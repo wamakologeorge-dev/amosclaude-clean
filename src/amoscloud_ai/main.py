@@ -1,81 +1,66 @@
+"""Amosclaud-AI application entry point.
+
+This module exposes a FastAPI app that serves the web UI and the offline-capable
+AI endpoints used by the browser and Android clients.
 """
-Amosclaud-AI application entry point.
-Starts the Flask API server that serves both the REST API and the web app.
-"""
-import os
+
 import logging
+import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-
-from src.amoscloud_ai.api import create_app  # noqa: E402
-
-# Resolve the web/ directory relative to the project root
-_HERE = Path(__file__).resolve().parent
-_WEB_DIR = str(_HERE.parent.parent.parent / "web")
-
-app = create_app(static_folder=_WEB_DIR)
-
-if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
-
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "Starting Amosclaud-AI server on http://%s:%d (debug=%s)", host, port, debug
-    )
-    app.run(host=host, port=port, debug=debug)
-Amoscloud AI – FastAPI web application entry point.
-
-Endpoints
----------
-GET  /                  → web UI (HTML)
-POST /build/photo       → build from uploaded image
-POST /build/instructions → build from text instructions
-GET  /health            → health check
-"""
-
-from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, HTMLResponse
+from pydantic import BaseModel
 
 from src.amoscloud_ai.builder import BuilderService
 from src.amoscloud_ai.config import settings
 from src.amoscloud_ai.logger import log
 from src.amoscloud_ai.models import BuildResult, BuildStatus
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+)
 
 app = FastAPI(
     title="Amoscloud AI",
-    description="Build projects from photo uploads or text instructions.",
+    description="Offline-capable Amosclaud-AI server for chat, build plans, and web UI hosting.",
     version="1.0.0",
 )
 
-_TEMPLATES_DIR = Path(__file__).parent / "templates"
-templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+_WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 builder_service = BuilderService()
-
 _MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     """Serve the main web UI."""
-    return templates.TemplateResponse(request=request, name="index.html")
+    return HTMLResponse((_WEB_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/styles.css")
+async def styles() -> FileResponse:
+    return FileResponse(_WEB_DIR / "styles.css")
+
+
+@app.get("/app.js")
+async def app_js() -> FileResponse:
+    return FileResponse(_WEB_DIR / "app.js")
+
+
+@app.get("/health")
+async def health() -> dict:
+    """Health check used by Docker and load balancers."""
+    return {"status": "healthy", "service": "amosclaud-ai", "version": "1.0.0"}
 
 
 @app.post("/build/photo", response_model=BuildResult)
@@ -83,12 +68,7 @@ async def build_from_photo(
     photo: UploadFile = File(..., description="Image file (PNG, JPEG, GIF, WebP)"),
     instructions: str = Form(default="", description="Optional additional instructions"),
 ) -> BuildResult:
-    """
-    Build from an uploaded photo/screenshot.
-
-    The image is sent to Claude's vision model which generates a full project
-    plan and implementation outline.
-    """
+    """Build from an uploaded image or screenshot."""
     content_type = photo.content_type or ""
     if not content_type.startswith("image/"):
         return BuildResult(
@@ -107,7 +87,7 @@ async def build_from_photo(
             error=f"File too large (max {settings.max_upload_size_mb} MB).",
         )
 
-    log.info(f"Received photo upload: {photo.filename} ({len(raw)} bytes)")
+    log.info("Received photo upload: %s (%d bytes)", photo.filename, len(raw))
     return builder_service.build_from_photo(
         image_bytes=raw,
         filename=photo.filename or "upload.png",
@@ -120,12 +100,7 @@ async def build_from_instructions(
     instructions: str = Form(..., description="What you want to build"),
     context: str = Form(default="", description="Optional project context"),
 ) -> BuildResult:
-    """
-    Build from plain-text instructions.
-
-    The instructions are sent to Claude which generates a full project plan
-    and implementation outline.
-    """
+    """Build from plain-text instructions."""
     if not instructions.strip():
         return BuildResult(
             status=BuildStatus.FAILED,
@@ -141,15 +116,94 @@ async def build_from_instructions(
     )
 
 
-@app.get("/health")
-async def health() -> dict:
-    """Health check used by Docker and load balancers."""
-    return {"status": "healthy", "service": "amoscloud-ai"}
+_conversations: dict[str, list[dict]] = {}
 
 
-# ---------------------------------------------------------------------------
-# Dev server entry point
-# ---------------------------------------------------------------------------
+@app.post("/api/chat")
+async def chat(payload: ChatRequest) -> dict:
+    """Handle the browser/Android chat requests with an offline-safe fallback."""
+    session_id = payload.session_id or _new_session_id()
+    message = payload.message.strip()
+    if not message:
+        return {"error": "message is required"}
+
+    history = _conversations.setdefault(session_id, [])
+    history.append({"role": "user", "content": message, "timestamp": _now()})
+    reply = _generate_reply(message, history)
+    history.append({"role": "assistant", "content": reply, "timestamp": _now()})
+
+    return {"reply": reply, "session_id": session_id, "timestamp": _now()}
+
+
+@app.get("/api/chat/history/{session_id}")
+async def chat_history(session_id: str) -> dict:
+    return {"session_id": session_id, "history": _conversations.get(session_id, [])}
+
+
+@app.delete("/api/chat/history/{session_id}")
+async def clear_history(session_id: str) -> dict:
+    _conversations.pop(session_id, None)
+    return {"session_id": session_id, "cleared": True}
+
+
+@app.get("/api/capabilities")
+async def capabilities() -> dict:
+    return {
+        "name": "Amosclaud-AI",
+        "version": "1.0.0",
+        "capabilities": [
+            "ci_cd_automation",
+            "code_analysis",
+            "deployment",
+            "database_management",
+            "git_operations",
+            "intelligent_chat",
+        ],
+        "description": "Professional CI/CD & Deployment Automation AI",
+    }
+
+
+_GREETINGS = {"hi", "hello", "hey", "greetings", "howdy"}
+_KEYWORD_REPLIES: list[tuple[list[str], str]] = [
+    (["deploy", "deployment", "release"], "I can handle deployments for you! Use the CI/CD pipeline or tell me the target environment (dev / staging / production) and I'll kick off the deployment workflow."),
+    (["test", "tests", "testing", "pytest"], "I can run your test suite automatically. Trigger integration tests with `pytest tests/` or let me orchestrate the full CI pipeline including lint → test → build → deploy."),
+    (["database", "db", "migrate", "migration", "postgres"], "Database operations are fully automated: migrations, backups, and optimisation. Tell me which database action you need and I'll execute it safely."),
+    (["git", "commit", "branch", "push", "pull", "merge"], "I manage Git operations end-to-end: branching, committing, merging, and pushing. What repo action do you need?"),
+    (["build", "compile", "docker", "container", "image"], "I can build Docker images, run `docker-compose up`, and manage the full container lifecycle. What would you like to build?"),
+    (["code", "analyze", "review", "lint", "refactor"], "Code analysis is one of my core capabilities. I can review files, suggest refactors, run linters, and detect issues automatically."),
+    (["log", "logs", "error", "debug", "trace"], "I aggregate logs from all services in real-time. Share the error message or service name and I'll diagnose the issue."),
+    (["help", "what can you do", "capabilities", "features"], "I'm Amosclaud-AI — your autonomous CI/CD assistant! I can:\n• Deploy apps to any environment\n• Run automated tests\n• Manage databases\n• Analyse and edit code\n• Handle Git operations\n• Monitor logs and errors\n\nJust tell me what you need!"),
+    (["browser", "search", "web", "url", "open"], "Use the built-in browser tab to navigate any URL. I can also help you search for documentation or resources — what are you looking for?"),
+]
+
+
+def _new_session_id() -> str:
+    return str(uuid.uuid4())
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _rule_based_reply(message: str) -> str:
+    lower = message.lower().strip(" ?!.,")
+    if lower in _GREETINGS:
+        return "Hello! I'm Amosclaud-AI 🤖 — your intelligent CI/CD automation assistant. How can I help you today?"
+
+    for keywords, reply in _KEYWORD_REPLIES:
+        if any(keyword in lower for keyword in keywords):
+            return reply
+
+    return (
+        f'I received your message: "{message}"\n\n'
+        "I'm Amosclaud-AI, specialising in CI/CD automation, deployments, code analysis, "
+        "and DevOps workflows. Could you give me more details so I can assist you better?"
+    )
+
+
+def _generate_reply(message: str, history: list[dict]) -> str:
+    return _rule_based_reply(message)
+
 
 if __name__ == "__main__":
     import uvicorn
