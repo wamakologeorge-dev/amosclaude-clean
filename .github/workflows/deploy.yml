@@ -1,0 +1,50 @@
+name: Deployment Pipeline
+
+on:
+  repository_dispatch:
+    types: [deploy]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Report Queued
+        run: |
+          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Deployment starting..."}' || true
+
+      - name: Simulate Build
+        run: |
+          echo "Building Amosclaud..."
+          sleep 2
+          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Build in progress...\\n"}' || true
+          echo "Build successful."
+          sleep 2
+
+      - name: Simulate Deploy
+        run: |
+          echo "Deploying to ${{ github.event.client_payload.environment }}..."
+          sleep 2
+          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Deploying to environment...\\n"}' || true
+
+      - name: Report Success
+        if: success()
+        run: |
+          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "success", "logs": "Deployment completed successfully!\\n"}' || true
+
+      - name: Report Failure
+        if: failure()
+        run: |
+          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "failed", "logs": "Deployment failed.\\n"}' || true
