@@ -53,6 +53,13 @@ COMMENT_AUTHOR = os.environ.get("COMMENT_AUTHOR", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
 BOT_SIGNATURE = "\n\n---\n*\U0001f916 Amosclaude-AI \u2013 automated response*"
 
+# Truncation limits for issue comment output
+MAX_CODE_PREVIEW_LENGTH = 3000
+MAX_RESPONSE_LENGTH = 2000
+
+# Directories to skip during file search
+_SKIP_DIRS = {".git", "__pycache__", "node_modules", "venv", ".venv", ".tox", "dist", "build"}
+
 GH_API = "https://api.github.com"
 GH_HEADERS = {
     "Authorization": "Bearer " + GITHUB_TOKEN,
@@ -95,11 +102,26 @@ def gh_get_issue() -> dict:
 
 
 def gh_get_issue_comments() -> list:
-    """Return all comments on the issue (oldest first)."""
+    """Return all comments on the issue (oldest first), handling pagination."""
     url = f"{GH_API}/repos/{GITHUB_REPOSITORY}/issues/{ISSUE_NUMBER}/comments"
-    resp = requests.get(url, headers=GH_HEADERS, params={"per_page": 100}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
+    all_comments: list = []
+    page = 1
+    while True:
+        resp = requests.get(
+            url,
+            headers=GH_HEADERS,
+            params={"per_page": 100, "page": page},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        batch = resp.json()
+        if not batch:
+            break
+        all_comments.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    return all_comments
 
 
 def gh_get_default_branch() -> str:
@@ -181,16 +203,19 @@ def find_file_in_repo(name: str) -> Optional[str]:
     """
     Search the local checkout for *name* (exact path or basename match).
     Returns the relative path from the repo root, or None.
+    Skips common noise directories (.git, __pycache__, node_modules, etc.).
     """
     repo_root = Path(__file__).resolve().parent.parent
     # Exact path first
     candidate = repo_root / name
     if candidate.is_file():
         return str(candidate.relative_to(repo_root))
-    # Basename search
-    matches = list(repo_root.rglob(name))
-    if matches:
-        return str(matches[0].relative_to(repo_root))
+    # Basename search, skipping noise directories
+    for path in repo_root.rglob(name):
+        if any(part in _SKIP_DIRS for part in path.parts):
+            continue
+        if path.is_file():
+            return str(path.relative_to(repo_root))
     return None
 
 
@@ -447,7 +472,10 @@ def run() -> None:
     # -----------------------------------------------------------------------
     lines = [f"Hi @{COMMENT_AUTHOR}! Here's my analysis of `{resolved_file}`:\n"]
     if fixed_code:
-        lines.append(f"```\n{fixed_code[:3000]}\n```")
+        truncated_code = fixed_code[:MAX_CODE_PREVIEW_LENGTH]
+        if len(fixed_code) > MAX_CODE_PREVIEW_LENGTH:
+            truncated_code += "\n... (truncated – see the PR for the full diff)"
+        lines.append(f"```\n{truncated_code}\n```")
         if explanation:
             lines.append(f"\n{explanation}")
         if pr_url:
@@ -458,7 +486,10 @@ def run() -> None:
                 "You can apply the code above manually."
             )
     else:
-        lines.append(claude_response[:2000])
+        truncated_response = claude_response[:MAX_RESPONSE_LENGTH]
+        if len(claude_response) > MAX_RESPONSE_LENGTH:
+            truncated_response += "\n... (response truncated)"
+        lines.append(truncated_response)
 
     gh_post_comment("\n".join(lines) + BOT_SIGNATURE)
     print("[issue-bot] Done.")
