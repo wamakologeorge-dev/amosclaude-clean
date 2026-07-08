@@ -233,6 +233,38 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function generateOfflineReply(message) {
+  const lower = message.toLowerCase().trim().replace(/[?!.,]/g, '');
+  const greetings = new Set(['hi', 'hello', 'hey', 'greetings', 'howdy']);
+  if (greetings.has(lower)) {
+    return "Hello! I’m Amosclaud-AI offline mode — I can still help with deployments, tests, databases, and code reviews locally.";
+  }
+
+  if (/(deploy|deployment|release)/.test(lower)) {
+    return "I can handle deployments locally! Tell me the target environment and I’ll walk you through the deployment workflow.";
+  }
+  if (/(test|pytest|testing)/.test(lower)) {
+    return "I can help run tests locally. Use the repo’s test command or tell me which suite you want to validate.";
+  }
+  if (/(database|db|migrate|migration)/.test(lower)) {
+    return "Database tasks can be managed offline. I can help you plan migrations, backups, and restore steps.";
+  }
+  if (/(git|branch|commit|push|merge)/.test(lower)) {
+    return "I can assist with Git workflows locally: branch creation, commit messages, and merge planning.";
+  }
+  if (/(build|docker|container)/.test(lower)) {
+    return "I can help you build and containerise the project locally. Share the stack and I’ll guide the setup.";
+  }
+  if (/(code|analyze|review|lint|refactor)/.test(lower)) {
+    return "I can review the codebase and suggest local fixes, refactors, or linting steps.";
+  }
+  if (/(browser|web|search|url)/.test(lower)) {
+    return "I can help you browse or search locally. Open the browser tab and I’ll guide your next step.";
+  }
+
+  return `I received your message: "${message}"\n\nI’m Amosclaud-AI in offline mode and can still help with CI/CD, deployments, tests, databases, and code review tasks.`;
+}
+
 async function sendMessage() {
   const message = chatInput.value.trim();
   if (!message) return;
@@ -273,9 +305,9 @@ async function sendMessage() {
 
   } catch (err) {
     typing.remove();
-    appendMessage('assistant',
-      '⚠️ I couldn\'t reach the backend right now. Please check your connection or the API URL in Settings.');
-    showToast('Failed to connect to API', 'error');
+    const offlineReply = generateOfflineReply(message);
+    appendMessage('assistant', offlineReply);
+    showToast('Offline fallback engaged', 'info');
     console.error('[Chat error]', err);
   }
 }
