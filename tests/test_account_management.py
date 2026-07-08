@@ -1,5 +1,6 @@
 """Tests for lightweight account management endpoints."""
 
+import importlib
 import sys
 import types
 from unittest.mock import MagicMock
@@ -17,7 +18,7 @@ def _make_anthropic_stub():
 
     class _Messages:
         def create(self, **kwargs):
-            return _Message("## Project Plan\n- Step 1\n## Implementation Outline\n- file.py")
+            return _Message("mock build plan")
 
     class Anthropic:
         def __init__(self, **kwargs):
@@ -27,22 +28,30 @@ def _make_anthropic_stub():
     return module
 
 
-sys.modules.setdefault("anthropic", _make_anthropic_stub())
+@pytest.fixture()
+def app_module(monkeypatch):
+    monkeypatch.setitem(sys.modules, "anthropic", _make_anthropic_stub())
+    module = importlib.import_module("src.amoscloud_ai.main")
+    importlib.reload(module)
+    return module
 
-from src.amoscloud_ai.main import app, _accounts  # noqa: E402
+
+@pytest.fixture()
+def client(app_module):
+    with TestClient(app_module.app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(autouse=True)
-def clear_accounts():
-    _accounts.clear()
+def clear_accounts(app_module):
+    with app_module.accounts_lock:
+        app_module.accounts.clear()
     yield
-    _accounts.clear()
+    with app_module.accounts_lock:
+        app_module.accounts.clear()
 
 
-client = TestClient(app)
-
-
-def test_delete_account_returns_confirmation():
+def test_delete_account_returns_confirmation(client, app_module):
     create_resp = client.post(
         "/accounts",
         json={"username": "alice", "email": "alice@example.com"},
@@ -54,10 +63,10 @@ def test_delete_account_returns_confirmation():
 
     assert delete_resp.status_code == 200
     assert delete_resp.json() == {"deleted": True, "account_id": account_id}
-    assert _accounts == {}
+    assert app_module.accounts == {}
 
 
-def test_delete_missing_account_returns_404():
+def test_delete_missing_account_returns_404(client):
     resp = client.delete("/accounts/does-not-exist")
 
     assert resp.status_code == 404

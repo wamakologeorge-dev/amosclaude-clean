@@ -4,6 +4,7 @@ Amoscloud AI FastAPI application entry point.
 import logging
 import os
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -21,9 +22,7 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
 
-# ---------------------------------------------------------------------------
 # App setup
-# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="Amoscloud AI",
@@ -38,17 +37,16 @@ builder_service = BuilderService()
 _MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
 
 # In-memory account store used for the lightweight account management API.
-_accounts: dict[str, dict[str, str]] = {}
+accounts_lock = Lock()
+accounts: dict[str, dict[str, str]] = {}
 
 
 class AccountCreateRequest(BaseModel):
     username: str = Field(min_length=1)
-    email: str = Field(min_length=1)
+    email: str = Field(min_length=1, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-# ---------------------------------------------------------------------------
 # Routes
-# ---------------------------------------------------------------------------
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -129,35 +127,35 @@ async def health() -> dict:
 @app.get("/accounts")
 async def list_accounts() -> dict:
     """Return the current in-memory account list."""
-    return {"accounts": list(_accounts.values())}
+    with accounts_lock:
+        return {"accounts": [dict(account) for account in accounts.values()]}
 
 
 @app.post("/accounts", status_code=201)
 async def create_account(payload: AccountCreateRequest) -> dict:
     """Create a new account and return it."""
-    account_id = uuid4().hex
-    account = {
-        "id": account_id,
-        "username": payload.username.strip(),
-        "email": payload.email.strip(),
-    }
-    _accounts[account_id] = account
-    return {"account": account}
+    with accounts_lock:
+        # Use a hex UUID so the ID is URL-safe and easy to read in logs.
+        account_id = uuid4().hex
+        account = {
+            "id": account_id,
+            "username": payload.username.strip(),
+            "email": payload.email.strip(),
+        }
+        accounts[account_id] = account
+        return {"account": account}
 
 
 @app.delete("/accounts/{account_id}")
 async def delete_account(account_id: str) -> dict:
     """Delete an account by ID."""
-    if account_id not in _accounts:
-        raise HTTPException(status_code=404, detail="account not found")
+    with accounts_lock:
+        if account_id not in accounts:
+            raise HTTPException(status_code=404, detail="account not found")
 
-    _accounts.pop(account_id)
-    return {"deleted": True, "account_id": account_id}
+        accounts.pop(account_id)
+        return {"deleted": True, "account_id": account_id}
 
-
-# ---------------------------------------------------------------------------
-# Dev server entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
