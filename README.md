@@ -1,6 +1,8 @@
-# 🚀 Amoscloud AI - Professional CI/CD & Deployment Automation
+# 🚀 Amosclaude AI - Professional CI/CD & Deployment Automation
 
-**Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
+**Amosclaude AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
+
+> **Owner & Maintainer:** [@wamakologeorge-dev](https://github.com/wamakologeorge-dev)
 
 ## ✨ Features
 

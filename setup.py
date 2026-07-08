@@ -9,8 +9,8 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="amoscloud-ai",
     version="1.0.0",
-    author="Amoscloud Team",
-    author_email="dev@amoscloud.ai",
+    author="wamakologeorge-dev",
+    author_email="wamakologeorge-dev@users.noreply.github.com",
     description="Professional CI/CD & Deployment Automation System",
     long_description=long_description,
     long_description_content_type="text/markdown",
