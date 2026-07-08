@@ -26,7 +26,9 @@ jobs:
       - name: Start Amoscloud AI server
         run: |
           python -m amoscloud_ai.main &
-          echo "Server PID: $!"
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          echo "Server started with PID $SERVER_PID"
         env:
           DATABASE_URL: sqlite:///./amoscloud.db
           SECRET_KEY: github-actions-secret
@@ -38,11 +40,13 @@ jobs:
           for i in $(seq 1 20); do
             if curl -sf http://localhost:8000/health; then
               echo "✅ Server is up!"
-              break
+              exit 0
             fi
             echo "Attempt $i failed, retrying in 2s..."
             sleep 2
           done
+          echo "❌ Server did not become ready after 20 attempts"
+          exit 1
 
       - name: Verify health endpoint
         run: |
@@ -66,3 +70,8 @@ jobs:
           echo "   Docs: http://localhost:8000/docs"
           echo "============================================"
           curl -s http://localhost:8000/health | python -m json.tool
+
+      - name: Stop server
+        if: always()
+        run: |
+          kill "$SERVER_PID" || true
