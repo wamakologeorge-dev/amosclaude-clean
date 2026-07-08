@@ -1,59 +1,17 @@
-Amosclaud Ecosystem
-An experimental, modular ecosystem designed for autonomous development, decentralized AI workflows, and integrated campus learning.
+# 🚀 Amoscloud AI - Professional CI/CD & Deployment Automation
 
-Overview
-Amosclaud is a unified software ecosystem engineered to bridge automated infrastructure management, decentralized machine learning modules, and collaborative educational spaces. The architecture relies on clean separation of concerns, leveraging modern containerization and automated CI/CD pipelines to manage multiple connected services seamlessly.
+**Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
 
-Core Components
-Unified Core: The central backend engine managing inter-module communication, database interactions via Prisma, and environment configurations.
+## ✨ Features
 
-Decentralized AI Module: Autonomous agent frameworks designed for code refactoring, self-healing execution loops, and distributed task handling.
+- ✅ **Automated Integration Testing** - Run tests automatically on every commit
+- ✅ **Smart Database Management** - Auto-migrate, backup, and optimize databases
+- ✅ **Intelligent File Editing** - Analyze and modify code automatically
+- ✅ **Code Deployment** - One-click deployment with rollback capabilities
+- ✅ **Repository Management** - Clone, branch, commit operations
+- ✅ **Real-time Reporting** - Comprehensive logs and status updates
+- ✅ **Build Automation** - Compile and build projects automatically
+- ✅ **Environment Management** - Auto-configure dev, staging, production
 
-Scientific Campus Learning Hub: Frontend and backend components tailored for structured educational workflows and resource sharing.
+## 📋 Project Structure
 
-Amosclaud Shell: An interactive workspace manager integrated with Git automation and deployment platforms like Railway.
-
-Technical Architecture
-Frontend: React, TypeScript, Tailwind CSS
-
-Backend: Node.js, TypeScript
-
-Database & ORM: PostgreSQL, Prisma
-
-Deployment & CI/CD: Railway, GitHub Actions
-
-Getting Started
-Prerequisites
-Node.js (v18 or higher)
-
-PostgreSQL instance
-
-Git
-
-Installation
-Clone the repository:
-
-Bash
-git clone https://github.com/your-username/amosclaud-clean.git
-cd amosclaud-clean
-Install dependencies:
-
-Bash
-npm install
-Configure environment variables by copying the example template and updating your credentials:
-
-Bash
-cp .env.example .env
-Run database migrations:
-
-Bash
-npx prisma migrate dev
-Start the development server:
-
-Bash
-npm run dev
-Contributing
-Contributions are welcome. Please read CONTRIBUTING.md and DEVELOPMENT.md in the repository for guidelines on coding standards, branching strategies, and pull request workflows.
-
-License
-This project is licensed under the MIT License.
