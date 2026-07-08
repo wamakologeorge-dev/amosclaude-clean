@@ -12,6 +12,7 @@
 - ✅ **Real-time Reporting** - Comprehensive logs and status updates
 - ✅ **Build Automation** - Compile and build projects automatically
 - ✅ **Environment Management** - Auto-configure dev, staging, production
+- ✅ **Offline-friendly operation** - The app serves a local fallback plan and chat replies when remote AI services or GitHub access are unavailable
 
 ## 📋 Project Structure
 

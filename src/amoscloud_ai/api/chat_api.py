@@ -107,6 +107,42 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def create_session_id() -> str:
+    """Create a new chat session identifier."""
+    return _new_session_id()
+
+
+def get_or_create_history(session_id: str) -> list:
+    """Return the conversation history for a session, creating it if needed."""
+    return _conversations.setdefault(session_id, [])
+
+
+def append_turn(session_id: str, role: str, content: str) -> None:
+    """Append a user or assistant turn to the session history."""
+    history = get_or_create_history(session_id)
+    history.append({"role": role, "content": content, "timestamp": _now()})
+
+
+def get_history(session_id: str) -> list:
+    """Return the conversation history for a session."""
+    return _conversations.get(session_id, [])
+
+
+def clear_history(session_id: str) -> None:
+    """Clear the conversation history for a session."""
+    _conversations.pop(session_id, None)
+
+
+def get_timestamp() -> str:
+    """Return the current UTC timestamp used by chat responses."""
+    return _now()
+
+
+def generate_reply(message: str, history: list) -> str:
+    """Generate an offline-friendly AI reply for the given message."""
+    return _generate_reply(message, history)
+
+
 _GREETINGS = {"hi", "hello", "hey", "greetings", "howdy"}
 
 # Keyword → canned response mapping for the rule-based fallback
