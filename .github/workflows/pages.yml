@@ -15,9 +15,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  agent-status:
     runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
     steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
+  build:
+    needs: agent-status
+    runs-on: ubuntu-latest
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
