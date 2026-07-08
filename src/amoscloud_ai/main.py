@@ -1,54 +1,25 @@
 """
-Amosclaud-AI application entry point.
-Starts the Flask API server that serves both the REST API and the web app.
+Amoscloud AI FastAPI application entry point.
 """
-import os
 import logging
+import os
 from pathlib import Path
+from uuid import uuid4
 
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-
-from src.amoscloud_ai.api import create_app  # noqa: E402
-
-# Resolve the web/ directory relative to the project root
-_HERE = Path(__file__).resolve().parent
-_WEB_DIR = str(_HERE.parent.parent.parent / "web")
-
-app = create_app(static_folder=_WEB_DIR)
-
-if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
-
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "Starting Amosclaud-AI server on http://%s:%d (debug=%s)", host, port, debug
-    )
-    app.run(host=host, port=port, debug=debug)
-Amoscloud AI – FastAPI web application entry point.
-
-Endpoints
----------
-GET  /                  → web UI (HTML)
-POST /build/photo       → build from uploaded image
-POST /build/instructions → build from text instructions
-GET  /health            → health check
-"""
-
-from pathlib import Path
-
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 from src.amoscloud_ai.builder import BuilderService
 from src.amoscloud_ai.config import settings
 from src.amoscloud_ai.logger import log
 from src.amoscloud_ai.models import BuildResult, BuildStatus
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+)
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -65,6 +36,14 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 builder_service = BuilderService()
 
 _MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
+
+# In-memory account store used for the lightweight account management API.
+_accounts: dict[str, dict[str, str]] = {}
+
+
+class AccountCreateRequest(BaseModel):
+    username: str = Field(min_length=1)
+    email: str = Field(min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +124,35 @@ async def build_from_instructions(
 async def health() -> dict:
     """Health check used by Docker and load balancers."""
     return {"status": "healthy", "service": "amoscloud-ai"}
+
+
+@app.get("/accounts")
+async def list_accounts() -> dict:
+    """Return the current in-memory account list."""
+    return {"accounts": list(_accounts.values())}
+
+
+@app.post("/accounts", status_code=201)
+async def create_account(payload: AccountCreateRequest) -> dict:
+    """Create a new account and return it."""
+    account_id = uuid4().hex
+    account = {
+        "id": account_id,
+        "username": payload.username.strip(),
+        "email": payload.email.strip(),
+    }
+    _accounts[account_id] = account
+    return {"account": account}
+
+
+@app.delete("/accounts/{account_id}")
+async def delete_account(account_id: str) -> dict:
+    """Delete an account by ID."""
+    if account_id not in _accounts:
+        raise HTTPException(status_code=404, detail="account not found")
+
+    _accounts.pop(account_id)
+    return {"deleted": True, "account_id": account_id}
 
 
 # ---------------------------------------------------------------------------
