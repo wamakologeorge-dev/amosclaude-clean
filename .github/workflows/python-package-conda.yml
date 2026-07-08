@@ -5,7 +5,6 @@ on: [push]
 jobs:
   build-linux:
     runs-on: ubuntu-latest
-    # This ensures the shell loads the necessary profile for conda to work
     defaults:
       run:
         shell: bash -l {0}
@@ -18,12 +17,12 @@ jobs:
       with:
         python-version: '3.10'
         auto-activate-base: true
-        # Optional: Use mamba for faster installation
         use-mamba: true 
 
     - name: Install dependencies
       run: |
-        mamba env update --file environment.yml --name base
+        # Since you use requirements.txt, use pip to install those dependencies
+        pip install -r requirements.txt
 
     - name: Lint with flake8
       run: |
