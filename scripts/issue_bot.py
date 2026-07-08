@@ -60,6 +60,10 @@ MAX_RESPONSE_LENGTH = 2000
 # Directories to skip during file search
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", "venv", ".venv", ".tox", "dist", "build"}
 
+# Derive the repository root from the GITHUB_WORKSPACE env var (set by GitHub
+# Actions), falling back to a path relative to this script's location.
+_REPO_ROOT = Path(os.environ.get("GITHUB_WORKSPACE") or Path(__file__).resolve().parent.parent)
+
 GH_API = "https://api.github.com"
 GH_HEADERS = {
     "Authorization": "Bearer " + GITHUB_TOKEN,
@@ -205,25 +209,34 @@ def find_file_in_repo(name: str) -> Optional[str]:
     Returns the relative path from the repo root, or None.
     Skips common noise directories (.git, __pycache__, node_modules, etc.).
     """
-    repo_root = Path(__file__).resolve().parent.parent
     # Exact path first
-    candidate = repo_root / name
+    candidate = _REPO_ROOT / name
     if candidate.is_file():
-        return str(candidate.relative_to(repo_root))
+        return str(candidate.relative_to(_REPO_ROOT))
     # Basename search, skipping noise directories
-    for path in repo_root.rglob(name):
+    for path in _REPO_ROOT.rglob(name):
         if any(part in _SKIP_DIRS for part in path.parts):
             continue
         if path.is_file():
-            return str(path.relative_to(repo_root))
+            return str(path.relative_to(_REPO_ROOT))
     return None
 
 
 def extract_filenames(text: str) -> list:
     """Extract plausible filenames from arbitrary text."""
     raw = FILENAME_PATTERN.findall(text)
-    # Filter out things like "e.g." or lone extensions
-    return [f for f in raw if "." in f and len(f) > 3]
+    # Require at least one character before the dot and a recognised extension
+    _KNOWN_EXTS = {
+        "py", "js", "ts", "java", "go", "rb", "rs", "c", "cpp", "h",
+        "yaml", "yml", "json", "toml", "ini", "cfg", "txt", "md",
+        "sh", "bash", "zsh", "html", "css", "sql",
+    }
+    result = []
+    for f in raw:
+        parts = f.rsplit(".", 1)
+        if len(parts) == 2 and parts[0] and parts[1].lower() in _KNOWN_EXTS:
+            result.append(f)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +451,8 @@ def run() -> None:
 
     # -----------------------------------------------------------------------
     # Step 5 - If Claude produced a code fix, commit it to a new branch + PR
+    # Note: strip() comparison intentionally ignores trailing-whitespace-only
+    # differences; such changes are not worth a PR on their own.
     # -----------------------------------------------------------------------
     pr_url: Optional[str] = None
     if fixed_code and fixed_code.strip() != file_content.strip():
@@ -464,8 +479,11 @@ def run() -> None:
                 body=pr_body,
             )
             print(f"[issue-bot] Created PR: {pr_url}")
+        except requests.HTTPError as exc:
+            print(f"[issue-bot] ERROR: GitHub API error while creating PR: {exc}", file=sys.stderr)
         except Exception as exc:
-            print(f"[issue-bot] WARNING: Could not create PR: {exc}")
+            print(f"[issue-bot] ERROR: Unexpected error while creating PR: {exc}", file=sys.stderr)
+            raise
 
     # -----------------------------------------------------------------------
     # Step 6 - Post the summary comment on the issue
@@ -507,6 +525,6 @@ if __name__ == "__main__":
                 f"this comment:\n```\n{exc}\n```\nPlease check the workflow logs."
                 + BOT_SIGNATURE
             )
-        except Exception:
-            pass
+        except Exception as comment_exc:
+            print(f"[issue-bot] Could not post error comment: {comment_exc}", file=sys.stderr)
         sys.exit(1)
