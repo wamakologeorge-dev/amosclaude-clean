@@ -218,14 +218,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
         print("Install it with: pip install uvicorn[standard]")
         return 1
 
-    print(f"🚀  Starting Amosclaud Platform API on http://{args.host}:{args.port}")
-    uvicorn.run(
-        "src.platform.platform_api:router",
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-        log_level=args.log_level,
-    )
+    try:
+        uvicorn.run(
+            "src.platform.platform_api:router",
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
+            log_level=args.log_level,
+        )
+    except Exception as exc:
+        print(f"Error: failed to start server — {exc}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -256,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_create.add_argument("--language", default="python", help="Primary language")
     p_create.add_argument("--description", default="", help="Short description")
     p_create.add_argument("--author", default="", help="Author name")
-    p_create.add_argument("--version", dest="version", default="0.1.0")
+    p_create.add_argument("--project-version", dest="version", default="0.1.0")
     p_create.add_argument("--output-dir", default=".", help="Parent directory for the project")
 
     # ── build ────────────────────────────────────────────────────────────────

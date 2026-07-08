@@ -370,7 +370,11 @@ class SoftwareCreator:
     ) -> List[str]:
         """Write all template files for *config* into *project_path*."""
         template_files = _TEMPLATES.get(config.project_type, {})
-        class_name = "".join(word.capitalize() for word in config.name.replace("-", "_").split("_"))
+        class_name = "".join(
+            word.capitalize()
+            for word in config.name.replace("-", "_").split("_")
+            if word
+        )
         fmt_vars = {
             "name": config.name,
             "description": config.description,

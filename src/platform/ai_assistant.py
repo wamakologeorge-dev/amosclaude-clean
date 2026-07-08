@@ -7,7 +7,6 @@ interface for generating, reviewing, documenting, and refactoring code.
 """
 
 import logging
-import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -385,7 +384,6 @@ class AIAssistant:
         param_str = ", ".join(
             f"{p.get('name', 'arg')}: {p.get('type', 'Any')}" for p in params
         ) or ""
-        wrapped_desc = textwrap.fill(description, width=72, initial_indent="    ", subsequent_indent="    ")
         return (
             f"def {name}({param_str}) -> {return_type}:\n"
             f'    """{description}"""\n'

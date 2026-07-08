@@ -8,6 +8,7 @@ through the platform CLI / API.
 
 import logging
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -231,7 +232,7 @@ class DeveloperTools:
                 duration_seconds=0.0,
             )
 
-        cmd = cmd_template.format(target=target)
+        cmd = cmd_template.format(target=shlex.quote(target))
         logger.info("Running: %s", cmd)
         start = datetime.now()
         try:

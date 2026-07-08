@@ -308,7 +308,7 @@ class BuildEngine:
 
         Checks for well-known indicator files in order of specificity.
         """
-        path = Path(project_path)
+        path = Path(project_path).resolve()
         indicators: List[tuple[str, Language]] = [
             ("Dockerfile", Language.DOCKER),
             ("pom.xml", Language.JAVA),
