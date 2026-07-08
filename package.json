@@ -1,0 +1,13 @@
+{
+  "name": "amosclaude-clean-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/agent/main.ts",
+    "dev": "node --experimental-strip-types src/agent/main.ts"
+  }
+}

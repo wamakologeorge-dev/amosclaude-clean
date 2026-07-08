@@ -2,6 +2,21 @@
 
 **Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
 
+## TypeScript agent scaffold
+
+A lightweight TypeScript-based agent scaffold is now available under `src/agent` and `src/app/api/agent/webhook/route.ts` for webhook-driven automation workflows.
+
+### Quick start
+
+Requires Node.js 22.6.0 or later.
+
+```bash
+npm install
+npm run dev
+```
+
+The agent reads configuration from `.env` and can be extended to call GitHub, shell, deployment, and reporting modules.
+
 ## ✨ Features
 
 - ✅ **Automated Integration Testing** - Run tests automatically on every commit
