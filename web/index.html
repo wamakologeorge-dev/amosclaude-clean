@@ -3,248 +3,149 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Amosclaud-AI — AI Assistant & Browser</title>
-  <link rel="stylesheet" href="styles.css" />
-  <!-- Material Icons -->
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <title>🚀 Amoscloud AI Platform</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- ═══════════════════════════════════════ APP SHELL ═════════════════════════════════════ -->
   <div id="app">
 
-    <!-- ── Side Navigation ── -->
-    <nav id="sidenav">
-      <div class="nav-header">
-        <div class="logo">
-          <span class="logo-icon">🤖</span>
-          <span class="logo-text">Amosclaud<span class="logo-accent">AI</span></span>
-        </div>
+    <!-- ══ Header ══ -->
+    <header id="topbar">
+      <div class="topbar-left">
+        <h1>🚀 Amoscloud AI Platform</h1>
+        <span class="version-badge">v1.0.0</span>
       </div>
-
-      <ul class="nav-items">
-        <li class="nav-item active" data-tab="chat" title="AI Chat">
-          <span class="material-icons">chat</span>
-          <span class="nav-label">AI Chat</span>
-        </li>
-        <li class="nav-item" data-tab="browser" title="Browser">
-          <span class="material-icons">language</span>
-          <span class="nav-label">Browser</span>
-        </li>
-        <li class="nav-item" data-tab="dashboard" title="Dashboard">
-          <span class="material-icons">dashboard</span>
-          <span class="nav-label">Dashboard</span>
-        </li>
-        <li class="nav-item" data-tab="settings" title="Settings">
-          <span class="material-icons">settings</span>
-          <span class="nav-label">Settings</span>
-        </li>
-      </ul>
-
-      <div class="nav-footer">
-        <button id="btn-new-chat" class="btn-icon-text">
-          <span class="material-icons">add</span>
-          <span>New Chat</span>
-        </button>
+      <div class="topbar-right">
+        <span id="status-indicator" class="status-dot status-unknown" title="Server status"></span>
+        <span id="status-label">Checking…</span>
+        <span id="refresh-timer" class="refresh-label">Auto-refresh in <span id="countdown">10</span>s</span>
       </div>
-    </nav>
+    </header>
 
-    <!-- ── Main Content ── -->
+    <!-- ══ Main ══ -->
     <main id="content">
 
-      <!-- ══════ TAB: AI Chat ══════ -->
-      <section id="tab-chat" class="tab active">
-        <header class="tab-header">
-          <h1><span class="material-icons">smart_toy</span> Amosclaud-AI Assistant</h1>
-          <div class="header-actions">
-            <button id="btn-clear-chat" class="btn-icon" title="Clear conversation">
-              <span class="material-icons">delete_outline</span>
-            </button>
-            <button id="btn-export-chat" class="btn-icon" title="Export conversation">
-              <span class="material-icons">download</span>
-            </button>
-          </div>
-        </header>
-
-        <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="Chat messages">
-          <!-- Welcome message -->
-          <div class="message message--assistant" id="msg-welcome">
-            <div class="message-avatar">🤖</div>
-            <div class="message-bubble">
-              <p>Hello! I'm <strong>Amosclaud-AI</strong> — your intelligent CI/CD &amp; DevOps automation assistant.</p>
-              <p>I can help you with:</p>
-              <ul>
-                <li>🚀 Deploy applications to any environment</li>
-                <li>🧪 Run automated tests &amp; CI pipelines</li>
-                <li>🗄️ Manage databases (migrations, backups)</li>
-                <li>🔍 Analyse &amp; review code</li>
-                <li>📦 Build Docker images &amp; containers</li>
-                <li>🌿 Git operations &amp; repository management</li>
-              </ul>
-              <p>What would you like to do today?</p>
-              <div class="quick-actions">
-                <button class="chip" data-prompt="Deploy my app to production">Deploy app</button>
-                <button class="chip" data-prompt="Run tests for my project">Run tests</button>
-                <button class="chip" data-prompt="Analyse my code for issues">Analyse code</button>
-                <button class="chip" data-prompt="Help me with database migration">DB migration</button>
-              </div>
-            </div>
+      <!-- Stats row -->
+      <section class="stats-row">
+        <div class="stat-card">
+          <div class="stat-icon">🔁</div>
+          <div class="stat-body">
+            <span class="stat-value" id="stat-pipelines">—</span>
+            <span class="stat-label">Total Pipelines</span>
           </div>
         </div>
-
-        <div class="chat-input-bar">
-          <div class="chat-input-wrap">
-            <textarea
-              id="chat-input"
-              rows="1"
-              placeholder="Ask Amosclaud-AI anything…"
-              aria-label="Chat input"
-            ></textarea>
-            <button id="btn-send" class="btn-send" aria-label="Send message" disabled>
-              <span class="material-icons">send</span>
-            </button>
+        <div class="stat-card">
+          <div class="stat-icon">🚀</div>
+          <div class="stat-body">
+            <span class="stat-value" id="stat-deployments">—</span>
+            <span class="stat-label">Active Deployments</span>
           </div>
-          <p class="input-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</p>
         </div>
-      </section>
-
-      <!-- ══════ TAB: Browser ══════ -->
-      <section id="tab-browser" class="tab">
-        <header class="tab-header">
-          <h1><span class="material-icons">language</span> Web Browser</h1>
-        </header>
-
-        <div class="browser-chrome">
-          <!-- Navigation bar -->
-          <div class="browser-nav">
-            <button id="browser-back" class="btn-icon" title="Back"><span class="material-icons">arrow_back</span></button>
-            <button id="browser-forward" class="btn-icon" title="Forward"><span class="material-icons">arrow_forward</span></button>
-            <button id="browser-refresh" class="btn-icon" title="Refresh"><span class="material-icons">refresh</span></button>
-            <button id="browser-home" class="btn-icon" title="Home"><span class="material-icons">home</span></button>
-            <div class="url-bar-wrap">
-              <span class="material-icons url-lock">lock</span>
-              <input id="browser-url" type="url" class="url-bar" value="https://www.google.com" placeholder="Enter URL…" aria-label="Address bar" />
-            </div>
-            <button id="browser-go" class="btn-primary">Go</button>
+        <div class="stat-card">
+          <div class="stat-icon" id="health-icon">💚</div>
+          <div class="stat-body">
+            <span class="stat-value" id="stat-health">—</span>
+            <span class="stat-label">Health Status</span>
           </div>
-
-          <!-- Bookmarks bar -->
-          <div class="bookmarks-bar">
-            <button class="bookmark" data-url="https://www.google.com">🔍 Google</button>
-            <button class="bookmark" data-url="https://github.com">🐙 GitHub</button>
-            <button class="bookmark" data-url="https://developer.android.com">🤖 Android Docs</button>
-            <button class="bookmark" data-url="https://docs.python.org/3/">🐍 Python Docs</button>
-            <button class="bookmark" data-url="https://hub.docker.com">🐳 Docker Hub</button>
-          </div>
-
-          <!-- Viewport -->
-          <div class="browser-viewport">
-            <iframe
-              id="browser-frame"
-              src="https://www.google.com"
-              title="Embedded browser"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            ></iframe>
-            <div id="browser-overlay" class="browser-overlay hidden">
-              <div class="overlay-content">
-                <span class="material-icons overlay-icon">open_in_new</span>
-                <p>Some websites block embedding.<br/>
-                <a id="overlay-link" href="#" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a></p>
-              </div>
-            </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-body">
+            <span class="stat-value" id="stat-uptime">—</span>
+            <span class="stat-label">Server Uptime</span>
           </div>
         </div>
       </section>
 
-      <!-- ══════ TAB: Dashboard ══════ -->
-      <section id="tab-dashboard" class="tab">
-        <header class="tab-header">
-          <h1><span class="material-icons">dashboard</span> Dashboard</h1>
-        </header>
-        <div class="dashboard-grid">
-          <div class="card card--blue">
-            <div class="card-icon"><span class="material-icons">rocket_launch</span></div>
-            <div class="card-info">
-              <span class="card-title">Deployments</span>
-              <span class="card-value" id="stat-deployments">—</span>
-            </div>
-          </div>
-          <div class="card card--green">
-            <div class="card-icon"><span class="material-icons">check_circle</span></div>
-            <div class="card-info">
-              <span class="card-title">Tests Passed</span>
-              <span class="card-value" id="stat-tests">—</span>
-            </div>
-          </div>
-          <div class="card card--orange">
-            <div class="card-icon"><span class="material-icons">storage</span></div>
-            <div class="card-info">
-              <span class="card-title">DB Operations</span>
-              <span class="card-value" id="stat-db">—</span>
-            </div>
-          </div>
-          <div class="card card--purple">
-            <div class="card-icon"><span class="material-icons">chat</span></div>
-            <div class="card-info">
-              <span class="card-title">AI Conversations</span>
-              <span class="card-value" id="stat-chats">0</span>
-            </div>
-          </div>
-        </div>
+      <!-- Quick actions -->
+      <section class="actions-row">
+        <button id="btn-trigger-pipeline" class="btn-primary">+ Trigger Pipeline</button>
+        <button id="btn-start-deployment" class="btn-accent">🚀 Start Deployment</button>
+      </section>
 
-        <div class="dashboard-capabilities">
-          <h2>Capabilities</h2>
-          <div id="capabilities-list" class="capabilities-grid">
-            <div class="skeleton-row"></div>
-          </div>
+      <!-- Pipelines table -->
+      <section class="table-section">
+        <h2>CI/CD Pipelines</h2>
+        <div class="table-wrap">
+          <table id="pipelines-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Branch</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="pipelines-body">
+              <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
-      <!-- ══════ TAB: Settings ══════ -->
-      <section id="tab-settings" class="tab">
-        <header class="tab-header">
-          <h1><span class="material-icons">settings</span> Settings</h1>
-        </header>
-        <div class="settings-panel">
-          <div class="settings-group">
-            <h2>API Connection</h2>
-            <label>
-              <span>Backend URL</span>
-              <input id="setting-api-url" type="url" value="" placeholder="http://localhost:8000" />
-            </label>
-            <button id="btn-test-connection" class="btn-primary">Test Connection</button>
-            <p id="connection-status" class="status-text"></p>
-          </div>
-
-          <div class="settings-group">
-            <h2>Appearance</h2>
-            <label class="toggle-label">
-              <span>Dark Mode</span>
-              <input id="setting-dark-mode" type="checkbox" class="toggle" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-
-          <div class="settings-group">
-            <h2>About</h2>
-            <dl class="about-list">
-              <dt>Application</dt><dd>Amosclaud-AI Web App</dd>
-              <dt>Version</dt><dd>1.0.0</dd>
-              <dt>Backend</dt><dd id="about-backend-version">—</dd>
-            </dl>
-          </div>
+      <!-- Deployments table -->
+      <section class="table-section">
+        <h2>Deployments</h2>
+        <div class="table-wrap">
+          <table id="deployments-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Environment</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="deployments-body">
+              <tr><td colspan="5" class="empty-row">Loading…</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
     </main>
   </div>
 
-  <!-- ── Loading overlay ── -->
-  <div id="loading-overlay" class="loading-overlay hidden">
-    <div class="spinner"></div>
+  <!-- Modal backdrop -->
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+
+  <!-- Trigger Pipeline Modal -->
+  <div id="modal-pipeline" class="modal hidden" role="dialog" aria-labelledby="modal-pipeline-title">
+    <h3 id="modal-pipeline-title">Trigger Pipeline</h3>
+    <label>Pipeline name
+      <input id="pipeline-name-input" type="text" placeholder="e.g. build-and-test" />
+    </label>
+    <label>Branch
+      <input id="pipeline-branch-input" type="text" placeholder="main" value="main" />
+    </label>
+    <div class="modal-actions">
+      <button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button>
+      <button id="btn-confirm-pipeline" class="btn-primary">Trigger</button>
+    </div>
   </div>
 
-  <!-- ── Toast notifications ── -->
+  <!-- Start Deployment Modal -->
+  <div id="modal-deployment" class="modal hidden" role="dialog" aria-labelledby="modal-deployment-title">
+    <h3 id="modal-deployment-title">Start Deployment</h3>
+    <label>Deployment name
+      <input id="deployment-name-input" type="text" placeholder="e.g. deploy-v2" />
+    </label>
+    <label>Environment
+      <select id="deployment-env-input">
+        <option value="production">production</option>
+        <option value="staging">staging</option>
+        <option value="development">development</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button id="btn-cancel-deployment" class="btn-ghost">Cancel</button>
+      <button id="btn-confirm-deployment" class="btn-accent">Deploy</button>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
   <div id="toast-container" aria-live="assertive"></div>
 
   <script src="app.js"></script>

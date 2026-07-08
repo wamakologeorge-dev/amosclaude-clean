@@ -1,130 +1,76 @@
-# 🚀 Amoscloud AI - Professional CI/CD & Deployment Automation
+# 🚀 Amoscloud AI Platform
 
-![Amosclaud-ai Status](https://img.shields.io/badge/Amosclaud--ai-%F0%9F%90%A6_Live_%26_Active-brightgreen)
+![Amoscloud AI Status](https://img.shields.io/badge/Amoscloud--AI-%F0%9F%9F%A2_Live_%26_Active-brightgreen)
 
-**Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management.
+Self-hosted CI/CD & Deployment Automation Platform. Runs entirely from GitHub — no external cloud needed.
 
-## ✨ Features
+## Quick Start
 
-- ✅ **Automated Integration Testing** - Run tests automatically on every commit
-- ✅ **Smart Database Management** - Auto-migrate, backup, and optimize databases
-- ✅ **Intelligent File Editing** - Analyze and modify code automatically
-- ✅ **Code Deployment** - One-click deployment with rollback capabilities
-- ✅ **Repository Management** - Clone, branch, commit operations
-- ✅ **Real-time Reporting** - Comprehensive logs and status updates
-- ✅ **Build Automation** - Compile and build projects automatically
-- ✅ **Environment Management** - Auto-configure dev, staging, production
-
----
-
-## 🚀 Render Auto-Deploy (Production)
-
-This repository is configured for Render using `render.yaml`.
-
-### Service settings
-
-- **Type:** Web Service
-- **Environment:** Python
-- **Build command:** `pip install -r requirements.txt`
-- **Start command:** `uvicorn src.amoscloud_ai.main:app --host 0.0.0.0 --port $PORT`
-- **Health check:** `/health`
-
-### Required environment variables
-
-- `ANTHROPIC_API_KEY` (required)
-- `LOG_LEVEL=INFO` (recommended)
-- `ENVIRONMENT=production` (recommended)
-
-### Deploy steps
-
-1. Connect Render service to repository `wamakologeorge-dev/amosclaude-clean`
-2. Select branch `main`
-3. Enable **Auto-Deploy**
-4. Set the environment variables above
-5. Trigger first deploy: **Manual Deploy → Deploy latest commit**
-
-### Troubleshooting checklist
-
-- If build fails:
-  - verify `requirements.txt` installs without conflicts
-  - confirm Python environment is selected in Render
-- If start fails:
-  - verify import path in start command is exactly `src.amoscloud_ai.main:app`
-  - ensure `uvicorn` is present in `requirements.txt`
-- If health check fails:
-  - open `/health` route and ensure it returns HTTP 200
-  - verify app binds to `0.0.0.0` and `$PORT`
-
----
-
-## 🛠️ Amosclaud Platform
-
-The **Amosclaud Platform** is a developer-focused layer built on top of Amoscloud AI that accelerates software creation, provides unified developer tooling, and exposes AI-powered assistance through APIs and CLI.
-
-### Platform Features
-
-| Feature | Description |
-|---|---|
-| 🏗️ **Software Creator** | Scaffold new projects from built-in templates (Web API, CLI, Library, Microservice, Full-Stack, Data Pipeline) |
-| 🔨 **Build Engine** | Multi-language build automation (Python, Node.js, Go, Java, Docker) with artifact management |
-| 🔍 **Developer Tools** | Unified linting (flake8, pylint, mypy, bandit), formatting (black, isort), and testing (pytest) |
-| 🤖 **AI Assistant** | Amosclaud-AI powered code review, function/class/test/docs generation, and refactoring suggestions |
-| 🌐 **Platform API** | FastAPI REST endpoints at `/platform/*` |
-| 💻 **Platform CLI** | `amosclaud-platform` command-line interface |
-
-### Quick Start — CLI
+### Option 1: Run with Docker (Full Platform)
 
 ```bash
-pip install -e .
-
-# Scaffold a new web API project
-amosclaud-platform create my-api --type web_api --description "My awesome API"
-
-# Build a project
-amosclaud-platform build ./my-api --language python
-
-# Run quality checks
-amosclaud-platform check ./my-api
-
-# AI code review
-amosclaud-platform review ./my-api/main.py
-
-# Generate a function stub
-amosclaud-platform generate function parse_payload "Parse a JSON payload and return a dict" --language python
-
-# Generate unit tests
-amosclaud-platform generate tests ./my-api/main.py --output tests/test_main.py
-
-# Generate Markdown docs
-amosclaud-platform generate docs ./my-api/main.py --output docs/main.md
-
-# Start the platform API server
-amosclaud-platform serve --port 8001
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean
+cd amosclaude-clean
+docker-compose up --build
 ```
 
-### Quick Start — Docker Compose
+- Dashboard: http://localhost — served by nginx on port 80
+- API Docs: http://localhost:8000/docs
+
+### Option 2: Run directly with Python
 
 ```bash
-docker-compose up amosclaud_platform
-# Platform API: http://localhost:8001
-# Swagger docs: http://localhost:8001/docs
+pip install -r requirements.txt
+python -m amoscloud_ai.main
 ```
 
-## 📋 Project Structure
+- Dashboard: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-```text
+## What You Can Do
+
+- 🔁 Manage CI/CD pipelines
+- 🚀 Trigger and rollback deployments
+- 💚 Monitor server health in real-time
+- 📊 View live dashboard at `/`
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Web dashboard |
+| `GET` | `/health` | Server health check |
+| `GET` | `/api/v1/pipelines` | List all pipelines |
+| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
+| `GET` | `/api/v1/deployments` | List all deployments |
+| `POST` | `/api/v1/deployments` | Start a deployment |
+| `GET` | `/docs` | Interactive API docs (Swagger UI) |
+
+## Project Structure
+
+```
 amosclaude-clean/
-├── src/
-│   ├── amoscloud_ai/
-│   │   ├── api/
-│   │   ├── main.py
-│   │   └── services/
-│   ├── ai/
-│   ├── core/
-│   └── database/
-├── web/
-├── android/
-├── Dockerfile
-├── docker-compose.yml
-└── requirements.txt
+├── amoscloud_ai/          # Main FastAPI application package
+│   ├── api/routes/        # health, pipelines, deployments routes
+│   ├── main.py            # App entry point — serves API + web dashboard
+│   ├── config.py          # Settings (pydantic-settings)
+│   └── models.py          # Pydantic models
+├── web/                   # Frontend dashboard (served at /)
+│   ├── index.html         # Dashboard UI
+│   ├── style.css          # Dark theme CSS
+│   └── app.js             # API fetch + auto-refresh
+├── tests/                 # pytest test suite
+├── Dockerfile             # Multi-stage build
+├── docker-compose.yml     # Full stack: API + Redis + nginx
+└── nginx.conf             # Reverse proxy config
 ```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (optional) |
+| `SECRET_KEY` | `change-me-in-production` | App secret key |
+| `ENVIRONMENT` | `development` | `development` or `production` |
+| `LOG_LEVEL` | `INFO` | Logging level |
