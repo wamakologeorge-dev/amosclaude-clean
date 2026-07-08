@@ -92,7 +92,7 @@ These values are defined in `docker-compose.yml` for the local development stack
 ├── docker-compose.yml
 ├── setup.py
 ├── src/
-│   ├── ami/               # AI-related helpers
+│   ├── ai/                # AI-related helpers
 │   ├── amoscloud_ai/      # service modules
 │   ├── core/              # orchestration and deployment helpers
 │   └── database/          # database helpers
