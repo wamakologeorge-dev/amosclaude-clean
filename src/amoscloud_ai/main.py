@@ -32,7 +32,7 @@ app = FastAPI(
 )
 
 # Mount static web files so the web UI is accessible at /static
-_WEB_DIR = Path(__file__).resolve().parent.parent.parent.parent / "web"
+_WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 if _WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(_WEB_DIR)), name="static")
 
