@@ -1,0 +1,53 @@
+name: 🤖 Amoscloud AI 24/7 Auto-Agent
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs every hour 24/7
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-ai-agent:
+    runs-on: ubuntu-latest
+    name: Autonomous Checking & Building
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Amoscloud AI Agent
+        run: |
+          # The agent runs 24/7 checks, builds, and edits files if improvements are found
+          python src/amoscloud_ai/autonomous_agent.py --mode autonomous-check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: "george makulu"
+
+      - name: Create Pull Request for Owner Review
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "🤖 Amoscloud AI Automated Improvements"
+          title: "🤖 Amoscloud AI 24/7 Auto-Agent Proposed Changes"
+          body: |
+            ## Amoscloud AI 24/7 Check & Build
+            Amoscloud-ai has checked the repository and built freedom changes!
+            
+            **Owner Action Required:**
+            - **Approve & Merge:** Let the change stay in the repository.
+            - **Close / Deny:** Reject the change. If denied, Amoscloud-ai will learn and rewrite the changes faster.
+          branch: amoscloud-ai/autonomous-updates
+          delete-branch: true
+          labels: |
+            ai-generated
+            automated-pr
