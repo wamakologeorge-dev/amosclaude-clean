@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CI Runs - Amoscloud</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+    .status-queued { color: gray; }
+    .status-building { color: blue; }
+    .status-success { color: green; }
+    .status-failed { color: red; }
+    pre { background: #eee; padding: 10px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>CI Runs</h1>
+  <a href="/ci/new">Trigger New Deployment</a>
+  <table id="runs-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Status</th>
+        <th>Created At</th>
+        <th>Logs</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Populated via JS -->
+    </tbody>
+  </table>
+  <script>
+    async function loadRuns() {
+      const res = await fetch('/api/ci/runs');
+      const runs = await res.json();
+      const tbody = document.querySelector('#runs-table tbody');
+      tbody.innerHTML = '';
+      runs.forEach(run => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${run.id}</td>
+          <td class="status-${run.status}">${run.status}</td>
+          <td>${run.created_at}</td>
+          <td><pre>${run.logs || ''}</pre></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    loadRuns();
+    setInterval(loadRuns, 5000);
+  </script>
+</body>
+</html>

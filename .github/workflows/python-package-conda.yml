@@ -3,6 +3,17 @@ name: Python Package using Conda
 on: [push]
 
 jobs:
+  agent-status:
+    runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
   build-linux:
     runs-on: ubuntu-latest
     strategy:
