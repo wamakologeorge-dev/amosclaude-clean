@@ -7,7 +7,7 @@ Runs 24/7 checks, builds, and edits repository files.
 import sys
 import argparse
 import logging
-from datetime import datetime
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -15,10 +15,10 @@ def check_and_build():
     logging.info("Starting autonomous 24/7 check and build...")
     # Add your logic here to analyze the repo and generate improvements
     logging.info("Analyzing repository for improvements...")
-    logging.info("Running builds to ensure freedom for Amosclaud-ai...")
+    logging.info("Running builds to ensure freedom for Amoscloud-ai...")
     
     # Simulating finding an improvement
-    improvement_found = True
+    improvement_found = False # Set to False by default, needs actual logic to determine if improvements are found
     if improvement_found:
         logging.info("Improvements found and applied. Ready for PR.")
     else:

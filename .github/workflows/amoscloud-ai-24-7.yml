@@ -31,7 +31,6 @@ jobs:
           python src/amoscloud_ai/autonomous_agent.py --mode autonomous-check
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: "george makulu"
 
       - name: Create Pull Request for Owner Review
         uses: peter-evans/create-pull-request@v5
