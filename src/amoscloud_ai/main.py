@@ -1,42 +1,7 @@
-"""
-Amosclaud-AI application entry point.
-Starts the Flask API server that serves both the REST API and the web app.
-"""
-import os
-import logging
-from pathlib import Path
+"""FastAPI entry point for Amoscloud AI.
 
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-
-from src.amoscloud_ai.api import create_app  # noqa: E402
-
-# Resolve the web/ directory relative to the project root
-_HERE = Path(__file__).resolve().parent
-_WEB_DIR = str(_HERE.parent.parent.parent / "web")
-
-app = create_app(static_folder=_WEB_DIR)
-
-if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
-
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "Starting Amosclaud-AI server on http://%s:%d (debug=%s)", host, port, debug
-    )
-    app.run(host=host, port=port, debug=debug)
-Amoscloud AI – FastAPI web application entry point.
-
-Endpoints
----------
-GET  /                  → web UI (HTML)
-POST /build/photo       → build from uploaded image
-POST /build/instructions → build from text instructions
-GET  /health            → health check
+Serves the build-assistant web UI and exposes endpoints for generating
+implementation plans from either plain-text instructions or uploaded images.
 """
 
 from pathlib import Path
@@ -50,26 +15,17 @@ from src.amoscloud_ai.config import settings
 from src.amoscloud_ai.logger import log
 from src.amoscloud_ai.models import BuildResult, BuildStatus
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
 app = FastAPI(
     title="Amoscloud AI",
     description="Build projects from photo uploads or text instructions.",
     version="1.0.0",
 )
 
-_TEMPLATES_DIR = Path(__file__).parent / "templates"
+_TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 builder_service = BuilderService()
 
 _MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
-
-
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -83,11 +39,10 @@ async def build_from_photo(
     photo: UploadFile = File(..., description="Image file (PNG, JPEG, GIF, WebP)"),
     instructions: str = Form(default="", description="Optional additional instructions"),
 ) -> BuildResult:
-    """
-    Build from an uploaded photo/screenshot.
+    """Build a project plan from an uploaded photo or screenshot.
 
-    The image is sent to Claude's vision model which generates a full project
-    plan and implementation outline.
+    The uploaded image is analyzed by the Claude vision model and converted
+    into a structured implementation plan and outline.
     """
     content_type = photo.content_type or ""
     if not content_type.startswith("image/"):
@@ -120,11 +75,10 @@ async def build_from_instructions(
     instructions: str = Form(..., description="What you want to build"),
     context: str = Form(default="", description="Optional project context"),
 ) -> BuildResult:
-    """
-    Build from plain-text instructions.
+    """Build a project plan from plain-text instructions.
 
-    The instructions are sent to Claude which generates a full project plan
-    and implementation outline.
+    The instructions are sent to Claude to produce a concise plan and an
+    implementation outline that can be acted on immediately.
     """
     if not instructions.strip():
         return BuildResult(
@@ -146,10 +100,6 @@ async def health() -> dict:
     """Health check used by Docker and load balancers."""
     return {"status": "healthy", "service": "amoscloud-ai"}
 
-
-# ---------------------------------------------------------------------------
-# Dev server entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
