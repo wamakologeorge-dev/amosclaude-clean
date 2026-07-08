@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amosclaud-AI</string>
+    <string name="tagline">Intelligent CI/CD &amp; DevOps Assistant</string>
+
+    <!-- Screen titles -->
+    <string name="title_ai_chat">AI Assistant</string>
+    <string name="title_browser">Web Browser</string>
+    <string name="title_settings">Settings</string>
+
+    <!-- Descriptions for home screen tiles -->
+    <string name="desc_ai_chat">Chat with your CI/CD automation AI</string>
+    <string name="desc_browser">Browse the web inside the app</string>
+    <string name="desc_settings">Configure backend API and preferences</string>
+
+    <!-- Hints -->
+    <string name="hint_message">Ask Amosclaud-AI anything…</string>
+    <string name="hint_url">Enter URL or search…</string>
+    <string name="hint_api_url">http://your-server:8000</string>
+
+    <!-- Labels -->
+    <string name="label_api_url">Backend API URL</string>
+
+    <!-- Buttons -->
+    <string name="btn_save">Save</string>
+    <string name="btn_test_connection">Test Connection</string>
+    <string name="go">Go</string>
+
+    <!-- Content descriptions (accessibility) -->
+    <string name="cd_send">Send message</string>
+    <string name="cd_back">Go back</string>
+    <string name="cd_forward">Go forward</string>
+    <string name="cd_refresh">Refresh</string>
+    <string name="cd_home">Home</string>
+
+    <!-- Status messages -->
+    <string name="status_testing">Testing connection…</string>
+    <string name="status_connected">✅ Connected successfully!</string>
+    <string name="status_failed">❌ Connection failed</string>
+    <string name="status_error">❌ Error: %s</string>
+
+    <!-- Misc -->
+    <string name="settings_saved">Settings saved</string>
+    <string name="error_url_required">URL is required</string>
+</resources>

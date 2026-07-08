@@ -46,6 +46,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
       LOG_LEVEL: INFO
+      # Optional: set OPENAI_API_KEY to enable real AI chat replies
+      # OPENAI_API_KEY: ""
     ports:
       - "8000:8000"
     depends_on:
