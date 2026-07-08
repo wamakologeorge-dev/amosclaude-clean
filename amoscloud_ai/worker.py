@@ -8,6 +8,7 @@ Or via module:
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -46,17 +47,30 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         if pipeline:
             pipeline.status = PipelineStatus.RUNNING
 
-        # ── Pipeline logic goes here ──────────────────────────────────────
-        # Placeholder: mark as success immediately.
-        # In production, integrate CIOrchestrator from src/core/.
+        # ── Pipeline logic ────────────────────────────────────────────────
+        from src.core.ci_orchestrator import CIOrchestrator
+
+        orchestrator = CIOrchestrator(config=payload)
+        success = asyncio.run(
+            orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
+        )
         # ─────────────────────────────────────────────────────────────────
 
         if pipeline:
-            pipeline.status = PipelineStatus.SUCCESS
+            pipeline.status = PipelineStatus.SUCCESS if success else PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
+            # Attach any job/report data captured by the orchestrator
+            if orchestrator.jobs:
+                pipeline.jobs = orchestrator.jobs
 
-        log.info(f"[worker] Pipeline {pipeline_id} completed successfully")
-        return {"pipeline_id": pipeline_id, "status": "success"}
+        result_status = "success" if success else "failed"
+        log.info(f"[worker] Pipeline {pipeline_id} finished with status: {result_status}")
+        return {
+            "pipeline_id": pipeline_id,
+            "status": result_status,
+            "jobs_count": len(orchestrator.jobs),
+            "reports_count": len(orchestrator.reports),
+        }
 
     except Exception as exc:
         log.error(f"[worker] Pipeline {pipeline_id} failed: {exc}")
@@ -84,18 +98,37 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
         if dep:
             dep.status = DeploymentStatus.IN_PROGRESS
 
-        # ── Deployment logic goes here ────────────────────────────────────
-        # Placeholder: mark as completed immediately.
-        # In production, integrate SmartDeployer from src/core/.
+        # ── Deployment logic ──────────────────────────────────────────────
+        from src.core.smart_deployer import SmartDeployer
+
+        deployer = SmartDeployer(config=config)
+        success = asyncio.run(
+            deployer.deploy(
+                config.get("version") or "latest",
+                config.get("environment") or "development",
+            )
+        )
         # ─────────────────────────────────────────────────────────────────
 
         if dep:
-            dep.status = DeploymentStatus.COMPLETED
+            # Map SmartDeployer's final status back to the API model
+            if success:
+                dep.status = DeploymentStatus.COMPLETED
+                dep.message = "Deployment completed successfully"
+            else:
+                # deployer.status reflects FAILED or ROLLED_BACK
+                deployer_status = deployer.status.value  # e.g. "rolled_back" or "failed"
+                dep.status = (
+                    DeploymentStatus.ROLLED_BACK
+                    if deployer_status == "rolled_back"
+                    else DeploymentStatus.FAILED
+                )
+                dep.message = f"Deployment did not complete (deployer status: {deployer_status})"
             dep.finished_at = datetime.now(timezone.utc)
-            dep.message = "Deployment completed successfully"
 
-        log.info(f"[worker] Deployment {deployment_id} completed")
-        return {"deployment_id": deployment_id, "status": "completed"}
+        result_status = dep.status.value if dep else ("completed" if success else "failed")
+        log.info(f"[worker] Deployment {deployment_id} finished with status: {result_status}")
+        return {"deployment_id": deployment_id, "status": result_status}
 
     except Exception as exc:
         log.error(f"[worker] Deployment {deployment_id} failed: {exc}")
