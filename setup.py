@@ -7,11 +7,11 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
     requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setup(
-    name="amoscloud-ai",
+    name="amosclaud-ai",
     version="1.0.0",
-    author="Amoscloud Team",
-    author_email="dev@amoscloud.ai",
-    description="Professional CI/CD & Deployment Automation System",
+    author="Amosclaud",
+    author_email="owner@amosclaud.ai",
+    description="Amosclaud-owned CI/CD, data, tools, resources, and AI automation system",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/wamakologeorge-dev/amosclaude-clean",
@@ -26,7 +26,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "amoscloud-ai=amoscloud_ai.cli:main",
+            "amosclaud-ai=amoscloud_ai.cli:main",
         ],
     },
 )

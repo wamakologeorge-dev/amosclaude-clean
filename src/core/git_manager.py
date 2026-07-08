@@ -4,6 +4,8 @@ import logging
 from typing import Dict, List, Optional, Any
 from git import Repo, GitCommandError
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,6 +16,7 @@ class GitManager:
         self.repo_url = repo_url
         self.github_token = github_token
         self.local_repo = None
+        self.owner_profile = get_ownership_profile()
     
     def clone_repository(self, target_path: str) -> bool:
         try:

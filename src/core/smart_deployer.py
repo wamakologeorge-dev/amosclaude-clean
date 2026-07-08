@@ -5,6 +5,8 @@ from typing import Dict, Optional, Any
 from datetime import datetime
 from enum import Enum
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +25,7 @@ class SmartDeployer:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.deployments = []
+        self.owner_profile = get_ownership_profile()
         self.status = DeploymentStatus.PENDING
     
     async def deploy(self, version: str, environment: str) -> bool:

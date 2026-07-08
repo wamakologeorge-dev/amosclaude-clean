@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 from datetime import datetime, timedelta
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,6 +36,7 @@ class AIAgentContingency:
         self.fallback_handlers = {}
         self.recovery_strategies = {}
         self.contingency_history = []
+        self.owner_profile = get_ownership_profile()
         self.max_retries = config.get("max_retries", 3)
         self.retry_delay = config.get("retry_delay", 5)
     
@@ -172,6 +175,8 @@ class AIAgentContingency:
     def get_contingency_report(self) -> Dict[str, Any]:
         """Get contingency report"""
         return {
+            "owner": self.owner_profile["owner"],
+            "ownership": self.owner_profile,
             "total_events": len(self.contingency_history),
             "events": self.contingency_history,
             "registered_handlers": list(self.fallback_handlers.keys()),

@@ -3,6 +3,8 @@
 import logging
 from typing import Dict, List, Optional, Any
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,6 +15,7 @@ class DatabaseManager:
         self.database_url = database_url
         self.engine = None
         self.session_maker = None
+        self.owner_profile = get_ownership_profile()
     
     def connect(self) -> bool:
         try:

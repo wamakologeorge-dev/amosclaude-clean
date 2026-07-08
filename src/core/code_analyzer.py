@@ -5,6 +5,8 @@ import ast
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,6 +15,7 @@ class CodeAnalyzer:
     
     def __init__(self):
         self.analysis_results = {}
+        self.owner_profile = get_ownership_profile()
     
     def analyze_file(self, file_path: str) -> Dict[str, Any]:
         try:
@@ -39,6 +42,7 @@ class CodeAnalyzer:
             tree = ast.parse(content)
             analysis = {
                 "file": file_path,
+                "owner": self.owner_profile["owner"],
                 "lines": len(content.split('\n')),
                 "functions": [],
                 "classes": [],

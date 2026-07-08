@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Dict, Any
 from enum import Enum
 
+from src.ownership import get_ownership_profile
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,6 +24,7 @@ class CIOrchestrator:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        self.owner_profile = get_ownership_profile()
         self.status = PipelineStatus.PENDING
         self.start_time = None
         self.end_time = None
@@ -63,6 +66,8 @@ class CIOrchestrator:
     
     def get_status(self) -> Dict[str, Any]:
         return {
+            "owner": self.owner_profile["owner"],
+            "ownership": self.owner_profile,
             "status": self.status.value,
             "start_time": self.start_time,
             "end_time": self.end_time,

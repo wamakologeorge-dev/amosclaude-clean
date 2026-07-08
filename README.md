@@ -1,6 +1,17 @@
-# 🚀 Amoscloud AI - Professional CI/CD & Deployment Automation
+# 🚀 Amosclaud AI - Professional CI/CD & Deployment Automation
 
-**Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
+**Amosclaud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
+
+## 👑 Ownership
+
+Amosclaud is the defined owner across the full platform scope:
+
+- Frontend experiences
+- Backend services
+- Data and database operations
+- Tools and automation flows
+- Project resources
+- AI-powered capabilities
 
 ## ✨ Features
 
@@ -14,4 +25,3 @@
 - ✅ **Environment Management** - Auto-configure dev, staging, production
 
 ## 📋 Project Structure
-
