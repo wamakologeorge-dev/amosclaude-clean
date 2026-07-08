@@ -292,28 +292,39 @@ const overlayLink = $('#overlay-link');
 const iframeHistory = [browserUrl.value];
 let iframeIndex = 0;
 
+/**
+ * Validate a URL and return it only if it uses an allowed scheme (http/https).
+ * Falls back to Google homepage for any disallowed or unparseable URL.
+ */
+function sanitizeUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return parsed.href;
+    }
+  } catch { /* fall through */ }
+  return 'https://www.google.com';
+}
+
 function navigateTo(url) {
   let safeUrl = url.trim();
-
-  // Block javascript: and data: URIs to prevent XSS
-  if (/^(javascript|data|vbscript):/i.test(safeUrl)) {
-    showToast('Blocked potentially unsafe URL scheme.', 'error');
-    return;
-  }
 
   if (!/^https?:\/\//i.test(safeUrl)) {
     // Treat as a search query
     safeUrl = 'https://www.google.com/search?q=' + encodeURIComponent(safeUrl);
   }
-  browserUrl.value = safeUrl;
+
+  // Validate through URL parsing — rejects javascript:, data:, and any other unsafe scheme
+  const verifiedUrl = sanitizeUrl(safeUrl);
+
+  browserUrl.value = verifiedUrl;
   browserOverlay.classList.add('hidden');
-  browserFrame.src = safeUrl;
-  // Use setAttribute to set href safely (avoids treating value as HTML)
-  overlayLink.setAttribute('href', safeUrl);
+  browserFrame.src = verifiedUrl;
+  overlayLink.setAttribute('href', verifiedUrl);
 
   // Trim forward history
   iframeHistory.splice(iframeIndex + 1);
-  iframeHistory.push(safeUrl);
+  iframeHistory.push(verifiedUrl);
   iframeIndex = iframeHistory.length - 1;
 }
 

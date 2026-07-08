@@ -6,7 +6,7 @@ REST endpoints for the Android and Web browser apps.
 import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -104,7 +104,7 @@ def _new_session_id() -> str:
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 _GREETINGS = {"hi", "hello", "hey", "greetings", "howdy"}
