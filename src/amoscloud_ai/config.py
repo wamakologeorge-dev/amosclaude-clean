@@ -24,6 +24,8 @@ class Settings:
     )
     deployment_retries: int = field(
         default_factory=lambda: int(os.getenv("DEPLOYMENT_RETRIES", "3"))
+        if os.getenv("DEPLOYMENT_RETRIES", "3").isdigit()
+        else 3
     )
 
 
