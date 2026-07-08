@@ -1,33 +1,10 @@
 version: '3.9'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: amoscloud_postgres
-    environment:
-      POSTGRES_DB: amoscloud_db
-      POSTGRES_USER: amoscloud
-      POSTGRES_PASSWORD: amoscloud_secure_password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U amoscloud"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - amoscloud_network
-
   redis:
     image: redis:7-alpine
     container_name: amoscloud_redis
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -42,80 +19,29 @@ services:
       dockerfile: Dockerfile
     container_name: amoscloud_api
     environment:
-      DATABASE_URL: postgresql://amoscloud:amoscloud_secure_password@postgres:5432/amoscloud_db
+      DATABASE_URL: sqlite:///./data/amoscloud.db
       REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development
+      ENVIRONMENT: production
       LOG_LEVEL: INFO
-      # Optional: set OPENAI_API_KEY to enable real AI chat replies
-      # OPENAI_API_KEY: ""
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
     ports:
       - "8000:8000"
+    volumes:
+      - amoscloud_data:/app/data
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - .:/app
     networks:
       - amoscloud_network
     restart: unless-stopped
-
-  amoscloud_worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: amoscloud_worker
-    environment:
-      DATABASE_URL: postgresql://amoscloud:amoscloud_secure_password@postgres:5432/amoscloud_db
-      REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development
-      LOG_LEVEL: INFO
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - .:/app
-    networks:
-      - amoscloud_network
-    restart: unless-stopped
-    command: python -m amoscloud_ai.worker
-
-  amosclaud_platform:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: amosclaud_platform
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://amoscloud:amoscloud_secure_password@postgres:5432/amoscloud_db}
-      REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: development
-      LOG_LEVEL: INFO
-    ports:
-      - "8001:8001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - .:/app
-    networks:
-      - amoscloud_network
-    restart: unless-stopped
-    command: python -m src.platform.platform_cli serve --host 0.0.0.0 --port 8001
 
   nginx:
     image: nginx:alpine
     container_name: amoscloud_nginx
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - amoscloud_api
     networks:
@@ -123,8 +49,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  redis_data:
+  amoscloud_data:
 
 networks:
   amoscloud_network:

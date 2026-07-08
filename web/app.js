@@ -1,451 +1,244 @@
 /**
- * Amosclaud-AI Web App
- * app.js — UI logic, chat engine, browser controller
+ * Amoscloud AI Platform — Dashboard JS
+ * Fetches /health, /api/v1/pipelines, /api/v1/deployments
+ * Auto-refreshes every 10 seconds
  */
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Config & State
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Helpers ─────────────────────────────────────────────────── */
+const API = window.location.origin;
 
-const DEFAULT_API = window.location.origin; // same host when served by Flask
+function $(id) { return document.getElementById(id); }
 
-const state = {
-  apiUrl: localStorage.getItem('apiUrl') || DEFAULT_API,
-  sessionId: localStorage.getItem('sessionId') || null,
-  darkMode: localStorage.getItem('darkMode') === 'true',
-  messageCount: 0,
-};
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   DOM Helpers
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const $ = (sel, ctx = document) => ctx.querySelector(sel);
-const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
-
-function showToast(message, type = 'info', duration = 3500) {
-  const container = $('#toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast toast--${type}`;
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), duration);
+function showToast(msg, type = 'info') {
+  const container = $('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast toast--${type}`;
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
 }
 
-function setLoading(visible) {
-  $('#loading-overlay').classList.toggle('hidden', !visible);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Tab Navigation
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-function activateTab(tabId) {
-  $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.tab === tabId));
-  $$('.tab').forEach(tab => tab.classList.toggle('active', tab.id === `tab-${tabId}`));
-
-  if (tabId === 'dashboard') loadDashboard();
-}
-
-$$('.nav-item').forEach(item => {
-  item.addEventListener('click', () => activateTab(item.dataset.tab));
-});
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Chat
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const chatMessages = $('#chat-messages');
-const chatInput = $('#chat-input');
-const btnSend = $('#btn-send');
-
-/** Auto-grow textarea */
-chatInput.addEventListener('input', () => {
-  chatInput.style.height = 'auto';
-  chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
-  btnSend.disabled = chatInput.value.trim().length === 0;
-});
-
-/** Send on Enter (Shift+Enter = new line) */
-chatInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    if (!btnSend.disabled) sendMessage();
-  }
-});
-
-btnSend.addEventListener('click', sendMessage);
-
-/** Quick-action chips */
-chatMessages.addEventListener('click', e => {
-  const chip = e.target.closest('.chip');
-  if (chip) {
-    chatInput.value = chip.dataset.prompt;
-    chatInput.dispatchEvent(new Event('input'));
-    sendMessage();
-  }
-});
-
-/** New chat button */
-$('#btn-new-chat').addEventListener('click', () => {
-  state.sessionId = null;
-  localStorage.removeItem('sessionId');
-  chatMessages.innerHTML = '';
-  state.messageCount = 0;
-  appendWelcome();
-  showToast('New conversation started', 'info');
-});
-
-/** Clear button */
-$('#btn-clear-chat').addEventListener('click', async () => {
-  if (state.sessionId) {
-    await fetch(`${state.apiUrl}/api/chat/history/${state.sessionId}`, { method: 'DELETE' });
-  }
-  chatMessages.innerHTML = '';
-  state.sessionId = null;
-  state.messageCount = 0;
-  localStorage.removeItem('sessionId');
-  appendWelcome();
-});
-
-/** Export button */
-$('#btn-export-chat').addEventListener('click', () => {
-  const messages = $$('.message', chatMessages);
-  const lines = messages.map(msg => {
-    const role = msg.classList.contains('message--user') ? 'You' : 'Amosclaud-AI';
-    const text = msg.querySelector('.message-bubble')?.innerText || '';
-    return `[${role}]\n${text}\n`;
-  });
-  const blob = new Blob([lines.join('\n---\n\n')], { type: 'text/plain' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `amosclaud-ai-chat-${Date.now()}.txt`;
-  a.click();
-});
-
-function appendWelcome() {
-  const welcome = document.createElement('div');
-  welcome.className = 'message message--assistant';
-  welcome.id = 'msg-welcome';
-  welcome.innerHTML = `
-    <div class="message-avatar">🤖</div>
-    <div class="message-bubble">
-      <p>Hello! I'm <strong>Amosclaud-AI</strong> — your intelligent CI/CD &amp; DevOps automation assistant.</p>
-      <p>How can I help you today?</p>
-      <div class="quick-actions">
-        <button class="chip" data-prompt="Deploy my app to production">Deploy app</button>
-        <button class="chip" data-prompt="Run tests for my project">Run tests</button>
-        <button class="chip" data-prompt="Analyse my code for issues">Analyse code</button>
-        <button class="chip" data-prompt="Help me with database migration">DB migration</button>
-      </div>
-    </div>`;
-  chatMessages.appendChild(welcome);
-}
-
-function appendMessage(role, content) {
-  const div = document.createElement('div');
-  div.className = `message message--${role}`;
-
-  const avatarContent = role === 'user' ? '👤' : '🤖';
-  div.innerHTML = `
-    <div class="message-avatar">${avatarContent}</div>
-    <div class="message-bubble">${formatContent(content)}</div>`;
-
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  return div;
-}
-
-function appendTypingIndicator() {
-  const div = document.createElement('div');
-  div.className = 'message message--assistant';
-  div.id = 'typing-indicator';
-  div.innerHTML = `
-    <div class="message-avatar">🤖</div>
-    <div class="message-bubble typing-indicator">
-      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-    </div>`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  return div;
-}
-
-/** Lightweight markdown → HTML (bold, italic, inline code, code blocks, lists, links) */
-function formatContent(text) {
-  if (!text) return '';
-
-  // Placeholders to protect code from HTML escaping
-  const codeBlocks = [];
-  const inlineCodes = [];
-
-  // Extract fenced code blocks first
-  text = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
-    const idx = codeBlocks.length;
-    codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
-    return `\x00CODE_BLOCK_${idx}\x00`;
-  });
-
-  // Extract inline code
-  text = text.replace(/`([^`]+)`/g, (_, code) => {
-    const idx = inlineCodes.length;
-    inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
-    return `\x00INLINE_${idx}\x00`;
-  });
-
-  // Escape all remaining HTML entities (prevents XSS from user/API text)
-  text = escapeHtml(text);
-
-  // Bold (operate on escaped text, markers are plain ASCII)
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-  // Italic
-  text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // Safe URLs — only allow http(s) schemes to prevent javascript: XSS
-  text = text.replace(/(https?:\/\/[^\s&lt;&gt;&quot;]+)/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-  // Bullet lists
-  text = text.replace(/^[•\-\*] (.+)$/gm, '<li>$1</li>');
-  text = text.replace(/(<li>.*<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`);
-
-  // Numbered lists
-  text = text.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
-
-  // Paragraphs
-  text = text.split('\n\n').map(p => p.trim()).filter(Boolean).map(p => {
-    if (p.startsWith('\x00CODE_BLOCK') || p.startsWith('<ul>') || p.startsWith('<li>')) return p;
-    return `<p>${p.replace(/\n/g, '<br />')}</p>`;
-  }).join('');
-
-  // Restore placeholders
-  codeBlocks.forEach((block, i) => { text = text.replace(`\x00CODE_BLOCK_${i}\x00`, block); });
-  inlineCodes.forEach((code, i)  => { text = text.replace(`\x00INLINE_${i}\x00`, code); });
-
-  return text;
+function statusBadge(status) {
+  if (!status) return '<span class="badge badge-default">unknown</span>';
+  const s = String(status).toLowerCase();
+  let cls = 'badge-default';
+  if (['success', 'completed', 'healthy', 'ok'].includes(s)) cls = 'badge-success';
+  else if (['running', 'active', 'in_progress'].includes(s))  cls = 'badge-running';
+  else if (['pending', 'queued', 'waiting'].includes(s))      cls = 'badge-pending';
+  else if (['failed', 'error', 'cancelled'].includes(s))      cls = 'badge-failed';
+  return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
 }
 
 function escapeHtml(str) {
-  return str
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
 
-async function sendMessage() {
-  const message = chatInput.value.trim();
-  if (!message) return;
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString();
+  } catch { return iso; }
+}
 
-  chatInput.value = '';
-  chatInput.style.height = 'auto';
-  btnSend.disabled = true;
-
-  // Remove welcome message if still visible
-  $('#msg-welcome')?.remove();
-
-  appendMessage('user', message);
-  state.messageCount++;
-
-  const typing = appendTypingIndicator();
+/* ── Health check ────────────────────────────────────────────── */
+async function fetchHealth() {
+  const dot   = $('status-indicator');
+  const label = $('status-label');
+  const icon  = $('health-icon');
+  const stat  = $('stat-health');
 
   try {
-    const res = await fetch(`${state.apiUrl}/api/chat`, {
+    const res  = await fetch(`${API}/health`);
+    const data = await res.json();
+
+    dot.className   = 'status-dot status-ok';
+    label.textContent = 'Server alive';
+    icon.textContent  = '💚';
+    stat.textContent  = data.status || 'ok';
+
+    // Uptime (not always exposed, graceful fallback)
+    if (data.uptime !== undefined) {
+      $('stat-uptime').textContent = `${Math.floor(data.uptime)}s`;
+    } else {
+      $('stat-uptime').textContent = 'running';
+    }
+  } catch {
+    dot.className   = 'status-dot status-error';
+    label.textContent = 'Server unreachable';
+    icon.textContent  = '🔴';
+    stat.textContent  = 'error';
+    $('stat-uptime').textContent = '—';
+  }
+}
+
+/* ── Pipelines ───────────────────────────────────────────────── */
+async function fetchPipelines() {
+  const tbody = $('pipelines-body');
+  try {
+    const res  = await fetch(`${API}/api/v1/pipelines`);
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.pipelines || data.items || []);
+
+    $('stat-pipelines').textContent = rows.length;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No pipelines yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(p => `
+      <tr>
+        <td>${escapeHtml(p.id || p.pipeline_id || '—')}</td>
+        <td>${escapeHtml(p.name || '—')}</td>
+        <td>${statusBadge(p.status)}</td>
+        <td>${escapeHtml(p.branch || p.ref || '—')}</td>
+        <td>${fmtDate(p.created_at || p.createdAt)}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load pipelines.</td></tr>';
+    console.error('[Pipelines]', err);
+  }
+}
+
+/* ── Deployments ─────────────────────────────────────────────── */
+async function fetchDeployments() {
+  const tbody = $('deployments-body');
+  try {
+    const res  = await fetch(`${API}/api/v1/deployments`);
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : (data.deployments || data.items || []);
+
+    const active = rows.filter(d => {
+      const s = String(d.status || '').toLowerCase();
+      return ['running', 'active', 'in_progress'].includes(s);
+    }).length;
+    $('stat-deployments').textContent = active || rows.length;
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No deployments yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(d => `
+      <tr>
+        <td>${escapeHtml(d.id || d.deployment_id || '—')}</td>
+        <td>${escapeHtml(d.name || '—')}</td>
+        <td>${statusBadge(d.status)}</td>
+        <td>${escapeHtml(d.environment || d.env || '—')}</td>
+        <td>${fmtDate(d.created_at || d.createdAt)}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load deployments.</td></tr>';
+    console.error('[Deployments]', err);
+  }
+}
+
+/* ── Auto-refresh ────────────────────────────────────────────── */
+const REFRESH_INTERVAL = 10;
+let countdownValue = REFRESH_INTERVAL;
+
+function refreshAll() {
+  fetchHealth();
+  fetchPipelines();
+  fetchDeployments();
+}
+
+function startCountdown() {
+  const el = $('countdown');
+  countdownValue = REFRESH_INTERVAL;
+  el.textContent = countdownValue;
+
+  return setInterval(() => {
+    countdownValue--;
+    if (countdownValue <= 0) {
+      countdownValue = REFRESH_INTERVAL;
+      refreshAll();
+    }
+    el.textContent = countdownValue;
+  }, 1000);
+}
+
+/* ── Modal helpers ───────────────────────────────────────────── */
+function openModal(modalId) {
+  $('modal-backdrop').classList.remove('hidden');
+  $(modalId).classList.remove('hidden');
+}
+
+function closeModals() {
+  $('modal-backdrop').classList.add('hidden');
+  document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+}
+
+$('modal-backdrop').addEventListener('click', closeModals);
+
+/* ── Trigger Pipeline ────────────────────────────────────────── */
+$('btn-trigger-pipeline').addEventListener('click', () => openModal('modal-pipeline'));
+$('btn-cancel-pipeline').addEventListener('click', closeModals);
+
+$('btn-confirm-pipeline').addEventListener('click', async () => {
+  const name   = $('pipeline-name-input').value.trim();
+  const branch = $('pipeline-branch-input').value.trim() || 'main';
+
+  if (!name) {
+    showToast('Pipeline name is required', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/api/v1/pipelines`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, session_id: state.sessionId }),
+      body: JSON.stringify({ name, branch }),
     });
 
-    typing.remove();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    if (!res.ok) throw new Error(`Server error ${res.status}`);
-
-    const data = await res.json();
-    state.sessionId = data.session_id;
-    localStorage.setItem('sessionId', state.sessionId);
-
-    appendMessage('assistant', data.reply);
-    state.messageCount++;
-
-    // Update chat counter in dashboard
-    const statChats = $('#stat-chats');
-    if (statChats) statChats.textContent = Math.ceil(state.messageCount / 2);
-
+    showToast(`Pipeline "${name}" triggered!`, 'success');
+    closeModals();
+    $('pipeline-name-input').value = '';
+    refreshAll();
   } catch (err) {
-    typing.remove();
-    appendMessage('assistant',
-      '⚠️ I couldn\'t reach the backend right now. Please check your connection or the API URL in Settings.');
-    showToast('Failed to connect to API', 'error');
-    console.error('[Chat error]', err);
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Browser Tab
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const browserFrame = $('#browser-frame');
-const browserUrl = $('#browser-url');
-const browserOverlay = $('#browser-overlay');
-const overlayLink = $('#overlay-link');
-
-const iframeHistory = [browserUrl.value];
-let iframeIndex = 0;
-
-/**
- * Validate a URL and return it only if it uses an allowed scheme (http/https).
- * Falls back to Google homepage for any disallowed or unparseable URL.
- */
-function sanitizeUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
-      return parsed.href;
-    }
-  } catch { /* fall through */ }
-  return 'https://www.google.com';
-}
-
-function navigateTo(url) {
-  let safeUrl = url.trim();
-
-  if (!/^https?:\/\//i.test(safeUrl)) {
-    // Treat as a search query
-    safeUrl = 'https://www.google.com/search?q=' + encodeURIComponent(safeUrl);
-  }
-
-  // Validate through URL parsing — rejects javascript:, data:, and any other unsafe scheme
-  const verifiedUrl = sanitizeUrl(safeUrl);
-
-  browserUrl.value = verifiedUrl;
-  browserOverlay.classList.add('hidden');
-  browserFrame.src = verifiedUrl;
-  overlayLink.setAttribute('href', verifiedUrl);
-
-  // Trim forward history
-  iframeHistory.splice(iframeIndex + 1);
-  iframeHistory.push(verifiedUrl);
-  iframeIndex = iframeHistory.length - 1;
-}
-
-$('#browser-go').addEventListener('click', () => navigateTo(browserUrl.value));
-browserUrl.addEventListener('keydown', e => { if (e.key === 'Enter') navigateTo(browserUrl.value); });
-$('#browser-home').addEventListener('click', () => navigateTo('https://www.google.com'));
-$('#browser-back').addEventListener('click', () => {
-  if (iframeIndex > 0) { iframeIndex--; navigateTo(iframeHistory[iframeIndex]); }
-});
-$('#browser-forward').addEventListener('click', () => {
-  if (iframeIndex < iframeHistory.length - 1) { iframeIndex++; navigateTo(iframeHistory[iframeIndex]); }
-});
-$('#browser-refresh').addEventListener('click', () => {
-  navigateTo(browserUrl.value);
-});
-
-// Bookmarks
-$$('.bookmark').forEach(btn => {
-  btn.addEventListener('click', () => navigateTo(btn.dataset.url));
-});
-
-// Show overlay if frame blocks embedding
-browserFrame.addEventListener('load', () => {
-  try {
-    // Cross-origin access check — throws if X-Frame-Options/CSP blocks embedding
-    const accessCheck = browserFrame.contentWindow.location.href;
-    if (accessCheck) browserOverlay.classList.add('hidden');
-  } catch {
-    // Cannot access; the site blocks embedding
-    browserOverlay.classList.remove('hidden');
+    showToast('Failed to trigger pipeline', 'error');
+    console.error('[Trigger pipeline]', err);
   }
 });
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Dashboard
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Start Deployment ────────────────────────────────────────── */
+$('btn-start-deployment').addEventListener('click', () => openModal('modal-deployment'));
+$('btn-cancel-deployment').addEventListener('click', closeModals);
 
-async function loadDashboard() {
+$('btn-confirm-deployment').addEventListener('click', async () => {
+  const name        = $('deployment-name-input').value.trim();
+  const environment = $('deployment-env-input').value;
+
+  if (!name) {
+    showToast('Deployment name is required', 'error');
+    return;
+  }
+
   try {
-    const res = await fetch(`${state.apiUrl}/api/capabilities`);
-    if (!res.ok) return;
-    const data = await res.json();
-
-    const grid = $('#capabilities-list');
-    grid.innerHTML = '';
-    data.capabilities.forEach(cap => {
-      const span = document.createElement('span');
-      span.className = 'capability-chip';
-      span.textContent = cap.replace(/_/g, ' ');
-      grid.appendChild(span);
+    const res = await fetch(`${API}/api/v1/deployments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, environment }),
     });
 
-    $('#about-backend-version').textContent = data.version || '—';
-  } catch { /* silently ignore */ }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-  // Simulated stats (replace with real API calls if available)
-  animateStat('#stat-deployments', 14);
-  animateStat('#stat-tests', 127);
-  animateStat('#stat-db', 8);
-  const statChats = $('#stat-chats');
-  if (statChats && statChats.textContent === '—') statChats.textContent = '0';
-}
-
-function animateStat(selector, target) {
-  const el = $(selector);
-  if (!el || el.textContent !== '—') return;
-  let current = 0;
-  const step = Math.ceil(target / 30);
-  const timer = setInterval(() => {
-    current = Math.min(current + step, target);
-    el.textContent = current;
-    if (current >= target) clearInterval(timer);
-  }, 30);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Settings
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const settingApiUrl = $('#setting-api-url');
-const settingDarkMode = $('#setting-dark-mode');
-
-settingApiUrl.value = state.apiUrl;
-settingDarkMode.checked = state.darkMode;
-
-settingApiUrl.addEventListener('change', () => {
-  state.apiUrl = settingApiUrl.value.replace(/\/$/, '') || DEFAULT_API;
-  localStorage.setItem('apiUrl', state.apiUrl);
-});
-
-settingDarkMode.addEventListener('change', () => {
-  state.darkMode = settingDarkMode.checked;
-  localStorage.setItem('darkMode', state.darkMode);
-  document.body.classList.toggle('dark', state.darkMode);
-});
-
-$('#btn-test-connection').addEventListener('click', async () => {
-  const status = $('#connection-status');
-  status.textContent = 'Testing…';
-  status.className = 'status-text';
-  try {
-    const res = await fetch(`${state.apiUrl}/health`);
-    const data = await res.json();
-    status.textContent = `✅ Connected — ${data.service} v${data.version}`;
-    status.className = 'status-text ok';
-  } catch {
-    status.textContent = '❌ Cannot reach the backend. Check the URL.';
-    status.className = 'status-text err';
+    showToast(`Deployment "${name}" started!`, 'success');
+    closeModals();
+    $('deployment-name-input').value = '';
+    refreshAll();
+  } catch (err) {
+    showToast('Failed to start deployment', 'error');
+    console.error('[Start deployment]', err);
   }
 });
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Initialise
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-function init() {
-  // Apply dark mode preference
-  if (state.darkMode) document.body.classList.add('dark');
-
-  // Activate default tab (chat)
-  activateTab('chat');
-}
-
-init();
+/* ── Init ────────────────────────────────────────────────────── */
+refreshAll();
+startCountdown();
