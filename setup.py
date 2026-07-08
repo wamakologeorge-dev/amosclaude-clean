@@ -29,7 +29,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "amoscloud-ai=src.amoscloud_ai.cli:main",
+            "amoscloud-ai=amoscloud_ai.cli:main",
         ],
     },
 )

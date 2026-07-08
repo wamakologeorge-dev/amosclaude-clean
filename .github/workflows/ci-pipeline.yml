@@ -46,7 +46,7 @@ jobs:
           pip install pytest pytest-cov
 
       - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=amoscloud_ai --cov=src --cov-report=xml --cov-report=term-missing
 
       - uses: codecov/codecov-action@v3
         with:
