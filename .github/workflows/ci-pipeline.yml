@@ -12,18 +12,19 @@ jobs:
   code-quality:
     runs-on: ubuntu-latest
     name: Code Quality & Linting
-    
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
+          pip install black isort flake8
+
       - run: black --check . || true
       - run: isort --check-only . || true
       - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
@@ -31,49 +32,22 @@ jobs:
   test:
     runs-on: ubuntu-latest
     name: Tests & Coverage
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: amoscloud_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
+
       - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
+          pip install pytest pytest-cov
+
       - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/amoscloud_test
-          REDIS_URL: redis://localhost:6379/0
-      
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+
       - uses: codecov/codecov-action@v3
         with:
           files: ./coverage.xml
@@ -82,13 +56,13 @@ jobs:
   security:
     runs-on: ubuntu-latest
     name: Security Scanning
-    
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - run: pip install bandit safety
       - run: bandit -r src/ -f json -o bandit-report.json || true
       - run: safety check --json || true
