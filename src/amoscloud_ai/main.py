@@ -55,7 +55,7 @@ async def build_from_photo(
             error=f"File too large (max {settings.max_upload_size_mb} MB).",
         )
 
-    log.info("Received photo upload: %s (%d bytes)", photo.filename, len(raw))
+    log.info(f"Received photo upload: {photo.filename} ({len(raw)} bytes)")
     return builder_service.build_from_photo(
         image_bytes=raw,
         filename=photo.filename or "upload.png",
