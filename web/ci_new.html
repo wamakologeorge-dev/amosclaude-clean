@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Trigger Deployment - Amoscloud</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    .container { max-width: 400px; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: .5rem; }
+    input { width: 100%; padding: .5rem; box-sizing: border-box; }
+    button { padding: .5rem 1rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Trigger New Deployment</h1>
+    <div class="form-group">
+      <label>Target Environment</label>
+      <input type="text" id="env" value="production" />
+    </div>
+    <button onclick="trigger()">Deploy</button>
+    <p id="msg"></p>
+    <br>
+    <a href="/ci">Back to CI Runs</a>
+  </div>
+  <script>
+    async function trigger() {
+      const env = document.getElementById('env').value;
+      const res = await fetch('/api/ci/trigger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment: env })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('msg').innerText = 'Triggered successfully. Redirecting...';
+        setTimeout(() => window.location.href = '/ci', 1500);
+      } else {
+        document.getElementById('msg').innerText = 'Error: ' + data.error;
+      }
+    }
+  </script>
+</body>
+</html>
