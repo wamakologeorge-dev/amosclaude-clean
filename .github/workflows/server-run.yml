@@ -1,0 +1,68 @@
+name: 🚀 Amoscloud AI — Live Server Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  run-server:
+    runs-on: ubuntu-latest
+    name: Start & verify Amoscloud AI server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Start Amoscloud AI server
+        run: |
+          python -m amoscloud_ai.main &
+          echo "Server PID: $!"
+        env:
+          DATABASE_URL: sqlite:///./amoscloud.db
+          SECRET_KEY: github-actions-secret
+          LOG_LEVEL: INFO
+
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server..."
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Server is up!"
+              break
+            fi
+            echo "Attempt $i failed, retrying in 2s..."
+            sleep 2
+          done
+
+      - name: Verify health endpoint
+        run: |
+          RESPONSE=$(curl -s http://localhost:8000/health)
+          echo "Health response: $RESPONSE"
+          echo "$RESPONSE" | python -c "import sys, json; d=json.load(sys.stdin); assert d['status']=='ok', f'Expected ok, got {d}'; print('✅ Health check passed!')"
+
+      - name: Run API smoke tests
+        run: |
+          pip install pytest httpx
+          pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: sqlite:///./amoscloud.db
+          SECRET_KEY: github-actions-secret
+
+      - name: Show server is alive
+        run: |
+          echo "============================================"
+          echo "✅ Amoscloud AI server ran successfully!"
+          echo "   API: http://localhost:8000"
+          echo "   Docs: http://localhost:8000/docs"
+          echo "============================================"
+          curl -s http://localhost:8000/health | python -m json.tool
