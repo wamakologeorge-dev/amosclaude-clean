@@ -1,0 +1,25 @@
+name: amosclaude
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - pytest
+  - flake8
+  - pip:
+      - fastapi
+      - uvicorn[standard]
+      - requests
+      - pyyaml
+      - python-dotenv
+      - click
+      - rich
+      - typer
+      - jinja2
+      - black
+      - isort
+      - pylint
+      - mypy
+      - bandit

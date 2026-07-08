@@ -43,6 +43,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.amoscloud_ai.builder import BuilderService
@@ -59,6 +60,11 @@ app = FastAPI(
     description="Build projects from photo uploads or text instructions.",
     version="1.0.0",
 )
+
+# Mount static web files so the web UI is accessible at /static
+_WEB_DIR = Path(__file__).resolve().parents[3] / "web"
+if _WEB_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_WEB_DIR)), name="static")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
