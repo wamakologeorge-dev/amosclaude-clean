@@ -57,7 +57,7 @@ class TestCIOrchestrator:
 
     def test_start_pipeline_push(self):
         orchestrator = CIOrchestrator(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             orchestrator.start_pipeline("push", {"branch": "main"})
         )
         assert result is True
@@ -65,14 +65,14 @@ class TestCIOrchestrator:
 
     def test_start_pipeline_pr(self):
         orchestrator = CIOrchestrator(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             orchestrator.start_pipeline("pull_request", {"number": 42})
         )
         assert result is True
 
     def test_start_pipeline_schedule(self):
         orchestrator = CIOrchestrator(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             orchestrator.start_pipeline("schedule", {})
         )
         assert result is True
@@ -107,7 +107,7 @@ class TestSmartDeployer:
 
     def test_deploy_success(self):
         deployer = SmartDeployer(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             deployer.deploy("1.0.0", "staging")
         )
         assert result is True
@@ -115,7 +115,7 @@ class TestSmartDeployer:
 
     def test_rollback(self):
         deployer = SmartDeployer(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             deployer.rollback("1.0.0", "staging")
         )
         assert result is True
@@ -146,7 +146,7 @@ class TestAIAgentContingency:
 
     def test_handle_contingency(self):
         contingency = AIAgentContingency(config={})
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             contingency.handle_contingency(
                 ValueError("test error"),
                 {"operation": "test"},
