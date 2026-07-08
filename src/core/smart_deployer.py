@@ -30,7 +30,10 @@ class SmartDeployer:
     
     async def deploy(self, version: str, environment: str) -> bool:
         try:
-            logger.info(f"Starting deployment of version {version} to {environment}")
+            logger.info(
+                f"{self.owner_profile['owner']} is starting deployment of version "
+                f"{version} to {environment}"
+            )
             self.status = DeploymentStatus.IN_PROGRESS
             
             if not await self._pre_deployment_checks(version):
@@ -77,7 +80,10 @@ class SmartDeployer:
     
     async def rollback(self, version: str, environment: str) -> bool:
         try:
-            logger.warning(f"Rolling back {version} from {environment}")
+            logger.warning(
+                f"{self.owner_profile['owner']} is rolling back {version} "
+                f"from {environment}"
+            )
             self.status = DeploymentStatus.ROLLED_BACK
             return True
         except Exception as e:

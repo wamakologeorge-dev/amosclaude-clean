@@ -20,7 +20,9 @@ class GitManager:
     
     def clone_repository(self, target_path: str) -> bool:
         try:
-            logger.info(f"Cloning repository to {target_path}")
+            logger.info(
+                f"{self.owner_profile['owner']} is cloning repository to {target_path}"
+            )
             self.local_repo = Repo.clone_from(self.repo_url, target_path)
             logger.info("Repository cloned successfully")
             return True
@@ -62,7 +64,7 @@ class GitManager:
                 logger.error("Repository not initialized")
                 return False
             self.local_repo.remotes.origin.push(branch)
-            logger.info(f"Pushed changes to {branch}")
+            logger.info(f"{self.owner_profile['owner']} pushed changes to {branch}")
             return True
         except Exception as e:
             logger.error(f"Failed to push changes: {str(e)}")

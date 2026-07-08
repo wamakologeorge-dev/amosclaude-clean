@@ -19,7 +19,9 @@ class DatabaseManager:
     
     def connect(self) -> bool:
         try:
-            logger.info("Connecting to database...")
+            logger.info(
+                f"{self.owner_profile['owner']} is connecting to the database..."
+            )
             logger.info("Database connection established")
             return True
         except Exception as e:
@@ -34,7 +36,10 @@ class DatabaseManager:
     
     def create_backup(self, backup_path: str) -> bool:
         try:
-            logger.info(f"Creating database backup to {backup_path}")
+            logger.info(
+                f"{self.owner_profile['owner']} is creating database backup to "
+                f"{backup_path}"
+            )
             return True
         except Exception as e:
             logger.error(f"Backup failed: {str(e)}")
@@ -42,7 +47,10 @@ class DatabaseManager:
     
     def restore_backup(self, backup_path: str) -> bool:
         try:
-            logger.info(f"Restoring database from {backup_path}")
+            logger.info(
+                f"{self.owner_profile['owner']} is restoring database from "
+                f"{backup_path}"
+            )
             return True
         except Exception as e:
             logger.error(f"Restore failed: {str(e)}")
