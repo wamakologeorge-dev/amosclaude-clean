@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: amosclaude-clean
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.amoscloud_ai.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ENVIRONMENT
+        value: production

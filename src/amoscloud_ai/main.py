@@ -1,34 +1,4 @@
 """
-Amosclaud-AI application entry point.
-Starts the Flask API server that serves both the REST API and the web app.
-"""
-import os
-import logging
-from pathlib import Path
-
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-
-from src.amoscloud_ai.api import create_app  # noqa: E402
-
-# Resolve the web/ directory relative to the project root
-_HERE = Path(__file__).resolve().parent
-_WEB_DIR = str(_HERE.parent.parent.parent / "web")
-
-app = create_app(static_folder=_WEB_DIR)
-
-if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
-
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "Starting Amosclaud-AI server on http://%s:%d (debug=%s)", host, port, debug
-    )
-    app.run(host=host, port=port, debug=debug)
 Amoscloud AI – FastAPI web application entry point.
 
 Endpoints
@@ -43,6 +13,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.amoscloud_ai.builder import BuilderService
@@ -59,6 +30,11 @@ app = FastAPI(
     description="Build projects from photo uploads or text instructions.",
     version="1.0.0",
 )
+
+# Mount static web files so the web UI is accessible at /static
+_WEB_DIR = Path(__file__).resolve().parents[3] / "web"
+if _WEB_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_WEB_DIR)), name="static")
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
