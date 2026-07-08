@@ -1,44 +1,7 @@
-"""
-Amosclaud-AI application entry point.
-Starts the Flask API server that serves both the REST API and the web app.
-"""
-import os
+"""FastAPI application entry point for Amoscloud AI."""
+
 import logging
-from pathlib import Path
-
-logging.basicConfig(
-    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-)
-
-from src.amoscloud_ai.api import create_app  # noqa: E402
-
-# Resolve the web/ directory relative to the project root
-_HERE = Path(__file__).resolve().parent
-_WEB_DIR = str(_HERE.parent.parent.parent / "web")
-
-app = create_app(static_folder=_WEB_DIR)
-
-if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
-
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "Starting Amosclaud-AI server on http://%s:%d (debug=%s)", host, port, debug
-    )
-    app.run(host=host, port=port, debug=debug)
-Amoscloud AI – FastAPI web application entry point.
-
-Endpoints
----------
-GET  /                  → web UI (HTML)
-POST /build/photo       → build from uploaded image
-POST /build/instructions → build from text instructions
-GET  /health            → health check
-"""
-
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -50,9 +13,10 @@ from src.amoscloud_ai.config import settings
 from src.amoscloud_ai.logger import log
 from src.amoscloud_ai.models import BuildResult, BuildStatus
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+)
 
 app = FastAPI(
     title="Amoscloud AI",
@@ -67,11 +31,6 @@ builder_service = BuilderService()
 _MAX_BYTES = settings.max_upload_size_mb * 1024 * 1024
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     """Serve the main web UI."""
@@ -83,12 +42,7 @@ async def build_from_photo(
     photo: UploadFile = File(..., description="Image file (PNG, JPEG, GIF, WebP)"),
     instructions: str = Form(default="", description="Optional additional instructions"),
 ) -> BuildResult:
-    """
-    Build from an uploaded photo/screenshot.
-
-    The image is sent to Claude's vision model which generates a full project
-    plan and implementation outline.
-    """
+    """Build from an uploaded photo/screenshot."""
     content_type = photo.content_type or ""
     if not content_type.startswith("image/"):
         return BuildResult(
@@ -120,12 +74,7 @@ async def build_from_instructions(
     instructions: str = Form(..., description="What you want to build"),
     context: str = Form(default="", description="Optional project context"),
 ) -> BuildResult:
-    """
-    Build from plain-text instructions.
-
-    The instructions are sent to Claude which generates a full project plan
-    and implementation outline.
-    """
+    """Build from plain-text instructions."""
     if not instructions.strip():
         return BuildResult(
             status=BuildStatus.FAILED,
@@ -146,10 +95,6 @@ async def health() -> dict:
     """Health check used by Docker and load balancers."""
     return {"status": "healthy", "service": "amoscloud-ai"}
 
-
-# ---------------------------------------------------------------------------
-# Dev server entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
