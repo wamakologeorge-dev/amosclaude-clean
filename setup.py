@@ -27,6 +27,7 @@ setup(
     entry_points={
         "console_scripts": [
             "amoscloud-ai=amoscloud_ai.cli:main",
+            "amosclaud-platform=src.platform.platform_cli:main",
         ],
     },
 )
