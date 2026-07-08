@@ -9,6 +9,17 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
+  agent-status:
+    runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
   code-quality:
     runs-on: ubuntu-latest
     name: Code Quality & Linting
