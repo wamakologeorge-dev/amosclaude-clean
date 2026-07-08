@@ -1,89 +1,76 @@
-# 🚀 Amoscloud AI - Professional CI/CD & Deployment Automation
+# 🚀 Amoscloud AI Platform
 
-![Amosclaud-ai Status](https://img.shields.io/badge/Amosclaud--ai-%F0%9F%90%A6_Live_%26_Active-brightgreen)
+![Amoscloud AI Status](https://img.shields.io/badge/Amoscloud--AI-%F0%9F%9F%A2_Live_%26_Active-brightgreen)
 
-**Amoscloud AI** is an intelligent, autonomous CI/CD automation system designed for developers. It acts first, reports later, and handles everything from integration testing to database management and intelligent deployment.
+Self-hosted CI/CD & Deployment Automation Platform. Runs entirely from GitHub — no external cloud needed.
 
-## ✨ Features
+## Quick Start
 
-- ✅ **Automated Integration Testing** - Run tests automatically on every commit
-- ✅ **Smart Database Management** - Auto-migrate, backup, and optimize databases
-- ✅ **Intelligent File Editing** - Analyze and modify code automatically
-- ✅ **Code Deployment** - One-click deployment with rollback capabilities
-- ✅ **Repository Management** - Clone, branch, commit operations
-- ✅ **Real-time Reporting** - Comprehensive logs and status updates
-- ✅ **Build Automation** - Compile and build projects automatically
-- ✅ **Environment Management** - Auto-configure dev, staging, production
+### Option 1: Run with Docker (Full Platform)
 
-## 📋 Project Structure
+```bash
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean
+cd amosclaude-clean
+docker-compose up --build
+```
+
+- Dashboard: http://localhost — served by nginx on port 80
+- API Docs: http://localhost:8000/docs
+
+### Option 2: Run directly with Python
+
+```bash
+pip install -r requirements.txt
+python -m amoscloud_ai.main
+```
+
+- Dashboard: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+## What You Can Do
+
+- 🔁 Manage CI/CD pipelines
+- 🚀 Trigger and rollback deployments
+- 💚 Monitor server health in real-time
+- 📊 View live dashboard at `/`
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Web dashboard |
+| `GET` | `/health` | Server health check |
+| `GET` | `/api/v1/pipelines` | List all pipelines |
+| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
+| `GET` | `/api/v1/deployments` | List all deployments |
+| `POST` | `/api/v1/deployments` | Start a deployment |
+| `GET` | `/docs` | Interactive API docs (Swagger UI) |
+
+## Project Structure
 
 ```
 amosclaude-clean/
-├── src/                        # Python backend (CI/CD automation engine)
-│   ├── amoscloud_ai/
-│   │   ├── api/                # REST API (Flask) for web & Android apps
-│   │   │   ├── __init__.py
-│   │   │   └── chat_api.py     # /api/chat, /api/capabilities, /health
-│   │   ├── main.py             # App entry point — serves API + web app
-│   │   └── services/           # Deployment & database services
-│   ├── ai/                     # AI agent contingency logic
-│   ├── core/                   # CI orchestrator, code analyser, git manager
-│   └── database/               # DB manager
-├── web/                        # 🌐 Web App (runs in any browser)
-│   ├── index.html              # SPA with AI Chat + Browser + Dashboard
-│   ├── styles.css
-│   └── app.js
-├── android/                    # 📱 Android App (Kotlin)
-│   ├── app/src/main/
-│   │   ├── AndroidManifest.xml
-│   │   ├── java/com/amosclaudai/
-│   │   │   ├── MainActivity.kt        # Home screen
-│   │   │   ├── AiChatActivity.kt      # AI chat
-│   │   │   ├── BrowserActivity.kt     # WebView browser
-│   │   │   ├── SettingsActivity.kt    # API URL configuration
-│   │   │   ├── api/AmosclaudApiClient.kt
-│   │   │   ├── adapter/ChatAdapter.kt
-│   │   │   └── model/
-│   │   └── res/                # Layouts, drawables, strings, themes
-│   └── build.gradle.kts
-├── Dockerfile
-├── docker-compose.yml
-└── requirements.txt
+├── amoscloud_ai/          # Main FastAPI application package
+│   ├── api/routes/        # health, pipelines, deployments routes
+│   ├── main.py            # App entry point — serves API + web dashboard
+│   ├── config.py          # Settings (pydantic-settings)
+│   └── models.py          # Pydantic models
+├── web/                   # Frontend dashboard (served at /)
+│   ├── index.html         # Dashboard UI
+│   ├── style.css          # Dark theme CSS
+│   └── app.js             # API fetch + auto-refresh
+├── tests/                 # pytest test suite
+├── Dockerfile             # Multi-stage build
+├── docker-compose.yml     # Full stack: API + Redis + nginx
+└── nginx.conf             # Reverse proxy config
 ```
 
-## 🌐 Web App
+## Environment Variables
 
-The web app is served automatically by the Flask backend at `http://localhost:8000`.
-
-Features:
-- **AI Chat** — send messages and receive responses from Amosclaud-AI
-- **Web Browser** — built-in iframe browser with bookmarks and address bar
-- **Dashboard** — live stats and capabilities overview
-- **Dark mode** — toggle in Settings
-
-Open `http://localhost:8000` after starting the backend.
-
-## 📱 Android App
-
-A native Kotlin Android app with:
-- **Home screen** — quick-launch tiles
-- **AI Chat** — full conversation interface with the backend API
-- **Web Browser** — full-featured WebView with bookmarks and navigation
-- **Settings** — configure the backend API URL
-
-### Building the Android App
-
-**Requirements:** Android Studio Hedgehog or later, JDK 17, Android SDK 34.
-
-```bash
-cd android
-./gradlew assembleDebug          # Build debug APK
-./gradlew assembleRelease        # Build release APK
-./gradlew installDebug           # Install on connected device/emulator
-```
-
-The APK is output to `android/app/build/outputs/apk/debug/app-debug.apk`.
-
-**Default API URL:** `http://10.0.2.2:8000` (Android emulator → host machine).  
-Change it in **Settings** for real devices (use your machine's local IP, e.g. `http://192.168.1.x:8000`).
-
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (optional) |
+| `SECRET_KEY` | `change-me-in-production` | App secret key — **must be changed in production**. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ENVIRONMENT` | `development` | `development` or `production` |
+| `LOG_LEVEL` | `INFO` | Logging level |

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Deployment
     deployment_retries: int = Field(default=3, alias="DEPLOYMENT_RETRIES")
 
+    # Debug
+    debug: bool = Field(default=False, alias="DEBUG")
+
     # Upload limits
     max_upload_size_mb: int = Field(default=20, alias="MAX_UPLOAD_SIZE_MB")
 

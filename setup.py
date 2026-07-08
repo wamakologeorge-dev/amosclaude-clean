@@ -1,10 +1,13 @@
+import os
 from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+requirements = []
+if os.path.exists("requirements.txt"):
+    with open("requirements.txt", "r", encoding="utf-8") as fh:
+        requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setup(
     name="amoscloud-ai",
@@ -15,7 +18,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/wamakologeorge-dev/amosclaude-clean",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests*"]),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -27,6 +30,7 @@ setup(
     entry_points={
         "console_scripts": [
             "amoscloud-ai=amoscloud_ai.cli:main",
+            "amosclaud-platform=src.platform.platform_cli:main",
         ],
     },
 )
