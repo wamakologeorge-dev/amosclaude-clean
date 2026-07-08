@@ -59,6 +59,14 @@ BOT_SIGNATURE = "\n\n---\n*\U0001f916 Amosclaude-AI \u2013 automated response*"
 # Truncation limits for issue comment output
 MAX_CODE_PREVIEW_LENGTH = 3000
 MAX_RESPONSE_LENGTH = 2000
+MAX_COMMIT_TITLE_LENGTH = 60
+
+# Recognised file extensions for filename extraction
+_KNOWN_EXTS = {
+    "py", "js", "ts", "java", "go", "rb", "rs", "c", "cpp", "h",
+    "yaml", "yml", "json", "toml", "ini", "cfg", "txt", "md",
+    "sh", "bash", "zsh", "html", "css", "sql",
+}
 
 # Directories to skip during file search
 _SKIP_DIRS = {".git", "__pycache__", "node_modules", "venv", ".venv", ".tox", "dist", "build"}
@@ -225,11 +233,6 @@ def extract_filenames(text: str) -> list:
     """Extract plausible filenames from arbitrary text."""
     raw = FILENAME_PATTERN.findall(text)
     # Require at least one character before the dot and a recognised extension
-    _KNOWN_EXTS = {
-        "py", "js", "ts", "java", "go", "rb", "rs", "c", "cpp", "h",
-        "yaml", "yml", "json", "toml", "ini", "cfg", "txt", "md",
-        "sh", "bash", "zsh", "html", "css", "sql",
-    }
     result = []
     for f in raw:
         parts = f.rsplit(".", 1)
@@ -471,7 +474,11 @@ def run() -> None:
                 gh_create_branch(branch_name, base_sha)
 
                 _, new_sha = gh_get_file(resolved_file, branch_name)
-                title_part = issue_title[:57] + "..." if len(issue_title) > 60 else issue_title
+                title_part = (
+                    issue_title[: MAX_COMMIT_TITLE_LENGTH - 3] + "..."
+                    if len(issue_title) > MAX_COMMIT_TITLE_LENGTH
+                    else issue_title
+                )
                 commit_msg = f"fix: auto-fix for issue #{ISSUE_NUMBER} - {title_part}"
                 gh_update_file(resolved_file, branch_name, new_sha, fixed_code, commit_msg)
 
