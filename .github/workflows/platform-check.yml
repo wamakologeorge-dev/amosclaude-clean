@@ -10,6 +10,8 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     name: Build & verify Docker image
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v4

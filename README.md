@@ -71,6 +71,6 @@ amosclaude-clean/
 |----------|---------|-------------|
 | `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (optional) |
-| `SECRET_KEY` | `change-me-in-production` | App secret key |
+| `SECRET_KEY` | `change-me-in-production` | App secret key — **must be changed in production**. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `ENVIRONMENT` | `development` | `development` or `production` |
 | `LOG_LEVEL` | `INFO` | Logging level |
