@@ -16,7 +16,7 @@ from src.amoscloud_ai.models import BuildMode, BuildResult, BuildStatus
 # System prompt shared by both modes
 _SYSTEM_PROMPT = """\
 You are Amoscloud AI, an expert software architect and CI/CD automation engineer.
-Your task is to analyse the user's input and produce:
+Your task is to analyze the user's input and produce:
 1. A concise **project plan** (bullet-list of components/steps).
 2. A concrete **implementation outline** with the key files, configurations, or
    commands needed to build and deploy the described project.
@@ -108,7 +108,7 @@ class BuilderService:
                 {
                     "type": "text",
                     "text": (
-                        "Please analyse this image and generate a complete build plan "
+                        "Please analyze this image and generate a complete build plan "
                         "for the project or application shown.\n"
                         + (f"\nAdditional instructions: {extra_instructions}" if extra_instructions else "")
                     ),

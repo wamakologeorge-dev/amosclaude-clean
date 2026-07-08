@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = Field(
-        default="******localhost:5432/amoscloud_db",
+        default="postgresql://localhost:5432/amoscloud_db",
         alias="DATABASE_URL",
     )
 
