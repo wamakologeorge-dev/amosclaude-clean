@@ -131,7 +131,7 @@ def create_app(static_folder: str = "web") -> Flask:
         
         # Trigger GitHub Action
         token = os.environ.get("GITHUB_TOKEN")
-        repo = os.environ.get("GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean")
+        repo = os.environ.get("GITHUB_REPOSITORY")
         
         if token and repo:
             url = f"https://api.github.com/repos/{repo}/dispatches"
@@ -144,7 +144,7 @@ def create_app(static_folder: str = "web") -> Flask:
                 "client_payload": {
                     "run_id": run_id,
                     "environment": env,
-                    "webhook_secret": os.environ.get("WEBHOOK_SECRET", "default_secret")
+                    "webhook_secret": os.environ.get("WEBHOOK_SECRET")
                 }
             }
             try:
@@ -158,7 +158,7 @@ def create_app(static_folder: str = "web") -> Flask:
     def ci_webhook():
         data = request.get_json(silent=True) or {}
         secret = data.get("webhook_secret")
-        if os.environ.get("WEBHOOK_SECRET") and secret != os.environ.get("WEBHOOK_SECRET"):
+        if not os.environ.get("WEBHOOK_SECRET") or secret != os.environ.get("WEBHOOK_SECRET"):
             return jsonify({"error": "Unauthorized"}), 401
             
         run_id = data.get("run_id")
