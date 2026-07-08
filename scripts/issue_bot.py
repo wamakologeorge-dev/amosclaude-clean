@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import textwrap
+import base64
 import time
 from pathlib import Path
 from typing import Optional
@@ -158,8 +159,6 @@ def gh_create_branch(branch: str, sha: str) -> None:
 
 def gh_get_file(path: str, branch: str) -> tuple:
     """Return (decoded_content, sha) for a file on a branch."""
-    import base64
-
     url = f"{GH_API}/repos/{GITHUB_REPOSITORY}/contents/{path}"
     resp = requests.get(url, headers=GH_HEADERS, params={"ref": branch}, timeout=30)
     resp.raise_for_status()
@@ -169,8 +168,6 @@ def gh_get_file(path: str, branch: str) -> tuple:
 
 
 def gh_update_file(path: str, branch: str, sha: str, content: str, message: str) -> None:
-    import base64
-
     url = f"{GH_API}/repos/{GITHUB_REPOSITORY}/contents/{path}"
     encoded = base64.b64encode(content.encode()).decode()
     resp = requests.put(
@@ -454,8 +451,9 @@ def run() -> None:
 
     # -----------------------------------------------------------------------
     # Step 5 - If Claude produced a code fix, commit it to a new branch + PR
-    # Note: strip() comparison intentionally ignores trailing-whitespace-only
-    # differences; such changes are not worth a PR on their own.
+    # Note: strip() comparison ignores leading/trailing whitespace changes.
+    # Internal whitespace changes (e.g. re-indentation) will still produce a
+    # PR, which is acceptable since those are visible diffs worth reviewing.
     # -----------------------------------------------------------------------
     pr_url: Optional[str] = None
     if fixed_code:
@@ -473,7 +471,8 @@ def run() -> None:
                 gh_create_branch(branch_name, base_sha)
 
                 _, new_sha = gh_get_file(resolved_file, branch_name)
-                commit_msg = f"fix: auto-fix for issue #{ISSUE_NUMBER} - {issue_title[:60]}"
+                title_part = issue_title[:57] + "..." if len(issue_title) > 60 else issue_title
+                commit_msg = f"fix: auto-fix for issue #{ISSUE_NUMBER} - {title_part}"
                 gh_update_file(resolved_file, branch_name, new_sha, fixed_code, commit_msg)
 
                 pr_body = (
@@ -489,9 +488,19 @@ def run() -> None:
                 )
                 print(f"[issue-bot] Created PR: {pr_url}")
             except requests.HTTPError as exc:
-                print(f"[issue-bot] ERROR: GitHub API error while creating PR: {exc}", file=sys.stderr)
+                print(
+                    f"[issue-bot] ERROR: GitHub API error while creating PR "
+                    f"(status={exc.response.status_code if exc.response is not None else 'unknown'}, "
+                    f"body={exc.response.text[:200] if exc.response is not None else ''}): {exc}",
+                    file=sys.stderr,
+                )
             except Exception as exc:
-                print(f"[issue-bot] ERROR: Unexpected error while creating PR: {exc}", file=sys.stderr)
+                import traceback
+                print(
+                    f"[issue-bot] ERROR: Unexpected error while creating PR: {exc}\n"
+                    + traceback.format_exc(),
+                    file=sys.stderr,
+                )
                 raise
 
     # -----------------------------------------------------------------------
@@ -499,9 +508,17 @@ def run() -> None:
     # -----------------------------------------------------------------------
     lines = [f"Hi @{COMMENT_AUTHOR}! Here's my analysis of `{resolved_file}`:\n"]
     if fixed_code:
-        truncated_code = fixed_code[:MAX_CODE_PREVIEW_LENGTH]
-        if len(fixed_code) > MAX_CODE_PREVIEW_LENGTH:
-            truncated_code += "\n... (truncated – see the PR for the full diff)"
+        # Truncate at a line boundary to avoid cutting mid-line
+        code_lines = fixed_code.splitlines(keepends=True)
+        truncated_lines = []
+        char_count = 0
+        for line in code_lines:
+            if char_count + len(line) > MAX_CODE_PREVIEW_LENGTH:
+                truncated_lines.append("... (truncated – see the PR for the full diff)\n")
+                break
+            truncated_lines.append(line)
+            char_count += len(line)
+        truncated_code = "".join(truncated_lines)
         lines.append(f"```\n{truncated_code}\n```")
         if explanation:
             lines.append(f"\n{explanation}")
