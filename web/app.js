@@ -174,21 +174,36 @@ function appendTypingIndicator() {
 function formatContent(text) {
   if (!text) return '';
 
-  // Code blocks
-  text = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) =>
-    `<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+  // Placeholders to protect code from HTML escaping
+  const codeBlocks = [];
+  const inlineCodes = [];
 
-  // Inline code
-  text = text.replace(/`([^`]+)`/g, (_, code) => `<code>${escapeHtml(code)}</code>`);
+  // Extract fenced code blocks first
+  text = text.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push(`<pre><code>${escapeHtml(code.trim())}</code></pre>`);
+    return `\x00CODE_BLOCK_${idx}\x00`;
+  });
 
-  // Bold
+  // Extract inline code
+  text = text.replace(/`([^`]+)`/g, (_, code) => {
+    const idx = inlineCodes.length;
+    inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
+    return `\x00INLINE_${idx}\x00`;
+  });
+
+  // Escape all remaining HTML entities (prevents XSS from user/API text)
+  text = escapeHtml(text);
+
+  // Bold (operate on escaped text, markers are plain ASCII)
   text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
   // Italic
   text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
-  // URLs
-  text = text.replace(/(https?:\/\/[^\s<>"]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Safe URLs — only allow http(s) schemes to prevent javascript: XSS
+  text = text.replace(/(https?:\/\/[^\s&lt;&gt;&quot;]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
 
   // Bullet lists
   text = text.replace(/^[•\-\*] (.+)$/gm, '<li>$1</li>');
@@ -199,9 +214,13 @@ function formatContent(text) {
 
   // Paragraphs
   text = text.split('\n\n').map(p => p.trim()).filter(Boolean).map(p => {
-    if (p.startsWith('<pre>') || p.startsWith('<ul>') || p.startsWith('<li>')) return p;
+    if (p.startsWith('\x00CODE_BLOCK') || p.startsWith('<ul>') || p.startsWith('<li>')) return p;
     return `<p>${p.replace(/\n/g, '<br />')}</p>`;
   }).join('');
+
+  // Restore placeholders
+  codeBlocks.forEach((block, i) => { text = text.replace(`\x00CODE_BLOCK_${i}\x00`, block); });
+  inlineCodes.forEach((code, i)  => { text = text.replace(`\x00INLINE_${i}\x00`, code); });
 
   return text;
 }
@@ -275,14 +294,22 @@ let iframeIndex = 0;
 
 function navigateTo(url) {
   let safeUrl = url.trim();
+
+  // Block javascript: and data: URIs to prevent XSS
+  if (/^(javascript|data|vbscript):/i.test(safeUrl)) {
+    showToast('Blocked potentially unsafe URL scheme.', 'error');
+    return;
+  }
+
   if (!/^https?:\/\//i.test(safeUrl)) {
-    // Try treating it as a search query
+    // Treat as a search query
     safeUrl = 'https://www.google.com/search?q=' + encodeURIComponent(safeUrl);
   }
   browserUrl.value = safeUrl;
   browserOverlay.classList.add('hidden');
   browserFrame.src = safeUrl;
-  overlayLink.href = safeUrl;
+  // Use setAttribute to set href safely (avoids treating value as HTML)
+  overlayLink.setAttribute('href', safeUrl);
 
   // Trim forward history
   iframeHistory.splice(iframeIndex + 1);
@@ -331,9 +358,13 @@ async function loadDashboard() {
     const data = await res.json();
 
     const grid = $('#capabilities-list');
-    grid.innerHTML = data.capabilities.map(cap =>
-      `<span class="capability-chip">${cap.replace(/_/g, ' ')}</span>`
-    ).join('');
+    grid.innerHTML = '';
+    data.capabilities.forEach(cap => {
+      const span = document.createElement('span');
+      span.className = 'capability-chip';
+      span.textContent = cap.replace(/_/g, ' ');
+      grid.appendChild(span);
+    });
 
     $('#about-backend-version').textContent = data.version || '—';
   } catch { /* silently ignore */ }

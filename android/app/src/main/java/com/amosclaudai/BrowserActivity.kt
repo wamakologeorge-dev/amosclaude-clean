@@ -9,6 +9,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.amosclaudai.databinding.ActivityBrowserBinding
 
@@ -48,6 +49,18 @@ class BrowserActivity : AppCompatActivity() {
         setupControls()
         setupBookmarks()
 
+        // Handle back press: navigate WebView history first, then exit
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (binding.webView.canGoBack()) {
+                    binding.webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+
         val startUrl = intent.getStringExtra("url") ?: HOME_URL
         binding.webView.loadUrl(startUrl)
         binding.etUrl.setText(startUrl)
@@ -56,14 +69,6 @@ class BrowserActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         onBackPressedDispatcher.onBackPressed()
         return true
-    }
-
-    override fun onBackPressed() {
-        if (binding.webView.canGoBack()) {
-            binding.webView.goBack()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
