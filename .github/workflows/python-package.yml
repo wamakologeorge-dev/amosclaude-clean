@@ -10,6 +10,17 @@ on:
     branches: [ "main" ]
 
 jobs:
+  agent-status:
+    runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
   build:
 
     runs-on: ubuntu-latest
