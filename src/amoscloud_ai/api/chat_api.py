@@ -5,6 +5,8 @@ REST endpoints for the Android and Web browser apps.
 
 import os
 import json
+import uuid
+import requests
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -114,7 +116,6 @@ def create_app(static_folder: str = "web") -> Flask:
         data = request.get_json(silent=True) or {}
         env = data.get("environment", "production")
         
-        import uuid
         run_id = str(uuid.uuid4())
         
         run_data = {
@@ -125,10 +126,10 @@ def create_app(static_folder: str = "web") -> Flask:
             "logs": ""
         }
         _ci_runs.append(run_data)
+        if len(_ci_runs) > 100:
+            _ci_runs.pop(0)
         
         # Trigger GitHub Action
-        import requests
-        import os
         token = os.environ.get("GITHUB_TOKEN")
         repo = os.environ.get("GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean")
         
@@ -142,19 +143,24 @@ def create_app(static_folder: str = "web") -> Flask:
                 "event_type": "deploy",
                 "client_payload": {
                     "run_id": run_id,
-                    "environment": env
+                    "environment": env,
+                    "webhook_secret": os.environ.get("WEBHOOK_SECRET", "default_secret")
                 }
             }
             try:
-                requests.post(url, json=payload, headers=headers)
+                requests.post(url, json=payload, headers=headers, timeout=10)
             except Exception as e:
-                logger.error(f"Failed to trigger GH action: {e}")
+                logger.error(f"Failed to trigger GH action: URL={url}, Error={e}")
         
         return jsonify({"success": True, "run_id": run_id})
 
     @app.route("/api/ci/webhook", methods=["POST"])
     def ci_webhook():
         data = request.get_json(silent=True) or {}
+        secret = data.get("webhook_secret")
+        if os.environ.get("WEBHOOK_SECRET") and secret != os.environ.get("WEBHOOK_SECRET"):
+            return jsonify({"error": "Unauthorized"}), 401
+            
         run_id = data.get("run_id")
         status = data.get("status")
         logs = data.get("logs")
@@ -165,9 +171,9 @@ def create_app(static_folder: str = "web") -> Flask:
                     run["status"] = status
                 if logs:
                     run["logs"] += logs + "\n"
+"
                 break
         return jsonify({"success": True})
-
 
     return app
 

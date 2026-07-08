@@ -4,6 +4,9 @@ on:
   repository_dispatch:
     types: [deploy]
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -13,17 +16,17 @@ jobs:
 
       - name: Report Queued
         run: |
-          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+          curl -X POST ${{ secrets.AMOSCLOUD_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
-            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Deployment starting..."}' || true
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "webhook_secret": "${{ github.event.client_payload.webhook_secret }}", "status": "building", "logs": "Deployment starting..."}' || true
 
       - name: Simulate Build
         run: |
-          echo "Building Amosclaud..."
+          echo "Building Amoscloud..."
           sleep 2
-          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+          curl -X POST ${{ secrets.AMOSCLOUD_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
-            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Build in progress...\\n"}' || true
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "webhook_secret": "${{ github.event.client_payload.webhook_secret }}", "status": "building", "logs": "Build in progress...\\n"}' || true
           echo "Build successful."
           sleep 2
 
@@ -31,20 +34,20 @@ jobs:
         run: |
           echo "Deploying to ${{ github.event.client_payload.environment }}..."
           sleep 2
-          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+          curl -X POST ${{ secrets.AMOSCLOUD_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
-            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "building", "logs": "Deploying to environment...\\n"}' || true
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "webhook_secret": "${{ github.event.client_payload.webhook_secret }}", "status": "building", "logs": "Deploying to environment...\\n"}' || true
 
       - name: Report Success
         if: success()
         run: |
-          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+          curl -X POST ${{ secrets.AMOSCLOUD_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
-            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "success", "logs": "Deployment completed successfully!\\n"}' || true
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "webhook_secret": "${{ github.event.client_payload.webhook_secret }}", "status": "success", "logs": "Deployment completed successfully!\\n"}' || true
 
       - name: Report Failure
         if: failure()
         run: |
-          curl -X POST ${{ secrets.AMOSCLAUD_WEBHOOK_URL }} \
+          curl -X POST ${{ secrets.AMOSCLOUD_WEBHOOK_URL }} \
             -H "Content-Type: application/json" \
-            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "status": "failed", "logs": "Deployment failed.\\n"}' || true
+            -d '{"run_id": "${{ github.event.client_payload.run_id }}", "webhook_secret": "${{ github.event.client_payload.webhook_secret }}", "status": "failed", "logs": "Deployment failed.\\n"}' || true
