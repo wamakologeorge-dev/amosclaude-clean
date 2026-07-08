@@ -338,7 +338,7 @@ $('#browser-forward').addEventListener('click', () => {
   if (iframeIndex < iframeHistory.length - 1) { iframeIndex++; navigateTo(iframeHistory[iframeIndex]); }
 });
 $('#browser-refresh').addEventListener('click', () => {
-  browserFrame.src = browserFrame.src; // eslint-disable-line no-self-assign
+  navigateTo(browserUrl.value);
 });
 
 // Bookmarks
@@ -349,11 +349,11 @@ $$('.bookmark').forEach(btn => {
 // Show overlay if frame blocks embedding
 browserFrame.addEventListener('load', () => {
   try {
-    // Access check — throws if cross-origin blocked
-    const _ = browserFrame.contentWindow.location.href; // eslint-disable-line no-unused-vars
-    browserOverlay.classList.add('hidden');
+    // Cross-origin access check — throws if X-Frame-Options/CSP blocks embedding
+    const accessCheck = browserFrame.contentWindow.location.href;
+    if (accessCheck) browserOverlay.classList.add('hidden');
   } catch {
-    // Cannot access; the site probably sends X-Frame-Options
+    // Cannot access; the site blocks embedding
     browserOverlay.classList.remove('hidden');
   }
 });

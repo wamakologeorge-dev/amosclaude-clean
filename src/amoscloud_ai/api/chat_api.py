@@ -150,17 +150,8 @@ _KEYWORD_REPLIES: list[tuple[list[str], str]] = [
 ]
 
 
-def _generate_reply(message: str, history: list) -> str:
-    """
-    Rule-based reply generator.
-    Replace this with a call to a real LLM (OpenAI, Anthropic, etc.)
-    by setting the OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable.
-    """
-    # Optionally delegate to OpenAI if configured
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if openai_key:
-        return _openai_reply(message, history, openai_key)
-
+def _rule_based_reply(message: str) -> str:
+    """Keyword-driven fallback reply — no external API required."""
     lower = message.lower().strip(" ?!.,")
 
     if lower in _GREETINGS:
@@ -178,6 +169,17 @@ def _generate_reply(message: str, history: list) -> str:
         "I'm Amosclaud-AI, specialising in CI/CD automation, deployments, code analysis, "
         "and DevOps workflows. Could you give me more details so I can assist you better?"
     )
+
+
+def _generate_reply(message: str, history: list) -> str:
+    """
+    Generate a reply for the given message.
+    Delegates to OpenAI when OPENAI_API_KEY is set; otherwise uses rule-based logic.
+    """
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if openai_key:
+        return _openai_reply(message, history, openai_key)
+    return _rule_based_reply(message)
 
 
 def _openai_reply(message: str, history: list, api_key: str) -> str:
@@ -209,6 +211,4 @@ def _openai_reply(message: str, history: list, api_key: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as exc:  # pragma: no cover
         logger.warning("OpenAI call failed: %s — falling back to rule-based reply", exc)
-        return _generate_reply.__wrapped__(message, history) if hasattr(_generate_reply, "__wrapped__") else (
-            "I encountered an issue reaching my language model. Please try again shortly."
-        )
+        return _rule_based_reply(message)

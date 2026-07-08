@@ -75,13 +75,16 @@ class BrowserActivity : AppCompatActivity() {
     private fun setupWebView() {
         binding.webView.apply {
             settings.apply {
-                javaScriptEnabled       = true
-                domStorageEnabled       = true
-                loadWithOverviewMode    = true
-                useWideViewPort         = true
-                builtInZoomControls     = true
-                displayZoomControls     = false
+                javaScriptEnabled        = true
+                domStorageEnabled        = true
+                loadWithOverviewMode     = true
+                useWideViewPort          = true
+                builtInZoomControls      = true
+                displayZoomControls      = false
                 setSupportMultipleWindows(false)
+                // Restrict access to local file system and content providers
+                allowFileAccess          = false
+                allowContentAccess       = false
             }
 
             webChromeClient = object : WebChromeClient() {
@@ -98,6 +101,9 @@ class BrowserActivity : AppCompatActivity() {
 
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    // Only allow http/https navigation; block other schemes
+                    val scheme = request.url.scheme?.lowercase()
+                    if (scheme != "http" && scheme != "https") return true
                     binding.etUrl.setText(request.url.toString())
                     return false
                 }
