@@ -44,6 +44,33 @@ function fmtDate(iso) {
   } catch { return iso; }
 }
 
+function addAgentReport(message, muted = false) {
+  const replies = $('agent-replies');
+  const item = document.createElement('div');
+  item.className = muted ? 'agent-reply muted' : 'agent-reply';
+  item.textContent = message;
+  if (replies.querySelector('.muted')) replies.innerHTML = '';
+  replies.prepend(item);
+}
+
+/* ── Autonomous server ───────────────────────────────────────── */
+async function fetchAgent() {
+  try {
+    const res = await fetch(`${API}/api/v1/agent`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    $('agent-name').textContent = data.name || 'Amosclaud Autonomous Server';
+    $('agent-mission').textContent = data.mission || 'Ready to run autonomous Amosclaud operations.';
+    $('agent-status').className = 'badge badge-success';
+    $('agent-status').textContent = data.mode || 'autonomous';
+  } catch (err) {
+    $('agent-status').className = 'badge badge-failed';
+    $('agent-status').textContent = 'offline';
+    console.error('[Agent profile]', err);
+  }
+}
+
 /* ── Health check ────────────────────────────────────────────── */
 async function fetchHealth() {
   const dot   = $('status-indicator');
@@ -93,10 +120,10 @@ async function fetchPipelines() {
     tbody.innerHTML = rows.map(p => `
       <tr>
         <td>${escapeHtml(p.id || p.pipeline_id || '—')}</td>
-        <td>${escapeHtml(p.name || '—')}</td>
+        <td>${escapeHtml(p.name || p.trigger || 'Pipeline')}</td>
         <td>${statusBadge(p.status)}</td>
         <td>${escapeHtml(p.branch || p.ref || '—')}</td>
-        <td>${fmtDate(p.created_at || p.createdAt)}</td>
+        <td>${fmtDate(p.started_at || p.created_at || p.createdAt)}</td>
       </tr>`).join('');
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load pipelines.</td></tr>';
@@ -126,10 +153,10 @@ async function fetchDeployments() {
     tbody.innerHTML = rows.map(d => `
       <tr>
         <td>${escapeHtml(d.id || d.deployment_id || '—')}</td>
-        <td>${escapeHtml(d.name || '—')}</td>
+        <td>${escapeHtml(d.name || d.version || 'Deployment')}</td>
         <td>${statusBadge(d.status)}</td>
         <td>${escapeHtml(d.environment || d.env || '—')}</td>
-        <td>${fmtDate(d.created_at || d.createdAt)}</td>
+        <td>${fmtDate(d.started_at || d.created_at || d.createdAt)}</td>
       </tr>`).join('');
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load deployments.</td></tr>';
@@ -143,6 +170,7 @@ let countdownValue = REFRESH_INTERVAL;
 
 function refreshAll() {
   fetchHealth();
+  fetchAgent();
   fetchPipelines();
   fetchDeployments();
 }
@@ -192,7 +220,11 @@ $('btn-confirm-pipeline').addEventListener('click', async () => {
     const res = await fetch(`${API}/api/v1/pipelines`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, branch }),
+      body: JSON.stringify({
+        trigger: 'manual',
+        branch,
+        payload: { name },
+      }),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -224,7 +256,7 @@ $('btn-confirm-deployment').addEventListener('click', async () => {
     const res = await fetch(`${API}/api/v1/deployments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, environment }),
+      body: JSON.stringify({ version: name, environment }),
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -236,6 +268,48 @@ $('btn-confirm-deployment').addEventListener('click', async () => {
   } catch (err) {
     showToast('Failed to start deployment', 'error');
     console.error('[Start deployment]', err);
+  }
+});
+
+/* ── Run autonomous server ───────────────────────────────────── */
+$('btn-run-agent').addEventListener('click', async () => {
+  const mode = $('agent-mode-input').value;
+  const objective = $('agent-objective-input').value.trim();
+
+  $('btn-run-agent').disabled = true;
+  $('agent-status').className = 'badge badge-running';
+  $('agent-status').textContent = 'running';
+
+  try {
+    const res = await fetch(`${API}/api/v1/agent/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode,
+        objective: objective || undefined,
+        branch: 'main',
+        metadata: { branch: 'main' },
+      }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+    const checkSummary = Array.isArray(data.checks) && data.checks.length
+      ? ` Checks: ${data.checks.map(check => `${check.name}=${check.status}`).join(', ')}`
+      : '';
+    addAgentReport(`${data.reply || 'Autonomous run accepted.'}${checkSummary}`);
+    showToast(`Autonomous run ${data.run_id || ''}`.trim(), 'success');
+    $('agent-objective-input').value = '';
+    refreshAll();
+  } catch (err) {
+    $('agent-status').className = 'badge badge-failed';
+    $('agent-status').textContent = 'error';
+    showToast('Failed to start autonomous run', 'error');
+    console.error('[Run agent]', err);
+  } finally {
+    $('btn-run-agent').disabled = false;
+    fetchAgent();
   }
 });
 

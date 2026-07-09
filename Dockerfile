@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+LABEL maintainer="Amosclaud Team"
+LABEL description="Amosclaud AI - CI/CD & Deployment Automation"
+LABEL version="1.0.0"
+
 WORKDIR /app
 
 # Copy requirements first for better caching
