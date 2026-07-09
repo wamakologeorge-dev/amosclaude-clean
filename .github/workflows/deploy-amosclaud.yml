@@ -1,0 +1,54 @@
+name: Deploy amosclaud.com
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - run: pytest -q
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    environment:
+      name: production
+      url: https://amosclaud.com
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.AMOSCLAUD_SSH_KEY }}" > ~/.ssh/amosclaud
+          chmod 600 ~/.ssh/amosclaud
+          ssh-keyscan -H "${{ secrets.AMOSCLAUD_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Deploy all services
+        env:
+          SSH_HOST: ${{ secrets.AMOSCLAUD_SSH_HOST }}
+          SSH_USER: ${{ secrets.AMOSCLAUD_SSH_USER }}
+          APP_DIR: ${{ secrets.AMOSCLAUD_APP_DIR }}
+        run: |
+          ssh -i ~/.ssh/amosclaud "$SSH_USER@$SSH_HOST" "
+            set -e
+            cd \"$APP_DIR\"
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+            docker compose -f docker-compose.prod.yml ps
+          "
+
+      - name: Verify production health
+        run: |
+          curl --fail --retry 12 --retry-delay 5 https://amosclaud.com/health

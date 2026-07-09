@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: amosclaud_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-amosclaud_db}
+      POSTGRES_USER: ${POSTGRES_USER:-amosclaud}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-amosclaud} -d ${POSTGRES_DB:-amosclaud_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amosclaud_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: amosclaud_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - amosclaud_network
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amosclaud_api
+    environment:
+      APP_NAME: Amosclaud AI
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql://${POSTGRES_USER:-amosclaud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-amosclaud_db}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALLOWED_HOSTS: '["https://amosclaud.com","https://www.amosclaud.com"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amosclaud_network
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: amosclaud_worker
+    command: python -m amoscloud_ai.worker
+    environment:
+      APP_NAME: Amosclaud AI
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql://${POSTGRES_USER:-amosclaud}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-amosclaud_db}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ALLOWED_HOSTS: '["https://amosclaud.com","https://www.amosclaud.com"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amosclaud_network
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: amosclaud_caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - amosclaud_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  amosclaud_network:
+    driver: bridge
