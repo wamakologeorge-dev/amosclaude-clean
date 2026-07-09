@@ -23,7 +23,7 @@ asyncpg>=0.28.0
 psycopg2-binary>=2.9.9
 
 # Data validation
-pydantic>=2.6.0
+pydantic>=2.13.4
 pydantic-settings>=2.2.0
 
 # Git operations
