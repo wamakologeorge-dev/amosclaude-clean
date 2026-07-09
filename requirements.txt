@@ -24,7 +24,7 @@ psycopg2-binary>=2.9.9
 
 # Data validation
 pydantic>=2.6.0
-pydantic-settings>=2.2.0
+pydantic-settings>=2.14.2
 
 # Git operations
 gitpython>=3.1.0
