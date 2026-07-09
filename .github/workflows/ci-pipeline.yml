@@ -1,4 +1,4 @@
-name: 🚀 Amoscloud AI - CI Pipeline
+name: 🚀 Amosclaud AI - CI Pipeline
 
 on:
   push:
@@ -67,9 +67,10 @@ jobs:
       - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest pytest-cov
       
       - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || true
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/amoscloud_test
           REDIS_URL: redis://localhost:6379/0

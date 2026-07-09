@@ -8,8 +8,8 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 
 FROM python:3.11-slim
 
-LABEL maintainer="Amoscloud Team"
-LABEL description="Amoscloud AI - CI/CD & Deployment Automation"
+LABEL maintainer="Amosclaud Team"
+LABEL description="Amosclaud AI - CI/CD & Deployment Automation"
 LABEL version="1.0.0"
 
 WORKDIR /app

@@ -1,4 +1,4 @@
-"""Pydantic models for Amoscloud AI."""
+"""Pydantic models for Amosclaud AI."""
 
 from __future__ import annotations
 
@@ -62,6 +62,10 @@ class PipelineResponse(BaseModel):
     branch: Optional[str] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
+    message: Optional[str] = None
+    copilot_reply: Optional[str] = None
+    copilot_role: Optional[str] = None
+    delegation_target: Optional[str] = None
     jobs: List[PipelineJob] = Field(default_factory=list)
 
 
@@ -85,6 +89,36 @@ class DeploymentResponse(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     message: Optional[str] = None
+    copilot_reply: Optional[str] = None
+    copilot_role: Optional[str] = None
+    delegation_target: Optional[str] = None
+
+
+class CopilotProfile(BaseModel):
+    name: str
+    owner: str
+    role: str
+    mission: str
+    home: str
+    pipeline: str
+    scope: List[str]
+    directives: List[str]
+
+
+class CopilotDelegationRequest(BaseModel):
+    task: str = Field(..., min_length=1, description="Work to delegate to Amosclaud Copilot")
+    source: Optional[str] = Field(default=None, description="Caller, channel, or request source")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CopilotDelegationResponse(BaseModel):
+    accepted: bool
+    task: str
+    source: Optional[str] = None
+    reply: str
+    copilot_role: str
+    delegation_target: str
+    scope: List[str]
 
 
 # ---------------------------------------------------------------------------

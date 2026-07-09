@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
+import asyncio
+
+import httpx
 
 from amoscloud_ai.main import create_app
 
 app = create_app()
-client = TestClient(app)
+
+
+async def _request(method: str, path: str, **kwargs):
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.request(method, path, **kwargs)
+
+
+def request(method: str, path: str, **kwargs):
+    return asyncio.run(_request(method, path, **kwargs))
 
 
 # ---------------------------------------------------------------------------
@@ -16,7 +26,7 @@ client = TestClient(app)
 # ---------------------------------------------------------------------------
 
 def test_health_ok():
-    resp = client.get("/health")
+    resp = request("GET", "/health")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
@@ -26,11 +36,45 @@ def test_health_ok():
 
 
 # ---------------------------------------------------------------------------
+# Copilot
+# ---------------------------------------------------------------------------
+
+def test_copilot_profile_scope():
+    resp = request("GET", "/api/v1/copilot")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["name"] == "Amosclaud Copilot"
+    assert data["owner"] == "Amosclaud"
+    assert data["role"] == "higher-level delegation agent"
+    assert data["scope"] == ["amosclaud.com", "Amosclaud pipeline"]
+    assert "only for amosclaud.com" in data["mission"].lower()
+
+
+def test_copilot_delegate_task():
+    payload = {"task": "  build landing page  ", "source": "test-suite"}
+    resp = request("POST", "/api/v1/copilot/delegate", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["accepted"] is True
+    assert data["task"] == "build landing page"
+    assert data["source"] == "test-suite"
+    assert data["reply"].startswith("Amosclaud Copilot:")
+    assert data["copilot_role"] == "higher-level delegation agent"
+    assert data["delegation_target"] == "Amosclaud pipeline"
+    assert data["scope"] == ["amosclaud.com", "Amosclaud pipeline"]
+
+
+def test_copilot_delegate_rejects_blank_task():
+    resp = request("POST", "/api/v1/copilot/delegate", json={"task": "   "})
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Pipelines
 # ---------------------------------------------------------------------------
 
 def test_list_pipelines_empty():
-    resp = client.get("/api/v1/pipelines")
+    resp = request("GET", "/api/v1/pipelines")
     assert resp.status_code == 200
     # May contain items from other tests; just ensure it's a list
     assert isinstance(resp.json(), list)
@@ -38,27 +82,33 @@ def test_list_pipelines_empty():
 
 def test_trigger_pipeline():
     payload = {"trigger": "manual", "branch": "main", "payload": {}}
-    resp = client.post("/api/v1/pipelines", json=payload)
+    resp = request("POST", "/api/v1/pipelines", json=payload)
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
     assert data["trigger"] == "manual"
     assert data["branch"] == "main"
+    assert data["message"]
+    assert data["copilot_reply"].startswith("Amosclaud Copilot:")
+    assert data["copilot_role"] == "higher-level delegation agent"
+    assert data["delegation_target"] == "Amosclaud pipeline"
+    assert data["jobs"][0]["name"] == "Build"
+    assert data["jobs"][0]["logs"]
 
 
 def test_get_pipeline_not_found():
-    resp = client.get("/api/v1/pipelines/nonexistent-id")
+    resp = request("GET", "/api/v1/pipelines/nonexistent-id")
     assert resp.status_code == 404
 
 
 def test_cancel_pipeline():
     # Create one first
     payload = {"trigger": "push", "branch": "feature/x", "payload": {}}
-    create_resp = client.post("/api/v1/pipelines", json=payload)
+    create_resp = request("POST", "/api/v1/pipelines", json=payload)
     pipeline_id = create_resp.json()["id"]
 
     # Cancel it – if already finished in stub mode it should 409
-    cancel_resp = client.delete(f"/api/v1/pipelines/{pipeline_id}")
+    cancel_resp = request("DELETE", f"/api/v1/pipelines/{pipeline_id}")
     assert cancel_resp.status_code in (204, 409)
 
 
@@ -67,37 +117,41 @@ def test_cancel_pipeline():
 # ---------------------------------------------------------------------------
 
 def test_list_deployments_empty():
-    resp = client.get("/api/v1/deployments")
+    resp = request("GET", "/api/v1/deployments")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
 
 
 def test_start_deployment():
     payload = {"environment": "development", "version": "1.0.0", "pre_deploy_tests": False}
-    resp = client.post("/api/v1/deployments", json=payload)
+    resp = request("POST", "/api/v1/deployments", json=payload)
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
     assert data["environment"] == "development"
+    assert data["message"]
+    assert data["copilot_reply"].startswith("Amosclaud Copilot:")
+    assert data["copilot_role"] == "higher-level delegation agent"
+    assert data["delegation_target"] == "Amosclaud pipeline"
 
 
 def test_get_deployment_not_found():
-    resp = client.get("/api/v1/deployments/nonexistent-id")
+    resp = request("GET", "/api/v1/deployments/nonexistent-id")
     assert resp.status_code == 404
 
 
 def test_rollback_deployment():
     # Create a deployment first
     payload = {"environment": "staging", "version": "1.0.1"}
-    create_resp = client.post("/api/v1/deployments", json=payload)
+    create_resp = request("POST", "/api/v1/deployments", json=payload)
     dep_id = create_resp.json()["id"]
 
-    rollback_resp = client.post(f"/api/v1/deployments/{dep_id}/rollback")
+    rollback_resp = request("POST", f"/api/v1/deployments/{dep_id}/rollback")
     assert rollback_resp.status_code == 200
     data = rollback_resp.json()
     assert data["status"] == "rolled_back"
 
 
 def test_rollback_not_found():
-    resp = client.post("/api/v1/deployments/nonexistent-id/rollback")
+    resp = request("POST", "/api/v1/deployments/nonexistent-id/rollback")
     assert resp.status_code == 404

@@ -1,4 +1,4 @@
-"""Amoscloud AI – FastAPI application entry point.
+"""Amosclaud AI – FastAPI application entry point.
 
 Run directly:
     python -m amoscloud_ai.main
@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from amoscloud_ai import __version__
-from amoscloud_ai.api.routes import deployments, health, pipelines
+from amoscloud_ai.api.routes import copilot, deployments, health, pipelines
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
 
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         f"[{settings.environment}] on {settings.host}:{settings.port}"
     )
     yield
-    log.info("Shutting down Amoscloud AI server")
+    log.info("Shutting down Amosclaud AI server")
 
 
 def create_app() -> FastAPI:
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health.router)
+    app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
 

@@ -1,1 +1,1 @@
-"""API package for Amoscloud AI."""
+"""API package for Amosclaud AI."""
