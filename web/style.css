@@ -190,6 +190,88 @@ button {
 }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
 
+/* ── Agent panel ─────────────────────────────────────────────── */
+.agent-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-header h2 {
+  font-size: 1rem;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.agent-header p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  max-width: 760px;
+}
+
+.agent-compose {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.agent-compose select,
+.agent-compose textarea {
+  min-height: 76px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.agent-compose select {
+  min-height: 44px;
+}
+
+.agent-compose textarea {
+  resize: vertical;
+}
+
+.agent-compose select:focus,
+.agent-compose textarea:focus { border-color: var(--primary); }
+
+.agent-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.agent-reply {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.agent-reply.muted {
+  color: var(--text-muted);
+}
+
 /* ── Table sections ──────────────────────────────────────────── */
 .table-section {
   background: var(--surface);
@@ -363,4 +445,9 @@ tbody td {
   #content { padding: 12px; }
   .stats-row { grid-template-columns: 1fr 1fr; }
   .stat-value { font-size: 1.4rem; }
+  .agent-header,
+  .agent-compose {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
 }

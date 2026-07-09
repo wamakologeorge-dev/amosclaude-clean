@@ -1,4 +1,4 @@
-"""Celery worker for Amoscloud AI background tasks.
+"""Celery worker for Amosclaud AI background tasks.
 
 Start with:
     celery -A amoscloud_ai.worker worker --loglevel=info
@@ -41,46 +41,87 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
     try:
         # Import here to avoid circular imports at module load time
         from amoscloud_ai.api.routes.pipelines import _pipelines
+        from amoscloud_ai.copilot import pipeline_reply
         from amoscloud_ai.models import PipelineStatus
 
         pipeline = _pipelines.get(pipeline_id)
         if pipeline:
             pipeline.status = PipelineStatus.RUNNING
+            reply = pipeline_reply(PipelineStatus.RUNNING)
+            pipeline.message = reply
+            pipeline.copilot_reply = reply
+            if pipeline.jobs:
+                pipeline.jobs[0].status = PipelineStatus.RUNNING
+                pipeline.jobs[0].started_at = datetime.now(timezone.utc)
+                pipeline.jobs[0].logs.append(reply)
 
         # ── Pipeline logic ────────────────────────────────────────────────
-        from src.core.ci_orchestrator import CIOrchestrator
+        if payload.get("trigger") == "autonomous":
+            from amoscloud_ai.autonomous_server import run_autonomous_server
 
-        orchestrator = CIOrchestrator(config=payload)
-        success = asyncio.run(
-            orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
-        )
+            run_payload = payload.get("payload", {})
+            result = run_autonomous_server(
+                run_payload.get("mode", "autonomous-check"),
+                run_payload.get("objective", "amosclaud.com autonomous operations"),
+                run_payload.get("metadata", {}),
+            )
+            success = result.status == PipelineStatus.SUCCESS
+            orchestrator_jobs = []
+            reports_count = len(result.checks)
+            if pipeline and pipeline.jobs:
+                pipeline.jobs[0].logs.extend(result.logs)
+        else:
+            from src.core.ci_orchestrator import CIOrchestrator
+
+            orchestrator = CIOrchestrator(config=payload)
+            success = asyncio.run(
+                orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
+            )
+            orchestrator_jobs = orchestrator.jobs
+            reports_count = len(orchestrator.reports)
         # ─────────────────────────────────────────────────────────────────
 
         if pipeline:
             pipeline.status = PipelineStatus.SUCCESS if success else PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
             # Attach any job/report data captured by the orchestrator
-            if orchestrator.jobs:
-                pipeline.jobs = orchestrator.jobs
+            if orchestrator_jobs:
+                pipeline.jobs = orchestrator_jobs
+            reply = pipeline_reply(pipeline.status)
+            pipeline.message = reply
+            pipeline.copilot_reply = reply
+            if pipeline.jobs:
+                pipeline.jobs[0].status = pipeline.status
+                pipeline.jobs[0].finished_at = pipeline.finished_at
+                pipeline.jobs[0].logs.append(reply)
 
         result_status = "success" if success else "failed"
         log.info(f"[worker] Pipeline {pipeline_id} finished with status: {result_status}")
         return {
             "pipeline_id": pipeline_id,
             "status": result_status,
-            "jobs_count": len(orchestrator.jobs),
-            "reports_count": len(orchestrator.reports),
+            "jobs_count": len(orchestrator_jobs),
+            "reports_count": reports_count,
         }
 
     except Exception as exc:
         log.error(f"[worker] Pipeline {pipeline_id} failed: {exc}")
         try:
             from amoscloud_ai.api.routes.pipelines import _pipelines
+            from amoscloud_ai.copilot import pipeline_reply
             from amoscloud_ai.models import PipelineStatus
             pipeline = _pipelines.get(pipeline_id)
             if pipeline:
                 pipeline.status = PipelineStatus.FAILED
                 pipeline.finished_at = datetime.now(timezone.utc)
+                reply = pipeline_reply(PipelineStatus.FAILED)
+                pipeline.message = reply
+                pipeline.copilot_reply = reply
+                for job in pipeline.jobs:
+                    if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
+                        job.status = PipelineStatus.FAILED
+                        job.finished_at = pipeline.finished_at
+                        job.logs.append(reply)
         except Exception:
             pass
         raise self.retry(exc=exc, countdown=5)
@@ -92,11 +133,15 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
     log.info(f"[worker] Running deployment {deployment_id} to {config.get('environment')}")
     try:
         from amoscloud_ai.api.routes.deployments import _deployments
+        from amoscloud_ai.copilot import deployment_reply
         from amoscloud_ai.models import DeploymentStatus
 
         dep = _deployments.get(deployment_id)
         if dep:
             dep.status = DeploymentStatus.IN_PROGRESS
+            reply = deployment_reply(DeploymentStatus.IN_PROGRESS)
+            dep.message = reply
+            dep.copilot_reply = reply
 
         # ── Deployment logic ──────────────────────────────────────────────
         from src.core.smart_deployer import SmartDeployer
@@ -114,7 +159,6 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
             # Map SmartDeployer's final status back to the API model
             if success:
                 dep.status = DeploymentStatus.COMPLETED
-                dep.message = "Deployment completed successfully"
             else:
                 # deployer.status reflects FAILED or ROLLED_BACK
                 deployer_status = deployer.status.value  # e.g. "rolled_back" or "failed"
@@ -123,8 +167,10 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
                     if deployer_status == "rolled_back"
                     else DeploymentStatus.FAILED
                 )
-                dep.message = f"Deployment did not complete (deployer status: {deployer_status})"
             dep.finished_at = datetime.now(timezone.utc)
+            reply = deployment_reply(dep.status)
+            dep.message = reply
+            dep.copilot_reply = reply
 
         result_status = dep.status.value if dep else ("completed" if success else "failed")
         log.info(f"[worker] Deployment {deployment_id} finished with status: {result_status}")
@@ -134,11 +180,15 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
         log.error(f"[worker] Deployment {deployment_id} failed: {exc}")
         try:
             from amoscloud_ai.api.routes.deployments import _deployments
+            from amoscloud_ai.copilot import deployment_reply
             from amoscloud_ai.models import DeploymentStatus
             dep = _deployments.get(deployment_id)
             if dep:
                 dep.status = DeploymentStatus.FAILED
                 dep.finished_at = datetime.now(timezone.utc)
+                reply = deployment_reply(DeploymentStatus.FAILED)
+                dep.message = reply
+                dep.copilot_reply = reply
         except Exception:
             pass
         raise self.retry(exc=exc, countdown=5)

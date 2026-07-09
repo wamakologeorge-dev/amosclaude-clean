@@ -63,6 +63,30 @@
         <button id="btn-start-deployment" class="btn-accent">🚀 Start Deployment</button>
       </section>
 
+      <!-- Autonomous server -->
+      <section class="agent-section">
+        <div class="agent-header">
+          <div>
+            <h2 id="agent-name">Amosclaud Autonomous Server</h2>
+            <p id="agent-mission">Loading autonomous server profile...</p>
+          </div>
+          <span id="agent-status" class="badge badge-pending">connecting</span>
+        </div>
+        <div class="agent-compose">
+          <select id="agent-mode-input" aria-label="Autonomous mode">
+            <option value="autonomous-check">autonomous-check</option>
+            <option value="build">build</option>
+            <option value="deploy">deploy</option>
+            <option value="monitor">monitor</option>
+          </select>
+          <textarea id="agent-objective-input" rows="3" placeholder="Optional objective for this autonomous run"></textarea>
+          <button id="btn-run-agent" class="btn-primary">Run</button>
+        </div>
+        <div id="agent-replies" class="agent-replies" aria-live="polite">
+          <div class="agent-reply muted">Autonomous run reports will appear here.</div>
+        </div>
+      </section>
+
       <!-- Pipelines table -->
       <section class="table-section">
         <h2>CI/CD Pipelines</h2>
