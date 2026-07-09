@@ -1,8 +1,8 @@
-# Deployment Rules for amosclaud.com
+# Python Deployment Rules for amosclaud.com
 
-Whenever you finish modifying files, resolving a bug, or building a feature, you must prepare the project for deployment:
+Whenever you finish a task, prepare the project for deployment:
 
-1. **Build Step**: Ensure you run the production build script (e.g., `npm run build` or `go build`).
-2. **Authentication**: Use the environment variable `$AMOSCLOUD_API_TOKEN` to authorize commands. Do not hardcode this value.
-3. **Deployment Command**: Package all artifacts in the distribution folder and deploy them using the AmosCloud CLI tool.
-4. **Verification**: After a deployment is triggered, check the output status URL to confirm that the deployment succeeded on amosclaud.com.
+1. **Environment Setup**: Ensure dependencies are installed via `pip install -r requirements.txt`.
+2. **Authentication**: Use Python's `os.environ.get('AMOSCLOUD_API_TOKEN')` to securely pull the API key.
+3. **Execution**: Run the local python deployment script via `python deploy.py`. 
+4. **Verification**: Confirm that the script returns a `200 OK` response from amosclaud.com.
