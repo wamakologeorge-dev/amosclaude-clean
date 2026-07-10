@@ -1,4 +1,4 @@
-"""Command-line interface for Amoscloud AI."""
+"""Command-line interface for Amosclaud AI."""
 
 import sys
 
@@ -12,7 +12,7 @@ from amoscloud_ai.config import settings
 @click.group()
 @click.version_option(__version__, prog_name="amoscloud-ai")
 def cli() -> None:
-    """Amoscloud AI – Self-hosted CI/CD & Deployment Automation."""
+    """Amosclaud AI – Self-hosted CI/CD & Deployment Automation."""
 
 
 @cli.command()
@@ -21,8 +21,8 @@ def cli() -> None:
 @click.option("--workers", default=settings.workers, show_default=True, type=int, help="Worker count")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (dev only)")
 def serve(host: str, port: int, workers: int, reload: bool) -> None:
-    """Start the Amoscloud AI API server."""
-    click.echo(f"Starting Amoscloud AI v{__version__} on {host}:{port} …")
+    """Start the Amosclaud AI API server."""
+    click.echo(f"Starting Amosclaud AI v{__version__} on {host}:{port} …")
     uvicorn.run(
         "amoscloud_ai.main:app",
         host=host,
@@ -39,7 +39,7 @@ def worker(concurrency: int) -> None:
     """Start the Celery background worker."""
     from amoscloud_ai.worker import celery_app
 
-    click.echo(f"Starting Amoscloud AI worker (concurrency={concurrency}) …")
+    click.echo(f"Starting Amosclaud AI worker (concurrency={concurrency}) …")
     celery_app.worker_main(
         argv=["worker", "--loglevel", settings.log_level.lower(), "-c", str(concurrency)]
     )

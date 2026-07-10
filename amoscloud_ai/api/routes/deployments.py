@@ -6,8 +6,10 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
+from amoscloud_ai.copilot import COPILOT_PIPELINE, COPILOT_ROLE, deployment_reply
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import DeploymentConfig, DeploymentResponse, DeploymentStatus
+from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/deployments", tags=["deployments"])
 
@@ -32,6 +34,7 @@ async def get_deployment(deployment_id: str) -> DeploymentResponse:
 async def start_deployment(config: DeploymentConfig) -> DeploymentResponse:
     deployment_id = str(uuid.uuid4())
     log.info(f"Starting deployment {deployment_id} to {config.environment}")
+    reply = deployment_reply(DeploymentStatus.PENDING)
 
     dep = DeploymentResponse(
         id=deployment_id,
@@ -39,18 +42,24 @@ async def start_deployment(config: DeploymentConfig) -> DeploymentResponse:
         environment=config.environment.value,
         version=config.version,
         started_at=datetime.now(timezone.utc),
+        message=reply,
+        copilot_reply=reply,
+        copilot_role=COPILOT_ROLE,
+        delegation_target=COPILOT_PIPELINE,
     )
     _deployments[deployment_id] = dep
 
     # Kick off background task
     try:
         from amoscloud_ai.worker import run_deployment_task
-        run_deployment_task.delay(deployment_id, config.model_dump())
+        dispatch_task(run_deployment_task, deployment_id, config.model_dump())
     except Exception:
         log.warning("Celery unavailable – running deployment stub")
         dep.status = DeploymentStatus.COMPLETED
         dep.finished_at = datetime.now(timezone.utc)
-        dep.message = "Deployment completed (stub mode)"
+        reply = deployment_reply(DeploymentStatus.COMPLETED)
+        dep.message = reply
+        dep.copilot_reply = reply
 
     return dep
 
@@ -64,5 +73,7 @@ async def rollback_deployment(deployment_id: str) -> DeploymentResponse:
     log.warning(f"Rolling back deployment {deployment_id}")
     dep.status = DeploymentStatus.ROLLED_BACK
     dep.finished_at = datetime.now(timezone.utc)
-    dep.message = "Rolled back successfully"
+    reply = deployment_reply(DeploymentStatus.ROLLED_BACK)
+    dep.message = reply
+    dep.copilot_reply = reply
     return dep

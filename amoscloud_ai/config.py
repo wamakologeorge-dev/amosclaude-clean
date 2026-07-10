@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     )
 
     # App
-    app_name: str = "Amoscloud AI"
+    app_name: str = "Amosclaud AI"
     app_version: str = "1.0.0"
     environment: str = "development"
     debug: bool = False
@@ -40,6 +40,17 @@ class Settings(BaseSettings):
 
     # Deployment
     deployment_retries: int = 3
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, v: object) -> object:
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"debug", "development", "dev"}:
+                return True
+        return v
 
     @field_validator("celery_broker_url", mode="before")
     @classmethod
