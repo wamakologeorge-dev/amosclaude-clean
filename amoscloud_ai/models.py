@@ -1,9 +1,18 @@
 # ---------------------------------------------------------------------------
 # Pipeline logs and artifacts models
 # ---------------------------------------------------------------------------
-
 from pydantic import BaseModel, Field
 from datetime import datetime
+from enum import Enum
+
+
+class PipelineStatus(str, Enum):
+    """Pipeline execution status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class PipelineLogCreate(BaseModel):
