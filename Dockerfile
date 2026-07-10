@@ -1,25 +1,22 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim
+    # Dockerfile
+    FROM python:3.9-slim
 
-# Set the maintainer, description, and version labels
-LABEL maintainer="Amosclaud Team"
-LABEL description="Amosclaud AI - CI/CD & Deployment"
-LABEL version="1.0.0"
+    WORKDIR /app
 
-# Set the working directory in the container
-WORKDIR /app
+    # Install dependencies
+    COPY api_key_manager/requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+    # Copy the application code
+    COPY api_key_manager/ .
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+    # Expose the port (e.g., 8001)
+    EXPOSE 8001
 
-# Copy application code
-COPY . .
+    # Set environment variables (important for production)
+    ENV AGENT_JWT_SECRET_KEY="your_production_agent_jwt_secret_key_here"
+    # ENV SQLALCHEMY_DATABASE_URL="postgresql://user:password@host:port/dbname" # For production DB
 
-# Expose the port the application will run on
-EXPOSE 8000
-
-# Run the application
-CMD ["python", "-m", "uvicorn", "amoscloud_ai.main:app"]
+    # Run the FastAPI application
+    CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    
