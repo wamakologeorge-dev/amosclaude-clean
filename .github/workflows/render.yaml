@@ -1,0 +1,14 @@
+# render.yaml
+services:
+  - type: web
+    name: amosclaud-platform
+    script: python main.py
+    env:
+      - key: FLASK_APP
+        value: main.py
+      - key: FLASK_ENV
+        value: production
+    ports:
+      - port: 3000
+        protocol: http
+
