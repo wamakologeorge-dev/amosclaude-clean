@@ -1,110 +1,134 @@
-# cmood/api-gateway/main.py
-import os
+# amos-api-gateway/main.py
+from fastapi import FastAPI, Request, Response, HTTPException, status, Depends
+from fastapi.routing import APIRoute
+from fastapi.responses import JSONResponse
 import httpx
-from fastapi import FastAPI, Request, Response, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+import logging
+import time
 
-load_dotenv()
+from .config import settings
+from .dependencies import get_current_user, rate_limiter
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Amosclaud Cloud API Gateway",
-    description="Production-ready API Gateway routing traffic to cmood microservices.",
-    version="1.0.0"
+    title=settings.PROJECT_NAME,
+    version=settings.PROJECT_VERSION,
+    description="Amos API Gateway for microservices orchestration."
 )
 
-# CORS Configuration
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Initialize HTTPX client for proxying requests
+# Use a timeout to prevent hanging requests
+http_client = httpx.AsyncClient(timeout=30.0)
 
-# Service Routing Map (Configurable via Environment Variables)
-SERVICES = {
-    "auth": os.getenv("AUTH_SERVICE_URL", "http://localhost:8001"),
-    "database": os.getenv("DATABASE_SERVICE_URL", "http://localhost:8002"),
-    "repository": os.getenv("REPOSITORY_SERVICE_URL", "http://localhost:8003"),
-    "monitoring": os.getenv("MONITORING_SERVICE_URL", "http://localhost:8004"),
-    "organization": os.getenv("ORGANIZATION_SERVICE_URL", "http://localhost:8005"),
-    "amosflow": os.getenv("AMOSFLOW_SERVICE_URL", "http://localhost:8000"),
-}
+# --- Middleware for Logging ---
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    logger.info(f"Incoming request: {request.method} {request.url} from {request.client.host}")
 
-# Async HTTP Client for Proxying
-http_client = httpx.AsyncClient(timeout=60.0)
+    response = await call_next(request)
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    await http_client.aclose()
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    logger.info(f"Outgoing response: {request.method} {request.url} - Status: {response.status_code} - Time: {process_time:.4f}s")
+    return response
 
-async def proxy_request(service_name: str, path: str, request: Request) -> Response:
-    """
-    Forwards incoming requests to the designated downstream microservice.
-    Preserves HTTP methods, headers, query parameters, and request body.
-    """
-    if service_name not in SERVICES:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Service '{service_name}' is not registered at the gateway."
-        )
-
-    target_url = f"{SERVICES[service_name]}/{path}"
+# --- API Gateway Routing Logic ---
+async def proxy_request(request: Request, service_url: str):
+    url = httpx.URL(service_url + request.url.path.replace("/api", "", 1)) # Remove /api prefix for backend
     
-    # Extract request elements
+    # Prepare headers, removing host to prevent issues with backend services
     headers = dict(request.headers)
-    # Remove Host header to prevent routing loops/errors at downstream targets
     headers.pop("host", None)
     
-    params = dict(request.query_params)
-    content = await request.body()
-    method = request.method
+    # Forward query parameters
+    params = request.query_params
+
+    # Read request body if present
+    body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
 
     try:
-        response = await http_client.request(
-            method=method,
-            url=target_url,
+        # Make the request to the backend service
+        proxy_response = await http_client.request(
+            method=request.method,
+            url=url,
             headers=headers,
             params=params,
-            content=content,
-            follow_redirects=True
+            content=body
         )
+
+        # Create a new response with the backend's content and status
+        response_headers = dict(proxy_response.headers)
+        # Remove transfer-encoding header if present, as httpx handles it
+        response_headers.pop("transfer-encoding", None)
         
-        # Exclude hop-by-hop headers from downstream response
-        excluded_headers = ["content-encoding", "content-length", "transfer-encoding", "connection"]
-        response_headers = {
-            k: v for k, v in response.headers.items() 
-            if k.lower() not in excluded_headers
-        }
-
         return Response(
-            content=response.content,
-            status_code=response.status_code,
+            content=proxy_response.content,
+            status_code=proxy_response.status_code,
             headers=response_headers,
-            media_type=response.headers.get("content-type")
+            media_type=proxy_response.headers.get("content-type")
         )
-
-    except httpx.RequestError as exc:
+    except httpx.RequestError as e:
+        logger.error(f"Proxy request failed for {request.url} to {url}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gateway failed to connect to downstream service '{service_name}': {str(exc)}"
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Service unavailable: {e}"
+        )
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during proxying: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal server error occurred."
         )
 
-@app.api_route("/api/v1/{service}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
-async def gateway_route(service: str, path: str, request: Request):
-    """
-    Dynamic catch-all route handler mapping path prefixes to microservices.
-    Example: /api/v1/auth/login -> http://localhost:8001/login
-    """
-    return await proxy_request(service, path, request)
+# --- Gateway Endpoints ---
+# Example: Route requests starting with /api/service-a to SERVICE_A_URL
+@app.api_route("/api/service-a/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def route_service_a(
+    request: Request, 
+    path: str, 
+    current_user: dict = Depends(get_current_user), # Apply authentication
+    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
+):
+    logger.info(f"Routing to Service A for user: {current_user['username']}")
+    return await proxy_request(request, settings.SERVICE_A_URL)
 
+# Example: Route requests starting with /api/service-b to SERVICE_B_URL
+@app.api_route("/api/service-b/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def route_service_b(
+    request: Request, 
+    path: str, 
+    current_user: dict = Depends(get_current_user), # Apply authentication
+    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
+):
+    logger.info(f"Routing to Service B for user: {current_user['username']}")
+    return await proxy_request(request, settings.SERVICE_B_URL)
+
+# Example: Route requests starting with /api/service-c to SERVICE_C_URL
+@app.api_route("/api/service-c/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def route_service_c(
+    request: Request, 
+    path: str, 
+    current_user: dict = Depends(get_current_user), # Apply authentication
+    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
+):
+    logger.info(f"Routing to Service C for user: {current_user['username']}")
+    return await proxy_request(request, settings.SERVICE_C_URL)
+
+# Health check endpoint
 @app.get("/health")
-async def gateway_health():
-    """Gateway self-health check endpoint."""
-    return {
-        "status": "healthy",
-        "gateway_time": httpx.Client().get("https://worldtimeapi.org/api/ip").json().get("datetime", None) if os.getenv("PROD") else None
-    }
+async def health_check():
+    return {"status": "ok", "message": "API Gateway is running"}
 
+# Root endpoint for documentation or general info
+@app.get("/")
+async def read_root():
+    return JSONResponse(content={
+        "message": "Welcome to Amos API Gateway",
+        "version": settings.PROJECT_VERSION,
+        "docs": "/docs",
+        "redoc": "/redoc"
+    })
