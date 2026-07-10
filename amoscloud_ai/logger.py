@@ -1,4 +1,4 @@
-"""Centralised logger for Amoscloud AI."""
+"""Centralised logger for Amosclaud AI."""
 
 import logging
 import sys
