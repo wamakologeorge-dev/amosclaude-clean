@@ -6,8 +6,10 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
+from amoscloud_ai.copilot import COPILOT_PIPELINE, COPILOT_ROLE, pipeline_reply
 from amoscloud_ai.logger import log
-from amoscloud_ai.models import PipelineResponse, PipelineStatus, PipelineTrigger
+from amoscloud_ai.models import PipelineJob, PipelineResponse, PipelineStatus, PipelineTrigger
+from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
@@ -32,6 +34,7 @@ async def get_pipeline(pipeline_id: str) -> PipelineResponse:
 async def trigger_pipeline(body: PipelineTrigger) -> PipelineResponse:
     pipeline_id = str(uuid.uuid4())
     log.info(f"Triggering pipeline {pipeline_id} via {body.trigger}")
+    reply = pipeline_reply(PipelineStatus.PENDING)
 
     pipeline = PipelineResponse(
         id=pipeline_id,
@@ -39,17 +42,37 @@ async def trigger_pipeline(body: PipelineTrigger) -> PipelineResponse:
         trigger=body.trigger,
         branch=body.branch,
         started_at=datetime.now(timezone.utc),
+        message=reply,
+        copilot_reply=reply,
+        copilot_role=COPILOT_ROLE,
+        delegation_target=COPILOT_PIPELINE,
+        jobs=[
+            PipelineJob(
+                id="build",
+                name="Build",
+                status=PipelineStatus.PENDING,
+                logs=[reply],
+            )
+        ],
     )
     _pipelines[pipeline_id] = pipeline
 
     # Kick off background task (Celery task if broker available, otherwise inline stub)
     try:
         from amoscloud_ai.worker import run_pipeline_task
-        run_pipeline_task.delay(pipeline_id, body.model_dump())
+        dispatch_task(run_pipeline_task, pipeline_id, body.model_dump())
     except Exception:
         log.warning("Celery unavailable – running pipeline synchronously (stub)")
         pipeline.status = PipelineStatus.SUCCESS
         pipeline.finished_at = datetime.now(timezone.utc)
+        reply = pipeline_reply(PipelineStatus.SUCCESS)
+        pipeline.message = reply
+        pipeline.copilot_reply = reply
+        if pipeline.jobs:
+            pipeline.jobs[0].status = PipelineStatus.SUCCESS
+            pipeline.jobs[0].started_at = pipeline.started_at
+            pipeline.jobs[0].finished_at = pipeline.finished_at
+            pipeline.jobs[0].logs.append(reply)
 
     return pipeline
 
@@ -63,4 +86,12 @@ async def cancel_pipeline(pipeline_id: str) -> None:
         raise HTTPException(status_code=409, detail="Pipeline already finished")
     pipeline.status = PipelineStatus.CANCELLED
     pipeline.finished_at = datetime.now(timezone.utc)
+    reply = pipeline_reply(PipelineStatus.CANCELLED)
+    pipeline.message = reply
+    pipeline.copilot_reply = reply
+    for job in pipeline.jobs:
+        if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.FAILED, PipelineStatus.CANCELLED):
+            job.status = PipelineStatus.CANCELLED
+            job.finished_at = pipeline.finished_at
+            job.logs.append(reply)
     log.info(f"Pipeline {pipeline_id} cancelled")
