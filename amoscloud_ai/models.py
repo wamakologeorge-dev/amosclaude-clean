@@ -2,6 +2,10 @@
 # Pipeline logs and artifacts models
 # ---------------------------------------------------------------------------
 
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+
 class PipelineLogCreate(BaseModel):
     pipeline_id: str = Field(..., description="Pipeline ID")
     job_id: str = Field(..., description="Job ID")
