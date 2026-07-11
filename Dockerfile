@@ -11,6 +11,7 @@ RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
 COPY amoscloud_ai/ ./amoscloud_ai/
+COPY src/ ./src/
 COPY web/ ./web/
 
 EXPOSE 8000
