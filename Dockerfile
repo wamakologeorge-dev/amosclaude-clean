@@ -4,11 +4,11 @@
     WORKDIR /app
 
     # Install dependencies
-    COPY api_key_manager/requirements.txt .
+    COPY api-gateway/requirements.txt .
     RUN pip install --no-cache-dir -r requirements.txt
 
     # Copy the application code
-    COPY api_key_manager/ .
+    COPY api-gateway/ .
 
     # Expose the port (e.g., 8001)
     EXPOSE 8001
