@@ -1,4 +1,4 @@
-name: Amosclaud CI
+name: CI
 
 on:
   push:
@@ -12,6 +12,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -26,11 +27,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          pip install -r requirements.txt
+
+      - name: Compile Python sources
+        run: python -m compileall -q amoscloud_ai src tests
 
       - name: Lint critical errors
-        run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        run: flake8 amoscloud_ai src tests --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run tests
-        run: pytest
+        run: pytest -q
+
+      - name: Import application
+        run: python -c "from amoscloud_ai.main import app; print(app.title)"
+
+      - name: Build Docker image
+        run: docker build -t amosclaud-clean:ci .
