@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = "change-me-in-production"
-    allowed_hosts: List[str] = ["*"]
+    allowed_hosts: List[str] = ["http://localhost", "http://localhost:8000"]
 
     # Deployment
     deployment_retries: int = 3
@@ -56,17 +56,26 @@ class Settings(BaseSettings):
     @classmethod
     def set_celery_broker(cls, v: str, info) -> str:
         if not v:
-            data = info.data
-            return data.get("redis_url", "redis://localhost:6379/0")
+            return info.data.get("redis_url", "redis://localhost:6379/0")
         return v
 
     @field_validator("celery_result_backend", mode="before")
     @classmethod
     def set_celery_backend(cls, v: str, info) -> str:
         if not v:
-            data = info.data
-            return data.get("redis_url", "redis://localhost:6379/0")
+            return info.data.get("redis_url", "redis://localhost:6379/0")
         return v
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.environment.lower() in {"production", "prod", "release"}:
+            if self.secret_key == "change-me-in-production" or len(self.secret_key) < 32:
+                raise ValueError("SECRET_KEY must be set to a strong value in production")
+            if "*" in self.allowed_hosts:
+                raise ValueError("ALLOWED_HOSTS must not contain '*' in production")
+            if self.debug:
+                raise ValueError("DEBUG must be disabled in production")
+        return self
 
 
 @lru_cache
