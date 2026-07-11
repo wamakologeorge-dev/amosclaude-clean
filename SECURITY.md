@@ -2,20 +2,22 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Security fixes are applied to the latest code on the `main` branch. Older branches and archived releases are not guaranteed to receive updates.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please do not open a public issue for a suspected vulnerability or exposed credential.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Use GitHub's private vulnerability reporting feature for this repository when available. Include:
+
+- A clear description of the issue
+- Steps to reproduce it
+- The affected files, endpoints, or versions
+- The potential impact
+- Any suggested mitigation
+
+You can expect an initial acknowledgement within 7 days. Confirmed vulnerabilities will be prioritized based on severity and impact.
+
+## Secrets
+
+Never commit API keys, tokens, passwords, private keys, or populated `.env` files. Use `.env.example` for documented placeholders and store real values in GitHub Secrets or the deployment platform's secret manager.
