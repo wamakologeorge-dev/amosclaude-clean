@@ -1,22 +1,21 @@
-    # Dockerfile
-    FROM python:3.9-slim
+FROM python:3.9-slim
 
-    WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-    # Install dependencies
-    COPY api-gateway/requirements.txt .
-    RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /app
 
-    # Copy the application code
-    COPY api-gateway/ .
+# Install dependencies using the repository-standard requirements file.
+COPY requirements.txt ./requirements.txt
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -r requirements.txt
 
-    # Expose the port (e.g., 8001)
-    EXPOSE 8001
+# Copy the API gateway into an importable Python package path.
+COPY api-gateway/ ./api_gateway/
 
-    # Set environment variables (important for production)
-    ENV AGENT_JWT_SECRET_KEY="your_production_agent_jwt_secret_key_here"
-    # ENV SQLALCHEMY_DATABASE_URL="postgresql://user:password@host:port/dbname" # For production DB
+# Credentials and secrets, including AMOSCLOUD_API_TOKEN, must be supplied
+# by the deployment environment rather than stored in the image.
+EXPOSE 8001
 
-    # Run the FastAPI application
-    CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
-    
+CMD ["uvicorn", "api_gateway.main:app", "--host", "0.0.0.0", "--port", "8001"]
