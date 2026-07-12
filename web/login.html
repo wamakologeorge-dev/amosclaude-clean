@@ -12,7 +12,7 @@
       <div class="brand-mark">A</div>
       <p class="eyebrow">AMOSCLAUD</p>
       <h1>Your Amosclaud account comes first.</h1>
-      <p>Create your account with email, verify it with a code sent by Amosclaud, then connect GitHub later from repository settings.</p>
+      <p>Create your account directly with Amosclaud. A rotating Amos Secure Code protects signup and password recovery without Google, email, or SMS providers.</p>
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
@@ -28,12 +28,25 @@
         <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
         <label>Email address<input id="email" name="username" type="email" autocomplete="username" required /></label>
         <label id="password-field">Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
-        <label id="code-field" class="hidden">Verification code<input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
-        <p id="password-hint" class="hint hidden">Use at least 10 characters. Amosclaud will email you a six-digit code.</p>
+
+        <section id="secure-setup" class="hidden" aria-live="polite">
+          <p class="hint">Save this setup key in any authenticator app. The app will generate your rotating six-digit Amos Secure Code.</p>
+          <div class="secure-key-row"><code id="secure-key"></code><button id="copy-secure-key" class="btn-ghost" type="button">Copy key</button></div>
+          <a id="open-authenticator" class="btn-ghost" href="#">Open authenticator app</a>
+        </section>
+
+        <label id="code-field" class="hidden">Amos Secure Code<input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="32" /></label>
+        <p id="password-hint" class="hint hidden">Use at least 10 characters. No email provider is required.</p>
         <button id="submit-button" class="primary-button" type="submit">Sign in</button>
       </form>
 
       <button id="forgot-password" class="btn-ghost" type="button">Forgot password?</button>
+      <section id="recovery-panel" class="hidden">
+        <h3>Save your recovery codes</h3>
+        <p class="hint">Store these somewhere safe. Each code works once.</p>
+        <pre id="recovery-codes"></pre>
+        <button id="continue-after-recovery" class="primary-button" type="button">I saved them — open Amosclaud</button>
+      </section>
       <p id="message" class="message" role="alert" aria-live="polite"></p>
     </section>
   </main>
