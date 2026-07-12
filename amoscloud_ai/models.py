@@ -150,6 +150,31 @@ class CopilotDelegationResponse(BaseModel):
     accepted_at: Optional[datetime] = None
 
 
+class ChatRequest(BaseModel):
+    """A message from the web or Android Amosclaud client."""
+
+    message: str = Field(..., min_length=1, max_length=12000)
+    session_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class ChatResponse(BaseModel):
+    """A response that both first-party clients can consume."""
+
+    reply: str
+    session_id: str
+    timestamp: datetime
+    provider: str
+
+
+class AgentCapabilityResponse(BaseModel):
+    name: str
+    version: str
+    capabilities: list[str]
+    repository_scope: str
+    execution_mode: str
+
+
+
 class AutonomousAgentProfile(BaseModel):
     name: str
     owner: str
