@@ -66,13 +66,13 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     normalised = " ".join(message.lower().rstrip(".!?").split())
 
     if not message and mode == "build":
-        return f"What would you like to build today, {name}?"
+        return f"Hi {name}. What do you want to create today?"
 
     if normalised in GREETING_WORDS:
-        return f"Hi {name}. What would you like to build today?"
+        return f"Hi {name}. What do you want to create today?"
 
     if normalised in {"build", "make", "create"}:
-        return f"What would you like to build today, {name}?"
+        return f"Hi {name}. What do you want to create today?"
 
     return None
 
