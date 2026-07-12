@@ -11,6 +11,7 @@ Commands:
 """
 
 from __future__ import annotations
+from typing import Optional
 
 import argparse
 import os
@@ -101,7 +102,7 @@ def run_serve() -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Amosclaud repository entry point.")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--test-guardrails", action="store_true",

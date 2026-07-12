@@ -7,7 +7,7 @@ import sys
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from amoscloud_ai.models import PipelineStatus
 
@@ -64,7 +64,7 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def run_autonomous_server(mode: str, objective: str, metadata: dict[str, Any] | None = None) -> AutonomousRunResult:
+def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
     """Run safe, local autonomous checks against the current repository."""
     root = repo_root()
     metadata = metadata or {}

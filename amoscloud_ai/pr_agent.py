@@ -15,7 +15,7 @@ import tempfile
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 _REPOSITORY = "wamakologeorge-dev/amosclaude-clean"
@@ -28,7 +28,7 @@ class WorkResult:
     status: str
     message: str
     logs: list[str] = field(default_factory=list)
-    pull_request_url: str | None = None
+    pull_request_url: Optional[str] = None
 
 
 class PullRequestAgent:
@@ -40,10 +40,10 @@ class PullRequestAgent:
         self.base_branch = base_branch
         self.branch = f"amosclaud/agent-{task_id[:8]}"
         self.logs: list[str] = []
-        self.root: Path | None = None
+        self.root: Optional[Path] = None
 
     @staticmethod
-    def configuration_error() -> str | None:
+    def configuration_error() -> Optional[str]:
         missing = [name for name in ("ANTHROPIC_API_KEY", "GITHUB_TOKEN") if not os.environ.get(name)]
         if missing:
             return "Repository execution is not configured: missing " + ", ".join(missing) + "."
