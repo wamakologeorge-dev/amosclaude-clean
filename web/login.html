@@ -31,14 +31,14 @@
 
       <div class="divider"><span>or</span></div>
 
-      <form id="auth-form" novalidate>
+      <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">
           Full name
           <input id="name" name="name" autocomplete="name" minlength="2" />
         </label>
         <label>
           Email address
-          <input id="email" name="email" type="email" autocomplete="email" required />
+          <input id="email" name="username" type="email" autocomplete="username" required />
         </label>
         <label>
           Password
