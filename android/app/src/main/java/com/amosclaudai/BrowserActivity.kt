@@ -22,7 +22,7 @@ class BrowserActivity : AppCompatActivity() {
     private lateinit var binding: ActivityBrowserBinding
 
     private val bookmarks = listOf(
-        "Google"      to "https://www.google.com",
+        "Amosclaud"   to HOME_URL,
         "GitHub"      to "https://github.com",
         "Android Docs" to "https://developer.android.com",
         "Python Docs" to "https://docs.python.org/3/",
@@ -30,7 +30,7 @@ class BrowserActivity : AppCompatActivity() {
     )
 
     companion object {
-        const val HOME_URL = "https://www.google.com"
+        const val HOME_URL = "https://web-production-d94ca.up.railway.app/"
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -49,7 +49,6 @@ class BrowserActivity : AppCompatActivity() {
         setupControls()
         setupBookmarks()
 
-        // Handle back press: navigate WebView history first, then exit
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (binding.webView.canGoBack()) {
@@ -82,7 +81,6 @@ class BrowserActivity : AppCompatActivity() {
                 builtInZoomControls      = true
                 displayZoomControls      = false
                 setSupportMultipleWindows(false)
-                // Restrict access to local file system and content providers
                 allowFileAccess          = false
                 allowContentAccess       = false
             }
@@ -101,7 +99,6 @@ class BrowserActivity : AppCompatActivity() {
 
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                    // Only allow http/https navigation; block other schemes
                     val scheme = request.url.scheme?.lowercase()
                     if (scheme != "http" && scheme != "https") return true
                     binding.etUrl.setText(request.url.toString())
