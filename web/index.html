@@ -63,27 +63,14 @@
             <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
           </div>
 
-          <div class="ai-worker-stage" role="img" aria-label="Animated 3D-style human AI worker showing Amosclaud status">
-            <div class="ai-worker-grid"></div>
-            <div class="ai-worker-scene">
-              <div class="ai-worker-orbit"></div>
-              <div class="ai-worker-person">
-                <div class="ai-worker-hair"></div>
-                <div class="ai-worker-head"></div>
-                <div class="ai-worker-face-light"></div>
-                <div class="ai-worker-body"></div>
-                <div class="ai-worker-core"></div>
-                <div class="ai-worker-arm left"></div>
-                <div class="ai-worker-arm right"></div>
-                <div class="ai-worker-desk"></div>
-                <div class="ai-worker-screen"></div>
-              </div>
-            </div>
+          <article class="ai-worker-stage" aria-label="Interactive 3D Amosclaud AI workspace feed">
+            <div id="ai-worker-canvas"></div>
+            <span class="ai-worker-hint">Drag to rotate</span>
             <div class="ai-worker-status-copy">
               <span class="ai-worker-live">AI WORKSPACE LIVE</span>
               <span>Builder · Tester · Reviewer</span>
             </div>
-          </div>
+          </article>
         </div>
       </section>
 
@@ -119,5 +106,7 @@
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/app.js"></script>
   <script src="/static/repositories.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.min.js" crossorigin="anonymous"></script>
+  <script src="/static/agent-3d.js"></script>
 </body>
 </html>
