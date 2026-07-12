@@ -120,6 +120,36 @@ class DeploymentResponse(BaseModel):
     delegation_target: Optional[str] = None
 
 
+class CopilotProfile(BaseModel):
+    name: str
+    owner: str
+    role: str
+    mission: str
+    home: str
+    pipeline: str
+    scope: list[str]
+    directives: list[str]
+
+
+class CopilotDelegationRequest(BaseModel):
+    task: str = Field(..., min_length=1)
+    source: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CopilotDelegationResponse(BaseModel):
+    accepted: bool
+    task: str
+    source: Optional[str] = None
+    reply: str
+    copilot_role: str
+    delegation_target: str
+    scope: list[str]
+    pipeline_id: Optional[str] = None
+    status: Optional[PipelineStatus] = None
+    accepted_at: Optional[datetime] = None
+
+
 class AutonomousAgentProfile(BaseModel):
     name: str
     owner: str
