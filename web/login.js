@@ -25,11 +25,27 @@ function setMode(nextMode) {
   passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
   title.textContent = registering ? 'Create your account' : 'Welcome back';
   subtitle.textContent = registering
-    ? 'The first account created becomes the administrator.'
+    ? 'Create your Amosclaud account. Your browser can securely save the password.'
     : 'Use your email and password or continue with GitHub.';
   submitButton.textContent = registering ? 'Create account' : 'Sign in';
   message.textContent = '';
   message.className = 'message';
+}
+
+async function offerCredentialSave(payload) {
+  if (!('credentials' in navigator) || typeof window.PasswordCredential !== 'function') return;
+
+  try {
+    const credential = new PasswordCredential({
+      id: payload.email,
+      password: payload.password,
+      name: payload.name || payload.email,
+    });
+    await navigator.credentials.store(credential);
+  } catch (error) {
+    // Password saving is controlled by the browser and may be unavailable or declined.
+    console.debug('[Password manager]', error);
+  }
 }
 
 loginTab.addEventListener('click', () => setMode('login'));
@@ -60,9 +76,15 @@ form.addEventListener('submit', async (event) => {
     });
     const data = response.status === 204 ? {} : await response.json();
     if (!response.ok) throw new Error(data.detail || 'Authentication failed');
-    message.textContent = 'Success. Opening your dashboard…';
+
+    await offerCredentialSave(payload);
+
+    message.textContent = mode === 'register'
+      ? 'Account created. Save your password when your browser asks.'
+      : 'Success. Opening your dashboard…';
     message.classList.add('success');
-    window.location.assign('/');
+
+    setTimeout(() => window.location.assign('/'), mode === 'register' ? 500 : 100);
   } catch (error) {
     message.textContent = error.message;
   } finally {
