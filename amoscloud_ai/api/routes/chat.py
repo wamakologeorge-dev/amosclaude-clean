@@ -56,31 +56,70 @@ connected to the Amosclaud platform repository. Follow these repository instruct
 def _fallback_reply(message: str) -> str:
     return (
         "Amosclaud is online and ready to help with repository analysis, implementation plans, "
-        "testing, Railway deployments, and monitoring. Live AI responses are not enabled for "
-        "this request. Organizations and external clients can send their own provider key via "
-        "the X-LLM-API-Key header (with optional X-LLM-Provider: anthropic or openai). "
-        "Your request was received: "
+        "testing, Railway deployments, and monitoring. Live AI responses are temporarily "
+        "unavailable; the platform team has been notified. Your request was received: "
         f"{message}"
     )
 
 
-def _resolve_provider(client_key: Optional[str], client_provider: Optional[str]) -> tuple[str, Optional[str]]:
-    """Resolve (provider, api_key) for a chat request.
+def _resolve_provider() -> tuple[str, Optional[str]]:
+    """Resolve (provider, api_key) from the platform's own server-side keys.
 
-    Client-supplied keys (external users and organizations) take priority and are
-    used only for their own request. Without a client key, the platform falls back
-    to server-configured keys so the owner is never asked to supply one per request.
+    The platform always answers with its own provider key. Clients and external
+    organizations never supply provider keys; they authenticate with a
+    platform-issued Amosclaud API key instead (see ``_authorize_platform_key``).
     """
-    if client_key:
-        provider = (client_provider or "").strip().lower()
-        if provider not in {"anthropic", "openai"}:
-            provider = "anthropic" if client_key.startswith("sk-ant-") else "openai"
-        return provider, client_key
     if os.environ.get("ANTHROPIC_API_KEY"):
         return "anthropic", os.environ["ANTHROPIC_API_KEY"]
     if os.environ.get("OPENAI_API_KEY"):
         return "openai", os.environ["OPENAI_API_KEY"]
     return "offline", None
+
+
+_key_manager_ready = False
+
+
+def _is_owner(owner_key: Optional[str]) -> bool:
+    expected = os.environ.get("AMOSCLAUD_OWNER_KEY")
+    if not expected or not owner_key:
+        return False
+    import secrets
+
+    return secrets.compare_digest(owner_key, expected)
+
+
+async def _authorize_platform_key(api_key: Optional[str], owner_key: Optional[str]) -> None:
+    """Authorize a chat request under the platform-issued key model.
+
+    - The owner is never asked for a key: requests carrying the owner key, and
+      first-party surfaces (no key at all, unless CHAT_REQUIRE_API_KEY=true),
+      pass through.
+    - Clients and organizations use Amosclaud API keys (``ak_...``) created for
+      them by the owner in the API-key manager. Presented keys must be valid.
+    - Set CHAT_REQUIRE_API_KEY=true to require a platform key on every request.
+    """
+    if _is_owner(owner_key):
+        return
+    require_key = os.environ.get("CHAT_REQUIRE_API_KEY", "").strip().lower() in {"1", "true", "yes"}
+    if not api_key:
+        if require_key:
+            raise HTTPException(
+                status_code=401,
+                detail="An Amosclaud API key is required. Ask the platform owner for a key and send it in the X-API-Key header.",
+            )
+        return
+    global _key_manager_ready
+    from api_key_manager import auth as km_auth, models as km_models
+    from api_key_manager.database import SessionLocal, engine
+
+    if not _key_manager_ready:
+        km_models.Base.metadata.create_all(bind=engine)
+        _key_manager_ready = True
+    db = SessionLocal()
+    try:
+        await km_auth.validate_api_key_dependency(api_key, db)
+    finally:
+        db.close()
 
 
 def _openai_reply(history: list[dict[str, str]], api_key: Optional[str] = None) -> str:
@@ -140,13 +179,13 @@ def _anthropic_reply(history: list[dict[str, str]], api_key: Optional[str] = Non
 async def chat(
     body: ChatRequest,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-    x_llm_api_key: Optional[str] = Header(default=None),
-    x_llm_provider: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None),
 ) -> ChatResponse:
     """Chat normally, or queue an explicit authenticated PR-agent command."""
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
+    await _authorize_platform_key(x_api_key, x_amosclaud_owner_key)
 
     session_id = body.session_id or str(uuid.uuid4())
     if body.start_pr_task:
@@ -177,7 +216,7 @@ async def chat(
         history[:] = history[-_MAX_HISTORY_TURNS:]
         request_history = list(history)
 
-    provider, resolved_key = _resolve_provider(x_llm_api_key, x_llm_provider)
+    provider, resolved_key = _resolve_provider()
     if provider == "anthropic":
         reply = await asyncio.to_thread(_anthropic_reply, request_history, resolved_key)
     elif provider == "openai":
