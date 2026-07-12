@@ -70,6 +70,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
+    # Compatibility routes keep existing OAuth apps working when their callback
+    # was configured as /auth/github/callback instead of /api/v1/auth/github/callback.
+    app.include_router(auth.router, include_in_schema=False)
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
