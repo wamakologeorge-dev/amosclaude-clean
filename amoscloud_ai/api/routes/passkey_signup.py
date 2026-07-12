@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from webauthn import generate_registration_options, options_to_json, verify_registration_response
 from webauthn.helpers import bytes_to_base64url
@@ -27,6 +28,7 @@ from amoscloud_ai.api.routes.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+log = logging.getLogger(__name__)
 MAIL_DOMAIN = os.getenv("AMOS_MAIL_DOMAIN", "amosclaud.com").strip().lower()
 RP_ID = os.getenv("PASSKEY_RP_ID", "amosclaud.com").strip().lower()
 RP_NAME = os.getenv("PASSKEY_RP_NAME", "Amosclaud")
@@ -86,6 +88,48 @@ def _prepare(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+def _request_origin(request: Request) -> str | None:
+    """Return the public HTTPS origin supplied by trusted proxy headers."""
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip().lower()
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc)).split(",", 1)[0].strip().lower()
+    hostname = forwarded_host.split(":", 1)[0]
+
+    allowed_host = hostname == RP_ID or hostname.endswith(f".{RP_ID}")
+    local_development = RP_ID in {"localhost", "127.0.0.1"} and hostname in {"localhost", "127.0.0.1"}
+    if not (allowed_host or local_development):
+        return None
+    if forwarded_proto != "https" and not local_development:
+        return None
+    return f"{forwarded_proto}://{forwarded_host}".rstrip("/")
+
+
+def _verify_credential(credential: dict, challenge: bytes, request: Request):
+    """Verify against configured origin and the validated Railway public origin."""
+    origins = [EXPECTED_ORIGIN]
+    public_origin = _request_origin(request)
+    if public_origin and public_origin not in origins:
+        origins.append(public_origin)
+
+    failures: list[str] = []
+    for origin in origins:
+        try:
+            return verify_registration_response(
+                credential=credential,
+                expected_challenge=challenge,
+                expected_rp_id=RP_ID,
+                expected_origin=origin,
+                require_user_verification=True,
+            )
+        except Exception as exc:  # The library raises specific verification subclasses across versions.
+            failures.append(f"{origin}: {type(exc).__name__}: {exc}")
+
+    log.warning("Passkey registration rejected for RP %s; %s", RP_ID, " | ".join(failures))
+    raise HTTPException(
+        status_code=400,
+        detail="Device verification could not be confirmed. Reload the page and approve the phone security prompt again.",
+    )
+
+
 @router.post("/register/passkey/start", status_code=201)
 def start_passkey_signup(body: PasskeyStartRequest) -> dict:
     username = _username(body.username)
@@ -138,7 +182,7 @@ def start_passkey_signup(body: PasskeyStartRequest) -> dict:
 
 
 @router.post("/register/passkey/finish", status_code=201)
-def finish_passkey_signup(body: PasskeyFinishRequest, response: Response) -> dict:
+def finish_passkey_signup(body: PasskeyFinishRequest, response: Response, request: Request) -> dict:
     username = _username(body.username)
     now = datetime.now(timezone.utc).isoformat()
 
@@ -148,16 +192,7 @@ def finish_passkey_signup(body: PasskeyFinishRequest, response: Response) -> dic
         if not pending or pending["expires_at"] <= now:
             raise HTTPException(status_code=400, detail="Signup expired. Start again.")
 
-        try:
-            verified = verify_registration_response(
-                credential=body.credential,
-                expected_challenge=bytes(pending["challenge"]),
-                expected_rp_id=RP_ID,
-                expected_origin=EXPECTED_ORIGIN,
-                require_user_verification=True,
-            )
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="Device verification failed. Try again on this device.") from exc
+        verified = _verify_credential(body.credential, bytes(pending["challenge"]), request)
 
         if db.execute("SELECT 1 FROM users WHERE email=?", (pending["address"],)).fetchone():
             raise HTTPException(status_code=409, detail="That Amosclaud username is already taken")
