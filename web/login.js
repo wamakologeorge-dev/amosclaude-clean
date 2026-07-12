@@ -44,6 +44,17 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
+async function verifySession() {
+  const response = await fetch('/api/v1/auth/me', {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    throw new Error('Your account was accepted, but Amosclaud could not keep the login session. Use only www.amosclaud.com and check the persistent /data volume.');
+  }
+  return response.json();
+}
+
 function base64urlToBytes(value) {
   const padding = '='.repeat((4 - value.length % 4) % 4);
   const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -127,11 +138,11 @@ function setMode(nextMode) {
 
   if (registering) {
     title.textContent = 'Create your Amosclaud account';
-    subtitle.textContent = 'Choose your @amosclaud.com address and confirm on this device.';
+    subtitle.textContent = 'Choose your @amosclaud.com mail address and confirm on this device.';
     submitButton.textContent = 'Create account securely';
   } else {
     title.textContent = 'Welcome back';
-    subtitle.textContent = 'Use your fingerprint or device security to sign in.';
+    subtitle.textContent = 'Use your fingerprint, device security, or Amosclaud mail and password.';
     submitButton.textContent = 'Sign in with password';
   }
   showMessage('');
@@ -156,6 +167,7 @@ passkeyLoginButton.addEventListener('click', async () => {
       method: 'POST',
       body: JSON.stringify({attempt: start.attempt, credential: serialiseAuthenticationCredential(credential)}),
     });
+    await verifySession();
     showMessage('Verified. Opening Amosclaud…', true);
     setTimeout(() => window.location.assign('/'), 120);
   } catch (error) {
@@ -174,12 +186,13 @@ form.addEventListener('submit', async event => {
   submitButton.disabled = true;
   try {
     if (mode === 'login') {
-      let email = identifierInput.value.trim().toLowerCase();
-      if (!email.includes('@')) email += '@amosclaud.com';
+      let mail = identifierInput.value.trim().toLowerCase();
+      if (!mail.includes('@')) mail += '@amosclaud.com';
       await requestJson('/api/v1/auth/login', {
         method: 'POST',
-        body: JSON.stringify({email, password: passwordInput.value}),
+        body: JSON.stringify({email: mail, password: passwordInput.value}),
       });
+      await verifySession();
       showMessage('Success. Opening Amosclaud…', true);
       setTimeout(() => window.location.assign('/'), 120);
       return;
@@ -204,6 +217,7 @@ form.addEventListener('submit', async event => {
       body: JSON.stringify({username, credential: serialiseRegistrationCredential(credential)}),
     });
 
+    await verifySession();
     showMessage(`Account created: ${finished.address}. Opening Amosclaud…`, true);
     setTimeout(() => window.location.assign('/'), 250);
   } catch (error) {
@@ -216,7 +230,7 @@ form.addEventListener('submit', async event => {
 
 (async () => {
   try {
-    const response = await fetch('/api/v1/auth/me', {credentials: 'same-origin'});
+    const response = await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'});
     if (response.ok) window.location.assign('/');
   } catch (_) {}
 })();
