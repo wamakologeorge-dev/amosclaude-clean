@@ -88,7 +88,7 @@ watcher_thread = None
 
 @app.on_event("startup")
 async def startup_event():
-    global observer, watcher_thread
+    global observer
 
     # Ensure the watched directory exists
     os.makedirs(cmood_state.watched_directory, exist_ok=True)
@@ -121,7 +121,6 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    global observer
     if observer:
         observer.stop()
         observer.join()

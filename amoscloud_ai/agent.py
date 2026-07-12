@@ -275,4 +275,17 @@ class CodexAgent:
                     status = "SUCCESS" if res["success"] else f"FAILED: {res.get('error')}"
                     feedback += f"- Action: {res['action']} on '{res['path']}' -> {status}\n"
                     if res["action"] == "read" and res["success"]:
-                        feedback += f"  Content:\n
+                        feedback += f"  Content:\n{res.get('content', '')}\n"
+                else:
+                    status = "SUCCESS" if res["success"] else "FAILED"
+                    feedback += f"- Command: {res['command']} -> {status}\n"
+                    if res.get("stdout"):
+                        feedback += f"  stdout:\n{res['stdout']}\n"
+                    if res.get("stderr"):
+                        feedback += f"  stderr:\n{res['stderr']}\n"
+                if not res["success"]:
+                    has_failures = True
+
+            history.append({"role": "user", "content": feedback})
+            if not has_failures:
+                print("[Codex Agent] Actions completed successfully.")
