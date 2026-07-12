@@ -2,28 +2,20 @@ const form = document.getElementById('auth-form');
 const loginTab = document.getElementById('login-tab');
 const registerTab = document.getElementById('register-tab');
 const nameField = document.getElementById('name-field');
-const passwordField = document.getElementById('password-field');
-const codeField = document.getElementById('code-field');
-const secureSetup = document.getElementById('secure-setup');
-const secureKey = document.getElementById('secure-key');
-const copySecureKey = document.getElementById('copy-secure-key');
-const openAuthenticator = document.getElementById('open-authenticator');
-const recoveryPanel = document.getElementById('recovery-panel');
-const recoveryCodes = document.getElementById('recovery-codes');
-const continueAfterRecovery = document.getElementById('continue-after-recovery');
+const identifierField = document.getElementById('identifier-field');
+const usernameField = document.getElementById('username-field');
 const nameInput = document.getElementById('name');
-const emailInput = document.getElementById('email');
+const identifierInput = document.getElementById('identifier');
+const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
-const codeInput = document.getElementById('code');
 const passwordHint = document.getElementById('password-hint');
+const deviceNote = document.getElementById('device-note');
 const submitButton = document.getElementById('submit-button');
-const forgotButton = document.getElementById('forgot-password');
 const title = document.getElementById('auth-title');
 const subtitle = document.getElementById('auth-subtitle');
 const message = document.getElementById('message');
 
 let mode = 'login';
-let pendingSetup = null;
 
 function showMessage(text, success = false) {
   message.textContent = text;
@@ -33,66 +25,86 @@ function showMessage(text, success = false) {
 function errorText(detail, fallback = 'Authentication failed') {
   if (!detail) return fallback;
   if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    return detail.map(item => item?.msg || item?.message || JSON.stringify(item)).join(' ');
-  }
+  if (Array.isArray(detail)) return detail.map(item => item?.msg || item?.message || JSON.stringify(item)).join(' ');
   return detail.msg || detail.message || fallback;
 }
 
-async function readResponse(response) {
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+  });
   const text = await response.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch (_) {
-    return {detail: text};
-  }
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
+  if (!response.ok) throw new Error(errorText(data.detail));
+  return data;
+}
+
+function base64urlToBytes(value) {
+  const padding = '='.repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from(raw, char => char.charCodeAt(0));
+}
+
+function bytesToBase64url(value) {
+  const bytes = new Uint8Array(value);
+  let raw = '';
+  bytes.forEach(byte => raw += String.fromCharCode(byte));
+  return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function prepareCreationOptions(options) {
+  return {
+    ...options,
+    challenge: base64urlToBytes(options.challenge),
+    user: {...options.user, id: base64urlToBytes(options.user.id)},
+    excludeCredentials: (options.excludeCredentials || []).map(item => ({...item, id: base64urlToBytes(item.id)})),
+  };
+}
+
+function serialiseCredential(credential) {
+  return {
+    id: credential.id,
+    rawId: bytesToBase64url(credential.rawId),
+    type: credential.type,
+    authenticatorAttachment: credential.authenticatorAttachment,
+    clientExtensionResults: credential.getClientExtensionResults(),
+    response: {
+      clientDataJSON: bytesToBase64url(credential.response.clientDataJSON),
+      attestationObject: bytesToBase64url(credential.response.attestationObject),
+      transports: credential.response.getTransports ? credential.response.getTransports() : [],
+    },
+  };
 }
 
 function setMode(nextMode) {
   mode = nextMode;
   const registering = mode === 'register';
-  const verifying = mode === 'verify';
-  const resetting = mode === 'reset';
-
-  loginTab.classList.toggle('active', mode === 'login');
-  registerTab.classList.toggle('active', registering || verifying);
+  loginTab.classList.toggle('active', !registering);
+  registerTab.classList.toggle('active', registering);
   nameField.classList.toggle('hidden', !registering);
-  codeField.classList.toggle('hidden', !(verifying || resetting));
-  secureSetup.classList.toggle('hidden', !verifying);
-  passwordField.classList.toggle('hidden', false);
+  identifierField.classList.toggle('hidden', registering);
+  usernameField.classList.toggle('hidden', !registering);
   passwordHint.classList.toggle('hidden', !registering);
-  forgotButton.classList.toggle('hidden', mode !== 'login');
-  recoveryPanel.classList.add('hidden');
-  form.classList.remove('hidden');
+  deviceNote.classList.toggle('hidden', !registering);
 
   nameInput.required = registering;
-  codeInput.required = verifying || resetting;
-  passwordInput.required = true;
-  passwordInput.minLength = registering || verifying || resetting ? 10 : 1;
-  passwordInput.autocomplete = registering || verifying || resetting ? 'new-password' : 'current-password';
-  codeInput.value = '';
-  codeInput.inputMode = verifying ? 'numeric' : 'text';
-  codeInput.maxLength = verifying ? 6 : 32;
-  codeInput.pattern = verifying ? '[0-9]{6}' : '';
-  codeInput.placeholder = verifying ? '6-digit code from your authenticator app' : 'Authenticator code or recovery code';
+  usernameInput.required = registering;
+  identifierInput.required = !registering;
+  passwordInput.minLength = registering ? 10 : 1;
+  passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
 
-  if (mode === 'login') {
-    title.textContent = 'Welcome back';
-    subtitle.textContent = 'Sign in directly to Amosclaud.';
-    submitButton.textContent = 'Sign in';
-  } else if (mode === 'register') {
+  if (registering) {
     title.textContent = 'Create your Amosclaud account';
-    subtitle.textContent = 'Set up a rotating Amos Secure Code. No email provider is required.';
-    submitButton.textContent = 'Create secure code setup';
-  } else if (mode === 'verify') {
-    title.textContent = 'Enter your Amos Secure Code';
-    subtitle.textContent = 'Add the setup key to your authenticator app, then enter the six-digit number shown by the app — not the setup key.';
-    submitButton.textContent = 'Verify and create account';
+    subtitle.textContent = 'Choose your @amosclaud.com address and confirm on this device.';
+    submitButton.textContent = 'Create account securely';
   } else {
-    title.textContent = 'Reset your password';
-    subtitle.textContent = 'Enter a current Amos Secure Code or one saved recovery code.';
-    submitButton.textContent = 'Reset password';
+    title.textContent = 'Welcome back';
+    subtitle.textContent = 'Sign in with your Amosclaud address.';
+    submitButton.textContent = 'Sign in';
   }
   showMessage('');
 }
@@ -100,91 +112,55 @@ function setMode(nextMode) {
 loginTab.addEventListener('click', () => setMode('login'));
 registerTab.addEventListener('click', () => setMode('register'));
 
-forgotButton.addEventListener('click', () => {
-  const email = emailInput.value.trim();
-  if (!email) {
-    showMessage('Enter your email address first.');
-    emailInput.focus();
-    return;
-  }
-  setMode('reset');
-  showMessage('Use your authenticator code or one recovery code. No email will be sent.', true);
-});
-
-copySecureKey.addEventListener('click', async () => {
-  if (!pendingSetup?.secret) return;
-  await navigator.clipboard.writeText(pendingSetup.secret);
-  showMessage('Setup key copied. Add it to your authenticator app; do not paste it into the code box.', true);
-});
-
-continueAfterRecovery.addEventListener('click', () => window.location.assign('/'));
-
-form.addEventListener('submit', async (event) => {
+form.addEventListener('submit', async event => {
   event.preventDefault();
   showMessage('');
   if (!form.reportValidity()) return;
 
-  let endpoint = '/api/v1/auth/login';
-  const payload = {email: emailInput.value.trim(), password: passwordInput.value};
-
-  if (mode === 'register') {
-    endpoint = '/api/v1/auth/register/secure-code/start';
-    payload.name = nameInput.value.trim();
-  } else if (mode === 'verify') {
-    const code = codeInput.value.trim();
-    if (!/^\d{6}$/.test(code)) {
-      showMessage('Enter the six-digit number generated by your authenticator app, not the setup key.');
-      codeInput.focus();
-      return;
-    }
-    endpoint = '/api/v1/auth/register/secure-code/verify';
-    payload.code = code;
-  } else if (mode === 'reset') {
-    endpoint = '/api/v1/auth/password/secure-reset';
-    payload.code = codeInput.value.trim();
-  }
-
   submitButton.disabled = true;
   try {
-    const response = await fetch(endpoint, {
+    if (mode === 'login') {
+      let email = identifierInput.value.trim().toLowerCase();
+      if (!email.includes('@')) email += '@amosclaud.com';
+      await requestJson('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({email, password: passwordInput.value}),
+      });
+      showMessage('Success. Opening Amosclaud…', true);
+      setTimeout(() => window.location.assign('/'), 120);
+      return;
+    }
+
+    if (!window.PublicKeyCredential || !navigator.credentials) {
+      throw new Error('This browser does not support secure device confirmation. Update the browser or use another device.');
+    }
+
+    const username = usernameInput.value.trim().toLowerCase();
+    showMessage('Preparing secure device confirmation…', true);
+    const start = await requestJson('/api/v1/auth/register/passkey/start', {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        name: nameInput.value.trim(),
+        username,
+        password: passwordInput.value,
+      }),
     });
-    const data = await readResponse(response);
-    if (!response.ok) throw new Error(errorText(data.detail));
 
-    if (mode === 'register') {
-      pendingSetup = data;
-      secureKey.textContent = data.secret;
-      openAuthenticator.href = data.otpauth_uri;
-      setMode('verify');
-      secureSetup.classList.remove('hidden');
-      showMessage('Setup created. Add the key to your authenticator app, then type the six-digit number shown there.', true);
-      return;
-    }
+    const credential = await navigator.credentials.create({
+      publicKey: prepareCreationOptions(start.public_key),
+    });
+    if (!credential) throw new Error('Device confirmation was cancelled.');
 
-    if (mode === 'verify') {
-      recoveryCodes.textContent = (data.recovery_codes || []).join('\n');
-      form.classList.add('hidden');
-      recoveryPanel.classList.remove('hidden');
-      title.textContent = 'Account created';
-      subtitle.textContent = 'Save these one-time recovery codes before continuing.';
-      showMessage('Your Amosclaud account is protected without Google, email, or SMS.', true);
-      return;
-    }
+    const finished = await requestJson('/api/v1/auth/register/passkey/finish', {
+      method: 'POST',
+      body: JSON.stringify({username, credential: serialiseCredential(credential)}),
+    });
 
-    if (mode === 'reset') {
-      setMode('login');
-      showMessage('Password reset. You can sign in now.', true);
-      return;
-    }
-
-    showMessage('Success. Opening Amosclaud…', true);
-    setTimeout(() => window.location.assign('/'), 150);
+    showMessage(`Account created: ${finished.address}. Opening Amosclaud…`, true);
+    setTimeout(() => window.location.assign('/'), 250);
   } catch (error) {
-    showMessage(error.message);
+    const cancelled = error?.name === 'NotAllowedError';
+    showMessage(cancelled ? 'Device confirmation was cancelled or timed out. Tap Create account securely and try again.' : error.message);
   } finally {
     submitButton.disabled = false;
   }
