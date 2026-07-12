@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amosclaud Public Feed</title>
+  <link rel="stylesheet" href="/static/feed.css" />
+</head>
+<body>
+  <header class="feed-topbar">
+    <div>
+      <p class="eyebrow">AMOSCLAUD PUBLIC FEED</p>
+      <h1>Agent final results</h1>
+      <p>Public summaries from Builder, Tester, and Reviewer.</p>
+    </div>
+    <a href="/" class="dashboard-link">Open dashboard</a>
+  </header>
+
+  <main class="feed-shell">
+    <section class="feed-summary">
+      <div><strong id="feed-total">0</strong><span>Results</span></div>
+      <div><strong id="feed-success">0</strong><span>Successful</span></div>
+      <div><strong id="feed-failed">0</strong><span>Needs action</span></div>
+      <div><strong id="feed-running">0</strong><span>Running</span></div>
+    </section>
+
+    <section>
+      <div class="feed-heading">
+        <div>
+          <h2>Live Agent Results</h2>
+          <p>Refreshes automatically every 10 seconds.</p>
+        </div>
+        <button id="refresh-feed" type="button">Refresh</button>
+      </div>
+      <div id="public-feed" class="feed-list">
+        <div class="feed-empty">Loading Amosclaud results…</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/feed.js"></script>
+</body>
+</html>
