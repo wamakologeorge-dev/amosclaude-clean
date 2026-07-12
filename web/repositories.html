@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="application-name" content="Amosclaud" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <title>Repositories · Amosclaud</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/repositories.css" />
   <link rel="stylesheet" href="/static/repositories-page.css" />
@@ -56,7 +64,26 @@
     <label>Repository name<input id="repository-name-input" type="text" placeholder="my-project" maxlength="100" /></label>
     <label>Description<input id="repository-description-input" type="text" placeholder="What is this project for?" maxlength="500" /></label>
     <label>Visibility<select id="repository-visibility-input"><option value="private">Private</option><option value="public">Public</option></select></label>
+    <label>License
+      <select id="repository-license-input">
+        <option value="none">No license</option>
+        <option value="mit">MIT License</option>
+        <option value="apache-2.0">Apache License 2.0</option>
+        <option value="gpl-3.0">GNU GPLv3</option>
+        <option value="agpl-3.0">GNU AGPLv3</option>
+        <option value="lgpl-3.0">GNU LGPLv3</option>
+        <option value="mpl-2.0">Mozilla Public License 2.0</option>
+        <option value="bsd-2-clause">BSD 2-Clause</option>
+        <option value="bsd-3-clause">BSD 3-Clause</option>
+        <option value="isc">ISC License</option>
+        <option value="unlicense">The Unlicense</option>
+        <option value="epl-2.0">Eclipse Public License 2.0</option>
+        <option value="bsl-1.0">Boost Software License 1.0</option>
+        <option value="cc0-1.0">Creative Commons Zero v1.0</option>
+      </select>
+    </label>
     <label class="checkbox-label"><input id="repository-readme-input" type="checkbox" checked /> Initialize with README</label>
+    <label class="checkbox-label"><input id="repository-gitignore-input" type="checkbox" /> Add a standard .gitignore</label>
     <div class="modal-actions"><button id="btn-cancel-repository" class="btn-ghost">Cancel</button><button id="btn-confirm-repository" class="btn-primary">Create repository</button></div>
   </div>
 
@@ -73,5 +100,6 @@
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/repositories.js"></script>
   <script src="/static/repositories-page.js"></script>
+  <script src="/static/app-install.js"></script>
 </body>
 </html>
