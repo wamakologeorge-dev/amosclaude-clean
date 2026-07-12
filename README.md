@@ -22,7 +22,7 @@ Amosclaud is an installable Progressive Web App. It runs from `https://amosclaud
 3. Tap **Add to Home Screen**.
 4. Confirm the name **Amosclaud**, then tap **Add**.
 
-Apple devices do not show the same automatic install prompt as Android. Installation is completed through Safari's Share menu.
+Apple devices complete installation through Safari's Share menu.
 
 ### Microsoft Windows
 
@@ -39,6 +39,27 @@ Apple devices do not show the same automatic install prompt as Android. Installa
 4. Launch it from the desktop application menu.
 
 The installable app requires HTTPS in production. Local development works on `localhost`.
+
+## Repository creation and licenses
+
+The **New repository** form supports private or public repositories, optional README initialization, an optional standard `.gitignore`, and these license choices:
+
+- No license
+- MIT License
+- Apache License 2.0
+- GNU GPLv3
+- GNU AGPLv3
+- GNU LGPLv3
+- Mozilla Public License 2.0
+- BSD 2-Clause
+- BSD 3-Clause
+- ISC License
+- The Unlicense
+- Eclipse Public License 2.0
+- Boost Software License 1.0
+- Creative Commons Zero v1.0
+
+When selected, Amosclaud creates and commits the `LICENSE` file automatically. The template service is implemented in `amoscloud_ai/api/routes/repository_templates.py`.
 
 ## Run locally with Python
 
@@ -143,11 +164,11 @@ MAIL_SMTP_FROM=verified-sender@amosclaud.com
 MAIL_SMTP_TLS=true
 ```
 
-Internal messages between Amosclaud mailboxes work through the Amosclaud database. Trusted sending and receiving over the public internet also require correct MX, SPF, DKIM, and DMARC records for `amosclaud.com`, plus an approved mail provider.
+Internal messages between Amosclaud mailboxes work through the Amosclaud database. Trusted public-internet mail also requires correct MX, SPF, DKIM, and DMARC records for `amosclaud.com`, plus an approved mail provider.
 
 ## App and package metadata
 
-The installable application metadata is stored in:
+Installable application metadata:
 
 ```text
 web/manifest.webmanifest
@@ -156,7 +177,7 @@ web/app-install.js
 web/amosclaud-app-icon.svg
 ```
 
-Python package metadata and the command-line entry point are stored in:
+Python package and patch-version metadata:
 
 ```text
 pyproject.toml
@@ -184,7 +205,7 @@ The `amosclaud` console command starts `amoscloud_ai.main:main`.
 ```text
 amosclaude-clean/
 ├── amoscloud_ai/
-│   ├── api/routes/          # Authentication, mail, repositories, storage, agent, and other APIs
+│   ├── api/routes/          # Authentication, mail, repositories, licenses, storage, agent, and other APIs
 │   ├── main.py              # FastAPI entry point and web routes
 │   └── __init__.py          # Version and package metadata
 ├── web/                     # Website and installable app files
@@ -196,9 +217,11 @@ amosclaude-clean/
 └── README.md
 ```
 
-## Release notes: 1.0.1
+## Release notes: 1.0.1 patch
 
 - Added installable app support for Android, iOS, Microsoft Windows, Ubuntu, and other Linux desktops.
 - Added a web app manifest, service worker, app icon, and installation prompt.
 - Added Python package metadata and the `amosclaud` command.
-- Updated platform, deployment, mail, passkey, and installation instructions.
+- Added repository license selection and automatic `LICENSE` creation.
+- Added optional standard `.gitignore` initialization.
+- Updated platform, deployment, mail, passkey, repository, and installation instructions.
