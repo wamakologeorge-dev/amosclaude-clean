@@ -5,8 +5,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
@@ -35,6 +36,7 @@ AGENT_DIRECTIVES = [
     "Report run state through the server API and dashboard.",
 ]
 ALLOWED_MODES = {"autonomous-check", "build", "deploy", "monitor"}
+GREETING_WORDS = {"hi", "hello", "hey", "hiya", "yo", "good morning", "good afternoon", "good evening"}
 
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
@@ -47,6 +49,32 @@ def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
     if status == PipelineStatus.FAILED:
         return f"{AGENT_NAME}: autonomous {mode} run failed for {objective}."
     return f"{AGENT_NAME}: autonomous {mode} run was cancelled for {objective}."
+
+
+def _display_name(request: Request) -> str:
+    user = get_user_from_session(request.cookies.get("amos_session"))
+    if not user:
+        return "there"
+    raw_name = (user["name"] or "there").strip()
+    first_name = raw_name.split()[0] if raw_name else "there"
+    return first_name[:1].upper() + first_name[1:]
+
+
+def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
+    name = _display_name(request)
+    message = objective.strip()
+    normalised = " ".join(message.lower().rstrip(".!?").split())
+
+    if not message and mode == "build":
+        return f"What would you like to build today, {name}?"
+
+    if normalised in GREETING_WORDS:
+        return f"Hi {name}. What would you like to build today?"
+
+    if normalised in {"build", "make", "create"}:
+        return f"What would you like to build today, {name}?"
+
+    return None
 
 
 @router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous server profile")
@@ -68,7 +96,7 @@ async def get_agent() -> AutonomousAgentProfile:
 
 
 @router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous server run")
-async def run_agent(body: AutonomousAgentRunRequest) -> AutonomousAgentRunResponse:
+async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
         raise HTTPException(
@@ -76,12 +104,29 @@ async def run_agent(body: AutonomousAgentRunRequest) -> AutonomousAgentRunRespon
             detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}",
         )
 
-    from amoscloud_ai.api.routes.pipelines import _pipelines
-
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
+    objective = (body.objective or "").strip()
+
+    conversational_reply = _conversation_reply(request, mode, objective)
+    if conversational_reply:
+        return AutonomousAgentRunResponse(
+            accepted=True,
+            run_id=run_id,
+            mode=mode,
+            objective=objective or "conversation",
+            reply=conversational_reply,
+            pipeline_id=f"chat-{run_id}",
+            status=PipelineStatus.SUCCESS,
+            started_at=started_at,
+            checks=[],
+            logs=[conversational_reply],
+        )
+
+    from amoscloud_ai.api.routes.pipelines import _pipelines
+
     pipeline_id = str(uuid.uuid4())
-    objective = (body.objective or f"{AGENT_HOME} autonomous operations").strip()
+    objective = objective or f"{AGENT_HOME} autonomous operations"
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
 
     pipeline = PipelineResponse(
