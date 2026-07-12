@@ -18,7 +18,21 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
-from amoscloud_ai.api.routes import agent, auth, chat, copilot, deployments, feed, health, pipelines, pr_tasks, repositories
+from amoscloud_ai.api.routes import (
+    agent,
+    auth,
+    chat,
+    community,
+    copilot,
+    deployments,
+    feed,
+    health,
+    organizations,
+    pipelines,
+    pr_tasks,
+    repositories,
+    workspaces,
+)
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
@@ -37,7 +51,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Self-hosted CI/CD, deployment automation, authentication, and native repository hosting.",
+        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, and developer community.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -60,6 +74,9 @@ def create_app() -> FastAPI:
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
     app.include_router(repositories.router, prefix="/api/v1")
+    app.include_router(organizations.router, prefix="/api/v1")
+    app.include_router(workspaces.router, prefix="/api/v1")
+    app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
@@ -69,6 +86,12 @@ def create_app() -> FastAPI:
     @app.get("/feed", include_in_schema=False)
     async def public_feed():
         return FileResponse(web_dir / "feed.html")
+
+    @app.get("/community", include_in_schema=False)
+    async def community_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "community.html")
 
     @app.get("/login", include_in_schema=False)
     async def login_page(request: Request):
