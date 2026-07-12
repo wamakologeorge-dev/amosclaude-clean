@@ -155,6 +155,8 @@ class ChatRequest(BaseModel):
 
     message: str = Field(..., min_length=1, max_length=12000)
     session_id: Optional[str] = Field(default=None, max_length=128)
+    start_pr_task: bool = False
+    base_branch: str = Field(default="main", pattern=r"^[A-Za-z0-9._/-]+$")
 
 
 class ChatResponse(BaseModel):
@@ -164,6 +166,9 @@ class ChatResponse(BaseModel):
     session_id: str
     timestamp: datetime
     provider: str
+    task_id: Optional[str] = None
+    task_status: Optional[str] = None
+    task_url: Optional[str] = None
 
 
 class AgentCapabilityResponse(BaseModel):
@@ -241,3 +246,29 @@ class PipelineArtifactResponse(BaseModel):
     mime_type: str
     uploaded_at: datetime
     created_at: datetime
+
+
+class RepositoryTaskStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class RepositoryTaskRequest(BaseModel):
+    """An authenticated owner command for the configured Amosclaud repository."""
+
+    objective: str = Field(..., min_length=3, max_length=12000)
+    base_branch: str = Field(default="main", pattern=r"^[A-Za-z0-9._/-]+$")
+
+
+class RepositoryTaskResponse(BaseModel):
+    task_id: str
+    status: RepositoryTaskStatus
+    objective: str
+    branch: str
+    message: str
+    created_at: datetime
+    updated_at: datetime
+    pull_request_url: Optional[str] = None
+    logs: list[str] = Field(default_factory=list)

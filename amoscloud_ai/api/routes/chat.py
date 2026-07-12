@@ -11,9 +11,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
-from amoscloud_ai.models import AgentCapabilityResponse, ChatRequest, ChatResponse
+from amoscloud_ai.models import AgentCapabilityResponse, ChatRequest, ChatResponse, RepositoryTaskRequest
 
 router = APIRouter(tags=["chat"])
 
@@ -87,13 +87,38 @@ def _anthropic_reply(history: list[dict[str, str]]) -> str:
 
 
 @router.post("/api/chat", response_model=ChatResponse, summary="Talk to Amosclaud")
-async def chat(body: ChatRequest) -> ChatResponse:
-    """Return a repository-aware engineering response for either first-party client."""
+async def chat(
+    body: ChatRequest,
+    x_amosclaud_owner_key: str | None = Header(default=None),
+) -> ChatResponse:
+    """Chat normally, or queue an explicit authenticated PR-agent command."""
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
 
     session_id = body.session_id or str(uuid.uuid4())
+    if body.start_pr_task:
+        # Execution is explicit and owner-authenticated; ordinary chat can never mutate a repository.
+        from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, queue_task
+
+        _require_owner_key(x_amosclaud_owner_key)
+        task = queue_task(RepositoryTaskRequest(objective=message, base_branch=body.base_branch))
+        reply = f"I started PR-agent task {task.task_id} on branch {task.branch}. I will work in an isolated workspace and report its pull request when complete."
+        with _conversation_lock:
+            _conversations[session_id].extend([
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": reply},
+            ])
+            _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
+        return ChatResponse(
+            reply=reply,
+            session_id=session_id,
+            timestamp=_now(),
+            provider="pr-agent",
+            task_id=task.task_id,
+            task_status=task.status.value,
+            task_url=f"/api/v1/agent/tasks/{task.task_id}",
+        )
     with _conversation_lock:
         history = _conversations[session_id]
         history.append({"role": "user", "content": message})
@@ -138,6 +163,8 @@ async def capabilities() -> AgentCapabilityResponse:
             "railway_deployment",
             "health_monitoring",
             "github_integration",
+            "owner_authenticated_pr_agent",
+            "isolated_concurrent_repository_tasks",
         ],
         repository_scope="wamakologeorge-dev/amosclaude-clean",
         execution_mode="connected-agent",

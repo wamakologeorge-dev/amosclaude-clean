@@ -48,3 +48,25 @@ def test_capabilities_describe_connected_repository_agent():
     body = response.json()
     assert "repository_instruction_analysis" in body["capabilities"]
     assert body["repository_scope"] == "wamakologeorge-dev/amosclaude-clean"
+
+
+def test_owner_chat_command_queues_pr_agent_work(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_OWNER_KEY", "private-key")
+    response = request(
+        "POST",
+        "/api/chat",
+        headers={"X-Amosclaud-Owner-Key": "private-key"},
+        json={"message": "Repair the dashboard", "start_pr_task": True},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "pr-agent"
+    assert body["task_id"]
+    assert body["task_status"] in {"queued", "running", "failed"}
+    assert body["task_url"].endswith(body["task_id"])
+
+
+def test_chat_cannot_queue_pr_agent_without_owner_key(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_OWNER_KEY", "private-key")
+    response = request("POST", "/api/chat", json={"message": "Repair the dashboard", "start_pr_task": True})
+    assert response.status_code == 401
