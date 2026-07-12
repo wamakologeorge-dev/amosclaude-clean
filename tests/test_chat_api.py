@@ -22,6 +22,7 @@ def request(method: str, path: str, **kwargs):
 
 def test_chat_returns_android_contract_without_provider_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     response = request("POST", "/api/chat", json={"message": "Help me inspect this repository"})
     assert response.status_code == 200
     body = response.json()

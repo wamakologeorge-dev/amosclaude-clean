@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
 
@@ -56,16 +56,55 @@ connected to the Amosclaud platform repository. Follow these repository instruct
 def _fallback_reply(message: str) -> str:
     return (
         "Amosclaud is online and ready to help with repository analysis, implementation plans, "
-        "testing, Railway deployments, and monitoring. Configure ANTHROPIC_API_KEY in the "
-        "service environment to enable live AI responses. Your request was received: "
+        "testing, Railway deployments, and monitoring. Configure ANTHROPIC_API_KEY or "
+        "OPENAI_API_KEY in the service environment to enable live AI responses. "
+        "Your request was received: "
         f"{message}"
     )
+
+
+def _active_provider() -> str:
+    """Return which LLM provider will answer chat requests."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    return "offline"
+
+
+def _openai_reply(history: list[dict[str, str]]) -> str:
+    """Answer with OpenAI when an OpenAI key is configured."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return _fallback_reply(history[-1]["content"])
+
+    try:
+        import httpx
+
+        payload = {
+            "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            "max_tokens": 1200,
+            "messages": [{"role": "system", "content": _system_prompt()}]
+            + [{"role": turn["role"], "content": turn["content"]} for turn in history],
+        }
+        response = httpx.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=payload,
+            timeout=60,
+        )
+        response.raise_for_status()
+        text = (response.json()["choices"][0]["message"]["content"] or "").strip()
+        return text or "I could not produce a response. Please try again."
+    except Exception:
+        # Keep the client useful during a provider outage without exposing provider details.
+        return _fallback_reply(history[-1]["content"])
 
 
 def _anthropic_reply(history: list[dict[str, str]]) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        return _fallback_reply(history[-1]["content"])
+        return _openai_reply(history)
 
     try:
         import anthropic
@@ -89,7 +128,7 @@ def _anthropic_reply(history: list[dict[str, str]]) -> str:
 @router.post("/api/chat", response_model=ChatResponse, summary="Talk to Amosclaud")
 async def chat(
     body: ChatRequest,
-    x_amosclaud_owner_key: str | None = Header(default=None),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
 ) -> ChatResponse:
     """Chat normally, or queue an explicit authenticated PR-agent command."""
     message = body.message.strip()
@@ -134,7 +173,7 @@ async def chat(
         reply=reply,
         session_id=session_id,
         timestamp=_now(),
-        provider="anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "offline",
+        provider=_active_provider(),
     )
 
 
