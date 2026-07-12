@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign in · Amosclaud AI</title>
+  <title>Sign in · Amosclaud</title>
   <link rel="stylesheet" href="/static/login.css" />
 </head>
 <body>
   <main class="auth-shell">
     <section class="brand-panel">
       <div class="brand-mark">A</div>
-      <p class="eyebrow">AMOSCLAUD AI</p>
-      <h1>Control your automation securely.</h1>
-      <p>Sign in to manage pipelines, deployments, and autonomous tasks.</p>
+      <p class="eyebrow">AMOSCLAUD</p>
+      <h1>Your Amosclaud account comes first.</h1>
+      <p>Create your account with email, verify it with a code sent by Amosclaud, then connect GitHub later from your repository settings.</p>
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
@@ -22,32 +22,18 @@
       </div>
 
       <h2 id="auth-title">Welcome back</h2>
-      <p id="auth-subtitle" class="muted">Use your email and password or continue with GitHub.</p>
-
-      <a class="github-button" href="/api/v1/auth/github" aria-label="Continue with GitHub">
-        <span>GitHub</span>
-        <strong>Continue with GitHub</strong>
-      </a>
-
-      <div class="divider"><span>or</span></div>
+      <p id="auth-subtitle" class="muted">Sign in directly to Amosclaud.</p>
 
       <form id="auth-form" autocomplete="on" novalidate>
-        <label id="name-field" class="hidden">
-          Full name
-          <input id="name" name="name" autocomplete="name" minlength="2" />
-        </label>
-        <label>
-          Email address
-          <input id="email" name="username" type="email" autocomplete="username" required />
-        </label>
-        <label>
-          Password
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-        </label>
-        <p id="password-hint" class="hint hidden">Use at least 10 characters.</p>
+        <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
+        <label>Email address<input id="email" name="username" type="email" autocomplete="username" required /></label>
+        <label id="password-field">Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+        <label id="code-field" class="hidden">Verification code<input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></label>
+        <p id="password-hint" class="hint hidden">Use at least 10 characters. Amosclaud will email you a six-digit code.</p>
         <button id="submit-button" class="primary-button" type="submit">Sign in</button>
       </form>
 
+      <button id="forgot-password" class="btn-ghost" type="button">Forgot password?</button>
       <p id="message" class="message" role="alert" aria-live="polite"></p>
     </section>
   </main>
