@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Amosclaud Public Feed</title>
+  <title>Amosclaud Review Feed</title>
   <link rel="stylesheet" href="/static/feed.css" />
+  <link rel="stylesheet" href="/static/feed-reviews.css" />
 </head>
 <body>
   <header class="feed-topbar">
     <div>
-      <p class="eyebrow">AMOSCLAUD PUBLIC FEED</p>
-      <h1>Agent final results</h1>
-      <p>Public summaries from Builder, Tester, and Reviewer.</p>
+      <p class="eyebrow">AMOSCLAUD REVIEW FEED</p>
+      <h1>Agent work, errors, and human review</h1>
+      <p>Review Builder, Tester, and Reviewer results, comment on code errors, and ask Amosclaud to prepare an immediate repair run.</p>
     </div>
     <a href="/" class="dashboard-link">Open dashboard</a>
   </header>
@@ -28,7 +29,7 @@
       <div class="feed-heading">
         <div>
           <h2>Live Agent Results</h2>
-          <p>Refreshes automatically every 10 seconds.</p>
+          <p>Persistent pipeline records refresh automatically every 10 seconds.</p>
         </div>
         <button id="refresh-feed" type="button">Refresh</button>
       </div>
