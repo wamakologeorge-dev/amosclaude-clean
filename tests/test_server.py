@@ -22,6 +22,23 @@ def request(method: str, path: str, **kwargs):
 
 
 # ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+def test_root_serves_the_same_origin_dashboard():
+    resp = request("GET", "/")
+    assert resp.status_code == 200
+    assert "Amosclaud AI Platform" in resp.text
+    assert 'src="/static/app.js"' in resp.text
+
+def test_dashboard_assets_are_served_by_the_application():
+    resp = request("GET", "/static/app.js")
+    assert resp.status_code == 200
+    assert "window.location.origin" in resp.text
+
+
+
+# ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
