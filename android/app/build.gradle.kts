@@ -17,7 +17,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Default API URL (can be overridden at runtime in Settings)
-        buildConfigField("String", "DEFAULT_API_URL", "\"http://10.0.2.2:8000\"")
+        buildConfigField("String", "DEFAULT_API_URL", "\"https://amosclaud.com\"")
     }
 
     buildTypes {
