@@ -3,70 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚀 Amosclaud AI Platform</title>
+  <title>Amosclaud Workspace</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/agent-visual.css" />
   <link rel="stylesheet" href="/static/sidebar.css" />
+  <link rel="stylesheet" href="/static/notebook-dashboard.css" />
 </head>
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="topbar-left"><h1>🚀 Amosclaud AI Platform</h1><span class="version-badge">v1.0.0</span></div>
+      <div class="topbar-left"><h1>Amosclaud Workspace</h1><span class="version-badge">v1.0.0</span></div>
       <div class="topbar-right">
-        <span id="status-indicator" class="status-dot status-unknown" title="Server status"></span>
-        <span id="status-label">Checking…</span>
-        <span id="refresh-timer" class="refresh-label">Auto-refresh in <span id="countdown">10</span>s</span>
+        <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
+        <span id="refresh-timer" class="refresh-label">Refresh in <span id="countdown">10</span>s</span>
+        <a class="notebook-action" href="/repositories">Repositories</a>
+        <a class="notebook-action" href="/community">Community</a>
         <span id="current-user" class="user-pill">Loading user…</span>
         <button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button>
       </div>
     </header>
 
-    <main id="content">
-      <section class="stats-row">
-        <div class="stat-card"><div class="stat-icon">🔁</div><div class="stat-body"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Total Pipelines</span></div></div>
-        <div class="stat-card"><div class="stat-icon">🚀</div><div class="stat-body"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Active Deployments</span></div></div>
-        <div class="stat-card"><div class="stat-icon" id="health-icon">💚</div><div class="stat-body"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health Status</span></div></div>
-        <div class="stat-card"><div class="stat-icon">⏱️</div><div class="stat-body"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Server Uptime</span></div></div>
-      </section>
-
-      <section class="actions-row">
-        <a class="btn-primary" href="/repositories">Open Repositories</a>
-        <button id="btn-trigger-pipeline" class="btn-primary">+ Trigger Pipeline</button>
-        <button id="btn-start-deployment" class="btn-accent">🚀 Start Deployment</button>
-      </section>
-
-      <section class="agent-section">
-        <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Server</h2><p id="agent-mission">Loading autonomous server profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
-        <div class="agent-layout-visual">
-          <div class="agent-controls-stack">
-            <div class="agent-compose">
-              <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">autonomous-check</option><option value="build">build</option><option value="deploy">deploy</option><option value="monitor">monitor</option></select>
-              <textarea id="agent-objective-input" rows="3" placeholder="Tell Amosclaud what you want to build, test, fix, deploy, or monitor..."></textarea>
-              <button id="btn-run-agent" class="btn-primary">Run</button>
-            </div>
-            <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
+    <main id="content" class="notebook-shell">
+      <aside class="notebook-panel sources-panel">
+        <div class="panel-head"><h2>Sources</h2><span>＋</span></div>
+        <div class="panel-body">
+          <div class="sources-actions">
+            <a class="source-button" href="/repositories">＋ Add repository source</a>
+            <button class="source-button" type="button">＋ Add storage file</button>
           </div>
-          <article class="ai-worker-stage" aria-label="Interactive 3D Amosclaud AI workspace feed">
-            <div id="ai-worker-canvas"></div><span class="ai-worker-hint">Drag to rotate</span>
-            <div class="ai-worker-status-copy"><span class="ai-worker-live">AI WORKSPACE LIVE</span><span>Builder · Tester · Reviewer</span></div>
-          </article>
+          <div class="source-search"><input type="search" placeholder="Search files and repositories" /><button class="source-button" type="button">Search</button></div>
+          <div class="source-empty">Saved repositories, files, deployment logs, and Amosclaud Storage items will appear here.</div>
         </div>
+      </aside>
+
+      <section class="notebook-panel chat-panel">
+        <div class="panel-head"><h2>Agent</h2><button class="notebook-action" type="button">Customize</button></div>
+        <div class="chat-hero"><h2>What are you building?</h2><p>Give Amosclaud a goal. It will explain the plan, work through the files, test the result, and prepare deployment.</p></div>
+        <section class="agent-section">
+          <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Server</h2><p id="agent-mission">Loading autonomous server profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
+          <div class="agent-layout-visual">
+            <div class="agent-controls-stack">
+              <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
+              <div class="agent-compose">
+                <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">Ask</option><option value="build">Build</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option></select>
+                <textarea id="agent-objective-input" rows="3" placeholder="Ask Amosclaud to create, fix, test, explain, deploy, or monitor something..."></textarea>
+                <button id="btn-run-agent" class="btn-primary">Send</button>
+              </div>
+            </div>
+            <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
+          </div>
+        </section>
+        <div class="notebook-footer-note">Amosclaud should only report work as completed after repository tools confirm it.</div>
       </section>
 
-      <section class="table-section"><h2>CI/CD Pipelines</h2><div class="table-wrap"><table id="pipelines-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Branch</th><th>Created</th></tr></thead><tbody id="pipelines-body"><tr><td colspan="5" class="empty-row">Loading…</td></tr></tbody></table></div></section>
-      <section class="table-section"><h2>Deployments</h2><div class="table-wrap"><table id="deployments-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Environment</th><th>Created</th></tr></thead><tbody id="deployments-body"><tr><td colspan="5" class="empty-row">Loading…</td></tr></tbody></table></div></section>
+      <aside class="notebook-panel studio-panel">
+        <div class="panel-head"><h2>Studio</h2><span>Tools</span></div>
+        <div class="panel-body">
+          <div class="studio-grid">
+            <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run pipeline</span></button>
+            <button class="studio-tool"><strong>Test</strong><span>Check source</span></button>
+            <button class="studio-tool"><strong>Review</strong><span>Inspect changes</span></button>
+            <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start release</span></button>
+            <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Open source</span></a>
+            <a class="studio-tool" href="/community"><strong>Community</strong><span>Open chat</span></a>
+            <button class="studio-tool"><strong>Storage</strong><span>Open files</span></button>
+            <button class="studio-tool"><strong>Report</strong><span>View results</span></button>
+          </div>
+          <div class="studio-summary">Studio output, build results, deployment status, and generated reports will appear here.</div>
+
+          <section class="stats-row">
+            <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
+          </section>
+
+          <section class="table-section"><h2>Recent pipelines</h2><div class="table-wrap"><table id="pipelines-table"><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody id="pipelines-body"><tr><td colspan="2">Loading…</td></tr></tbody></table></div></section>
+          <section class="table-section"><h2>Recent deployments</h2><div class="table-wrap"><table id="deployments-table"><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody id="deployments-body"><tr><td colspan="2">Loading…</td></tr></tbody></table></div></section>
+        </div>
+      </aside>
     </main>
   </div>
 
   <div id="modal-backdrop" class="modal-backdrop hidden"></div>
-  <div id="modal-pipeline" class="modal hidden" role="dialog" aria-labelledby="modal-pipeline-title"><h3 id="modal-pipeline-title">Trigger Pipeline</h3><label>Pipeline name<input id="pipeline-name-input" type="text" placeholder="e.g. build-and-test" /></label><label>Branch<input id="pipeline-branch-input" type="text" placeholder="main" value="main" /></label><div class="modal-actions"><button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button><button id="btn-confirm-pipeline" class="btn-primary">Trigger</button></div></div>
-  <div id="modal-deployment" class="modal hidden" role="dialog" aria-labelledby="modal-deployment-title"><h3 id="modal-deployment-title">Start Deployment</h3><label>Deployment name<input id="deployment-name-input" type="text" placeholder="e.g. deploy-v2" /></label><label>Environment<select id="deployment-env-input"><option value="production">production</option><option value="staging">staging</option><option value="development">development</option></select></label><div class="modal-actions"><button id="btn-cancel-deployment" class="btn-ghost">Cancel</button><button id="btn-confirm-deployment" class="btn-accent">Deploy</button></div></div>
-
+  <div id="modal-pipeline" class="modal hidden"><h3>Trigger Pipeline</h3><label>Pipeline name<input id="pipeline-name-input" type="text" /></label><label>Branch<input id="pipeline-branch-input" type="text" value="main" /></label><div class="modal-actions"><button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button><button id="btn-confirm-pipeline" class="btn-primary">Trigger</button></div></div>
+  <div id="modal-deployment" class="modal hidden"><h3>Start Deployment</h3><label>Deployment name<input id="deployment-name-input" type="text" /></label><label>Environment<select id="deployment-env-input"><option value="production">production</option><option value="staging">staging</option><option value="development">development</option></select></label><div class="modal-actions"><button id="btn-cancel-deployment" class="btn-ghost">Cancel</button><button id="btn-confirm-deployment" class="btn-accent">Deploy</button></div></div>
   <div id="toast-container" aria-live="assertive"></div>
+
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/sidebar.js"></script>
-  <script type="module" src="/static/agent-3d-loader.js"></script>
 </body>
 </html>
