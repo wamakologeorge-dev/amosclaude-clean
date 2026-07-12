@@ -31,6 +31,7 @@ from amoscloud_ai.api.routes import (
     pipelines,
     pr_tasks,
     repositories,
+    storage,
     workspaces,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
@@ -42,6 +43,7 @@ from amoscloud_ai.logger import log
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
+    storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     log.info(f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}")
     yield
     log.info("Shutting down Amosclaud AI server")
@@ -51,7 +53,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, and developer community.",
+        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, and developer community.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -76,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(repositories.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
     app.include_router(workspaces.router, prefix="/api/v1")
+    app.include_router(storage.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
 
