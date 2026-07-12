@@ -22,7 +22,7 @@ classifiers = [
   "Operating System :: OS Independent",
   "Topic :: Software Development :: Build Tools"
 ]
-dependencies = []
+dynamic = ["dependencies"]
 
 [project.urls]
 Homepage = "https://amosclaud.com"
@@ -34,3 +34,6 @@ amosclaud = "amoscloud_ai.main:main"
 
 [tool.setuptools.packages.find]
 include = ["amoscloud_ai*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
