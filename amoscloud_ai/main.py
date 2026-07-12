@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
-from amoscloud_ai.api.routes import agent, chat, deployments, health, pipelines, pr_tasks
+from amoscloud_ai.api.routes import agent, chat, copilot, deployments, health, pipelines, pr_tasks
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
 
@@ -59,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(chat.router)
     app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
