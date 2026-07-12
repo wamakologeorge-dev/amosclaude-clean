@@ -8,6 +8,9 @@
       if (response.status === 401) return window.location.assign('/login');
       const user = await response.json();
       if (userLabel) userLabel.textContent = user.name || user.email;
+      document.querySelectorAll('[data-admin-only]').forEach(element => {
+        element.hidden = !user.is_admin;
+      });
     } catch (_) {}
   }
 

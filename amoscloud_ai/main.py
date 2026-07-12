@@ -14,11 +14,12 @@ from typing import AsyncGenerator
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
 from amoscloud_ai.api.routes import (
+    admin,
     agent,
     amos_mail,
     amos_secure_code,
@@ -71,6 +72,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def block_suspended_accounts(request: Request, call_next):
+        token = request.cookies.get("amos_session")
+        if token and admin.is_session_suspended(token):
+            response = JSONResponse({"detail": "This account is suspended"}, status_code=403)
+            response.delete_cookie("amos_session", path="/")
+            return response
+        return await call_next(request)
+
     app.include_router(health.router)
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
@@ -91,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
+    app.include_router(admin.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
     if web_dir.exists():
@@ -98,19 +109,11 @@ def create_app() -> FastAPI:
 
     @app.get("/service-worker.js", include_in_schema=False)
     async def service_worker():
-        return FileResponse(
-            web_dir / "service-worker.js",
-            media_type="application/javascript",
-            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
-        )
+        return FileResponse(web_dir / "service-worker.js", media_type="application/javascript", headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     async def web_manifest():
-        return FileResponse(
-            web_dir / "manifest.webmanifest",
-            media_type="application/manifest+json",
-            headers={"Cache-Control": "public, max-age=3600"},
-        )
+        return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/feed", include_in_schema=False)
     async def public_feed():
@@ -133,6 +136,15 @@ def create_app() -> FastAPI:
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "repositories.html")
+
+    @app.get("/admin", include_in_schema=False)
+    async def admin_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "admin.html")
 
     @app.get("/mail", include_in_schema=False)
     async def mail_page(request: Request):
@@ -159,14 +171,7 @@ app = create_app()
 
 
 def main() -> None:
-    uvicorn.run(
-        "amoscloud_ai.main:app",
-        host=settings.host,
-        port=settings.port,
-        workers=settings.workers,
-        reload=settings.debug,
-        log_level=settings.log_level.lower(),
-    )
+    uvicorn.run("amoscloud_ai.main:app", host=settings.host, port=settings.port, workers=settings.workers, reload=settings.debug, log_level=settings.log_level.lower())
 
 
 if __name__ == "__main__":
