@@ -40,14 +40,14 @@
       </nav>
       <section class="repo-profile-block" style="margin-top:16px;display:block">
         <strong>GitHub integration</strong>
-        <span style="display:block;margin:8px 0 12px">Connect GitHub only when you want Amosclaud to access repositories you already have there.</span>
-        <a class="repo-dashboard-link" href="/api/v1/auth/github/link">Connect GitHub repositories</a>
+        <span style="display:block;margin:8px 0 12px">Connect GitHub to browse, import, pull, and push repositories you already have there.</span>
+        <a class="repo-dashboard-link" href="/api/v1/github/connect">Connect GitHub repositories</a>
       </section>
     </aside>
 
     <section class="repo-main">
       <div class="repo-page-heading">
-        <div><h1>Repositories</h1><p>Create Amosclaud repositories or connect existing GitHub repositories separately.</p></div>
+        <div><h1>Repositories</h1><p>Create native Amosclaud repositories or import existing GitHub repositories.</p></div>
         <button id="btn-create-repository" class="repo-new-button" type="button">New repository</button>
       </div>
       <div class="repo-toolbar">
@@ -100,6 +100,7 @@
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/repositories.js"></script>
   <script src="/static/repositories-page.js"></script>
+  <script src="/static/github-repositories.js"></script>
   <script src="/static/app-install.js"></script>
 </body>
 </html>
