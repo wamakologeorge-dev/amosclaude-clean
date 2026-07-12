@@ -11,8 +11,8 @@
     <section class="brand-panel">
       <div class="brand-mark">A</div>
       <p class="eyebrow">AMOSCLAUD</p>
-      <h1>Your Amosclaud account comes first.</h1>
-      <p>Create your account directly with Amosclaud. A rotating Amos Secure Code protects signup and password recovery without Google, email, or SMS providers.</p>
+      <h1>Your Amosclaud account and mail in one step.</h1>
+      <p>Choose a username, create a password, and confirm on this device with fingerprint, Face ID, phone PIN, or screen lock. No Gmail, SMS code, or authenticator app.</p>
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
@@ -22,31 +22,23 @@
       </div>
 
       <h2 id="auth-title">Welcome back</h2>
-      <p id="auth-subtitle" class="muted">Sign in directly to Amosclaud.</p>
+      <p id="auth-subtitle" class="muted">Sign in with your Amosclaud address.</p>
 
       <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
-        <label>Email address<input id="email" name="username" type="email" autocomplete="username" required /></label>
-        <label id="password-field">Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
-
-        <section id="secure-setup" class="hidden" aria-live="polite">
-          <p class="hint">Save this setup key in any authenticator app. The app will generate your rotating six-digit Amos Secure Code.</p>
-          <div class="secure-key-row"><code id="secure-key"></code><button id="copy-secure-key" class="btn-ghost" type="button">Copy key</button></div>
-          <a id="open-authenticator" class="btn-ghost" href="#">Open authenticator app</a>
+        <label id="identifier-field">Amosclaud address or email<input id="identifier" name="username" autocomplete="username" required placeholder="username@amosclaud.com" /></label>
+        <label id="username-field" class="hidden">Choose username
+          <div class="address-input"><input id="username" name="amos-username" autocomplete="nickname" minlength="3" maxlength="32" /><span>@amosclaud.com</span></div>
+        </label>
+        <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+        <p id="password-hint" class="hint hidden">Use at least 10 characters. Your device will ask you to confirm signup.</p>
+        <section id="device-note" class="device-note hidden">
+          <strong>Private device check</strong>
+          <span>Amosclaud uses your device’s built-in security. Your fingerprint, face, or PIN never goes to Amosclaud.</span>
         </section>
-
-        <label id="code-field" class="hidden">Amos Secure Code<input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="32" /></label>
-        <p id="password-hint" class="hint hidden">Use at least 10 characters. No email provider is required.</p>
         <button id="submit-button" class="primary-button" type="submit">Sign in</button>
       </form>
 
-      <button id="forgot-password" class="btn-ghost" type="button">Forgot password?</button>
-      <section id="recovery-panel" class="hidden">
-        <h3>Save your recovery codes</h3>
-        <p class="hint">Store these somewhere safe. Each code works once.</p>
-        <pre id="recovery-codes"></pre>
-        <button id="continue-after-recovery" class="primary-button" type="button">I saved them — open Amosclaud</button>
-      </section>
       <p id="message" class="message" role="alert" aria-live="polite"></p>
     </section>
   </main>
