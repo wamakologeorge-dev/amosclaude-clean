@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from amoscloud_ai import __version__
 from amoscloud_ai.api.routes import (
     agent,
+    amos_mail,
     auth,
     chat,
     community,
@@ -53,7 +54,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, and developer community.",
+        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, Amos Mail, and developer community.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     app.include_router(storage.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
+    app.include_router(amos_mail.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
     if web_dir.exists():
@@ -107,6 +109,12 @@ def create_app() -> FastAPI:
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "repositories.html")
+
+    @app.get("/mail", include_in_schema=False)
+    async def mail_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "mail.html")
 
     @app.get("/workspace/{repository_id}", include_in_schema=False)
     async def repository_workspace(repository_id: int, request: Request):
