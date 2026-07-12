@@ -80,6 +80,26 @@
     }
   }
 
+  async function readResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    const raw = await response.text();
+
+    if (contentType.includes('application/json') && raw) {
+      try {
+        return JSON.parse(raw);
+      } catch (_error) {
+        // Fall through to the safe error object below.
+      }
+    }
+
+    return {
+      detail: response.ok
+        ? 'The agent returned an unreadable response.'
+        : `The agent server failed with HTTP ${response.status}. Please check the deployment logs.`,
+      raw,
+    };
+  }
+
   async function stopAgent() {
     if (!controller) return;
     controller.abort();
@@ -128,7 +148,7 @@
         }),
       });
 
-      const data = await response.json();
+      const data = await readResponse(response);
       if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
 
       pending.remove();
