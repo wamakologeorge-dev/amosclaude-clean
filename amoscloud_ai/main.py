@@ -21,6 +21,7 @@ from amoscloud_ai import __version__
 from amoscloud_ai.api.routes import (
     agent,
     amos_mail,
+    amos_secure_code,
     auth,
     chat,
     community,
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
+    app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
