@@ -208,6 +208,34 @@ def _commit(repo: Repo, message: str, user: sqlite3.Row) -> str:
     return repo.index.commit(message.strip()).hexsha
 
 
+def _starter_files(name: str, description: str, initialize_readme: bool) -> dict[str, str]:
+    """Return the standard structure for every Amosclaud developer repository."""
+    files = {
+        ".Amosclaud-workflow/workflow.yml": (
+            "name: Amosclaud Workflow\n"
+            "version: 1\n"
+            "entry: Src/app/example.tsx\n"
+            "steps:\n"
+            "  - build\n"
+            "  - test\n"
+            "  - review\n"
+        ),
+        "Src/app/example.tsx": (
+            "export default function Example() {\n"
+            "  return (\n"
+            "    <main>\n"
+            f"      <h1>{name}</h1>\n"
+            "      <p>Built with Amosclaud.</p>\n"
+            "    </main>\n"
+            "  );\n"
+            "}\n"
+        ),
+    }
+    if initialize_readme:
+        files["README.md"] = f"# {name}\n\n{description}\n"
+    return files
+
+
 @router.post("", response_model=RepositoryResponse, status_code=201)
 def create_repository(body: RepositoryCreate, user: sqlite3.Row = Depends(_current_user)) -> RepositoryResponse:
     name = body.name.strip()
@@ -230,14 +258,16 @@ def create_repository(body: RepositoryCreate, user: sqlite3.Row = Depends(_curre
         try:
             path.mkdir(parents=True, exist_ok=False)
             repo = Repo.init(path, initial_branch="main")
-            filename = "README.md" if body.initialize_readme else ".gitkeep"
-            content = f"# {name}\n\n{body.description.strip()}\n" if body.initialize_readme else ""
-            (path / filename).write_text(content, encoding="utf-8")
+            starter_files = _starter_files(name, body.description.strip(), body.initialize_readme)
+            for relative_path, content in starter_files.items():
+                target = path / relative_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
             with repo.config_writer() as config:
                 config.set_value("user", "name", user["name"] or user["email"])
                 config.set_value("user", "email", user["email"])
-            repo.index.add([filename])
-            repo.index.commit("Initial commit")
+            repo.index.add(list(starter_files))
+            repo.index.commit("Initialize Amosclaud developer repository")
         except Exception:
             shutil.rmtree(path, ignore_errors=True)
             db.execute("DELETE FROM repositories WHERE id = ?", (repository_id,))
