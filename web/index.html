@@ -5,17 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🚀 Amosclaud AI Platform</title>
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/repositories.css" />
   <link rel="stylesheet" href="/static/agent-visual.css" />
   <link rel="stylesheet" href="/static/sidebar.css" />
 </head>
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="topbar-left">
-        <h1>🚀 Amosclaud AI Platform</h1>
-        <span class="version-badge">v1.0.0</span>
-      </div>
+      <div class="topbar-left"><h1>🚀 Amosclaud AI Platform</h1><span class="version-badge">v1.0.0</span></div>
       <div class="topbar-right">
         <span id="status-indicator" class="status-dot status-unknown" title="Server status"></span>
         <span id="status-label">Checking…</span>
@@ -34,22 +30,9 @@
       </section>
 
       <section class="actions-row">
-        <button id="btn-create-repository" class="btn-primary">+ New Repository</button>
+        <a class="btn-primary" href="/repositories">Open Repositories</a>
         <button id="btn-trigger-pipeline" class="btn-primary">+ Trigger Pipeline</button>
         <button id="btn-start-deployment" class="btn-accent">🚀 Start Deployment</button>
-      </section>
-
-      <section class="repository-section">
-        <div class="section-heading">
-          <div>
-            <h2>Your repositories</h2>
-            <p>Create projects, branches, folders, files, and commits directly in Amosclaud.</p>
-          </div>
-          <span id="repository-count" class="badge badge-default">0 repositories</span>
-        </div>
-        <div id="repository-grid" class="repository-grid">
-          <div class="repository-empty">Loading repositories…</div>
-        </div>
       </section>
 
       <section class="agent-section">
@@ -63,14 +46,9 @@
             </div>
             <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
           </div>
-
           <article class="ai-worker-stage" aria-label="Interactive 3D Amosclaud AI workspace feed">
-            <div id="ai-worker-canvas"></div>
-            <span class="ai-worker-hint">Drag to rotate</span>
-            <div class="ai-worker-status-copy">
-              <span class="ai-worker-live">AI WORKSPACE LIVE</span>
-              <span>Builder · Tester · Reviewer</span>
-            </div>
+            <div id="ai-worker-canvas"></div><span class="ai-worker-hint">Drag to rotate</span>
+            <div class="ai-worker-status-copy"><span class="ai-worker-live">AI WORKSPACE LIVE</span><span>Builder · Tester · Reviewer</span></div>
           </article>
         </div>
       </section>
@@ -81,32 +59,12 @@
   </div>
 
   <div id="modal-backdrop" class="modal-backdrop hidden"></div>
-
-  <div id="modal-repository" class="modal hidden" role="dialog" aria-labelledby="modal-repository-title">
-    <h3 id="modal-repository-title">Create a repository</h3>
-    <label>Repository name<input id="repository-name-input" type="text" placeholder="my-project" maxlength="100" /></label>
-    <label>Description<input id="repository-description-input" type="text" placeholder="What is this project for?" maxlength="500" /></label>
-    <label>Visibility<select id="repository-visibility-input"><option value="private">Private</option><option value="public">Public</option></select></label>
-    <label class="checkbox-label"><input id="repository-readme-input" type="checkbox" checked /> Initialize with README</label>
-    <div class="modal-actions"><button id="btn-cancel-repository" class="btn-ghost">Cancel</button><button id="btn-confirm-repository" class="btn-primary">Create repository</button></div>
-  </div>
-
-  <div id="modal-file" class="modal modal-wide hidden" role="dialog" aria-labelledby="modal-file-title">
-    <h3 id="modal-file-title">Create or edit a file</h3>
-    <input id="file-repository-id" type="hidden" />
-    <label>Branch<input id="file-branch-input" type="text" value="main" /></label>
-    <label>File path<input id="file-path-input" type="text" placeholder="src/main.py" /></label>
-    <label>Content<textarea id="file-content-input" rows="12" placeholder="Write file content here..."></textarea></label>
-    <label>Commit message<input id="file-commit-input" type="text" value="Update file" /></label>
-    <div class="modal-actions"><button id="btn-cancel-file" class="btn-ghost">Cancel</button><button id="btn-confirm-file" class="btn-primary">Commit file</button></div>
-  </div>
-
   <div id="modal-pipeline" class="modal hidden" role="dialog" aria-labelledby="modal-pipeline-title"><h3 id="modal-pipeline-title">Trigger Pipeline</h3><label>Pipeline name<input id="pipeline-name-input" type="text" placeholder="e.g. build-and-test" /></label><label>Branch<input id="pipeline-branch-input" type="text" placeholder="main" value="main" /></label><div class="modal-actions"><button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button><button id="btn-confirm-pipeline" class="btn-primary">Trigger</button></div></div>
   <div id="modal-deployment" class="modal hidden" role="dialog" aria-labelledby="modal-deployment-title"><h3 id="modal-deployment-title">Start Deployment</h3><label>Deployment name<input id="deployment-name-input" type="text" placeholder="e.g. deploy-v2" /></label><label>Environment<select id="deployment-env-input"><option value="production">production</option><option value="staging">staging</option><option value="development">development</option></select></label><div class="modal-actions"><button id="btn-cancel-deployment" class="btn-ghost">Cancel</button><button id="btn-confirm-deployment" class="btn-accent">Deploy</button></div></div>
 
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/app.js"></script>
-  <script src="/static/repositories.js"></script>
+  <script src="/static/account.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/sidebar.js"></script>
   <script type="module" src="/static/agent-3d-loader.js"></script>
