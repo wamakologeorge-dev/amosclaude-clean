@@ -4,6 +4,17 @@ Amosclaud is a self-hosted development platform with native accounts, `@amosclau
 
 Current version: **1.0.1**
 
+## Sign in from any device
+
+Amosclaud accounts work across phones, tablets, laptops, and desktop computers.
+
+Returning users can sign in with:
+
+- fingerprint, Face ID, Touch ID, Windows Hello, device PIN, or screen lock through passkeys
+- Amosclaud username and password as a fallback
+
+Users may enter either their full address, such as `username@amosclaud.com`, or only the username. The same account is used on every supported device.
+
 ## Install Amosclaud as an app
 
 Amosclaud is an installable Progressive Web App. It runs from `https://amosclaud.com`, opens in its own app window, keeps the Amosclaud icon on the device, and uses the same account and server as the website.
@@ -39,6 +50,62 @@ Apple devices complete installation through Safari's Share menu.
 4. Launch it from the desktop application menu.
 
 The installable app requires HTTPS in production. Local development works on `localhost`.
+
+## Native desktop packages
+
+Amosclaud also includes a desktop packaging foundation in the `desktop/` directory.
+
+Supported package targets:
+
+- Windows `.exe` installer for x64 and ARM64
+- macOS `.dmg` for Intel and Apple Silicon
+- Linux `.AppImage`
+- Debian/Ubuntu `.deb`
+
+The desktop shell uses Electron with context isolation, sandboxing, disabled Node.js integration in the web page, external-link protection, and automatic update checks.
+
+Desktop release builds are created by `.github/workflows/desktop-release.yml`. A tag in this format starts the release workflow:
+
+```text
+desktop-v1.0.0
+```
+
+The workflow builds platform-specific artifacts and attaches them to a GitHub Release. Code signing and Apple notarization credentials should be configured before distributing trusted production installers.
+
+### Run the desktop shell locally
+
+Requirements:
+
+- Node.js 22 or newer
+- npm
+
+```bash
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean/desktop
+npm install
+npm start
+```
+
+Build local packages:
+
+```bash
+npm run dist
+```
+
+The desktop application connects to `https://amosclaud.com` by default. For development, set `AMOSCLAUD_URL` before starting it.
+
+macOS or Linux:
+
+```bash
+AMOSCLAUD_URL=http://localhost:8000 npm start
+```
+
+Windows PowerShell:
+
+```powershell
+$env:AMOSCLAUD_URL="http://localhost:8000"
+npm start
+```
 
 ## Repository creation and licenses
 
@@ -145,6 +212,8 @@ PASSKEY_RP_NAME=Amosclaud
 PASSKEY_SETUP_MINUTES=10
 ```
 
+The persistent `/data` volume is required so user accounts, passkeys, sessions, mail, and other SQLite-backed records survive restarts and deployments.
+
 Optional GitHub repository linking:
 
 ```env
@@ -168,13 +237,22 @@ Internal messages between Amosclaud mailboxes work through the Amosclaud databas
 
 ## App and package metadata
 
-Installable application metadata:
+Installable web application metadata:
 
 ```text
 web/manifest.webmanifest
 web/service-worker.js
 web/app-install.js
 web/amosclaud-app-icon.svg
+```
+
+Desktop package metadata:
+
+```text
+desktop/package.json
+desktop/main.js
+desktop/preload.js
+.github/workflows/desktop-release.yml
 ```
 
 Python package and patch-version metadata:
@@ -196,7 +274,7 @@ The `amosclaud` console command starts `amoscloud_ai.main:main`.
 | `/workspace/{repository_id}` | Repository source workspace |
 | `/mail` | Amos Mail inbox and compose interface |
 | `/community` | Developer community |
-| `/feed` | Public feed |
+| `/feed` | Public pipeline and review feed |
 | `/docs` | FastAPI documentation |
 | `/health` | Server health check |
 
@@ -205,10 +283,12 @@ The `amosclaud` console command starts `amoscloud_ai.main:main`.
 ```text
 amosclaude-clean/
 ├── amoscloud_ai/
-│   ├── api/routes/          # Authentication, mail, repositories, licenses, storage, agent, and other APIs
+│   ├── api/routes/          # Authentication, mail, repositories, storage, agent, and other APIs
 │   ├── main.py              # FastAPI entry point and web routes
 │   └── __init__.py          # Version and package metadata
-├── web/                     # Website and installable app files
+├── web/                     # Website and installable PWA files
+├── desktop/                 # Electron desktop application and packaging metadata
+├── .github/workflows/       # CI and desktop release automation
 ├── Infrastructure/          # Container files
 ├── Scripts/start.sh         # Railway and production startup script
 ├── tests/                   # Automated tests
@@ -220,6 +300,10 @@ amosclaude-clean/
 ## Release notes: 1.0.1 patch
 
 - Added installable app support for Android, iOS, Microsoft Windows, Ubuntu, and other Linux desktops.
+- Added passkey sign-in using fingerprint, Face ID, Touch ID, Windows Hello, device PIN, or screen lock.
+- Kept username and password login as a cross-device fallback.
+- Added the Electron desktop packaging foundation for Windows, macOS, and Linux.
+- Added a GitHub Actions desktop release workflow.
 - Added a web app manifest, service worker, app icon, and installation prompt.
 - Added Python package metadata and the `amosclaud` command.
 - Added repository license selection and automatic `LICENSE` creation.
