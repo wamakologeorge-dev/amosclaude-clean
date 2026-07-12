@@ -25,6 +25,7 @@ from amoscloud_ai.api.routes import (
     chat,
     copilot,
     deployments,
+    feed,
     health,
     pipelines,
     pr_tasks,
@@ -70,8 +71,6 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
-    # Compatibility routes keep existing OAuth apps working when their callback
-    # was configured as /auth/github/callback instead of /api/v1/auth/github/callback.
     app.include_router(auth.router, include_in_schema=False)
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
@@ -79,10 +78,15 @@ def create_app() -> FastAPI:
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
     app.include_router(repositories.router, prefix="/api/v1")
+    app.include_router(feed.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
     if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
+
+    @app.get("/feed", include_in_schema=False)
+    async def public_feed():
+        return FileResponse(web_dir / "feed.html")
 
     @app.get("/login", include_in_schema=False)
     async def login_page(request: Request):
