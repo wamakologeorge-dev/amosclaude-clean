@@ -1,4 +1,4 @@
-"""Authentication API: email/password plus GitHub OAuth."""
+"""Authentication API with Google OAuth as the active account provider."""
 
 from __future__ import annotations
 
@@ -57,7 +57,8 @@ def _connect() -> sqlite3.Connection:
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
             password_hash TEXT,
             github_id TEXT UNIQUE,
-            provider TEXT NOT NULL DEFAULT 'password',
+            google_id TEXT UNIQUE,
+            provider TEXT NOT NULL DEFAULT 'google',
             is_admin INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         );
@@ -70,6 +71,10 @@ def _connect() -> sqlite3.Connection:
         );
         """
     )
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()}
+    if "google_id" not in columns:
+        db.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id)")
     db.commit()
     return db
 
@@ -79,12 +84,6 @@ def _normalise_email(email: str) -> str:
     if "@" not in value or value.startswith("@") or value.endswith("@"):
         raise HTTPException(status_code=422, detail="Enter a valid email address")
     return value
-
-
-def _hash_password(password: str, salt: bytes | None = None) -> str:
-    salt = salt or secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PBKDF2_ROUNDS)
-    return f"pbkdf2_sha256${PBKDF2_ROUNDS}${salt.hex()}${digest.hex()}"
 
 
 def _verify_password(password: str, encoded: str | None) -> bool:
@@ -144,28 +143,23 @@ def get_user_from_session(token: str | None) -> sqlite3.Row | None:
 
 
 def _user_response(row: sqlite3.Row) -> UserResponse:
-    return UserResponse(id=row["id"], name=row["name"], email=row["email"], is_admin=bool(row["is_admin"]), provider=row["provider"])
+    return UserResponse(
+        id=row["id"],
+        name=row["name"],
+        email=row["email"],
+        is_admin=bool(row["is_admin"]),
+        provider=row["provider"],
+    )
 
 
-@router.post("/register", response_model=UserResponse, status_code=201)
-def register(body: RegisterRequest, response: Response) -> UserResponse:
-    email = _normalise_email(body.email)
-    with _connect() as db:
-        if db.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
-            raise HTTPException(status_code=409, detail="An account with this email already exists")
-        first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-        cursor = db.execute(
-            "INSERT INTO users(name, email, password_hash, provider, is_admin, created_at) VALUES (?, ?, ?, 'password', ?, ?)",
-            (body.name.strip(), email, _hash_password(body.password), int(first_user), datetime.now(timezone.utc).isoformat()),
-        )
-        token = _create_session(db, cursor.lastrowid)
-        user = db.execute("SELECT id, name, email, is_admin, provider FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
-    _set_session_cookie(response, token)
-    return _user_response(user)
+@router.post("/register", status_code=410)
+def register_disabled(body: RegisterRequest) -> None:
+    raise HTTPException(status_code=410, detail="Account creation is available through Google only")
 
 
 @router.post("/login", response_model=UserResponse)
-def login(body: LoginRequest, response: Response) -> UserResponse:
+def legacy_password_login(body: LoginRequest, response: Response) -> UserResponse:
+    """Keep existing password accounts usable, while new accounts are Google-only."""
     email = _normalise_email(body.email)
     with _connect() as db:
         user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
@@ -195,53 +189,114 @@ def logout(response: Response, amos_session: str | None = Cookie(default=None)) 
     return response
 
 
-@router.get("/github")
-def github_login(request: Request) -> RedirectResponse:
-    client_id = os.getenv("GITHUB_CLIENT_ID")
+@router.get("/google")
+def google_login(request: Request) -> RedirectResponse:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
     if not client_id:
-        raise HTTPException(status_code=503, detail="GitHub sign-in is not configured")
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
     state = secrets.token_urlsafe(32)
-    callback = os.getenv("GITHUB_CALLBACK_URL") or str(request.url_for("github_callback"))
-    url = "https://github.com/login/oauth/authorize?" + urlencode({"client_id": client_id, "redirect_uri": callback, "scope": "read:user user:email", "state": state})
+    callback = os.getenv("GOOGLE_CALLBACK_URL") or str(request.url_for("google_callback"))
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": callback,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": state,
+            "access_type": "online",
+            "prompt": "select_account",
+        }
+    )
     response = RedirectResponse(url)
-    response.set_cookie(OAUTH_STATE_COOKIE, state, max_age=600, httponly=True, secure=os.getenv("AUTH_COOKIE_SECURE", "true").lower() == "true", samesite="lax")
+    response.set_cookie(
+        OAUTH_STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        secure=os.getenv("AUTH_COOKIE_SECURE", "true").lower() == "true",
+        samesite="lax",
+    )
     return response
 
 
-@router.get("/github/callback", name="github_callback")
-async def github_callback(code: str, state: str, request: Request, amos_oauth_state: str | None = Cookie(default=None)) -> RedirectResponse:
+@router.get("/google/callback", name="google_callback")
+async def google_callback(
+    code: str,
+    state: str,
+    request: Request,
+    amos_oauth_state: str | None = Cookie(default=None),
+) -> RedirectResponse:
     if not amos_oauth_state or not hmac.compare_digest(state, amos_oauth_state):
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    client_id = os.getenv("GITHUB_CLIENT_ID")
-    client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     if not client_id or not client_secret:
-        raise HTTPException(status_code=503, detail="GitHub sign-in is not configured")
-    callback = os.getenv("GITHUB_CALLBACK_URL") or str(request.url_for("github_callback"))
-    async with httpx.AsyncClient(timeout=15) as client:
-        token_response = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={"client_id": client_id, "client_secret": client_secret, "code": code, "redirect_uri": callback})
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+
+    callback = os.getenv("GOOGLE_CALLBACK_URL") or str(request.url_for("google_callback"))
+    async with httpx.AsyncClient(timeout=20) as client:
+        token_response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": callback,
+            },
+        )
+        if token_response.status_code >= 400:
+            raise HTTPException(status_code=401, detail="Google authentication failed")
         access_token = token_response.json().get("access_token")
         if not access_token:
-            raise HTTPException(status_code=401, detail="GitHub authentication failed")
-        headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"}
-        profile = (await client.get("https://api.github.com/user", headers=headers)).json()
-        emails = (await client.get("https://api.github.com/user/emails", headers=headers)).json()
-    email = next((item["email"] for item in emails if item.get("primary") and item.get("verified")), None)
-    if not email:
-        raise HTTPException(status_code=400, detail="GitHub account needs a verified primary email")
-    email = _normalise_email(email)
-    github_id = str(profile["id"])
-    name = profile.get("name") or profile.get("login") or "GitHub user"
+            raise HTTPException(status_code=401, detail="Google authentication failed")
+        profile_response = await client.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if profile_response.status_code >= 400:
+            raise HTTPException(status_code=401, detail="Google profile could not be verified")
+        profile = profile_response.json()
+
+    if not profile.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Google account email must be verified")
+
+    email = _normalise_email(profile.get("email", ""))
+    google_id = str(profile.get("sub", ""))
+    if not google_id:
+        raise HTTPException(status_code=400, detail="Google account identifier is missing")
+    name = (profile.get("name") or email.split("@", 1)[0]).strip()
+
     with _connect() as db:
-        user = db.execute("SELECT * FROM users WHERE github_id = ? OR email = ?", (github_id, email)).fetchone()
+        user = db.execute("SELECT * FROM users WHERE google_id = ? OR email = ?", (google_id, email)).fetchone()
         if user:
-            db.execute("UPDATE users SET github_id = ?, provider = CASE WHEN password_hash IS NULL THEN 'github' ELSE 'password+github' END WHERE id = ?", (github_id, user["id"]))
+            db.execute(
+                "UPDATE users SET google_id = ?, name = ?, provider = 'google' WHERE id = ?",
+                (google_id, name, user["id"]),
+            )
             user_id = user["id"]
         else:
             first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-            cursor = db.execute("INSERT INTO users(name, email, github_id, provider, is_admin, created_at) VALUES (?, ?, ?, 'github', ?, ?)", (name, email, github_id, int(first_user), datetime.now(timezone.utc).isoformat()))
+            cursor = db.execute(
+                """INSERT INTO users(name, email, google_id, provider, is_admin, created_at)
+                   VALUES (?, ?, ?, 'google', ?, ?)""",
+                (name, email, google_id, int(first_user), datetime.now(timezone.utc).isoformat()),
+            )
             user_id = cursor.lastrowid
         token = _create_session(db, user_id)
+
     response = RedirectResponse("/")
     response.delete_cookie(OAUTH_STATE_COOKIE)
     _set_session_cookie(response, token)
     return response
+
+
+@router.get("/github")
+def github_disabled() -> None:
+    raise HTTPException(status_code=410, detail="GitHub account sign-in is disabled. Continue with Google.")
+
+
+@router.get("/github/callback")
+def github_callback_disabled() -> None:
+    raise HTTPException(status_code=410, detail="GitHub account sign-in is disabled. Continue with Google.")
