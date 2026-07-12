@@ -21,7 +21,7 @@
       <div class="brand-mark">A</div>
       <p class="eyebrow">AMOSCLAUD</p>
       <h1>Your Amosclaud account and mail in one step.</h1>
-      <p>Choose a username, create a password, and confirm on this device with fingerprint, Face ID, phone PIN, or screen lock. No Gmail, SMS code, or authenticator app.</p>
+      <p>Create the account once, then return with your fingerprint, Face ID, phone PIN, or screen lock.</p>
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
@@ -31,7 +31,10 @@
       </div>
 
       <h2 id="auth-title">Welcome back</h2>
-      <p id="auth-subtitle" class="muted">Sign in with your Amosclaud address.</p>
+      <p id="auth-subtitle" class="muted">Use your fingerprint or device security to sign in.</p>
+
+      <button id="passkey-login-button" class="primary-button" type="button">Use fingerprint to sign in</button>
+      <div id="password-login-divider" class="hint" style="text-align:center;margin:18px 0 10px">or use your password</div>
 
       <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
@@ -45,7 +48,7 @@
           <strong>Private device check</strong>
           <span>Amosclaud uses your device’s built-in security. Your fingerprint, face, or PIN never goes to Amosclaud.</span>
         </section>
-        <button id="submit-button" class="primary-button" type="submit">Sign in</button>
+        <button id="submit-button" class="primary-button" type="submit">Sign in with password</button>
       </form>
 
       <p id="message" class="message" role="alert" aria-live="polite"></p>
