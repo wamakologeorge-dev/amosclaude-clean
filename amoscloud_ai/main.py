@@ -35,6 +35,7 @@ from amoscloud_ai.api.routes import (
     pr_tasks,
     repositories,
     repository_templates,
+    reviews,
     storage,
     workspaces,
 )
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
+    app.include_router(reviews.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
     app.include_router(repositories.router, prefix="/api/v1")
     app.include_router(repository_templates.router, prefix="/api/v1")
