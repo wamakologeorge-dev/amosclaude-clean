@@ -9,22 +9,36 @@ Or with uvicorn:
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
-from amoscloud_ai.api.routes import agent, chat, copilot, deployments, health, pipelines, pr_tasks
+from amoscloud_ai.api.routes import (
+    agent,
+    auth,
+    chat,
+    copilot,
+    deployments,
+    health,
+    pipelines,
+    pr_tasks,
+    repositories,
+)
+from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
     log.info(
         f"🚀 {settings.app_name} v{__version__} starting "
         f"[{settings.environment}] on {settings.host}:{settings.port}"
@@ -38,15 +52,13 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=__version__,
         description=(
-            "Self-hosted CI/CD & Deployment Automation server. "
-            "Manage pipelines, deployments, and database migrations via REST API."
+            "Self-hosted CI/CD, deployment automation, authentication, and native repository hosting."
         ),
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
     )
 
-    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_hosts,
@@ -55,24 +67,31 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Routers
     app.include_router(health.router)
     app.include_router(chat.router)
+    app.include_router(auth.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
+    app.include_router(repositories.router, prefix="/api/v1")
 
-    # Mount web dashboard static files
-    web_dir = os.path.join(os.path.dirname(__file__), "..", "web")
-    if os.path.exists(web_dir):
+    web_dir = Path(__file__).resolve().parent.parent / "web"
+    if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
+    @app.get("/login", include_in_schema=False)
+    async def login_page(request: Request):
+        if get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "login.html")
+
     @app.get("/", include_in_schema=False)
-    async def dashboard() -> FileResponse:
-        index_path = os.path.join(os.path.dirname(__file__), "..", "web", "index.html")
-        return FileResponse(index_path)
+    async def dashboard(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "index.html")
 
     return app
 
