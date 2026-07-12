@@ -82,6 +82,12 @@ def create_app() -> FastAPI:
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "repositories.html")
 
+    @app.get("/workspace/{repository_id}", include_in_schema=False)
+    async def repository_workspace(repository_id: int, request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "workspace.html")
+
     @app.get("/", include_in_schema=False)
     async def dashboard(request: Request):
         if not get_user_from_session(request.cookies.get("amos_session")):
