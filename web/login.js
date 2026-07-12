@@ -2,101 +2,149 @@ const form = document.getElementById('auth-form');
 const loginTab = document.getElementById('login-tab');
 const registerTab = document.getElementById('register-tab');
 const nameField = document.getElementById('name-field');
+const passwordField = document.getElementById('password-field');
+const codeField = document.getElementById('code-field');
 const nameInput = document.getElementById('name');
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
+const codeInput = document.getElementById('code');
 const passwordHint = document.getElementById('password-hint');
 const submitButton = document.getElementById('submit-button');
+const forgotButton = document.getElementById('forgot-password');
 const title = document.getElementById('auth-title');
 const subtitle = document.getElementById('auth-subtitle');
 const message = document.getElementById('message');
 
 let mode = 'login';
 
+function showMessage(text, success = false) {
+  message.textContent = text;
+  message.className = success ? 'message success' : 'message';
+}
+
 function setMode(nextMode) {
   mode = nextMode;
   const registering = mode === 'register';
-  loginTab.classList.toggle('active', !registering);
-  registerTab.classList.toggle('active', registering);
+  const verifying = mode === 'verify';
+  const resetting = mode === 'reset';
+
+  loginTab.classList.toggle('active', mode === 'login');
+  registerTab.classList.toggle('active', registering || verifying);
   nameField.classList.toggle('hidden', !registering);
+  codeField.classList.toggle('hidden', !(verifying || resetting));
+  passwordField.classList.toggle('hidden', false);
   passwordHint.classList.toggle('hidden', !registering);
+  forgotButton.classList.toggle('hidden', mode !== 'login');
+
   nameInput.required = registering;
-  passwordInput.minLength = registering ? 10 : 1;
-  passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
-  title.textContent = registering ? 'Create your account' : 'Welcome back';
-  subtitle.textContent = registering
-    ? 'Create your Amosclaud account. Your browser can securely save the password.'
-    : 'Use your email and password or continue with GitHub.';
-  submitButton.textContent = registering ? 'Create account' : 'Sign in';
-  message.textContent = '';
-  message.className = 'message';
-}
+  codeInput.required = verifying || resetting;
+  passwordInput.required = true;
+  passwordInput.minLength = registering || resetting ? 10 : 1;
+  passwordInput.autocomplete = registering || resetting ? 'new-password' : 'current-password';
 
-async function offerCredentialSave(payload) {
-  if (!('credentials' in navigator) || typeof window.PasswordCredential !== 'function') return;
-
-  try {
-    const credential = new PasswordCredential({
-      id: payload.email,
-      password: payload.password,
-      name: payload.name || payload.email,
-    });
-    await navigator.credentials.store(credential);
-  } catch (error) {
-    console.debug('[Password manager]', error);
+  if (mode === 'login') {
+    title.textContent = 'Welcome back';
+    subtitle.textContent = 'Sign in directly to Amosclaud.';
+    submitButton.textContent = 'Sign in';
+  } else if (mode === 'register') {
+    title.textContent = 'Create your Amosclaud account';
+    subtitle.textContent = 'We will send a six-digit verification code to your email.';
+    submitButton.textContent = 'Send verification code';
+  } else if (mode === 'verify') {
+    title.textContent = 'Verify your email';
+    subtitle.textContent = 'Enter the code Amosclaud sent to your email.';
+    submitButton.textContent = 'Verify and create account';
+  } else {
+    title.textContent = 'Reset your password';
+    subtitle.textContent = 'Enter the reset code and choose a new password.';
+    submitButton.textContent = 'Reset password';
   }
+  showMessage('');
 }
 
 loginTab.addEventListener('click', () => setMode('login'));
 registerTab.addEventListener('click', () => setMode('register'));
 
+forgotButton.addEventListener('click', async () => {
+  const email = emailInput.value.trim();
+  if (!email) {
+    showMessage('Enter your email address first.');
+    emailInput.focus();
+    return;
+  }
+  forgotButton.disabled = true;
+  try {
+    const response = await fetch('/api/v1/auth/password/forgot', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email}),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Could not send reset code');
+    setMode('reset');
+    showMessage('A password reset code was sent by Amosclaud.', true);
+  } catch (error) {
+    showMessage(error.message);
+  } finally {
+    forgotButton.disabled = false;
+  }
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  message.textContent = '';
-  message.className = 'message';
-
+  showMessage('');
   if (!form.reportValidity()) return;
 
-  const payload = {
-    email: emailInput.value.trim(),
-    password: passwordInput.value,
-  };
-  if (mode === 'register') payload.name = nameInput.value.trim();
+  let endpoint = '/api/v1/auth/login';
+  let payload = {email: emailInput.value.trim(), password: passwordInput.value};
+
+  if (mode === 'register') {
+    endpoint = '/api/v1/auth/register/request-code';
+    payload.name = nameInput.value.trim();
+  } else if (mode === 'verify') {
+    endpoint = '/api/v1/auth/register/verify';
+    payload.code = codeInput.value.trim();
+  } else if (mode === 'reset') {
+    endpoint = '/api/v1/auth/password/reset';
+    payload.code = codeInput.value.trim();
+  }
 
   submitButton.disabled = true;
-  submitButton.textContent = mode === 'register' ? 'Creating account…' : 'Signing in…';
-
   try {
-    const response = await fetch(`/api/v1/auth/${mode}`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
     });
     const data = response.status === 204 ? {} : await response.json();
     if (!response.ok) throw new Error(data.detail || 'Authentication failed');
 
-    await offerCredentialSave(payload);
+    if (mode === 'register') {
+      setMode('verify');
+      showMessage('Verification code sent. Check your email.', true);
+      return;
+    }
+    if (mode === 'reset') {
+      setMode('login');
+      showMessage('Password reset. You can sign in now.', true);
+      return;
+    }
 
-    message.textContent = mode === 'register'
-      ? 'Account created. Save your password when your browser asks.'
-      : 'Success. Opening your dashboard…';
-    message.classList.add('success');
-
-    setTimeout(() => window.location.assign('/'), mode === 'register' ? 500 : 100);
+    showMessage(mode === 'verify' ? 'Account created. Opening Amosclaud…' : 'Success. Opening Amosclaud…', true);
+    setTimeout(() => window.location.assign('/'), 150);
   } catch (error) {
-    message.textContent = error.message;
+    showMessage(error.message);
   } finally {
     submitButton.disabled = false;
-    submitButton.textContent = mode === 'register' ? 'Create account' : 'Sign in';
   }
 });
 
 (async () => {
   try {
-    const response = await fetch('/api/v1/auth/me', { credentials: 'same-origin' });
+    const response = await fetch('/api/v1/auth/me', {credentials: 'same-origin'});
     if (response.ok) window.location.assign('/');
   } catch (_) {
-    // Login page remains available when the server is temporarily offline.
+    // Keep the page available while the server reconnects.
   }
 })();
