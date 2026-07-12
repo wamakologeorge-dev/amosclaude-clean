@@ -30,6 +30,7 @@ from amoscloud_ai.api.routes import (
     deployments,
     feed,
     github_repositories,
+    github_travel,
     health,
     organizations,
     passkey_signup,
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
+    app.include_router(github_travel.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(reviews.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
@@ -183,9 +185,5 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def main() -> None:
-    uvicorn.run("amoscloud_ai.main:app", host=settings.host, port=settings.port, workers=settings.workers, reload=settings.debug, log_level=settings.log_level.lower())
-
-
 if __name__ == "__main__":
-    main()
+    uvicorn.run("amoscloud_ai.main:app", host=settings.host, port=settings.port, reload=settings.environment == "development")

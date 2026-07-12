@@ -68,6 +68,15 @@ def queue_task(body: RepositoryTaskRequest) -> RepositoryTaskResponse:
     return task
 
 
+def get_task_status(task_id: str) -> RepositoryTaskResponse:
+    """Return a task snapshot for another trusted Amosclaud API route."""
+    with _lock:
+        task = _tasks.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found.")
+    return task
+
+
 @router.post("", response_model=RepositoryTaskResponse, status_code=202, summary="Start autonomous PR work")
 async def start_task(
     body: RepositoryTaskRequest,
@@ -81,8 +90,4 @@ async def start_task(
 @router.get("/{task_id}", response_model=RepositoryTaskResponse, summary="Get PR-agent task status")
 async def get_task(task_id: str, x_amosclaud_owner_key: Optional[str] = Header(default=None)) -> RepositoryTaskResponse:
     _require_owner_key(x_amosclaud_owner_key)
-    with _lock:
-        task = _tasks.get(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found.")
-    return task
+    return get_task_status(task_id)
