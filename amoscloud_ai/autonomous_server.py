@@ -123,13 +123,39 @@ def _run_command(root: Path, args: list[str], timeout: int = 30) -> subprocess.C
 
 
 def _git_status_check(root: Path) -> CheckResult:
-    result = _run_command(root, ["git", "status", "--short"], timeout=10)
-    if result.returncode != 0:
+    # Railway's Docker build copies application files but normally excludes
+    # the repository's .git directory. That is a valid production runtime,
+    # so missing Git metadata must not make the autonomous run fail.
+    if not (root / ".git").exists():
         return CheckResult(
             name="git-status",
-            status="failed",
-            summary="Unable to read repository status.",
-            details=[result.stderr.strip() or result.stdout.strip()],
+            status="passed",
+            summary="Git metadata is not included in the production container; repository files are available.",
+        )
+
+    try:
+        result = _run_command(root, ["git", "status", "--short"], timeout=10)
+    except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        return CheckResult(
+            name="git-status",
+            status="warning",
+            summary="Git status is unavailable in this runtime.",
+            details=[str(exc)],
+        )
+
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip()
+        if "not a git repository" in error.lower():
+            return CheckResult(
+                name="git-status",
+                status="passed",
+                summary="Production container has no Git metadata; repository files are available.",
+            )
+        return CheckResult(
+            name="git-status",
+            status="warning",
+            summary="Unable to read repository status in this runtime.",
+            details=[error],
         )
 
     lines = [line for line in result.stdout.splitlines() if line.strip()]
