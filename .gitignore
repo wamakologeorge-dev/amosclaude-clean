@@ -28,6 +28,7 @@ htmlcov/
 .env.*
 !.env.example
 !.env.production.example
+!.env.workspace.example
 *.pem
 *.key
 *.p12
