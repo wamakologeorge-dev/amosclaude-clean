@@ -6,6 +6,7 @@
   <title>🚀 Amosclaud AI Platform</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/repositories.css" />
+  <link rel="stylesheet" href="/static/agent-visual.css" />
 </head>
 <body>
   <div id="app">
@@ -52,12 +53,38 @@
 
       <section class="agent-section">
         <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Server</h2><p id="agent-mission">Loading autonomous server profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
-        <div class="agent-compose">
-          <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">autonomous-check</option><option value="build">build</option><option value="deploy">deploy</option><option value="monitor">monitor</option></select>
-          <textarea id="agent-objective-input" rows="3" placeholder="Optional objective for this autonomous run"></textarea>
-          <button id="btn-run-agent" class="btn-primary">Run</button>
+        <div class="agent-layout-visual">
+          <div class="agent-controls-stack">
+            <div class="agent-compose">
+              <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">autonomous-check</option><option value="build">build</option><option value="deploy">deploy</option><option value="monitor">monitor</option></select>
+              <textarea id="agent-objective-input" rows="3" placeholder="Tell Amosclaud what you want to build, test, fix, deploy, or monitor..."></textarea>
+              <button id="btn-run-agent" class="btn-primary">Run</button>
+            </div>
+            <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
+          </div>
+
+          <div class="ai-worker-stage" role="img" aria-label="Animated 3D-style human AI worker showing Amosclaud status">
+            <div class="ai-worker-grid"></div>
+            <div class="ai-worker-scene">
+              <div class="ai-worker-orbit"></div>
+              <div class="ai-worker-person">
+                <div class="ai-worker-hair"></div>
+                <div class="ai-worker-head"></div>
+                <div class="ai-worker-face-light"></div>
+                <div class="ai-worker-body"></div>
+                <div class="ai-worker-core"></div>
+                <div class="ai-worker-arm left"></div>
+                <div class="ai-worker-arm right"></div>
+                <div class="ai-worker-desk"></div>
+                <div class="ai-worker-screen"></div>
+              </div>
+            </div>
+            <div class="ai-worker-status-copy">
+              <span class="ai-worker-live">AI WORKSPACE LIVE</span>
+              <span>Builder · Tester · Reviewer</span>
+            </div>
+          </div>
         </div>
-        <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Autonomous run reports will appear here.</div></div>
       </section>
 
       <section class="table-section"><h2>CI/CD Pipelines</h2><div class="table-wrap"><table id="pipelines-table"><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Branch</th><th>Created</th></tr></thead><tbody id="pipelines-body"><tr><td colspan="5" class="empty-row">Loading…</td></tr></tbody></table></div></section>
