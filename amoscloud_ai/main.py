@@ -39,6 +39,7 @@ from amoscloud_ai.api.routes import (
     repository_templates,
     reviews,
     storage,
+    wifi,
     workspaces,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
@@ -60,7 +61,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, Amos Mail, and developer community.",
+        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, Amos Mail, developer community, and managed Wi-Fi.",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(wifi.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
     if web_dir.exists():
