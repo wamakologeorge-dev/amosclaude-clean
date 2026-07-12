@@ -8,6 +8,8 @@
 
   const compose = runButton.closest('.agent-compose');
   const controls = replies.parentElement;
+  const sessionStorageKey = 'amosclaud-chat-session';
+  let chatSessionId = sessionStorage.getItem(sessionStorageKey) || null;
 
   const activityToolbar = document.createElement('div');
   activityToolbar.className = 'agent-activity-toolbar';
@@ -29,12 +31,6 @@
   compose.appendChild(stopButton);
 
   let controller = null;
-  const greetingWords = new Set(['hi', 'hello', 'hey', 'hiya', 'yo', 'good morning', 'good afternoon', 'good evening']);
-
-  function developerName() {
-    const raw = document.getElementById('current-user')?.textContent?.trim() || 'Developer';
-    return raw.split(/\s+/)[0] || 'Developer';
-  }
 
   function updateActivityView() {
     replies.classList.toggle('agent-replies-expanded', activityExpanded);
@@ -105,7 +101,7 @@
     controller.abort();
     controller = null;
     setBusy(false, 'stopped');
-    addMessage('I stopped the request. You can continue the conversation whenever you are ready.');
+    addMessage('I stopped that request. We can keep chatting whenever you are ready.');
     objectiveInput.focus();
   }
 
@@ -114,7 +110,6 @@
   async function sendMessage() {
     const objective = objectiveInput.value.trim();
     const mode = modeInput.value;
-    const normalized = objective.toLowerCase().replace(/[.!?]+$/, '').trim();
 
     if (!objective) {
       objectiveInput.focus();
@@ -125,34 +120,47 @@
     objectiveInput.value = '';
     objectiveInput.style.height = '';
 
-    if (greetingWords.has(normalized)) {
-      addMessage(`Hi ${developerName()}. What do you want to create today?`);
-      objectiveInput.focus();
-      return;
-    }
-
     controller = new AbortController();
-    setBusy(true, 'working');
-    const pending = addMessage('Amosclaud is working on your request…', 'pending');
+    setBusy(true, mode === 'autonomous-check' ? 'thinking' : 'working');
+    const pending = addMessage(
+      mode === 'autonomous-check'
+        ? 'Amosclaud is thinking…'
+        : 'Amosclaud is working on your request…',
+      'pending',
+    );
 
     try {
-      const response = await fetch('/api/v1/agent/run', {
+      const conversational = mode === 'autonomous-check';
+      const response = await fetch(conversational ? '/api/chat' : '/api/v1/agent/run', {
         method: 'POST',
         signal: controller.signal,
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode,
-          objective,
-          branch: 'main',
-          metadata: { branch: 'main' },
-        }),
+        body: JSON.stringify(conversational
+          ? {
+              message: objective,
+              session_id: chatSessionId,
+              start_pr_task: false,
+              base_branch: 'main',
+            }
+          : {
+              mode,
+              objective,
+              branch: 'main',
+              metadata: { branch: 'main' },
+            }),
       });
 
       const data = await readResponse(response);
       if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
 
+      if (conversational && data.session_id) {
+        chatSessionId = data.session_id;
+        sessionStorage.setItem(sessionStorageKey, chatSessionId);
+      }
+
       pending.remove();
-      addMessage(data.reply || 'The Agent finished processing your request.');
+      addMessage(data.reply || 'I finished processing your request.');
       setBusy(false, 'ready');
     } catch (error) {
       pending.remove();

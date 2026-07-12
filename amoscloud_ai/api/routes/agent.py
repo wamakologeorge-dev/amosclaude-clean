@@ -164,34 +164,50 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
     try:
         from amoscloud_ai.worker import run_pipeline_task
-
         dispatch_task(run_pipeline_task, pipeline_id, payload)
-    except Exception:
-        log.warning("Celery unavailable - running autonomous server inline")
-        result = run_autonomous_server(mode, objective, body.metadata)
-        pipeline.status = result.status
-        pipeline.finished_at = datetime.now(timezone.utc)
-        reply = result.reply
-        pipeline.message = reply
-        pipeline.copilot_reply = reply
-        if pipeline.jobs:
-            pipeline.jobs[0].status = result.status
-            pipeline.jobs[0].started_at = started_at
-            pipeline.jobs[0].finished_at = pipeline.finished_at
-            pipeline.jobs[0].logs.extend(result.logs)
-        checks = [
-            {
-                "name": check.name,
-                "status": check.status,
-                "summary": check.summary,
-                "details": check.details,
-            }
-            for check in result.checks
-        ]
-        logs = result.logs
-    else:
         checks = []
         logs = [reply]
+    except Exception as dispatch_error:
+        log.warning("Background worker unavailable; running autonomous server inline: %s", dispatch_error)
+        try:
+            result = run_autonomous_server(mode, objective, body.metadata)
+            pipeline.status = result.status
+            pipeline.finished_at = datetime.now(timezone.utc)
+            reply = result.reply
+            pipeline.message = reply
+            pipeline.copilot_reply = reply
+            if pipeline.jobs:
+                pipeline.jobs[0].status = result.status
+                pipeline.jobs[0].started_at = started_at
+                pipeline.jobs[0].finished_at = pipeline.finished_at
+                pipeline.jobs[0].logs.extend(result.logs)
+            checks = [
+                {
+                    "name": check.name,
+                    "status": check.status,
+                    "summary": check.summary,
+                    "details": check.details,
+                }
+                for check in result.checks
+            ]
+            logs = result.logs
+        except Exception as inline_error:
+            log.exception("Autonomous server inline run failed")
+            pipeline.status = PipelineStatus.FAILED
+            pipeline.finished_at = datetime.now(timezone.utc)
+            reply = (
+                "Amosclaud could not complete this agent run, but the server stayed online. "
+                "Check the deployment logs for the recorded runtime error."
+            )
+            pipeline.message = reply
+            pipeline.copilot_reply = reply
+            if pipeline.jobs:
+                pipeline.jobs[0].status = PipelineStatus.FAILED
+                pipeline.jobs[0].started_at = started_at
+                pipeline.jobs[0].finished_at = pipeline.finished_at
+                pipeline.jobs[0].logs.append(f"Runtime error: {type(inline_error).__name__}: {inline_error}")
+            checks = []
+            logs = [reply, f"Runtime error: {type(inline_error).__name__}"]
 
     return AutonomousAgentRunResponse(
         accepted=True,
