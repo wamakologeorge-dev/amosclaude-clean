@@ -29,6 +29,7 @@ from amoscloud_ai.api.routes import (
     copilot,
     deployments,
     feed,
+    github_repositories,
     health,
     organizations,
     passkey_signup,
@@ -94,6 +95,7 @@ def create_app() -> FastAPI:
     app.include_router(reviews.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
     app.include_router(repositories.router, prefix="/api/v1")
+    app.include_router(github_repositories.router, prefix="/api/v1")
     app.include_router(repository_templates.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
     app.include_router(workspaces.router, prefix="/api/v1")
