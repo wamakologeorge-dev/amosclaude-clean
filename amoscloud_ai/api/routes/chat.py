@@ -56,25 +56,36 @@ connected to the Amosclaud platform repository. Follow these repository instruct
 def _fallback_reply(message: str) -> str:
     return (
         "Amosclaud is online and ready to help with repository analysis, implementation plans, "
-        "testing, Railway deployments, and monitoring. Configure ANTHROPIC_API_KEY or "
-        "OPENAI_API_KEY in the service environment to enable live AI responses. "
+        "testing, Railway deployments, and monitoring. Live AI responses are not enabled for "
+        "this request. Organizations and external clients can send their own provider key via "
+        "the X-LLM-API-Key header (with optional X-LLM-Provider: anthropic or openai). "
         "Your request was received: "
         f"{message}"
     )
 
 
-def _active_provider() -> str:
-    """Return which LLM provider will answer chat requests."""
+def _resolve_provider(client_key: Optional[str], client_provider: Optional[str]) -> tuple[str, Optional[str]]:
+    """Resolve (provider, api_key) for a chat request.
+
+    Client-supplied keys (external users and organizations) take priority and are
+    used only for their own request. Without a client key, the platform falls back
+    to server-configured keys so the owner is never asked to supply one per request.
+    """
+    if client_key:
+        provider = (client_provider or "").strip().lower()
+        if provider not in {"anthropic", "openai"}:
+            provider = "anthropic" if client_key.startswith("sk-ant-") else "openai"
+        return provider, client_key
     if os.environ.get("ANTHROPIC_API_KEY"):
-        return "anthropic"
+        return "anthropic", os.environ["ANTHROPIC_API_KEY"]
     if os.environ.get("OPENAI_API_KEY"):
-        return "openai"
-    return "offline"
+        return "openai", os.environ["OPENAI_API_KEY"]
+    return "offline", None
 
 
-def _openai_reply(history: list[dict[str, str]]) -> str:
-    """Answer with OpenAI when an OpenAI key is configured."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+def _openai_reply(history: list[dict[str, str]], api_key: Optional[str] = None) -> str:
+    """Answer with OpenAI using a client-supplied or server-configured key."""
+    api_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return _fallback_reply(history[-1]["content"])
 
@@ -101,8 +112,8 @@ def _openai_reply(history: list[dict[str, str]]) -> str:
         return _fallback_reply(history[-1]["content"])
 
 
-def _anthropic_reply(history: list[dict[str, str]]) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+def _anthropic_reply(history: list[dict[str, str]], api_key: Optional[str] = None) -> str:
+    api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return _openai_reply(history)
 
@@ -129,6 +140,8 @@ def _anthropic_reply(history: list[dict[str, str]]) -> str:
 async def chat(
     body: ChatRequest,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
+    x_llm_api_key: Optional[str] = Header(default=None),
+    x_llm_provider: Optional[str] = Header(default=None),
 ) -> ChatResponse:
     """Chat normally, or queue an explicit authenticated PR-agent command."""
     message = body.message.strip()
@@ -164,7 +177,13 @@ async def chat(
         history[:] = history[-_MAX_HISTORY_TURNS:]
         request_history = list(history)
 
-    reply = await asyncio.to_thread(_anthropic_reply, request_history)
+    provider, resolved_key = _resolve_provider(x_llm_api_key, x_llm_provider)
+    if provider == "anthropic":
+        reply = await asyncio.to_thread(_anthropic_reply, request_history, resolved_key)
+    elif provider == "openai":
+        reply = await asyncio.to_thread(_openai_reply, request_history, resolved_key)
+    else:
+        reply = _fallback_reply(message)
     with _conversation_lock:
         _conversations[session_id].append({"role": "assistant", "content": reply})
         _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
@@ -173,7 +192,7 @@ async def chat(
         reply=reply,
         session_id=session_id,
         timestamp=_now(),
-        provider=_active_provider(),
+        provider=provider,
     )
 
 

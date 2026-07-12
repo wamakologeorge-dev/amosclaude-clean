@@ -71,3 +71,44 @@ def test_chat_cannot_queue_pr_agent_without_owner_key(monkeypatch):
     monkeypatch.setenv("AMOSCLAUD_OWNER_KEY", "private-key")
     response = request("POST", "/api/chat", json={"message": "Repair the dashboard", "start_pr_task": True})
     assert response.status_code == 401
+
+
+def test_chat_uses_client_supplied_llm_key_for_provider_selection(monkeypatch):
+    """External clients bring their own key; the platform never asks the owner for one."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    from amoscloud_ai.api.routes import chat as chat_module
+
+    monkeypatch.setattr(chat_module, "_anthropic_reply", lambda history, key=None: f"anthropic:{bool(key)}")
+    monkeypatch.setattr(chat_module, "_openai_reply", lambda history, key=None: f"openai:{bool(key)}")
+
+    response = request(
+        "POST",
+        "/api/chat",
+        json={"message": "hello"},
+        headers={"X-LLM-API-Key": "sk-ant-client-key"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "anthropic"
+    assert body["reply"] == "anthropic:True"
+
+    response = request(
+        "POST",
+        "/api/chat",
+        json={"message": "hello"},
+        headers={"X-LLM-API-Key": "sk-client-key", "X-LLM-Provider": "openai"},
+    )
+    body = response.json()
+    assert body["provider"] == "openai"
+    assert body["reply"] == "openai:True"
+
+
+def test_chat_offline_without_any_key_mentions_byok(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    response = request("POST", "/api/chat", json={"message": "hello"})
+    body = response.json()
+    assert body["provider"] == "offline"
+    assert "X-LLM-API-Key" in body["reply"]
