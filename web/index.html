@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="application-name" content="Amosclaud" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Amosclaud" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Amosclaud Workspace</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/agent-visual.css" />
   <link rel="stylesheet" href="/static/sidebar.css" />
@@ -12,7 +21,7 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="topbar-left"><h1>Amosclaud Workspace</h1><span class="version-badge">v1.0.0</span></div>
+      <div class="topbar-left"><h1>Amosclaud Workspace</h1><span class="version-badge">v1.0.1</span></div>
       <div class="topbar-right">
         <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
         <span id="refresh-timer" class="refresh-label">Refresh in <span id="countdown">10</span>s</span>
@@ -96,5 +105,6 @@
   <script src="/static/account.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/sidebar.js"></script>
+  <script src="/static/app-install.js"></script>
 </body>
 </html>
