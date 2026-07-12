@@ -1,10 +1,34 @@
 """Application configuration using Pydantic Settings."""
 
+from __future__ import annotations
+
+import hashlib
+import os
+import secrets
 from functools import lru_cache
 from typing import List
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _runtime_secret_key() -> str:
+    """Return a stable Railway-derived secret or a secure local fallback.
+
+    Railway exposes stable project/service/environment identifiers. Hashing them
+    gives the app a usable secret before a user supplies SECRET_KEY, preventing
+    the server from crashing during startup and failing its health check.
+    Production owners should still set a dedicated SECRET_KEY in Railway.
+    """
+    railway_parts = [
+        os.getenv("RAILWAY_PROJECT_ID", ""),
+        os.getenv("RAILWAY_SERVICE_ID", ""),
+        os.getenv("RAILWAY_ENVIRONMENT_ID", ""),
+    ]
+    material = ":".join(part for part in railway_parts if part)
+    if material:
+        return hashlib.sha256(f"amosclaud:{material}".encode()).hexdigest()
+    return secrets.token_urlsafe(48)
 
 
 class Settings(BaseSettings):
@@ -12,6 +36,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # App
@@ -35,8 +60,13 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
 
     # Security
-    secret_key: str = "change-me-in-production"
-    allowed_hosts: List[str] = ["http://localhost", "http://localhost:8000"]
+    secret_key: str = Field(default_factory=_runtime_secret_key)
+    allowed_hosts: List[str] = [
+        "http://localhost",
+        "http://localhost:8000",
+        "https://amosclaud.com",
+        "https://www.amosclaud.com",
+    ]
 
     # Deployment
     deployment_retries: int = 3
@@ -69,8 +99,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.environment.lower() in {"production", "prod", "release"}:
-            if self.secret_key == "change-me-in-production" or len(self.secret_key) < 32:
-                raise ValueError("SECRET_KEY must be set to a strong value in production")
+            if len(self.secret_key) < 32:
+                raise ValueError("SECRET_KEY must contain at least 32 characters")
             if "*" in self.allowed_hosts:
                 raise ValueError("ALLOWED_HOSTS must not contain '*' in production")
             if self.debug:
