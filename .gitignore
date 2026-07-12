@@ -37,6 +37,8 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+data/*
+!data/.gitkeep
 
 # OS
 .DS_Store
