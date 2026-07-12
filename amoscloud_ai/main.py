@@ -150,6 +150,15 @@ def create_app() -> FastAPI:
             return RedirectResponse("/", status_code=302)
         return FileResponse(web_dir / "admin.html")
 
+    @app.get("/admin/wifi", include_in_schema=False)
+    async def wifi_admin_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "wifi.html")
+
     @app.get("/mail", include_in_schema=False)
     async def mail_page(request: Request):
         if not get_user_from_session(request.cookies.get("amos_session")):
