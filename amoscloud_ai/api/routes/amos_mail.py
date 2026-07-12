@@ -1,4 +1,4 @@
-"""Amos Mail: internal @amos.com messaging plus optional internet delivery."""
+"""Amos Mail: internal @amosclaud.com messaging plus optional internet delivery."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from amoscloud_ai.api.routes.auth import get_user_from_session
 
 router = APIRouter(prefix="/mail", tags=["amos-mail"])
 DB_PATH = Path(os.getenv("AUTH_DB_PATH", "data/auth.db"))
-MAIL_DOMAIN = os.getenv("AMOS_MAIL_DOMAIN", "amos.com").strip().lower()
+MAIL_DOMAIN = os.getenv("AMOS_MAIL_DOMAIN", "amosclaud.com").strip().lower()
 USERNAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])?$")
 
 
@@ -160,7 +160,7 @@ def send_message(body: ComposeRequest, amos_session: str | None = Cookie(default
     with _connect() as db:
         mailbox = db.execute("SELECT address FROM mailboxes WHERE user_id=?", (user["id"],)).fetchone()
         if not mailbox:
-            raise HTTPException(status_code=409, detail="Create your @amos.com address first")
+            raise HTTPException(status_code=409, detail=f"Create your @{MAIL_DOMAIN} address first")
         sender = mailbox["address"]
         internal = recipient.endswith(f"@{MAIL_DOMAIN}")
         recipient_box = db.execute("SELECT user_id FROM mailboxes WHERE address=?", (recipient,)).fetchone() if internal else None
