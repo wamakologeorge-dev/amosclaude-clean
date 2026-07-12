@@ -92,6 +92,22 @@ def create_app() -> FastAPI:
     if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
+    @app.get("/service-worker.js", include_in_schema=False)
+    async def service_worker():
+        return FileResponse(
+            web_dir / "service-worker.js",
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+        )
+
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    async def web_manifest():
+        return FileResponse(
+            web_dir / "manifest.webmanifest",
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     @app.get("/feed", include_in_schema=False)
     async def public_feed():
         return FileResponse(web_dir / "feed.html")
