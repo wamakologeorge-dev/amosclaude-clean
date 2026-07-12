@@ -9,7 +9,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
-from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task, queue_task
+from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task_status, queue_task
 from amoscloud_ai.models import RepositoryTaskRequest, RepositoryTaskResponse
 
 router = APIRouter(prefix="/agent/github", tags=["github-agent-travel"])
@@ -108,4 +108,4 @@ async def github_travel_status(
 ) -> RepositoryTaskResponse:
     """Return the latest clone/edit/test/push/PR status for a travel task."""
     _authorise(request, x_amosclaud_owner_key)
-    return await get_task(task_id, x_amosclaud_owner_key or os.getenv("AMOSCLAUD_OWNER_KEY"))
+    return get_task_status(task_id)
