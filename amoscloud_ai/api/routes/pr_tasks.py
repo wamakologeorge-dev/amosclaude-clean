@@ -1,6 +1,7 @@
 """Private API endpoints that launch and report Amosclaud PR-agent work."""
 
 from __future__ import annotations
+from typing import Optional
 
 import asyncio
 import os
@@ -23,7 +24,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _require_owner_key(owner_key: str | None) -> None:
+def _require_owner_key(owner_key: Optional[str]) -> None:
     expected = os.environ.get("AMOSCLAUD_OWNER_KEY")
     if not expected:
         raise HTTPException(status_code=503, detail="PR agent is not configured: missing AMOSCLAUD_OWNER_KEY.")
@@ -70,7 +71,7 @@ def queue_task(body: RepositoryTaskRequest) -> RepositoryTaskResponse:
 @router.post("", response_model=RepositoryTaskResponse, status_code=202, summary="Start autonomous PR work")
 async def start_task(
     body: RepositoryTaskRequest,
-    x_amosclaud_owner_key: str | None = Header(default=None),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
 ) -> RepositoryTaskResponse:
     """Accept an owner command and immediately begin repository work in the background."""
     _require_owner_key(x_amosclaud_owner_key)
@@ -78,7 +79,7 @@ async def start_task(
 
 
 @router.get("/{task_id}", response_model=RepositoryTaskResponse, summary="Get PR-agent task status")
-async def get_task(task_id: str, x_amosclaud_owner_key: str | None = Header(default=None)) -> RepositoryTaskResponse:
+async def get_task(task_id: str, x_amosclaud_owner_key: Optional[str] = Header(default=None)) -> RepositoryTaskResponse:
     _require_owner_key(x_amosclaud_owner_key)
     with _lock:
         task = _tasks.get(task_id)
