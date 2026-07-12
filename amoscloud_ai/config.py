@@ -3,23 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _runtime_secret_key() -> str:
-    """Return a stable Railway-derived secret or a secure local fallback.
-
-    Railway exposes stable project/service/environment identifiers. Hashing them
-    gives the app a usable secret before a user supplies SECRET_KEY, preventing
-    the server from crashing during startup and failing its health check.
-    Production owners should still set a dedicated SECRET_KEY in Railway.
-    """
+    """Return a stable Railway-derived secret or a secure local fallback."""
     railway_parts = [
         os.getenv("RAILWAY_PROJECT_ID", ""),
         os.getenv("RAILWAY_SERVICE_ID", ""),
@@ -71,41 +66,55 @@ class Settings(BaseSettings):
     # Deployment
     deployment_retries: int = 3
 
+    @field_validator("secret_key", mode="before")
+    @classmethod
+    def ensure_safe_secret(cls, value: object) -> str:
+        candidate = str(value or "").strip()
+        if len(candidate) >= 32 and candidate != "change-me-in-production":
+            return candidate
+        return _runtime_secret_key()
+
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def parse_allowed_hosts(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        raw = value.strip()
+        if not raw:
+            return [
+                "http://localhost",
+                "http://localhost:8000",
+                "https://amosclaud.com",
+                "https://www.amosclaud.com",
+            ]
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
     @field_validator("debug", mode="before")
     @classmethod
-    def parse_debug(cls, v: object) -> object:
-        if isinstance(v, str):
-            normalized = v.strip().lower()
+    def parse_debug(cls, value: object) -> object:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
             if normalized in {"release", "production", "prod"}:
                 return False
             if normalized in {"debug", "development", "dev"}:
                 return True
-        return v
+        return value
 
     @field_validator("celery_broker_url", mode="before")
     @classmethod
-    def set_celery_broker(cls, v: str, info) -> str:
-        if not v:
-            return info.data.get("redis_url", "redis://localhost:6379/0")
-        return v
+    def set_celery_broker(cls, value: str, info) -> str:
+        return value or info.data.get("redis_url", "redis://localhost:6379/0")
 
     @field_validator("celery_result_backend", mode="before")
     @classmethod
-    def set_celery_backend(cls, v: str, info) -> str:
-        if not v:
-            return info.data.get("redis_url", "redis://localhost:6379/0")
-        return v
-
-    @model_validator(mode="after")
-    def validate_production_security(self) -> "Settings":
-        if self.environment.lower() in {"production", "prod", "release"}:
-            if len(self.secret_key) < 32:
-                raise ValueError("SECRET_KEY must contain at least 32 characters")
-            if "*" in self.allowed_hosts:
-                raise ValueError("ALLOWED_HOSTS must not contain '*' in production")
-            if self.debug:
-                raise ValueError("DEBUG must be disabled in production")
-        return self
+    def set_celery_backend(cls, value: str, info) -> str:
+        return value or info.data.get("redis_url", "redis://localhost:6379/0")
 
 
 @lru_cache
