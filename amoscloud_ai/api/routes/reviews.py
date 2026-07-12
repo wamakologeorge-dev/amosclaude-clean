@@ -19,7 +19,7 @@ class ReviewCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=5000)
     file_path: str | None = Field(default=None, max_length=500)
     line_number: int | None = Field(default=None, ge=1)
-    kind: str = Field(default="comment", pattern="^(comment|error|suggestion|approval)$")
+    kind: str = Field(default="comment", pattern="^(comment|solution|feedback|error|suggestion|approval)$")
 
 
 class AgentFixRequest(BaseModel):
