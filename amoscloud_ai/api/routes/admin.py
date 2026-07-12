@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response
 from pydantic import BaseModel
 
-from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
+from amoscloud_ai.api.routes.auth import DB_PATH, _connect, get_user_from_session
 from amoscloud_ai.api.routes.repositories import REPOSITORY_ROOT
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -22,6 +22,10 @@ class UserUpdate(BaseModel):
 
 
 def _db() -> sqlite3.Connection:
+    # Ensure the base authentication schema exists before applying admin-only
+    # migrations. Fresh Railway containers may start with an empty SQLite file.
+    with _connect():
+        pass
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
