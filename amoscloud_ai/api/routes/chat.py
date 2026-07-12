@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
 
@@ -89,7 +89,7 @@ def _anthropic_reply(history: list[dict[str, str]]) -> str:
 @router.post("/api/chat", response_model=ChatResponse, summary="Talk to Amosclaud")
 async def chat(
     body: ChatRequest,
-    x_amosclaud_owner_key: str | None = Header(default=None),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
 ) -> ChatResponse:
     """Chat normally, or queue an explicit authenticated PR-agent command."""
     message = body.message.strip()
