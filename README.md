@@ -1,105 +1,204 @@
-# Amosclaud AI Platform
+# Amosclaud
 
-Self-hosted CI/CD and deployment automation for Amosclaud. The app includes a FastAPI server, web dashboard, pipeline/deployment APIs, and Amosclaud Copilot delegation endpoints.
+Amosclaud is a self-hosted development platform with native accounts, `@amosclaud.com` mailboxes, repository hosting, source workspaces, storage, organizations, community tools, CI/CD pipelines, deployments, and an autonomous development agent.
 
-## Quick Start
+Current version: **1.0.1**
 
-### Run With Docker
+## Install Amosclaud as an app
+
+Amosclaud is an installable Progressive Web App. It runs from `https://amosclaud.com`, opens in its own app window, keeps the Amosclaud icon on the device, and uses the same account and server as the website.
+
+### Android
+
+1. Open `https://amosclaud.com` in Chrome.
+2. Sign in or create an Amosclaud account.
+3. Tap **Install Amosclaud app** when the button appears.
+4. If the button is not shown, open Chrome's menu and tap **Install app** or **Add to Home screen**.
+
+### iPhone and iPad
+
+1. Open `https://amosclaud.com` in Safari.
+2. Tap the **Share** button.
+3. Tap **Add to Home Screen**.
+4. Confirm the name **Amosclaud**, then tap **Add**.
+
+Apple devices do not show the same automatic install prompt as Android. Installation is completed through Safari's Share menu.
+
+### Microsoft Windows
+
+1. Open `https://amosclaud.com` in Microsoft Edge or Google Chrome.
+2. Open the browser menu.
+3. Choose **Apps → Install Amosclaud** in Edge, or **Install Amosclaud** in Chrome.
+4. Amosclaud will appear in the Start menu and can be pinned to the taskbar.
+
+### Ubuntu and other Linux desktops
+
+1. Open `https://amosclaud.com` in Chrome, Chromium, or Microsoft Edge.
+2. Open the browser menu.
+3. Choose **Install Amosclaud**.
+4. Launch it from the desktop application menu.
+
+The installable app requires HTTPS in production. Local development works on `localhost`.
+
+## Run locally with Python
+
+Requirements:
+
+- Python 3.11 or newer
+- Git
 
 ```bash
-git clone https://github.com/wamakologeorge-dev/amosclaude-clean
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
 cd amosclaude-clean
-docker-compose up --build
+python -m venv .venv
 ```
 
-- Dashboard: `http://localhost`
-- API Docs: `http://localhost:8000/docs`
+Activate the virtual environment.
 
-### Run With Python
+macOS, Ubuntu, or other Linux:
 
 ```bash
-pip install -r requirements.txt
+source .venv/bin/activate
+```
+
+Microsoft Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install and run:
+
+```bash
+python -m pip install --upgrade pip
+pip install -e .
+amosclaud
+```
+
+Open:
+
+- Amosclaud: `http://localhost:8000`
+- API documentation: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+
+A direct start also works:
+
+```bash
 python -m amoscloud_ai.main
 ```
 
-- Dashboard: `http://localhost:8000`
-- API Docs: `http://localhost:8000/docs`
-
-## What You Can Do
-
-- Manage CI/CD pipelines.
-- Trigger and rollback deployments.
-- Monitor server health in real time.
-- Delegate Amosclaud-owned work through Amosclaud Copilot.
-- View the live dashboard at `/`.
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Web dashboard |
-| `GET` | `/health` | Server health check |
-| `GET` | `/api/v1/copilot` | Amosclaud Copilot profile |
-| `POST` | `/api/v1/copilot/delegate` | Delegate work to Amosclaud Copilot |
-| `GET` | `/api/v1/pipelines` | List all pipelines |
-| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
-| `GET` | `/api/v1/deployments` | List all deployments |
-| `POST` | `/api/v1/deployments` | Start a deployment |
-| `GET` | `/docs` | Interactive API docs |
-
-## Amosclaud Copilot
-
-Amosclaud Copilot is scoped to Amosclaud-owned application work. Its job is to delegate, build, monitor, and report back only for `amosclaud.com` and the Amosclaud pipeline.
-
-## Production Deployment
-
-The production stack for `amosclaud.com` is defined in `docker-compose.prod.yml`:
-
-- FastAPI API server
-- Celery worker
-- PostgreSQL
-- Redis
-- Caddy reverse proxy with automatic HTTPS for `amosclaud.com` and `www.amosclaud.com`
-
-On the production host, create `.env.production` from `.env.production.example`, point DNS for `amosclaud.com` and `www.amosclaud.com` at the host, then run:
+## Run with Docker
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean
+docker compose -f Infrastructure/docker-compose.yml up --build
 ```
 
-GitHub Actions deployment is available in `.github/workflows/deploy-amosclaud.yml`. Configure these repository secrets before running it:
+Open `http://localhost:8000`.
 
-- `AMOSCLAUD_SSH_HOST`
-- `AMOSCLAUD_SSH_USER`
-- `AMOSCLAUD_SSH_KEY`
-- `AMOSCLAUD_APP_DIR`
+## Railway production deployment
 
-Railway deployment metadata is included in `railway.json` and `Procfile`. If `amosclaud.com` is connected to Railway, merge or deploy this branch there, set production environment variables, and Railway will start `python -m amoscloud_ai.main` with `/health` as the health check.
+Railway should start Amosclaud with:
 
-## Project Structure
+```bash
+bash Scripts/start.sh
+```
+
+Attach a persistent Railway volume and mount it at:
+
+```text
+/data
+```
+
+Recommended production variables:
+
+```env
+AUTH_DB_PATH=/data/auth.db
+AUTH_COOKIE_SECURE=true
+AUTH_SESSION_DAYS=7
+AMOS_MAIL_DOMAIN=amosclaud.com
+PASSKEY_RP_ID=amosclaud.com
+PASSKEY_ORIGIN=https://amosclaud.com
+PASSKEY_RP_NAME=Amosclaud
+PASSKEY_SETUP_MINUTES=10
+```
+
+Optional GitHub repository linking:
+
+```env
+GITHUB_CLIENT_ID=your-client-id
+GITHUB_CLIENT_SECRET=your-client-secret
+GITHUB_CALLBACK_URL=https://amosclaud.com/api/v1/auth/github/callback
+```
+
+Optional internet mail delivery:
+
+```env
+MAIL_SMTP_HOST=your-smtp-host
+MAIL_SMTP_PORT=587
+MAIL_SMTP_USERNAME=your-smtp-username
+MAIL_SMTP_PASSWORD=your-smtp-password
+MAIL_SMTP_FROM=verified-sender@amosclaud.com
+MAIL_SMTP_TLS=true
+```
+
+Internal messages between Amosclaud mailboxes work through the Amosclaud database. Trusted sending and receiving over the public internet also require correct MX, SPF, DKIM, and DMARC records for `amosclaud.com`, plus an approved mail provider.
+
+## App and package metadata
+
+The installable application metadata is stored in:
+
+```text
+web/manifest.webmanifest
+web/service-worker.js
+web/app-install.js
+web/amosclaud-app-icon.svg
+```
+
+Python package metadata and the command-line entry point are stored in:
+
+```text
+pyproject.toml
+amoscloud_ai/__init__.py
+```
+
+The `amosclaud` console command starts `amoscloud_ai.main:main`.
+
+## Main product routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Amosclaud Agent workspace |
+| `/login` | Native Amosclaud sign-in and account creation |
+| `/repositories` | Native repository list and creation |
+| `/workspace/{repository_id}` | Repository source workspace |
+| `/mail` | Amos Mail inbox and compose interface |
+| `/community` | Developer community |
+| `/feed` | Public feed |
+| `/docs` | FastAPI documentation |
+| `/health` | Server health check |
+
+## Project structure
 
 ```text
 amosclaude-clean/
-├── amoscloud_ai/          # Main FastAPI application package
-│   ├── api/routes/        # health, copilot, pipelines, deployments routes
-│   ├── main.py            # App entry point; serves API and web dashboard
-│   ├── config.py          # Settings
-│   └── models.py          # Pydantic models
-├── web/                   # Frontend dashboard served at /
-├── tests/                 # pytest test suite
-├── Dockerfile             # App container
-├── docker-compose.yml     # Local stack
-├── docker-compose.prod.yml # Production stack
-├── Caddyfile              # Production HTTPS reverse proxy
-└── nginx.conf             # Local reverse proxy config
+├── amoscloud_ai/
+│   ├── api/routes/          # Authentication, mail, repositories, storage, agent, and other APIs
+│   ├── main.py              # FastAPI entry point and web routes
+│   └── __init__.py          # Version and package metadata
+├── web/                     # Website and installable app files
+├── Infrastructure/          # Container files
+├── Scripts/start.sh         # Railway and production startup script
+├── tests/                   # Automated tests
+├── pyproject.toml           # Python build and package metadata
+├── requirements.txt         # Runtime dependencies
+└── README.md
 ```
 
-## Environment Variables
+## Release notes: 1.0.1
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
-| `SECRET_KEY` | `change-me-in-production` | App secret key; change in production |
-| `ENVIRONMENT` | `development` | Runtime environment |
-| `LOG_LEVEL` | `INFO` | Logging level |
+- Added installable app support for Android, iOS, Microsoft Windows, Ubuntu, and other Linux desktops.
+- Added a web app manifest, service worker, app icon, and installation prompt.
+- Added Python package metadata and the `amosclaud` command.
+- Updated platform, deployment, mail, passkey, and installation instructions.
