@@ -1,0 +1,251 @@
+/* Animated 3D-style Amosclaud AI worker status visual */
+.ai-worker-stage {
+  position: relative;
+  min-height: 230px;
+  overflow: hidden;
+  border: 1px solid rgba(88, 166, 255, .28);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(88, 166, 255, .2), transparent 34%),
+    linear-gradient(145deg, #0b1320 0%, #101a2b 48%, #07101c 100%);
+  perspective: 900px;
+  box-shadow: inset 0 0 50px rgba(88, 166, 255, .08), 0 18px 40px rgba(0, 0, 0, .34);
+}
+
+.ai-worker-grid {
+  position: absolute;
+  inset: 54% -15% -35%;
+  transform: rotateX(68deg);
+  background-image:
+    linear-gradient(rgba(88,166,255,.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(88,166,255,.18) 1px, transparent 1px);
+  background-size: 34px 34px;
+  animation: ai-grid-move 5s linear infinite;
+}
+
+.ai-worker-scene {
+  position: absolute;
+  inset: 18px;
+  display: grid;
+  place-items: center;
+  transform-style: preserve-3d;
+}
+
+.ai-worker-orbit,
+.ai-worker-orbit::before,
+.ai-worker-orbit::after {
+  position: absolute;
+  width: 158px;
+  height: 158px;
+  border-radius: 50%;
+  border: 1px solid rgba(88,166,255,.38);
+  content: "";
+}
+
+.ai-worker-orbit {
+  transform: rotateX(72deg) rotateZ(8deg);
+  animation: ai-orbit 8s linear infinite;
+}
+.ai-worker-orbit::before { transform: rotateY(66deg); }
+.ai-worker-orbit::after { transform: rotateX(66deg); }
+
+.ai-worker-person {
+  position: relative;
+  width: 108px;
+  height: 178px;
+  transform-style: preserve-3d;
+  animation: ai-breathe 3.2s ease-in-out infinite;
+  filter: drop-shadow(0 18px 22px rgba(0,0,0,.5));
+}
+
+.ai-worker-head {
+  position: absolute;
+  top: 5px;
+  left: 30px;
+  width: 50px;
+  height: 58px;
+  border-radius: 48% 48% 44% 44%;
+  background: linear-gradient(135deg, #cf9976, #8b5d48 70%);
+  box-shadow: inset 8px 4px 10px rgba(255,255,255,.12), inset -7px -6px 10px rgba(0,0,0,.25);
+  z-index: 4;
+}
+
+.ai-worker-hair {
+  position: absolute;
+  top: 0;
+  left: 27px;
+  width: 57px;
+  height: 29px;
+  border-radius: 55% 55% 35% 35%;
+  background: linear-gradient(135deg, #1a1e29, #05070b);
+  z-index: 5;
+}
+
+.ai-worker-face-light {
+  position: absolute;
+  top: 35px;
+  left: 39px;
+  width: 32px;
+  height: 5px;
+  border-radius: 10px;
+  background: #64d7ff;
+  box-shadow: 0 0 9px #64d7ff, 0 0 18px rgba(100,215,255,.65);
+  z-index: 6;
+  animation: ai-scan 1.8s ease-in-out infinite;
+}
+
+.ai-worker-body {
+  position: absolute;
+  top: 59px;
+  left: 17px;
+  width: 76px;
+  height: 86px;
+  border-radius: 24px 24px 16px 16px;
+  background: linear-gradient(145deg, #273c62, #101a31 68%);
+  border: 1px solid rgba(116,203,255,.28);
+  box-shadow: inset 12px 8px 20px rgba(255,255,255,.07), inset -10px -8px 20px rgba(0,0,0,.35);
+  z-index: 3;
+}
+
+.ai-worker-core {
+  position: absolute;
+  top: 86px;
+  left: 48px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #4ce08a;
+  box-shadow: 0 0 10px #4ce08a, 0 0 22px rgba(76,224,138,.7);
+  z-index: 5;
+}
+
+.ai-worker-arm {
+  position: absolute;
+  top: 71px;
+  width: 24px;
+  height: 83px;
+  border-radius: 18px;
+  background: linear-gradient(#253b61, #111b31);
+  transform-origin: 50% 10%;
+  z-index: 2;
+}
+.ai-worker-arm.left { left: 5px; transform: rotate(17deg); }
+.ai-worker-arm.right { right: 4px; transform: rotate(-24deg); animation: ai-type-arm .85s ease-in-out infinite alternate; }
+
+.ai-worker-desk {
+  position: absolute;
+  top: 137px;
+  left: -16px;
+  width: 142px;
+  height: 16px;
+  border-radius: 9px;
+  background: linear-gradient(#30435c, #111a27);
+  transform: rotateX(56deg) translateZ(12px);
+  box-shadow: 0 11px 18px rgba(0,0,0,.45);
+  z-index: 6;
+}
+
+.ai-worker-screen {
+  position: absolute;
+  top: 82px;
+  right: -56px;
+  width: 83px;
+  height: 61px;
+  border: 4px solid #1b2a3e;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, transparent 48%, rgba(93,217,255,.15) 50%, transparent 52%),
+    repeating-linear-gradient(0deg, rgba(92,219,255,.32) 0 2px, transparent 2px 9px),
+    #07111e;
+  transform: rotateY(-19deg) rotateX(2deg);
+  box-shadow: 0 0 18px rgba(88,166,255,.3);
+  animation: ai-screen-pulse 2s ease-in-out infinite;
+  z-index: 7;
+}
+
+.ai-worker-status-copy {
+  position: absolute;
+  left: 18px;
+  bottom: 15px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: .82rem;
+  color: #b7c8dc;
+  z-index: 10;
+}
+
+.ai-worker-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  color: #58a6ff;
+}
+.ai-worker-live::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #58a6ff;
+  box-shadow: 0 0 10px #58a6ff;
+  animation: ai-live-pulse 1.2s ease-in-out infinite;
+}
+
+.agent-section:has(#agent-status.badge-running) .ai-worker-person {
+  animation-duration: 1.2s;
+}
+.agent-section:has(#agent-status.badge-running) .ai-worker-arm.right {
+  animation-duration: .28s;
+}
+.agent-section:has(#agent-status.badge-running) .ai-worker-core {
+  background: #ffd34e;
+  box-shadow: 0 0 12px #ffd34e, 0 0 28px rgba(255,211,78,.8);
+}
+.agent-section:has(#agent-status.badge-success) .ai-worker-core {
+  background: #4ce08a;
+}
+.agent-section:has(#agent-status.badge-failed) .ai-worker-core {
+  background: #ff625c;
+  box-shadow: 0 0 12px #ff625c, 0 0 28px rgba(255,98,92,.75);
+}
+
+@keyframes ai-grid-move { to { background-position: 0 34px, 34px 0; } }
+@keyframes ai-orbit { to { transform: rotateX(72deg) rotateZ(368deg); } }
+@keyframes ai-breathe { 50% { transform: translateY(-5px) rotateY(3deg); } }
+@keyframes ai-type-arm { to { transform: rotate(-38deg) translateY(4px); } }
+@keyframes ai-scan { 50% { opacity: .45; transform: scaleX(.72); } }
+@keyframes ai-screen-pulse { 50% { box-shadow: 0 0 30px rgba(88,166,255,.55); } }
+@keyframes ai-live-pulse { 50% { opacity: .35; transform: scale(.72); } }
+
+@media (min-width: 850px) {
+  .agent-layout-visual {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .agent-controls-stack {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 849px) {
+  .agent-layout-visual { display: flex; flex-direction: column; gap: 16px; }
+  .ai-worker-stage { min-height: 215px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-worker-grid,
+  .ai-worker-orbit,
+  .ai-worker-person,
+  .ai-worker-arm.right,
+  .ai-worker-face-light,
+  .ai-worker-screen,
+  .ai-worker-live::before { animation: none !important; }
+}
