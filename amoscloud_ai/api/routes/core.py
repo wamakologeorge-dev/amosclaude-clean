@@ -7,6 +7,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.api.routes import local_workspace
 from amoscloud_ai.api.routes.admin import _admin_user
 from amoscloud_ai.core.access import AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
@@ -130,3 +131,6 @@ async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
         "model_available": model in available,
         "available_models": available,
     }
+
+
+router.include_router(local_workspace.router)
