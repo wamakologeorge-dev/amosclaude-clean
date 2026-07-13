@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from amoscloud_ai.models import RepositoryTaskRequest, RepositoryTaskResponse, RepositoryTaskStatus
 from amoscloud_ai.pr_agent import PullRequestAgent
@@ -86,14 +86,7 @@ def _persist_task(task: RepositoryTaskResponse) -> None:
         db.commit()
 
 
-def _load_task(task_id: str) -> RepositoryTaskResponse | None:
-    with _task_db() as db:
-        row = db.execute(
-            "SELECT * FROM repository_agent_tasks WHERE task_id=?",
-            (task_id,),
-        ).fetchone()
-    if row is None:
-        return None
+def _task_from_row(row: sqlite3.Row) -> RepositoryTaskResponse:
     return RepositoryTaskResponse(
         task_id=row["task_id"],
         status=RepositoryTaskStatus(row["status"]),
@@ -105,6 +98,15 @@ def _load_task(task_id: str) -> RepositoryTaskResponse | None:
         pull_request_url=row["pull_request_url"],
         logs=json.loads(row["logs_json"]),
     )
+
+
+def _load_task(task_id: str) -> RepositoryTaskResponse | None:
+    with _task_db() as db:
+        row = db.execute(
+            "SELECT * FROM repository_agent_tasks WHERE task_id=?",
+            (task_id,),
+        ).fetchone()
+    return None if row is None else _task_from_row(row)
 
 
 def _now() -> datetime:
@@ -135,6 +137,24 @@ def _expire_if_stale(task: RepositoryTaskResponse) -> RepositoryTaskResponse:
     task.logs.append("Task marked failed after exceeding the repository-agent stale timeout.")
     _persist_task(task)
     return task
+
+
+def list_recent_tasks(limit: int = 20) -> list[RepositoryTaskResponse]:
+    """Return newest persisted task snapshots after applying stale recovery."""
+    safe_limit = min(max(limit, 1), 100)
+    with _task_db() as db:
+        rows = db.execute(
+            "SELECT * FROM repository_agent_tasks ORDER BY created_at DESC LIMIT ?",
+            (safe_limit,),
+        ).fetchall()
+
+    tasks: list[RepositoryTaskResponse] = []
+    with _lock:
+        for row in rows:
+            task = _expire_if_stale(_task_from_row(row))
+            _tasks[task.task_id] = task
+            tasks.append(task)
+    return tasks
 
 
 def _require_owner_key(owner_key: Optional[str]) -> None:
@@ -219,6 +239,15 @@ async def start_task(
     """Accept an owner command and immediately begin repository work in the background."""
     _require_owner_key(x_amosclaud_owner_key)
     return queue_task(body)
+
+
+@router.get("", response_model=list[RepositoryTaskResponse], summary="List recent PR-agent tasks")
+async def recent_tasks(
+    limit: int = Query(default=20, ge=1, le=100),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
+) -> list[RepositoryTaskResponse]:
+    _require_owner_key(x_amosclaud_owner_key)
+    return list_recent_tasks(limit)
 
 
 @router.get("/{task_id}", response_model=RepositoryTaskResponse, summary="Get PR-agent task status")
