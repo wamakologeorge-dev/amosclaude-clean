@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException
 
+from amoscloud_ai.logger import log
 from amoscloud_ai.models import AgentCapabilityResponse, ChatRequest, ChatResponse, RepositoryTaskRequest
 
 router = APIRouter(tags=["chat"])
@@ -63,12 +64,7 @@ def _fallback_reply(message: str) -> str:
 
 
 def _resolve_provider() -> tuple[str, Optional[str]]:
-    """Resolve (provider, api_key) from the platform's own server-side keys.
-
-    The platform always answers with its own provider key. Clients and external
-    organizations never supply provider keys; they authenticate with a
-    platform-issued Amosclaud API key instead (see ``_authorize_platform_key``).
-    """
+    """Resolve (provider, api_key) from the platform's own server-side keys."""
     if os.environ.get("ANTHROPIC_API_KEY"):
         return "anthropic", os.environ["ANTHROPIC_API_KEY"]
     if os.environ.get("OPENAI_API_KEY"):
@@ -89,15 +85,7 @@ def _is_owner(owner_key: Optional[str]) -> bool:
 
 
 async def _authorize_platform_key(api_key: Optional[str], owner_key: Optional[str]) -> None:
-    """Authorize a chat request under the platform-issued key model.
-
-    - The owner is never asked for a key: requests carrying the owner key, and
-      first-party surfaces (no key at all, unless CHAT_REQUIRE_API_KEY=true),
-      pass through.
-    - Clients and organizations use Amosclaud API keys (``ak_...``) created for
-      them by the owner in the API-key manager. Presented keys must be valid.
-    - Set CHAT_REQUIRE_API_KEY=true to require a platform key on every request.
-    """
+    """Authorize a chat request under the platform-issued key model."""
     if _is_owner(owner_key):
         return
     require_key = os.environ.get("CHAT_REQUIRE_API_KEY", "").strip().lower() in {"1", "true", "yes"}
@@ -123,7 +111,7 @@ async def _authorize_platform_key(api_key: Optional[str], owner_key: Optional[st
 
 
 def _openai_reply(history: list[dict[str, str]], api_key: Optional[str] = None) -> str:
-    """Answer with OpenAI using a client-supplied or server-configured key."""
+    """Answer with OpenAI using a server-configured key."""
     api_key = api_key or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return _fallback_reply(history[-1]["content"])
@@ -147,7 +135,7 @@ def _openai_reply(history: list[dict[str, str]], api_key: Optional[str] = None) 
         text = (response.json()["choices"][0]["message"]["content"] or "").strip()
         return text or "I could not produce a response. Please try again."
     except Exception:
-        # Keep the client useful during a provider outage without exposing provider details.
+        log.exception("OpenAI chat provider failed")
         return _fallback_reply(history[-1]["content"])
 
 
@@ -171,7 +159,7 @@ def _anthropic_reply(history: list[dict[str, str]], api_key: Optional[str] = Non
         ).strip()
         return text or "I could not produce a response. Please try again."
     except Exception:
-        # Keep the Android client useful during a provider outage without exposing provider details.
+        log.exception("Anthropic chat provider failed")
         return _fallback_reply(history[-1]["content"])
 
 
@@ -185,54 +173,69 @@ async def chat(
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
-    await _authorize_platform_key(x_api_key, x_amosclaud_owner_key)
 
-    session_id = body.session_id or str(uuid.uuid4())
-    if body.start_pr_task:
-        # Execution is explicit and owner-authenticated; ordinary chat can never mutate a repository.
-        from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, queue_task
+    try:
+        await _authorize_platform_key(x_api_key, x_amosclaud_owner_key)
 
-        _require_owner_key(x_amosclaud_owner_key)
-        task = queue_task(RepositoryTaskRequest(objective=message, base_branch=body.base_branch))
-        reply = f"I started PR-agent task {task.task_id} on branch {task.branch}. I will work in an isolated workspace and report its pull request when complete."
+        session_id = body.session_id or str(uuid.uuid4())
+        if body.start_pr_task:
+            from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, queue_task
+
+            _require_owner_key(x_amosclaud_owner_key)
+            task = queue_task(RepositoryTaskRequest(objective=message, base_branch=body.base_branch))
+            reply = f"I started PR-agent task {task.task_id} on branch {task.branch}. I will work in an isolated workspace and report its pull request when complete."
+            with _conversation_lock:
+                _conversations[session_id].extend([
+                    {"role": "user", "content": message},
+                    {"role": "assistant", "content": reply},
+                ])
+                _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
+            return ChatResponse(
+                reply=reply,
+                session_id=session_id,
+                timestamp=_now(),
+                provider="pr-agent",
+                task_id=task.task_id,
+                task_status=task.status.value,
+                task_url=f"/api/v1/agent/tasks/{task.task_id}",
+            )
+
         with _conversation_lock:
-            _conversations[session_id].extend([
-                {"role": "user", "content": message},
-                {"role": "assistant", "content": reply},
-            ])
+            history = _conversations[session_id]
+            history.append({"role": "user", "content": message})
+            history[:] = history[-_MAX_HISTORY_TURNS:]
+            request_history = list(history)
+
+        provider, resolved_key = _resolve_provider()
+        if provider == "anthropic":
+            reply = await asyncio.to_thread(_anthropic_reply, request_history, resolved_key)
+        elif provider == "openai":
+            reply = await asyncio.to_thread(_openai_reply, request_history, resolved_key)
+        else:
+            reply = _fallback_reply(message)
+
+        with _conversation_lock:
+            _conversations[session_id].append({"role": "assistant", "content": reply})
             _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
+
         return ChatResponse(
             reply=reply,
             session_id=session_id,
             timestamp=_now(),
-            provider="pr-agent",
-            task_id=task.task_id,
-            task_status=task.status.value,
-            task_url=f"/api/v1/agent/tasks/{task.task_id}",
+            provider=provider,
         )
-    with _conversation_lock:
-        history = _conversations[session_id]
-        history.append({"role": "user", "content": message})
-        history[:] = history[-_MAX_HISTORY_TURNS:]
-        request_history = list(history)
-
-    provider, resolved_key = _resolve_provider()
-    if provider == "anthropic":
-        reply = await asyncio.to_thread(_anthropic_reply, request_history, resolved_key)
-    elif provider == "openai":
-        reply = await asyncio.to_thread(_openai_reply, request_history, resolved_key)
-    else:
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Unexpected chat API failure")
+        session_id = body.session_id or str(uuid.uuid4())
         reply = _fallback_reply(message)
-    with _conversation_lock:
-        _conversations[session_id].append({"role": "assistant", "content": reply})
-        _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
-
-    return ChatResponse(
-        reply=reply,
-        session_id=session_id,
-        timestamp=_now(),
-        provider=provider,
-    )
+        return ChatResponse(
+            reply=reply,
+            session_id=session_id,
+            timestamp=_now(),
+            provider="recovery",
+        )
 
 
 @router.get("/api/chat/history/{session_id}", summary="Get a chat session")
