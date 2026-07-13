@@ -8,27 +8,37 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Amosclaud needs Git for native repository operations.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /data/repositories
 
-# Install the production runtime directly so Railway does not depend on a
-# separate requirements.txt copy step or Docker layer ordering.
+# Keep the production image independent from a separately copied requirements
+# file. This prevents Railway build-context mistakes from failing before the
+# Amosclaud source is copied into the image.
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install --no-cache-dir \
         "fastapi>=0.110,<1" \
         "uvicorn[standard]>=0.29,<1" \
+        "flask>=3.0,<4" \
+        "flask-cors>=4.0,<7" \
         "python-multipart>=0.0.9" \
         "python-jose[cryptography]>=3.3,<4" \
         "passlib>=1.7,<2" \
         "bcrypt>=4.1,<5" \
         "jinja2>=3.1.3" \
         "webauthn>=2.2,<3" \
+        "anthropic>=0.25,<1" \
+        "celery>=5.3,<6" \
+        "redis>=5,<7" \
+        "sqlalchemy>=2.0,<3" \
+        "alembic>=1.13,<2" \
+        "asyncpg>=0.28,<1" \
+        "psycopg2-binary>=2.9.9,<3" \
         "pydantic>=2.7,<3" \
         "pydantic-settings>=2.2,<3" \
         "gitpython>=3.1,<4" \
+        "click>=8.1,<9" \
         "requests>=2.31,<3" \
         "httpx>=0.27,<1" \
         "aiofiles>=23.2,<25" \
