@@ -44,7 +44,11 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "aiofiles>=23.2,<25" \
         "python-dotenv>=1.0,<2"
 
-COPY . .
+COPY . /app
+
+# Fail with an explicit source-context error instead of a misleading missing
+# dependency-file error.
+RUN test -f /app/amoscloud_ai/main.py || (echo "Amosclaud source is missing from the Railway build context" && exit 1)
 
 EXPOSE 8000
 
