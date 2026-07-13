@@ -13,7 +13,9 @@ from fastapi import HTTPException
 
 _REPOSITORY_CREATE_RE = re.compile(
     r"^\s*(?:please\s+)?(?:create|make|start|initialize)\s+"
-    r"(?:(?:a|an|new)\s+)?(?:amosclaud\s+)?(?:repository|repo)\s+"
+    r"(?:(?:a|an|new)\s+)?"
+    r"(?:(?P<visibility>public|private)\s+)?"
+    r"(?:amosclaud\s+)?(?:repository|repo)\s+"
     r"(?:(?:called|named|for)\s+)?[\"']?"
     r"(?P<name>[A-Za-z0-9][A-Za-z0-9._-]{0,99})[\"']?"
     r"(?:\s|$)",
@@ -26,14 +28,16 @@ def parse_repository_create_command(message: str) -> dict[str, object] | None:
     match = _REPOSITORY_CREATE_RE.search(message)
     if not match:
         return None
-    lowered = message.lower()
-    visibility = "public" if re.search(r"\bpublic\b", lowered) else "private"
+    visibility = (match.group("visibility") or "private").lower()
     description_match = re.search(
-        r"\bdescription\s*[:=-]?\s*[\"']?(?P<description>[^\"']{1,500})[\"']?\s*$",
+        r"\bdescription\s*[:=-]?\s*(?:[\"'](?P<quoted>[^\"']{1,500})[\"']|(?P<plain>.{1,500}))\s*$",
         message,
         re.IGNORECASE,
     )
-    description = description_match.group("description").strip() if description_match else "Created by the Amosclaud agent."
+    if description_match:
+        description = (description_match.group("quoted") or description_match.group("plain") or "").strip()
+    else:
+        description = "Created by the Amosclaud agent."
     return {
         "name": match.group("name"),
         "description": description,
