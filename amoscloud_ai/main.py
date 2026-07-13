@@ -30,6 +30,7 @@ from amoscloud_ai.api.routes import (
     copilot,
     deployments,
     feed,
+    first_party_chat,
     github_repositories,
     github_travel,
     health,
@@ -101,7 +102,8 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(health.router)
-    app.include_router(chat.router)
+    app.include_router(first_party_chat.router)
+    app.include_router(chat.router, include_in_schema=False)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
     app.include_router(account.router, prefix="/api/v1")
