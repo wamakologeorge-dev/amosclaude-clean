@@ -51,7 +51,7 @@ def test_authenticated_chat_creates_repository(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.headers.get("content-type", "").startswith("application/json")
     body = response.json()
-    assert body["provider"] == "amosclaud-repository-action"
+    assert body["provider"] == "amosclaud"
     assert body["task_status"] == "completed"
     assert body["task_url"].startswith("/workspace/")
 
