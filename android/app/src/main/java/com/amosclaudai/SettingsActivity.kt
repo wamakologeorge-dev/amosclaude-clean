@@ -8,11 +8,7 @@ import com.amosclaudai.api.AmosclaudApiClient
 import com.amosclaudai.databinding.ActivitySettingsBinding
 import kotlinx.coroutines.launch
 
-/**
- * Settings screen — allows configuring the backend API URL.
- */
 class SettingsActivity : AppCompatActivity() {
-
     private lateinit var binding: ActivitySettingsBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +22,6 @@ class SettingsActivity : AppCompatActivity() {
             setDisplayHomeAsUpEnabled(true)
         }
 
-        // Load saved URL
         binding.etApiUrl.setText(AmosclaudApiClient.getBaseUrl(this))
 
         binding.btnSave.setOnClickListener {
@@ -41,17 +36,18 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.btnTestConnection.setOnClickListener {
             val url = binding.etApiUrl.text.toString().trim().trimEnd('/')
+            if (url.isEmpty()) {
+                binding.etApiUrl.error = getString(R.string.error_url_required)
+                return@setOnClickListener
+            }
+            AmosclaudApiClient.saveBaseUrl(this, url)
             binding.tvConnectionStatus.text = getString(R.string.status_testing)
             lifecycleScope.launch {
-                try {
-                    val ok = AmosclaudApiClient.testConnection(url)
-                    binding.tvConnectionStatus.text = if (ok)
-                        getString(R.string.status_connected)
-                    else
-                        getString(R.string.status_failed)
-                } catch (e: Exception) {
-                    binding.tvConnectionStatus.text =
-                        getString(R.string.status_error, e.message ?: "unknown error")
+                val ok = AmosclaudApiClient.testConnection(this@SettingsActivity)
+                binding.tvConnectionStatus.text = if (ok) {
+                    getString(R.string.status_connected)
+                } else {
+                    getString(R.string.status_failed)
                 }
             }
         }
