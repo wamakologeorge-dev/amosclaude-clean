@@ -10,10 +10,41 @@
   let repository = null;
 
   async function api(path, options = {}) {
-    const response = await fetch(path, { credentials: 'same-origin', ...options, headers: { ...(options.body ? {'Content-Type':'application/json'} : {}), ...(options.headers || {}) } });
-    if (response.status === 401) location.assign('/login');
-    const data = response.status === 204 ? null : await response.json();
-    if (!response.ok) throw new Error(data?.detail || `Request failed (${response.status})`);
+    const response = await fetch(path, {
+      credentials: 'same-origin',
+      ...options,
+      headers: {
+        ...(options.body ? {'Content-Type':'application/json'} : {}),
+        ...(options.headers || {})
+      }
+    });
+    if (response.status === 401) {
+      location.assign('/login');
+      throw new Error('Your session expired. Sign in again.');
+    }
+    if (response.status === 204) return null;
+
+    const contentType = response.headers.get('content-type') || '';
+    const raw = await response.text();
+    let data = null;
+    if (raw) {
+      if (contentType.includes('application/json')) {
+        try {
+          data = JSON.parse(raw);
+        } catch (_error) {
+          data = { detail: 'The server returned invalid JSON.' };
+        }
+      } else {
+        data = { detail: raw.trim() || `Request failed (${response.status})` };
+      }
+    }
+    if (!response.ok) {
+      const detail = data?.detail || data?.message || `Request failed (${response.status})`;
+      throw new Error(detail.length > 300 ? `${detail.slice(0, 300)}…` : detail);
+    }
+    if (!contentType.includes('application/json')) {
+      throw new Error('The server returned an unexpected response format.');
+    }
     return data;
   }
 
@@ -112,7 +143,7 @@
       const result = await api('/api/v1/agent/run', { method:'POST', body:JSON.stringify({ mode, objective:`${label} repository ${repository.name} on branch ${branch()} using .Amosclaud-workflow/workflow.yml`, branch:branch(), metadata:{ repository_id:Number(repositoryId), repository_name:repository.name } }) });
       output.textContent = result.reply || `${label} completed.`;
     } catch (error) {
-      output.textContent = `${label} failed: ${error.message}`;
+      output.textContent = `${label} failed safely: ${error.message}`;
     }
   }
 
