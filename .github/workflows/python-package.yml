@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v7
@@ -63,7 +63,7 @@ jobs:
           path: pytest-${{ matrix.python-version }}.log
           if-no-files-found: error
       - name: Report backend test failure
-        if: failure() && github.event_name == 'pull_request' && matrix.python-version == '3.11'
+        if: failure() && github.event_name == 'pull_request' && matrix.python-version == '3.12'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
