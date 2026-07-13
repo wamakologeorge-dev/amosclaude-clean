@@ -38,7 +38,7 @@ services:
       - .env
     environment:
       PORT: "8000"
-      AMOSCLAUD_ENV: production
+      ENVIRONMENT: production
       AUTH_COOKIE_SECURE: "false"
       AUTH_DB_PATH: /data/auth.db
       REPOSITORY_STORAGE_PATH: /data/repositories
