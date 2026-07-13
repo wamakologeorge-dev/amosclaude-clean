@@ -70,8 +70,8 @@ class MainActivity : AppCompatActivity() {
         })
 
         content.addView(section("Platform folders"))
-        content.addView(tile("CLI", "Native command access for build, test, deploy, monitor, and repository tasks") {
-            startActivity(Intent(this, AiChatActivity::class.java))
+        content.addView(tile("CLI", "Run real status, sync, and job operations against Amosclaud APIs") {
+            NativeModuleActivity.open(this, "cli")
         })
         content.addView(tile("Build Worker", "Run and inspect build-worker jobs through the native pipeline screen") {
             NativeModuleActivity.open(this, "pipelines")
