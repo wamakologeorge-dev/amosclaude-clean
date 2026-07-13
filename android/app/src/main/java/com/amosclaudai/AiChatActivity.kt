@@ -13,12 +13,7 @@ import com.amosclaudai.databinding.ActivityAiChatBinding
 import com.amosclaudai.model.ChatMessage
 import kotlinx.coroutines.launch
 
-/**
- * AI Chat screen.
- * Sends messages to the Amosclaud-AI backend and displays replies in a RecyclerView.
- */
 class AiChatActivity : AppCompatActivity() {
-
     private lateinit var binding: ActivityAiChatBinding
     private lateinit var adapter: ChatAdapter
     private val messages = mutableListOf<ChatMessage>()
@@ -35,13 +30,13 @@ class AiChatActivity : AppCompatActivity() {
             setDisplayHomeAsUpEnabled(true)
         }
 
+        sessionId = getSharedPreferences("amosclaud_chat", MODE_PRIVATE).getString("session_id", null)
         setupRecyclerView()
         setupInput()
-
-        // Welcome message
-        appendMessage(ChatMessage.Role.ASSISTANT,
-            "Hello! I'm Amosclaud-AI 🤖 — your intelligent CI/CD & DevOps assistant.\n\n" +
-            "I can help with deployments, tests, database management, code analysis, and Git operations.")
+        appendMessage(
+            ChatMessage.Role.ASSISTANT,
+            "Hello! I’m Amosclaud. Ask me to inspect, explain, build, test, deploy, or monitor your connected projects.",
+        )
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -52,9 +47,7 @@ class AiChatActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         adapter = ChatAdapter(messages)
         binding.rvMessages.apply {
-            layoutManager = LinearLayoutManager(this@AiChatActivity).also {
-                it.stackFromEnd = true
-            }
+            layoutManager = LinearLayoutManager(this@AiChatActivity).also { it.stackFromEnd = true }
             adapter = this@AiChatActivity.adapter
         }
     }
@@ -70,27 +63,37 @@ class AiChatActivity : AppCompatActivity() {
     }
 
     private fun sendMessage() {
-        val text = binding.etMessage.text?.toString()?.trim() ?: return
+        val text = binding.etMessage.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return
 
         binding.etMessage.text?.clear()
-        hideKeyboard()
-
         appendMessage(ChatMessage.Role.USER, text)
         setLoading(true)
 
-        val apiUrl = AmosclaudApiClient.getBaseUrl(this)
-
         lifecycleScope.launch {
             try {
-                val response = AmosclaudApiClient.sendMessage(apiUrl, text, sessionId)
-                sessionId = response.sessionId
+                val response = AmosclaudApiClient.sendMessage(this@AiChatActivity, text, sessionId)
+                sessionId = response.sessionId.ifBlank { sessionId }
+                getSharedPreferences("amosclaud_chat", MODE_PRIVATE)
+                    .edit()
+                    .putString("session_id", sessionId)
+                    .apply()
                 appendMessage(ChatMessage.Role.ASSISTANT, response.reply)
-            } catch (e: Exception) {
-                appendMessage(ChatMessage.Role.ASSISTANT,
-                    "⚠️ Could not reach the server. Please check your Settings and ensure the backend is running.\n\nError: ${e.message}")
+            } catch (error: AmosclaudApiClient.ApiException) {
+                if (error.statusCode == 401) {
+                    AmosclaudApiClient.clearSession(this@AiChatActivity)
+                    appendMessage(ChatMessage.Role.ASSISTANT, "Your session expired. Return to the home screen and sign in again.")
+                } else {
+                    appendMessage(ChatMessage.Role.ASSISTANT, "Amosclaud could not complete that request: ${error.message}")
+                }
+            } catch (error: Exception) {
+                appendMessage(
+                    ChatMessage.Role.ASSISTANT,
+                    "The Android app could not reach Amosclaud. Check your internet connection and server address, then try again.",
+                )
             } finally {
                 setLoading(false)
+                binding.etMessage.requestFocus()
             }
         }
     }
@@ -104,10 +107,6 @@ class AiChatActivity : AppCompatActivity() {
     private fun setLoading(loading: Boolean) {
         binding.progressBar.isVisible = loading
         binding.btnSend.isEnabled = !loading
-    }
-
-    private fun hideKeyboard() {
-        val imm = getSystemService(InputMethodManager::class.java)
-        imm.hideSoftInputFromWindow(binding.etMessage.windowToken, 0)
+        binding.etMessage.isEnabled = !loading
     }
 }
