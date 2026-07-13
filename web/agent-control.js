@@ -4,6 +4,8 @@
   const modeInput = document.getElementById('agent-mode-input');
   const replies = document.getElementById('agent-replies');
   const statusBadge = document.getElementById('agent-status');
+  const connectionButton = document.getElementById('btn-check-agent-connections');
+  const connectionStatus = document.getElementById('agent-connection-status');
   if (!runButton || !objectiveInput || !modeInput || !replies) return;
 
   const compose = runButton.closest('.agent-compose');
@@ -109,6 +111,31 @@
     };
   }
 
+  async function checkConnections() {
+    if (!connectionButton || !connectionStatus) return;
+    connectionButton.disabled = true;
+    connectionStatus.textContent = 'Checking GitHub and Amosclaud model connections…';
+
+    try {
+      const response = await fetch('/api/v1/agent/github/preflight', {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      const data = await readResponse(response);
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+
+      const github = data.github || {};
+      const model = data.model || {};
+      const githubLabel = github.reachable ? 'GitHub ready' : 'GitHub not ready';
+      const modelLabel = model.reachable ? 'Model ready' : 'Model not ready';
+      connectionStatus.textContent = `${data.ready ? 'Ready' : 'Needs attention'} — ${githubLabel}: ${github.detail || 'No details'}. ${modelLabel}: ${model.detail || 'No details'}.`;
+    } catch (error) {
+      connectionStatus.textContent = `Connection check failed: ${error.message}`;
+    } finally {
+      connectionButton.disabled = false;
+    }
+  }
+
   async function stopAgent() {
     if (!controller) return;
     controller.abort();
@@ -119,6 +146,7 @@
   }
 
   stopButton.addEventListener('click', stopAgent);
+  connectionButton?.addEventListener('click', checkConnections);
 
   async function sendMessage() {
     const objective = objectiveInput.value.trim();
