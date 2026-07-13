@@ -1,7 +1,7 @@
-const CACHE_NAME = 'amosclaud-app-v1';
+const CACHE_NAME = 'amosclaud-app-v3';
 const APP_SHELL = [
   '/login',
-  '/static/manifest.webmanifest',
+  '/manifest.webmanifest',
   '/static/amosclaud-app-icon.svg',
   '/static/login.css',
   '/static/login.js',
@@ -9,37 +9,70 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).catch(() => undefined));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .catch(() => undefined)
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    ))
   );
   self.clients.claim();
 });
 
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (_error) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw _error;
+  }
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
+
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(async () => {
+      networkFirst(request).catch(async () => {
         const cached = await caches.match('/login');
         return cached || new Response('Amosclaud is offline. Reconnect and try again.', {
           status: 503,
-          headers: {'Content-Type': 'text/plain; charset=utf-8'}
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
         });
       })
     );
     return;
   }
 
-  if (url.pathname.startsWith('/api/')) return;
+  const isVersionSensitiveAsset =
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('.html') ||
+    url.pathname === '/manifest.webmanifest' ||
+    url.pathname === '/service-worker.js';
+
+  if (isVersionSensitiveAsset) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then(cached => cached || fetch(request).then(response => {
