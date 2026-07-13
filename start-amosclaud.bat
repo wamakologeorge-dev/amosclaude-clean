@@ -19,8 +19,15 @@ if errorlevel 1 (
 )
 
 if not exist ".env" (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$key=[Convert]::ToBase64String((1..48|ForEach-Object{Get-Random -Maximum 256})); @('AMOSCLAUD_MASTER_KEY='+$key,'AMOSCLAUD_ADMIN_EMAIL=owner@example.com','AMOSCLAUD_MODEL=qwen2.5-coder:3b') | Set-Content -Encoding UTF8 .env"
-  echo Created .env. Change AMOSCLAUD_ADMIN_EMAIL before public use.
+  echo First-time Amosclaud owner setup.
+  set /p AMOS_OWNER_EMAIL=Enter the email address you will use for the owner account: 
+  if "%AMOS_OWNER_EMAIL%"=="" (
+    echo Owner email is required. No configuration was created.
+    pause
+    exit /b 1
+  )
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$key=[Convert]::ToBase64String((1..48|ForEach-Object{Get-Random -Maximum 256})); @('AMOSCLAUD_MASTER_KEY='+$key,'AMOSCLAUD_ADMIN_EMAIL=%AMOS_OWNER_EMAIL%','AMOSCLAUD_ACCESS_MODE=local','AMOSCLAUD_MODEL=qwen2.5-coder:3b') | Set-Content -Encoding UTF8 .env"
+  echo Created a private local configuration for %AMOS_OWNER_EMAIL%.
 )
 
 echo Starting Amosclaud and the local model runtime...
