@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
 from amoscloud_ai.api.routes import (
+    account,
     admin,
     agent,
     amos_mail,
@@ -46,6 +47,7 @@ from amoscloud_ai.api.routes import (
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
+from amoscloud_ai.security import SecurityMiddleware
 
 
 @asynccontextmanager
@@ -59,21 +61,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    production = settings.environment.lower() in {"production", "prod"}
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
         description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, Amos Mail, developer community, and managed Wi-Fi.",
-        docs_url="/docs",
-        redoc_url="/redoc",
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
         lifespan=lifespan,
     )
+    app.add_middleware(SecurityMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_hosts,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Amosclaud-Owner-Key"],
     )
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        log.exception("Unhandled request failure on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Amosclaud could not complete this request. The error was recorded in the server logs.",
+                "error": "internal_server_error",
+                "path": request.url.path,
+            },
+        )
 
     @app.middleware("http")
     async def block_suspended_accounts(request: Request, call_next):
@@ -88,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
+    app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")

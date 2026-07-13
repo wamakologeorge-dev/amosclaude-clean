@@ -115,7 +115,7 @@ def _get(pipeline_id: str) -> PipelineResponse | None:
     return _row_to_pipeline(row) if row else None
 
 
-def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse:
+async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse:
     pipeline.status = PipelineStatus.RUNNING
     pipeline.message = pipeline_reply(PipelineStatus.RUNNING)
     pipeline.copilot_reply = pipeline.message
@@ -139,11 +139,10 @@ def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse
             if pipeline.jobs:
                 pipeline.jobs[0].logs.extend(result.logs)
         else:
-            import asyncio
             from src.core.ci_orchestrator import CIOrchestrator
 
             orchestrator = CIOrchestrator(config=payload)
-            successful = asyncio.run(orchestrator.start_pipeline(payload.get("trigger", "manual"), payload))
+            successful = await orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
             if orchestrator.jobs:
                 pipeline.jobs = orchestrator.jobs
 
@@ -162,7 +161,7 @@ def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse
         pipeline.status = PipelineStatus.FAILED
         pipeline.finished_at = datetime.now(timezone.utc)
         pipeline.message = f"Pipeline failed: {exc}"
-        pipeline.copilot_reply = "Amosclaud found a blocking pipeline error and is ready to prepare a repair run."
+        pipeline.copilot_reply = f"Amosclaud Autonomous Server: pipeline failed safely and recorded {type(exc).__name__}."
         for job in pipeline.jobs:
             if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
                 job.status = PipelineStatus.FAILED
@@ -201,14 +200,11 @@ async def trigger_pipeline(body: PipelineTrigger) -> PipelineResponse:
         copilot_reply=reply,
         copilot_role=COPILOT_ROLE,
         delegation_target=COPILOT_PIPELINE,
-        jobs=[PipelineJob(id="build", name="Build and test", status=PipelineStatus.PENDING, logs=[reply])],
+        jobs=[PipelineJob(id="build", name="Build", status=PipelineStatus.PENDING, logs=[reply])],
     )
     payload = body.model_dump()
     _save(pipeline, payload)
-
-    # Execute real work in-process so the API and worker do not maintain separate memory stores.
-    # This can later move to a queue safely because state is now persisted in SQLite.
-    return _run_pipeline(pipeline, payload)
+    return await _run_pipeline(pipeline, payload)
 
 
 @router.delete("/{pipeline_id}", status_code=204, summary="Cancel a pipeline")

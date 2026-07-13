@@ -67,13 +67,10 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
 
     if not message and mode == "build":
         return f"Hi {name}. What do you want to create today?"
-
     if normalised in GREETING_WORDS:
         return f"Hi {name}. What do you want to create today?"
-
     if normalised in {"build", "make", "create"}:
         return f"Hi {name}. What do you want to create today?"
-
     return None
 
 
@@ -99,10 +96,7 @@ async def get_agent() -> AutonomousAgentProfile:
 async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}",
-        )
+        raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}")
 
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
@@ -123,12 +117,11 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             logs=[conversational_reply],
         )
 
-    from amoscloud_ai.api.routes.pipelines import _pipelines
+    from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
-
     pipeline = PipelineResponse(
         id=pipeline_id,
         status=PipelineStatus.PENDING,
@@ -139,17 +132,8 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         copilot_reply=reply,
         copilot_role=AGENT_ROLE,
         delegation_target=AGENT_PIPELINE,
-        jobs=[
-            PipelineJob(
-                id="autonomous-run",
-                name="Autonomous Run",
-                status=PipelineStatus.PENDING,
-                logs=[reply],
-            )
-        ],
+        jobs=[PipelineJob(id="autonomous-run", name="Autonomous Run", status=PipelineStatus.PENDING, logs=[reply])],
     )
-    _pipelines[pipeline_id] = pipeline
-
     payload = {
         "trigger": "autonomous",
         "branch": body.branch,
@@ -161,9 +145,11 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             "metadata": body.metadata,
         },
     }
+    _save(pipeline, payload)
 
     try:
         from amoscloud_ai.worker import run_pipeline_task
+
         dispatch_task(run_pipeline_task, pipeline_id, payload)
         checks = []
         logs = [reply]
@@ -182,23 +168,16 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].finished_at = pipeline.finished_at
                 pipeline.jobs[0].logs.extend(result.logs)
             checks = [
-                {
-                    "name": check.name,
-                    "status": check.status,
-                    "summary": check.summary,
-                    "details": check.details,
-                }
+                {"name": check.name, "status": check.status, "summary": check.summary, "details": check.details}
                 for check in result.checks
             ]
             logs = result.logs
+            _save(pipeline, payload)
         except Exception as inline_error:
             log.exception("Autonomous server inline run failed")
             pipeline.status = PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
-            reply = (
-                "Amosclaud could not complete this agent run, but the server stayed online. "
-                "Check the deployment logs for the recorded runtime error."
-            )
+            reply = f"{AGENT_NAME}: autonomous {mode} run failed safely for {objective}."
             pipeline.message = reply
             pipeline.copilot_reply = reply
             if pipeline.jobs:
@@ -208,6 +187,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].logs.append(f"Runtime error: {type(inline_error).__name__}: {inline_error}")
             checks = []
             logs = [reply, f"Runtime error: {type(inline_error).__name__}"]
+            _save(pipeline, payload, str(inline_error))
 
     return AutonomousAgentRunResponse(
         accepted=True,

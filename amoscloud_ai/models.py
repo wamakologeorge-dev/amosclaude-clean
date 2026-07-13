@@ -105,6 +105,12 @@ class DeploymentConfig(BaseModel):
     deploy_command: Optional[str] = None
     pre_deploy_tests: bool = True
     auto_rollback: bool = True
+    repo_url: Optional[str] = None
+    branch: str = "main"
+    build_command: Optional[str] = None
+    start_command: Optional[str] = None
+    env_vars: dict[str, str] = Field(default_factory=dict)
+    port: int = Field(default=8000, ge=1, le=65535)
 
 
 class DeploymentResponse(BaseModel):
@@ -118,6 +124,8 @@ class DeploymentResponse(BaseModel):
     copilot_reply: Optional[str] = None
     copilot_role: Optional[str] = None
     delegation_target: Optional[str] = None
+    worker_id: Optional[str] = None
+    logs: Optional[str] = None
 
 
 class CopilotProfile(BaseModel):
@@ -177,7 +185,6 @@ class AgentCapabilityResponse(BaseModel):
     capabilities: list[str]
     repository_scope: str
     execution_mode: str
-
 
 
 class AutonomousAgentProfile(BaseModel):
