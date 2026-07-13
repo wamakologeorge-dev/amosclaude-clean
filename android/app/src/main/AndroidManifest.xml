@@ -23,37 +23,13 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".AuthActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".AiChatActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity"
-            android:windowSoftInputMode="adjustResize" />
-
-        <activity
-            android:name=".RepositoriesActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
-            android:name=".AdminActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
-            android:name=".BrowserActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
-
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:parentActivityName=".MainActivity" />
+        <activity android:name=".AuthActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".AiChatActivity" android:exported="false" android:parentActivityName=".MainActivity" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".RepositoriesActivity" android:exported="false" android:parentActivityName=".MainActivity" />
+        <activity android:name=".NativeModuleActivity" android:exported="false" android:parentActivityName=".MainActivity" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".AdminActivity" android:exported="false" android:parentActivityName=".MainActivity" />
+        <activity android:name=".BrowserActivity" android:exported="false" android:parentActivityName=".MainActivity" android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name=".SettingsActivity" android:exported="false" android:parentActivityName=".MainActivity" />
 
     </application>
 </manifest>
