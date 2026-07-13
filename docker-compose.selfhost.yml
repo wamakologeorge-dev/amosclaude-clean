@@ -7,7 +7,7 @@ services:
     volumes:
       - amosclaud-models:/root/.ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
@@ -39,6 +39,7 @@ services:
     environment:
       PORT: "8000"
       ENVIRONMENT: production
+      AMOSCLAUD_ACCESS_MODE: ${AMOSCLAUD_ACCESS_MODE:-local}
       AUTH_COOKIE_SECURE: "false"
       AUTH_DB_PATH: /data/auth.db
       REPOSITORY_STORAGE_PATH: /data/repositories
@@ -48,7 +49,7 @@ services:
       AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
       AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - amosclaud-data:/data
     depends_on:
