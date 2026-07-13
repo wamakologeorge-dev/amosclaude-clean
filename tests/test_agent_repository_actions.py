@@ -37,14 +37,29 @@ def create_session(email: str = "developer@example.com") -> str:
     return token
 
 
-def test_parse_explicit_repository_command():
+def test_parse_explicit_public_repository_command():
     command = agent_actions.parse_repository_create_command(
         'Create a public repository for Amosclaud description "Real platform repository"'
     )
     assert command is not None
     assert command["name"] == "Amosclaud"
     assert command["visibility"] == "public"
+    assert command["description"] == "Real platform repository"
     assert command["initialize_readme"] is True
+
+
+def test_parse_default_private_repository_command():
+    command = agent_actions.parse_repository_create_command("Create repository for Amosclaud")
+    assert command is not None
+    assert command["name"] == "Amosclaud"
+    assert command["visibility"] == "private"
+
+
+def test_parse_explicit_private_repo_command():
+    command = agent_actions.parse_repository_create_command("Please make a private repo named backend-api")
+    assert command is not None
+    assert command["name"] == "backend-api"
+    assert command["visibility"] == "private"
 
 
 def test_agent_creates_real_native_repository(tmp_path, monkeypatch):
