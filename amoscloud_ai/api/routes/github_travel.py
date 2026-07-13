@@ -6,11 +6,11 @@ import os
 from typing import Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
-from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task_status, queue_task
+from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task_status, list_recent_tasks, queue_task
 from amoscloud_ai.models import RepositoryTaskRequest, RepositoryTaskResponse
 
 router = APIRouter(prefix="/agent/github", tags=["github-agent-travel"])
@@ -137,6 +137,17 @@ async def github_travel_preflight(
         github=github,
         model=model,
     )
+
+
+@router.get("/history", response_model=list[RepositoryTaskResponse])
+async def github_travel_history(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
+) -> list[RepositoryTaskResponse]:
+    """Return recent persisted GitHub travel and repository-agent task results."""
+    _authorise(request, x_amosclaud_owner_key)
+    return list_recent_tasks(limit)
 
 
 @router.post("/travel", response_model=GitHubTravelResponse, status_code=202)
