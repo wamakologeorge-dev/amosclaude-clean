@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,14 +24,7 @@ object AmosclaudApiClient {
     private val JSON = "application/json; charset=utf-8".toMediaType()
     private val gson = Gson()
 
-    data class User(
-        val id: Int,
-        val name: String,
-        val email: String,
-        val isAdmin: Boolean,
-        val provider: String,
-    )
-
+    data class User(val id: Int, val name: String, val email: String, val isAdmin: Boolean, val provider: String)
     data class Repository(
         val id: Int,
         val name: String,
@@ -39,7 +33,6 @@ object AmosclaudApiClient {
         val defaultBranch: String,
         val updatedAt: String,
     )
-
     data class AdminOverview(
         val users: Int,
         val administrators: Int,
@@ -54,8 +47,7 @@ object AmosclaudApiClient {
 
     fun getBaseUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        return (prefs.getString(KEY_API_URL, BuildConfig.DEFAULT_API_URL) ?: BuildConfig.DEFAULT_API_URL)
-            .trimEnd('/')
+        return (prefs.getString(KEY_API_URL, BuildConfig.DEFAULT_API_URL) ?: BuildConfig.DEFAULT_API_URL).trimEnd('/')
     }
 
     fun saveBaseUrl(context: Context, url: String) {
@@ -66,26 +58,23 @@ object AmosclaudApiClient {
     }
 
     fun clearSession(context: Context) {
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY_COOKIES)
-            .apply()
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).edit().remove(KEY_COOKIES).apply()
     }
 
     private fun client(context: Context): OkHttpClient = OkHttpClient.Builder()
-        .cookieJar(PersistentCookieJar(context.applicationContext))
+        .cookieJar(PersistentCookieJar(context.applicationContext, getBaseUrl(context).toHttpUrl()))
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(75, TimeUnit.SECONDS)
         .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    private class PersistentCookieJar(context: Context) : CookieJar {
+    private class PersistentCookieJar(context: Context, private val baseUrl: HttpUrl) : CookieJar {
         private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         private val cookies = mutableMapOf<String, Cookie>()
 
         init {
             prefs.getStringSet(KEY_COOKIES, emptySet()).orEmpty().forEach { encoded ->
-                Cookie.parse(HttpUrl.get(BuildConfig.DEFAULT_API_URL), encoded)?.let { cookies[it.name] = it }
+                Cookie.parse(baseUrl, encoded)?.let { cookies[it.name] = it }
             }
         }
 
@@ -99,41 +88,35 @@ object AmosclaudApiClient {
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
             val now = System.currentTimeMillis()
-            val valid = cookies.values.filter { it.expiresAt >= now && it.matches(url) }
             cookies.entries.removeAll { it.value.expiresAt < now }
-            return valid
+            return cookies.values.filter { it.matches(url) }
         }
     }
 
-    private suspend fun request(
-        context: Context,
-        path: String,
-        method: String = "GET",
-        payload: Any? = null,
-    ): String = withContext(Dispatchers.IO) {
-        val builder = Request.Builder().url("${getBaseUrl(context)}$path")
-        when (method) {
-            "POST" -> builder.post(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
-            "PATCH" -> builder.patch(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
-            "DELETE" -> builder.delete()
-            else -> builder.get()
-        }
-
-        client(context).newCall(builder.build()).execute().use { response ->
-            val raw = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val detail = runCatching {
-                    val map: Map<String, Any?> = gson.fromJson(raw, object : TypeToken<Map<String, Any?>>() {}.type)
-                    map["detail"]?.toString()
-                }.getOrNull()
-                throw ApiException(response.code, detail ?: "The Amosclaud server returned HTTP ${response.code}.")
+    private suspend fun request(context: Context, path: String, method: String = "GET", payload: Any? = null): String =
+        withContext(Dispatchers.IO) {
+            val builder = Request.Builder().url("${getBaseUrl(context)}$path")
+            when (method) {
+                "POST" -> builder.post(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
+                "PATCH" -> builder.patch(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
+                "DELETE" -> builder.delete()
+                else -> builder.get()
             }
-            raw
+            client(context).newCall(builder.build()).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val detail = runCatching {
+                        val map: Map<String, Any?> = gson.fromJson(raw, object : TypeToken<Map<String, Any?>>() {}.type)
+                        map["detail"]?.toString()
+                    }.getOrNull()
+                    throw ApiException(response.code, detail ?: "The Amosclaud server returned HTTP ${response.code}.")
+                }
+                raw
+            }
         }
-    }
 
     private fun userFrom(raw: String): User {
-        val map: Map<String, Any?> = gson.fromJson(raw, object : TypeToken<Map<String, Any?>>() {}.type)
+        val map = parseMap(raw)
         return User(
             id = (map["id"] as Number).toInt(),
             name = map["name"]?.toString().orEmpty(),
@@ -142,6 +125,18 @@ object AmosclaudApiClient {
             provider = map["provider"]?.toString().orEmpty(),
         )
     }
+
+    private fun parseMap(raw: String): Map<String, Any?> =
+        gson.fromJson(raw.ifBlank { "{}" }, object : TypeToken<Map<String, Any?>>() {}.type)
+
+    private fun parseList(raw: String): List<Map<String, Any?>> =
+        gson.fromJson(raw.ifBlank { "[]" }, object : TypeToken<List<Map<String, Any?>>>() {}.type)
+
+    suspend fun getMap(context: Context, path: String): Map<String, Any?> = parseMap(request(context, path))
+    suspend fun getList(context: Context, path: String): List<Map<String, Any?>> = parseList(request(context, path))
+    suspend fun postMap(context: Context, path: String, payload: Map<String, Any?>): Map<String, Any?> =
+        parseMap(request(context, path, "POST", payload))
+    suspend fun delete(context: Context, path: String) { request(context, path, "DELETE") }
 
     suspend fun login(context: Context, email: String, password: String): User =
         userFrom(request(context, "/api/v1/auth/login", "POST", mapOf("email" to email, "password" to password)))
@@ -161,13 +156,12 @@ object AmosclaudApiClient {
     }
 
     suspend fun sendMessage(context: Context, message: String, sessionId: String?): ChatResponse {
-        val raw = request(context, "/api/chat", "POST", buildMap<String, Any?> {
+        val map = parseMap(request(context, "/api/chat", "POST", buildMap<String, Any?> {
             put("message", message)
             put("start_pr_task", false)
             put("base_branch", "main")
             if (!sessionId.isNullOrBlank()) put("session_id", sessionId)
-        })
-        val map: Map<String, Any?> = gson.fromJson(raw, object : TypeToken<Map<String, Any?>>() {}.type)
+        }))
         return ChatResponse(
             reply = map["reply"]?.toString().orEmpty().ifBlank { "Amosclaud returned an empty response." },
             sessionId = map["session_id"]?.toString().orEmpty(),
@@ -175,24 +169,19 @@ object AmosclaudApiClient {
         )
     }
 
-    suspend fun repositories(context: Context): List<Repository> {
-        val raw = request(context, "/api/v1/repositories")
-        val rows: List<Map<String, Any?>> = gson.fromJson(raw, object : TypeToken<List<Map<String, Any?>>>() {}.type)
-        return rows.map { row ->
-            Repository(
-                id = (row["id"] as Number).toInt(),
-                name = row["name"]?.toString().orEmpty(),
-                description = row["description"]?.toString().orEmpty(),
-                visibility = row["visibility"]?.toString().orEmpty(),
-                defaultBranch = row["default_branch"]?.toString().orEmpty(),
-                updatedAt = row["updated_at"]?.toString().orEmpty(),
-            )
-        }
+    suspend fun repositories(context: Context): List<Repository> = getList(context, "/api/v1/repositories").map { row ->
+        Repository(
+            id = (row["id"] as Number).toInt(),
+            name = row["name"]?.toString().orEmpty(),
+            description = row["description"]?.toString().orEmpty(),
+            visibility = row["visibility"]?.toString().orEmpty(),
+            defaultBranch = row["default_branch"]?.toString().orEmpty(),
+            updatedAt = row["updated_at"]?.toString().orEmpty(),
+        )
     }
 
     suspend fun adminOverview(context: Context): AdminOverview {
-        val raw = request(context, "/api/v1/admin/overview")
-        val row: Map<String, Any?> = gson.fromJson(raw, object : TypeToken<Map<String, Any?>>() {}.type)
+        val row = getMap(context, "/api/v1/admin/overview")
         fun int(name: String) = (row[name] as? Number)?.toInt() ?: 0
         return AdminOverview(
             users = int("users"),
@@ -205,7 +194,5 @@ object AmosclaudApiClient {
         )
     }
 
-    suspend fun testConnection(context: Context): Boolean = runCatching {
-        request(context, "/health")
-    }.isSuccess
+    suspend fun testConnection(context: Context): Boolean = runCatching { request(context, "/health") }.isSuccess
 }
