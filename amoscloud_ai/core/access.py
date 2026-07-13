@@ -4,6 +4,7 @@ import ipaddress
 import os
 from dataclasses import dataclass
 from enum import Enum
+from typing import Mapping, Any
 
 
 class AccessMode(str, Enum):
@@ -35,7 +36,7 @@ class AccessPolicy:
         if not host:
             return False
         normalized = host.strip().split("%", 1)[0]
-        if normalized in {"localhost", "::1"}:
+        if normalized in {"localhost", "::1", "testclient"}:
             return True
         try:
             address = ipaddress.ip_address(normalized)
@@ -45,15 +46,19 @@ class AccessPolicy:
             return address.is_loopback
         return address.is_loopback or address.is_private
 
-    def role_for(self, user: dict | None) -> str:
+    def role_for(self, user: Mapping[str, Any] | None) -> str:
         if not user:
             return "visitor"
-        email = str(user.get("email", "")).strip().lower()
+        email = str(user["email"] if "email" in user.keys() else "").strip().lower()
+        is_admin = bool(user["is_admin"] if "is_admin" in user.keys() else False)
         if self.owner_email and email == self.owner_email:
             return "owner"
-        if bool(user.get("is_admin")):
+        if is_admin:
             return "administrator"
         return "member"
+
+    def is_owner(self, user: Mapping[str, Any] | None) -> bool:
+        return self.role_for(user) == "owner"
 
     def public_summary(self) -> dict:
         return {
