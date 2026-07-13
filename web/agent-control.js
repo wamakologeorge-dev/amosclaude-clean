@@ -66,6 +66,19 @@
     return item;
   }
 
+  function addActionLink(url, label) {
+    if (!url || !url.startsWith('/')) return;
+    const item = document.createElement('div');
+    item.className = 'agent-reply chat-message chat-message-agent';
+    const link = document.createElement('a');
+    link.className = 'btn-primary';
+    link.href = url;
+    link.textContent = label;
+    item.appendChild(link);
+    replies.appendChild(item);
+    updateActivityView();
+  }
+
   function setBusy(busy, label = 'ready') {
     runButton.disabled = busy;
     stopButton.hidden = !busy;
@@ -161,6 +174,9 @@
 
       pending.remove();
       addMessage(data.reply || 'I finished processing your request.');
+      if (data.task_url && data.task_status === 'completed') {
+        addActionLink(data.task_url, 'Open created repository');
+      }
       setBusy(false, 'ready');
     } catch (error) {
       pending.remove();
