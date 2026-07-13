@@ -24,6 +24,34 @@ services:
       timeout: 5s
       retries: 20
 
+  amosclaud-model:
+    image: ollama/ollama:latest
+    volumes:
+      - amosclaud-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  amosclaud-model-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://amosclaud-model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until ollama list >/dev/null 2>&1; do sleep 2; done
+        ollama pull "$${AMOSCLAUD_MODEL}"
+    depends_on:
+      amosclaud-model:
+        condition: service_healthy
+    restart: "no"
+
   app:
     build:
       context: .
@@ -35,6 +63,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       AUTH_COOKIE_SECURE: "false"
       PORT: "8000"
+      AMOSCLAUD_MODEL_URL: http://amosclaud-model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
     ports:
       - "8000:8000"
     volumes:
@@ -46,6 +77,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      amosclaud-model:
+        condition: service_healthy
+      amosclaud-model-init:
+        condition: service_completed_successfully
     command: uvicorn amoscloud_ai.main:app --host 0.0.0.0 --port 8000 --reload
 
   workspace:
@@ -67,4 +102,5 @@ volumes:
   amosclaud-redis:
   amosclaud-data:
   amosclaud-repositories:
+  amosclaud-models:
   code-server-data:
