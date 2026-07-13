@@ -75,6 +75,7 @@ class NativeModuleActivity : AppCompatActivity() {
     }
 
     private fun moduleTitle(): String = when (module) {
+        "cli" -> "Amosclaud CLI"
         "pipelines" -> "Pipelines"
         "deployments" -> "Deployments"
         "storage" -> "Amosclaud Storage"
@@ -84,6 +85,7 @@ class NativeModuleActivity : AppCompatActivity() {
     }
 
     private fun moduleActionLabel(): String = when (module) {
+        "cli" -> "Run sync command"
         "pipelines" -> "Trigger pipeline"
         "deployments" -> "Start deployment"
         "community" -> "Create post"
@@ -97,6 +99,11 @@ class NativeModuleActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val rows = when (module) {
+                    "cli" -> {
+                        val health = AmosclaudApiClient.getMap(this@NativeModuleActivity, "/health")
+                        val pipelines = AmosclaudApiClient.getList(this@NativeModuleActivity, "/api/v1/pipelines")
+                        listOf(mapOf("kind" to "health") + health) + pipelines.map { mapOf("kind" to "job") + it }
+                    }
                     "pipelines" -> AmosclaudApiClient.getList(this@NativeModuleActivity, "/api/v1/pipelines")
                     "deployments" -> AmosclaudApiClient.getList(this@NativeModuleActivity, "/api/v1/deployments")
                     "storage" -> {
@@ -109,7 +116,7 @@ class NativeModuleActivity : AppCompatActivity() {
                     else -> emptyList()
                 }
                 renderRows(rows)
-                statusView.text = "${rows.size} items"
+                statusView.text = if (module == "cli") "Connected to real server and pipeline APIs" else "${rows.size} items"
             } catch (error: AmosclaudApiClient.ApiException) {
                 statusView.text = error.message
                 list.removeAllViews()
@@ -135,6 +142,7 @@ class NativeModuleActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
         val title = when (module) {
+            "cli" -> if (row["kind"] == "health") "Server status" else row["message"] ?: row["id"] ?: "Pipeline job"
             "pipelines" -> row["message"] ?: row["id"]
             "deployments" -> "${row["environment"] ?: "deployment"} · ${row["version"] ?: "latest"}"
             "storage" -> row["display_name"] ?: row["name"] ?: "Storage"
@@ -143,6 +151,11 @@ class NativeModuleActivity : AppCompatActivity() {
             else -> row["name"] ?: row["id"] ?: "Item"
         }.toString()
         val summary = when (module) {
+            "cli" -> if (row["kind"] == "health") {
+                "${row["status"] ?: "unknown"} · version ${row["version"] ?: "unknown"} · ${row["environment"] ?: "unknown"}"
+            } else {
+                "${row["status"] ?: "unknown"} · ${row["trigger"] ?: "pipeline"} · branch ${row["branch"] ?: "main"}"
+            }
             "pipelines" -> "${row["status"] ?: "unknown"} · branch ${row["branch"] ?: "main"}"
             "deployments" -> "${row["status"] ?: "unknown"} · ${row["message"] ?: ""}"
             "storage" -> if (row.containsKey("used_bytes")) "Used ${row["used_bytes"]} of ${row["quota_bytes"]} bytes" else "${row["storage_key"] ?: ""} · ${row["size_bytes"] ?: 0} bytes"
@@ -170,6 +183,7 @@ class NativeModuleActivity : AppCompatActivity() {
 
     private fun moduleAction() {
         when (module) {
+            "cli" -> cliSyncDialog()
             "community" -> singleInputDialog("Create community post", "What do you want to share?") { value ->
                 post("/api/v1/community/posts", mapOf("content" to value))
             }
@@ -177,6 +191,35 @@ class NativeModuleActivity : AppCompatActivity() {
             "pipelines" -> pipelineDialog()
             "deployments" -> deploymentDialog()
         }
+    }
+
+    private fun cliSyncDialog() {
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(30, 10, 30, 0) }
+        val filePath = EditText(this).apply { hint = "Repository file path" }
+        val action = EditText(this).apply { hint = "Action"; setText("MANUAL_SYNC") }
+        form.addView(filePath)
+        form.addView(action)
+        AlertDialog.Builder(this)
+            .setTitle("Run Amosclaud CLI sync")
+            .setView(form)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Run") { _, _ ->
+                val path = filePath.text.toString().trim()
+                if (path.isNotBlank()) {
+                    post(
+                        "/api/v1/pipelines",
+                        mapOf(
+                            "trigger" to "android-cli-sync",
+                            "branch" to "main",
+                            "payload" to mapOf(
+                                "file_path" to path,
+                                "action" to action.text.toString().ifBlank { "MANUAL_SYNC" },
+                            ),
+                        ),
+                    )
+                }
+            }
+            .show()
     }
 
     private fun singleInputDialog(title: String, hint: String, onSubmit: (String) -> Unit) {
