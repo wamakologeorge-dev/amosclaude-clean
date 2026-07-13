@@ -4,10 +4,13 @@ from __future__ import annotations
 from typing import Optional
 
 import asyncio
+import json
 import os
 import secrets
+import sqlite3
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Lock
 
 from fastapi import APIRouter, Header, HTTPException
@@ -18,6 +21,90 @@ from amoscloud_ai.pr_agent import PullRequestAgent
 router = APIRouter(prefix="/agent/tasks", tags=["pr-agent"])
 _tasks: dict[str, RepositoryTaskResponse] = {}
 _lock = Lock()
+
+
+def _task_db_path() -> Path:
+    configured = os.getenv("AGENT_TASK_DB_PATH", "").strip()
+    if configured:
+        return Path(configured)
+    data_dir = Path(os.getenv("DATA_DIR", "data"))
+    return data_dir / "agent_tasks.db"
+
+
+def _task_db() -> sqlite3.Connection:
+    path = _task_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(path)
+    db.row_factory = sqlite3.Row
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS repository_agent_tasks (
+            task_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            objective TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            pull_request_url TEXT,
+            logs_json TEXT NOT NULL
+        )
+        """
+    )
+    db.commit()
+    return db
+
+
+def _persist_task(task: RepositoryTaskResponse) -> None:
+    with _task_db() as db:
+        db.execute(
+            """
+            INSERT INTO repository_agent_tasks(
+                task_id,status,objective,branch,message,created_at,updated_at,pull_request_url,logs_json
+            ) VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(task_id) DO UPDATE SET
+                status=excluded.status,
+                objective=excluded.objective,
+                branch=excluded.branch,
+                message=excluded.message,
+                updated_at=excluded.updated_at,
+                pull_request_url=excluded.pull_request_url,
+                logs_json=excluded.logs_json
+            """,
+            (
+                task.task_id,
+                task.status.value,
+                task.objective,
+                task.branch,
+                task.message,
+                task.created_at.isoformat(),
+                task.updated_at.isoformat(),
+                task.pull_request_url,
+                json.dumps(task.logs),
+            ),
+        )
+        db.commit()
+
+
+def _load_task(task_id: str) -> RepositoryTaskResponse | None:
+    with _task_db() as db:
+        row = db.execute(
+            "SELECT * FROM repository_agent_tasks WHERE task_id=?",
+            (task_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return RepositoryTaskResponse(
+        task_id=row["task_id"],
+        status=RepositoryTaskStatus(row["status"]),
+        objective=row["objective"],
+        branch=row["branch"],
+        message=row["message"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        pull_request_url=row["pull_request_url"],
+        logs=json.loads(row["logs_json"]),
+    )
 
 
 def _now() -> datetime:
@@ -38,7 +125,20 @@ async def _perform_task(task_id: str, request: RepositoryTaskRequest) -> None:
         current.status = RepositoryTaskStatus.RUNNING
         current.updated_at = _now()
         current.logs.append("Repository agent started: reading instructions and preparing an isolated branch.")
-    result = await asyncio.to_thread(PullRequestAgent(task_id, request.objective, request.base_branch).execute)
+        _persist_task(current)
+
+    try:
+        result = await asyncio.to_thread(PullRequestAgent(task_id, request.objective, request.base_branch).execute)
+    except Exception as exc:
+        with _lock:
+            current = _tasks[task_id]
+            current.status = RepositoryTaskStatus.FAILED
+            current.message = "Repository agent stopped unexpectedly. Review the task logs and deployment logs."
+            current.logs.append(f"Agent execution failed: {type(exc).__name__}")
+            current.updated_at = _now()
+            _persist_task(current)
+        return
+
     with _lock:
         current = _tasks[task_id]
         current.status = RepositoryTaskStatus.COMPLETED if result.status == "completed" else RepositoryTaskStatus.FAILED
@@ -46,6 +146,7 @@ async def _perform_task(task_id: str, request: RepositoryTaskRequest) -> None:
         current.pull_request_url = result.pull_request_url
         current.logs.extend(result.logs)
         current.updated_at = _now()
+        _persist_task(current)
 
 
 def queue_task(body: RepositoryTaskRequest) -> RepositoryTaskResponse:
@@ -64,6 +165,7 @@ def queue_task(body: RepositoryTaskRequest) -> RepositoryTaskResponse:
     )
     with _lock:
         _tasks[task_id] = task
+        _persist_task(task)
     asyncio.create_task(_perform_task(task_id, body))
     return task
 
@@ -72,6 +174,10 @@ def get_task_status(task_id: str) -> RepositoryTaskResponse:
     """Return a task snapshot for another trusted Amosclaud API route."""
     with _lock:
         task = _tasks.get(task_id)
+        if task is None:
+            task = _load_task(task_id)
+            if task is not None:
+                _tasks[task_id] = task
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found.")
     return task
