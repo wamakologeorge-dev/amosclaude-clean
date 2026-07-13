@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   build:
@@ -36,10 +37,35 @@ jobs:
           gradle-version: '8.6'
 
       - name: Compile debug APK
-        run: gradle --no-daemon clean assembleDebug
+        id: compile
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon --console=plain clean assembleDebug > android-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            tail -n 160 android-build.log > android-build-tail.log
+            cat android-build-tail.log
+          fi
+          exit "$status"
+
+      - name: Report Android build failure
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo '### Android build failed'
+            echo
+            echo '```text'
+            tail -n 120 android-build.log
+            echo '```'
+          } > ../android-build-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file ../android-build-comment.md
 
       - name: Run unit tests
-        run: gradle --no-daemon testDebugUnitTest
+        run: gradle --no-daemon --console=plain testDebugUnitTest
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
