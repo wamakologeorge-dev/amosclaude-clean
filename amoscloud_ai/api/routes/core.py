@@ -41,6 +41,15 @@ def _registry() -> ServiceRegistry:
     return ServiceRegistry(_core_db_path())
 
 
+def _owner_user(admin=Depends(_admin_user)):
+    owner_email = os.getenv("AMOSCLAUD_ADMIN_EMAIL", "").strip().lower()
+    if not owner_email:
+        raise HTTPException(status_code=503, detail="AMOSCLAUD_ADMIN_EMAIL must be configured")
+    if str(admin["email"]).strip().lower() != owner_email:
+        raise HTTPException(status_code=403, detail="Amosclaud owner access required")
+    return admin
+
+
 @router.get("/access")
 def access_summary() -> dict:
     """Return only safe visibility information; never expose secrets or endpoints."""
@@ -48,21 +57,21 @@ def access_summary() -> dict:
 
 
 @router.get("/settings")
-def list_settings(admin=Depends(_admin_user)) -> list[dict]:
-    del admin
+def list_settings(owner=Depends(_owner_user)) -> list[dict]:
+    del owner
     return _vault().list_masked()
 
 
 @router.put("/settings/{name}")
-def set_setting(name: str, body: SettingWrite, admin=Depends(_admin_user)) -> dict:
+def set_setting(name: str, body: SettingWrite, owner=Depends(_owner_user)) -> dict:
     vault = _vault()
-    vault.set(name, body.value, secret=body.secret, actor_id=int(admin["id"]))
+    vault.set(name, body.value, secret=body.secret, actor_id=int(owner["id"]))
     return {"name": name.strip().upper(), "saved": True, "is_secret": body.secret}
 
 
 @router.delete("/settings/{name}")
-def delete_setting(name: str, admin=Depends(_admin_user)) -> dict:
-    deleted = _vault().delete(name, actor_id=int(admin["id"]))
+def delete_setting(name: str, owner=Depends(_owner_user)) -> dict:
+    deleted = _vault().delete(name, actor_id=int(owner["id"]))
     if not deleted:
         raise HTTPException(status_code=404, detail="Setting not found")
     return {"name": name.strip().upper(), "deleted": True}
@@ -75,15 +84,15 @@ def list_services(admin=Depends(_admin_user)) -> list[dict]:
 
 
 @router.put("/services/{name}")
-def register_service(name: str, body: ServiceWrite, admin=Depends(_admin_user)) -> dict:
-    del admin
+def register_service(name: str, body: ServiceWrite, owner=Depends(_owner_user)) -> dict:
+    del owner
     _registry().register(name, body.kind, body.endpoint, body.metadata)
     return {"name": name, "registered": True, "endpoint": body.endpoint}
 
 
 @router.delete("/services/{name}")
-def remove_service(name: str, admin=Depends(_admin_user)) -> dict:
-    del admin
+def remove_service(name: str, owner=Depends(_owner_user)) -> dict:
+    del owner
     removed = _registry().remove(name)
     if not removed:
         raise HTTPException(status_code=404, detail="Service not found")
