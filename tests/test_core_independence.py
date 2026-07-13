@@ -1,7 +1,9 @@
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
+from amoscloud_ai.api.routes.core import _owner_user
 from amoscloud_ai.core.access import AccessMode, AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
 from amoscloud_ai.core.vault import AmosclaudVault, VaultError
@@ -54,6 +56,7 @@ def test_local_access_mode_rejects_non_loopback_clients():
     policy = AccessPolicy(mode=AccessMode.LOCAL, owner_email="owner@example.com")
     assert policy.allows_client("127.0.0.1") is True
     assert policy.allows_client("::1") is True
+    assert policy.allows_client("testclient") is True
     assert policy.allows_client("192.168.1.10") is False
     assert policy.allows_client("8.8.8.8") is False
 
@@ -78,3 +81,20 @@ def test_public_access_mode_and_role_mapping():
         "lan_access": True,
         "public_access": True,
     }
+
+
+def test_owner_dependency_accepts_only_configured_owner(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_ADMIN_EMAIL", "owner@example.com")
+    owner = {"id": 1, "email": "OWNER@example.com", "is_admin": 1}
+    assert _owner_user(admin=owner) is owner
+
+    with pytest.raises(HTTPException) as exc_info:
+        _owner_user(admin={"id": 2, "email": "admin@example.com", "is_admin": 1})
+    assert exc_info.value.status_code == 403
+
+
+def test_owner_dependency_requires_owner_email(monkeypatch):
+    monkeypatch.delenv("AMOSCLAUD_ADMIN_EMAIL", raising=False)
+    with pytest.raises(HTTPException) as exc_info:
+        _owner_user(admin={"id": 1, "email": "owner@example.com", "is_admin": 1})
+    assert exc_info.value.status_code == 503
