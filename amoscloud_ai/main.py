@@ -28,6 +28,7 @@ from amoscloud_ai.api.routes import (
     chat,
     community,
     copilot,
+    core,
     deployments,
     feed,
     first_party_chat,
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(core.router, prefix="/api/v1")
     app.include_router(wifi.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
