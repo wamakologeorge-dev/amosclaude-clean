@@ -2,7 +2,6 @@ package com.amosclaudai
 
 import android.os.Bundle
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -73,11 +72,13 @@ class AiChatActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val response = AmosclaudApiClient.sendMessage(this@AiChatActivity, text, sessionId)
-                sessionId = response.sessionId.ifBlank { sessionId }
-                getSharedPreferences("amosclaud_chat", MODE_PRIVATE)
-                    .edit()
-                    .putString("session_id", sessionId)
-                    .apply()
+                if (response.sessionId.isNotBlank()) {
+                    sessionId = response.sessionId
+                    getSharedPreferences("amosclaud_chat", MODE_PRIVATE)
+                        .edit()
+                        .putString("session_id", response.sessionId)
+                        .apply()
+                }
                 appendMessage(ChatMessage.Role.ASSISTANT, response.reply)
             } catch (error: AmosclaudApiClient.ApiException) {
                 if (error.statusCode == 401) {
@@ -86,7 +87,7 @@ class AiChatActivity : AppCompatActivity() {
                 } else {
                     appendMessage(ChatMessage.Role.ASSISTANT, "Amosclaud could not complete that request: ${error.message}")
                 }
-            } catch (error: Exception) {
+            } catch (_: Exception) {
                 appendMessage(
                     ChatMessage.Role.ASSISTANT,
                     "The Android app could not reach Amosclaud. Check your internet connection and server address, then try again.",
