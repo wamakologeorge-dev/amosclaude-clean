@@ -9,7 +9,7 @@ import os
 import secrets
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 
@@ -111,6 +111,32 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _stale_after() -> timedelta:
+    raw = os.getenv("AGENT_TASK_STALE_MINUTES", "60").strip()
+    try:
+        minutes = max(1, int(raw))
+    except ValueError:
+        minutes = 60
+    return timedelta(minutes=minutes)
+
+
+def _expire_if_stale(task: RepositoryTaskResponse) -> RepositoryTaskResponse:
+    if task.status not in {RepositoryTaskStatus.QUEUED, RepositoryTaskStatus.RUNNING}:
+        return task
+    if _now() - task.updated_at <= _stale_after():
+        return task
+
+    task.status = RepositoryTaskStatus.FAILED
+    task.message = (
+        "Repository agent work was interrupted or stopped reporting progress. "
+        "Start a new task after confirming the service is healthy."
+    )
+    task.updated_at = _now()
+    task.logs.append("Task marked failed after exceeding the repository-agent stale timeout.")
+    _persist_task(task)
+    return task
+
+
 def _require_owner_key(owner_key: Optional[str]) -> None:
     expected = os.environ.get("AMOSCLAUD_OWNER_KEY")
     if not expected:
@@ -178,6 +204,8 @@ def get_task_status(task_id: str) -> RepositoryTaskResponse:
             task = _load_task(task_id)
             if task is not None:
                 _tasks[task_id] = task
+        if task is not None:
+            task = _expire_if_stale(task)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found.")
     return task
