@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.admin import _admin_user
+from amoscloud_ai.core.access import AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
 from amoscloud_ai.core.vault import AmosclaudVault, VaultError
 
@@ -38,6 +39,12 @@ def _vault() -> AmosclaudVault:
 
 def _registry() -> ServiceRegistry:
     return ServiceRegistry(_core_db_path())
+
+
+@router.get("/access")
+def access_summary() -> dict:
+    """Return only safe visibility information; never expose secrets or endpoints."""
+    return AccessPolicy.from_environment().public_summary()
 
 
 @router.get("/settings")
