@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 import asyncio
+import secrets
+
 import httpx
 
 from amoscloud_ai.api.routes import auth, repositories
@@ -16,7 +18,7 @@ def test_authenticated_chat_creates_repository(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    token = "repository-action-session"
+    token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
     with auth._connect() as db:
         cursor = db.execute(
@@ -47,6 +49,7 @@ def test_authenticated_chat_creates_repository(tmp_path, monkeypatch):
 
     response = asyncio.run(send())
     assert response.status_code == 200
+    assert response.headers.get("content-type", "").startswith("application/json")
     body = response.json()
     assert body["provider"] == "amosclaud-repository-action"
     assert body["task_status"] == "completed"
