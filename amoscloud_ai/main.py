@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
 from amoscloud_ai.api.routes import (
+    account,
     admin,
     agent,
     amos_mail,
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
+    app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
