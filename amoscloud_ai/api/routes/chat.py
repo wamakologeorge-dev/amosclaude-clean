@@ -11,8 +11,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Cookie, Header, HTTPException
 
+from amoscloud_ai.agent_actions import execute_repository_create
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import AgentCapabilityResponse, ChatRequest, ChatResponse, RepositoryTaskRequest
 
@@ -50,8 +51,9 @@ def _system_prompt() -> str:
 build applications, inspect repositories, plan fixes, run appropriate checks, deploy through
 approved infrastructure, and monitor production. Be direct, accurate, and explicit when an
 operation needs a connected repository or human approval. Do not claim that code was edited,
-tested, pushed, or deployed unless tools confirmed it. The current first-party client is
-connected to the Amosclaud platform repository. Follow these repository instructions:\n\n""" + _repository_instructions()
+tested, pushed, deployed, or that a repository was created unless a first-party action confirmed
+it. The current first-party client is connected to the Amosclaud platform repository. Follow these
+repository instructions:\n\n""" + _repository_instructions()
 
 
 def _fallback_reply(message: str) -> str:
@@ -163,33 +165,40 @@ def _anthropic_reply(history: list[dict[str, str]], api_key: Optional[str] = Non
         return _fallback_reply(history[-1]["content"])
 
 
+def _record_exchange(session_id: str, message: str, reply: str) -> None:
+    with _conversation_lock:
+        _conversations[session_id].extend(
+            [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": reply},
+            ]
+        )
+        _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
+
+
 @router.post("/api/chat", response_model=ChatResponse, summary="Talk to Amosclaud")
 async def chat(
     body: ChatRequest,
+    amos_session: str | None = Cookie(default=None),
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None),
 ) -> ChatResponse:
-    """Chat normally, or queue an explicit authenticated PR-agent command."""
+    """Chat normally, execute an explicit native action, or queue a PR-agent command."""
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=422, detail="message must not be empty")
 
     try:
         await _authorize_platform_key(x_api_key, x_amosclaud_owner_key)
-
         session_id = body.session_id or str(uuid.uuid4())
+
         if body.start_pr_task:
             from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, queue_task
 
             _require_owner_key(x_amosclaud_owner_key)
             task = queue_task(RepositoryTaskRequest(objective=message, base_branch=body.base_branch))
             reply = f"I started PR-agent task {task.task_id} on branch {task.branch}. I will work in an isolated workspace and report its pull request when complete."
-            with _conversation_lock:
-                _conversations[session_id].extend([
-                    {"role": "user", "content": message},
-                    {"role": "assistant", "content": reply},
-                ])
-                _conversations[session_id][:] = _conversations[session_id][-_MAX_HISTORY_TURNS:]
+            _record_exchange(session_id, message, reply)
             return ChatResponse(
                 reply=reply,
                 session_id=session_id,
@@ -198,6 +207,24 @@ async def chat(
                 task_id=task.task_id,
                 task_status=task.status.value,
                 task_url=f"/api/v1/agent/tasks/{task.task_id}",
+            )
+
+        repository = execute_repository_create(message, amos_session)
+        if repository is not None:
+            reply = (
+                f'Repository "{repository.name}" was created successfully in Amosclaud. '
+                f"It is {repository.visibility}, uses the {repository.default_branch} branch, "
+                "and includes the starter workflow and README."
+            )
+            _record_exchange(session_id, message, reply)
+            return ChatResponse(
+                reply=reply,
+                session_id=session_id,
+                timestamp=_now(),
+                provider="amosclaud-repository-action",
+                task_id=str(repository.id),
+                task_status="completed",
+                task_url=f"/workspace/{repository.id}",
             )
 
         with _conversation_lock:
@@ -259,6 +286,7 @@ async def capabilities() -> AgentCapabilityResponse:
         capabilities=[
             "ai_assisted_engineering",
             "repository_instruction_analysis",
+            "native_repository_creation",
             "ci_cd_automation",
             "railway_deployment",
             "health_monitoring",
