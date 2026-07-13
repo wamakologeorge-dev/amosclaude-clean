@@ -99,7 +99,10 @@ object AmosclaudApiClient {
             when (method) {
                 "POST" -> builder.post(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
                 "PATCH" -> builder.patch(gson.toJson(payload ?: emptyMap<String, Any>()).toRequestBody(JSON))
-                "DELETE" -> builder.delete()
+                "DELETE" -> {
+                    if (payload == null) builder.delete()
+                    else builder.delete(gson.toJson(payload).toRequestBody(JSON))
+                }
                 else -> builder.get()
             }
             client(context).newCall(builder.build()).execute().use { response ->
@@ -152,6 +155,19 @@ object AmosclaudApiClient {
 
     suspend fun logout(context: Context) {
         runCatching { request(context, "/api/v1/auth/logout", "POST") }
+        clearSession(context)
+    }
+
+    suspend fun deleteAccount(context: Context, email: String, password: String?) {
+        request(
+            context,
+            "/api/v1/account",
+            "DELETE",
+            buildMap<String, Any?> {
+                put("confirmation", email)
+                if (!password.isNullOrBlank()) put("password", password)
+            },
+        )
         clearSession(context)
     }
 
