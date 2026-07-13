@@ -18,6 +18,8 @@ from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.admin_bootstrap import should_grant_admin
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 DB_PATH = Path(os.getenv("AUTH_DB_PATH", "data/auth.db"))
@@ -244,10 +246,11 @@ def verify_registration(body: RegisterVerifyRequest, response: Response) -> User
         pending = _consume_code(db, email, "register", body.code)
         if not _verify_password(body.password, pending["password_hash"]):
             raise HTTPException(status_code=400, detail="Password does not match the signup request")
-        first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        is_first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        is_admin = should_grant_admin(email, is_first_user=is_first_user)
         cursor = db.execute(
             "INSERT INTO users(name,email,password_hash,provider,is_admin,created_at) VALUES (?,?,?,'password',?,?)",
-            (pending["name"], email, pending["password_hash"], int(first_user), datetime.now(timezone.utc).isoformat()),
+            (pending["name"], email, pending["password_hash"], int(is_admin), datetime.now(timezone.utc).isoformat()),
         )
         token = _create_session(db, cursor.lastrowid)
         user = db.execute("SELECT id,name,email,is_admin,provider FROM users WHERE id=?", (cursor.lastrowid,)).fetchone()
