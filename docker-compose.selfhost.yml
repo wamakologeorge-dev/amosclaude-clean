@@ -1,0 +1,68 @@
+services:
+  model:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - amosclaud-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  model-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      until ollama list >/dev/null 2>&1; do sleep 2; done;
+      ollama pull "$${AMOSCLAUD_MODEL}"
+    depends_on:
+      model:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      AMOSCLAUD_ENV: production
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_DB_PATH: /data/auth.db
+      REPOSITORY_STORAGE_PATH: /data/repositories
+      STORAGE_PATH: /data/storage
+      AMOSCLAUD_CORE_DB: /data/amosclaud-core.db
+      AMOSCLAUD_MODEL_URL: http://model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - amosclaud-data:/data
+    depends_on:
+      model:
+        condition: service_healthy
+      model-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  amosclaud-data:
+  amosclaud-models:
