@@ -52,7 +52,7 @@ def _owner_user(admin=Depends(_admin_user)):
 
 @router.get("/access")
 def access_summary() -> dict:
-    """Return only safe visibility information; never expose secrets or endpoints."""
+    """Return safe visibility information without secrets or internal endpoints."""
     return AccessPolicy.from_environment().public_summary()
 
 
@@ -78,8 +78,8 @@ def delete_setting(name: str, owner=Depends(_owner_user)) -> dict:
 
 
 @router.get("/services")
-def list_services(admin=Depends(_admin_user)) -> list[dict]:
-    del admin
+def list_services(owner=Depends(_owner_user)) -> list[dict]:
+    del owner
     return _registry().list()
 
 
@@ -100,8 +100,8 @@ def remove_service(name: str, owner=Depends(_owner_user)) -> dict:
 
 
 @router.get("/model/diagnostics")
-async def model_diagnostics(admin=Depends(_admin_user)) -> dict:
-    del admin
+async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
+    del owner
     registry = _registry()
     endpoint = registry.resolve("amos://model") or _vault().get("AMOSCLAUD_MODEL_URL") or os.getenv(
         "AMOSCLAUD_MODEL_URL", "http://model:11434"
