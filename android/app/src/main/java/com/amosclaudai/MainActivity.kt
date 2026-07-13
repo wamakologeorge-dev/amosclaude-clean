@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(status)
         content.addView(progress)
 
+        content.addView(section("Core app"))
         content.addView(tile("Ask Amosclaud", "Native AI chat with safe fallback when an external provider is down") {
             startActivity(Intent(this, AiChatActivity::class.java))
         })
@@ -66,6 +67,32 @@ class MainActivity : AppCompatActivity() {
         })
         content.addView(tile("Community", "Read and create native Amosclaud community posts") {
             NativeModuleActivity.open(this, "community")
+        })
+
+        content.addView(section("Platform folders"))
+        content.addView(tile("CLI", "Native command access for build, test, deploy, monitor, and repository tasks") {
+            startActivity(Intent(this, AiChatActivity::class.java))
+        })
+        content.addView(tile("Build Worker", "Run and inspect build-worker jobs through the native pipeline screen") {
+            NativeModuleActivity.open(this, "pipelines")
+        })
+        content.addView(tile("Authentication", "Account, session, server connection, and permanent account deletion controls") {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        })
+        content.addView(tile("Apps", "View and manage application releases through Amosclaud deployments") {
+            NativeModuleActivity.open(this, "deployments")
+        })
+        content.addView(tile("Models", "Use Amosclaud models through the native assistant") {
+            startActivity(Intent(this, AiChatActivity::class.java))
+        })
+        content.addView(tile("API Key Manager", "Administrator controls for Amosclaud service access and platform security") {
+            startActivity(Intent(this, AdminActivity::class.java))
+        })
+        content.addView(tile("Amosflow", "Native workflow and automation access through pipelines") {
+            NativeModuleActivity.open(this, "pipelines")
+        })
+        content.addView(tile("API Gateway", "Check and configure the Amosclaud gateway and backend connection") {
+            startActivity(Intent(this, SettingsActivity::class.java))
         })
 
         adminButton = Button(this).apply {
@@ -89,6 +116,17 @@ class MainActivity : AppCompatActivity() {
         })
 
         return ScrollView(this).apply { addView(content) }
+    }
+
+    private fun section(title: String): View {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+        return TextView(this).apply {
+            text = title
+            textSize = 20f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(28), 0, 0)
+        }
     }
 
     private fun tile(title: String, description: String, action: () -> Unit): View {
