@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import httpx
 
@@ -21,7 +20,16 @@ class ProviderResult:
     status: str = "ready"
 
 
-def _self_hosted_reply(history: list[dict[str, str]]) -> ProviderResult | None:
+def _external_adapters_enabled() -> bool:
+    return os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
     endpoint = os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
     if not endpoint:
         return None
@@ -35,12 +43,12 @@ def _self_hosted_reply(history: list[dict[str, str]]) -> ProviderResult | None:
         f"{endpoint}/v1/chat/completions",
         headers=headers,
         json={
-            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud"),
-            "messages": history,
+            "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
+            "messages": [{"role": "system", "content": system_prompt}] + history,
             "temperature": 0.2,
             "max_tokens": 1200,
         },
-        timeout=float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "60")),
+        timeout=float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "120")),
     )
     response.raise_for_status()
     payload = response.json()
@@ -51,13 +59,7 @@ def _self_hosted_reply(history: list[dict[str, str]]) -> ProviderResult | None:
 
 
 def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
-    enabled = os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    if not enabled:
+    if not _external_adapters_enabled():
         return None
 
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
@@ -100,11 +102,11 @@ def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -
 def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
     """Return a response from the first-party Amosclaud provider."""
     try:
-        self_hosted = _self_hosted_reply(history)
+        self_hosted = _self_hosted_reply(history, system_prompt)
         if self_hosted:
             return self_hosted
     except Exception:
-        if os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").lower() not in {"1", "true", "yes", "on"}:
+        if not _external_adapters_enabled():
             raise
 
     adapted = _external_adapter_reply(history, system_prompt)
@@ -114,7 +116,7 @@ def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
     return ProviderResult(
         reply=(
             "Amosclaud is running, but its model runtime is not connected. "
-            "Configure AMOSCLAUD_MODEL_URL for the self-hosted model service."
+            "Start the Amosclaud model service and verify AMOSCLAUD_MODEL_URL."
         ),
         runtime="unconfigured",
         status="degraded",
@@ -126,7 +128,6 @@ def status() -> dict[str, object]:
     return {
         "provider": "amosclaud",
         "self_hosted_configured": bool(os.getenv("AMOSCLAUD_MODEL_URL", "").strip()),
-        "external_adapters_enabled": os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower()
-        in {"1", "true", "yes", "on"},
-        "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud"),
+        "external_adapters_enabled": _external_adapters_enabled(),
+        "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
     }
