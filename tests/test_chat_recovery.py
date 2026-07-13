@@ -1,12 +1,12 @@
 from fastapi.testclient import TestClient
 
-from amoscloud_ai.api.routes import chat
+from amoscloud_ai import provider
 from amoscloud_ai.main import create_app
 
 
-def test_chat_returns_json_when_provider_is_offline(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_chat_returns_json_when_model_runtime_is_unconfigured(monkeypatch):
+    monkeypatch.delenv("AMOSCLAUD_MODEL_URL", raising=False)
+    monkeypatch.setenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false")
     client = TestClient(create_app())
 
     response = client.post(
@@ -18,16 +18,15 @@ def test_chat_returns_json_when_provider_is_offline(monkeypatch):
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
     assert body["reply"]
-    assert body["provider"] == "offline"
+    assert body["provider"] == "amosclaud"
+    assert "model runtime is not connected" in body["reply"]
 
 
-def test_chat_recovers_from_unexpected_provider_error(monkeypatch):
-    monkeypatch.setattr(chat, "_resolve_provider", lambda: ("openai", "test-key"))
+def test_chat_recovers_from_unexpected_model_runtime_error(monkeypatch):
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("model runtime exploded")
 
-    async def explode(*_args, **_kwargs):
-        raise RuntimeError("provider exploded")
-
-    monkeypatch.setattr(chat.asyncio, "to_thread", explode)
+    monkeypatch.setattr(provider, "reply", explode)
     client = TestClient(create_app(), raise_server_exceptions=False)
 
     response = client.post(
@@ -38,5 +37,6 @@ def test_chat_recovers_from_unexpected_provider_error(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
-    assert body["provider"] == "recovery"
-    assert "temporarily unavailable" in body["reply"]
+    assert body["provider"] == "amosclaud"
+    assert "could not reach its model runtime" in body["reply"]
+    assert "not completed" in body["reply"]
