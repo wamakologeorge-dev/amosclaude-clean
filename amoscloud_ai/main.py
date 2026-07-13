@@ -75,6 +75,18 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        log.exception("Unhandled request failure on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Amosclaud could not complete this request. The error was recorded in the server logs.",
+                "error": "internal_server_error",
+                "path": request.url.path,
+            },
+        )
+
     @app.middleware("http")
     async def block_suspended_accounts(request: Request, call_next):
         token = request.cookies.get("amos_session")
