@@ -128,7 +128,7 @@
 
       const health = await readResponse(healthResponse);
       const profile = await readResponse(profileResponse);
-      connectionStatus.textContent = `Runtime ready — ${profile.name || 'Amosclaud Autonomous Runtime'} is online. Server health: ${health.status || 'ok'}. Ask mode remains available through the platform chat service.`;
+      connectionStatus.textContent = `Runtime ready — ${profile.name || 'Amosclaud Autonomous Runtime'} is online. Server healthy: ${health.status || 'ok'}. Ask mode remains available through the platform chat service.`;
     } catch (error) {
       connectionStatus.textContent = `Platform needs attention: ${error.message}`;
     } finally {
