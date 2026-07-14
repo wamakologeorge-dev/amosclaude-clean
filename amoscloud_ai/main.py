@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from amoscloud_ai import __version__
+from amoscloud_ai import __version__, model_network
 from amoscloud_ai.api.routes import (
     account,
     admin,
@@ -156,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(storage.router, prefix="/api/v1")
     app.include_router(task_router.router, prefix="/api/v1")
     app.include_router(server_stations.router, prefix="/api/v1")
+    app.include_router(model_network.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
