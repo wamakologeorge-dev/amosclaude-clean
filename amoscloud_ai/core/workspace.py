@@ -27,11 +27,19 @@ class WorkspaceError(RuntimeError):
     pass
 
 
+def _default_workspace_root() -> Path:
+    configured = os.getenv("AMOSCLAUD_WORKSPACE")
+    if configured:
+        return Path(configured)
+    auth_db = Path(os.getenv("AUTH_DB_PATH", "data/auth.db"))
+    return auth_db.parent / "workspace"
+
+
 class WorkspaceEngine:
     """Folder-first source of truth for Amosclaud-owned content."""
 
     def __init__(self, root: Path | None = None):
-        self.root = (root or Path(os.getenv("AMOSCLAUD_WORKSPACE", "/data/workspace"))).resolve()
+        self.root = (root or _default_workspace_root()).resolve()
         self.initialize()
 
     def initialize(self) -> None:
