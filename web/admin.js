@@ -6,6 +6,9 @@
   const search = document.getElementById('admin-user-search');
   const refresh = document.getElementById('admin-refresh');
   const health = document.getElementById('admin-health');
+  const ownerRuntime = document.getElementById('owner-runtime');
+  const ownerServicesBody = document.getElementById('owner-services-body');
+  const ownerSettingsBody = document.getElementById('owner-settings-body');
 
   const escapeHtml = value => String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
   const formatBytes = bytes => {
@@ -43,6 +46,18 @@
     return response.json();
   }
 
+  async function ownerApi(path) {
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
+    if (response.status === 401) { window.location.href = '/login'; throw new Error('Not authenticated'); }
+    if (response.status === 403) return null;
+    if (!response.ok) {
+      let detail = `Request failed (${response.status})`;
+      try { detail = (await response.json()).detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
   function renderMetrics(data) {
     const items = [
       ['Users', data.users], ['Administrators', data.administrators], ['Suspended', data.suspended_users],
@@ -53,6 +68,37 @@
     ];
     metrics.innerHTML = items.map(([label, value]) => `<article class="admin-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('');
     health.textContent = data.status === 'operational' ? '● Operational' : escapeHtml(data.status);
+  }
+
+  function renderOwnerControl(access, model, services, settings) {
+    if (settings === null) {
+      ownerRuntime.closest('.admin-panel').hidden = true;
+      return;
+    }
+    ownerRuntime.closest('.admin-panel').hidden = false;
+    const runtimeItems = [
+      ['Access mode', access.mode],
+      ['Model runtime', model.status],
+      ['Active model', model.model || 'Not configured'],
+      ['Registered services', services.length],
+    ];
+    ownerRuntime.innerHTML = runtimeItems.map(([label, value]) => `<article class="admin-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join('');
+
+    ownerServicesBody.innerHTML = services.length ? services.map(service => `
+      <tr>
+        <td><strong>${escapeHtml(service.name)}</strong></td>
+        <td>${escapeHtml(service.kind)}</td>
+        <td>${service.healthy ? '<span class="admin-badge ok">Healthy</span>' : '<span class="admin-badge warn">Offline</span>'}</td>
+        <td>${formatDate(service.last_seen)}</td>
+      </tr>`).join('') : '<tr><td colspan="4">No services registered yet. The local model still uses the Docker internal address.</td></tr>';
+
+    ownerSettingsBody.innerHTML = settings.length ? settings.map(setting => `
+      <tr>
+        <td><strong>${escapeHtml(setting.name)}</strong></td>
+        <td>${escapeHtml(setting.value)}</td>
+        <td>${setting.is_secret ? '<span class="admin-badge admin">Secret</span>' : '<span class="admin-badge ok">Visible</span>'}</td>
+        <td>${formatDate(setting.updated_at)}</td>
+      </tr>`).join('') : '<tr><td colspan="4">No Vault settings saved yet. Bootstrap settings remain in the local .env file.</td></tr>';
   }
 
   function renderUsers(users) {
@@ -115,10 +161,20 @@
   async function loadUsers() { renderUsers(await api(`/api/v1/admin/users?search=${encodeURIComponent(search.value.trim())}`)); }
   async function loadRepositories() { renderRepositories(await api('/api/v1/admin/repositories')); }
   async function loadAudit() { renderAudit(await api('/api/v1/admin/audit')); }
+  async function loadOwnerControl() {
+    const access = await ownerApi('/api/v1/core/access');
+    const settings = await ownerApi('/api/v1/core/settings');
+    if (settings === null) { renderOwnerControl({}, {}, [], null); return; }
+    const [model, services] = await Promise.all([
+      ownerApi('/api/v1/core/model/diagnostics'),
+      ownerApi('/api/v1/core/services'),
+    ]);
+    renderOwnerControl(access, model, services, settings);
+  }
 
   async function loadAll() {
     refresh.disabled = true;
-    try { await Promise.all([loadOverview(), loadUsers(), loadRepositories(), loadAudit()]); }
+    try { await Promise.all([loadOverview(), loadUsers(), loadRepositories(), loadAudit(), loadOwnerControl()]); }
     catch (error) { toast(error.message, true); }
     finally { refresh.disabled = false; }
   }
