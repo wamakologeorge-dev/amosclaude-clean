@@ -30,5 +30,5 @@ export HOST="${HOST:-127.0.0.1}"
 export PORT="${PORT:-8000}"
 
 echo "Amosclaud Agent Server: http://localhost:$PORT"
-cd "$APP_ROOT"
+cd "$ROOT"
 exec "$VENV_PYTHON" -m uvicorn amoscloud_ai.main:app --host "$HOST" --port "$PORT"
