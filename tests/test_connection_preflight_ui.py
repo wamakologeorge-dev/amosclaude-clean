@@ -8,6 +8,7 @@ def test_workspace_exposes_connection_preflight_controls():
 
     assert 'id="btn-check-agent-connections"' in html
     assert 'id="agent-connection-status"' in html
-    assert "/api/v1/agent/github/preflight" in script
-    assert "GitHub ready" in script
-    assert "Model ready" in script
+    assert "/health" in script
+    assert "/api/v1/agent" in script
+    assert "Runtime ready" in script
+    assert "Server healthy" in script
