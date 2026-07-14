@@ -33,11 +33,11 @@ def _current_user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Ro
 
 
 @router.post("/run")
-def run_amo(body: AmoRunRequest, user: sqlite3.Row = Depends(_current_user)) -> dict:
+def run_amo(body: AmoRunRequest, owner=Depends(_owner_user)) -> dict:
     try:
         program = parse_amo(body.source)
         result = AmoRuntime().execute(program, input_text=body.input)
-        result["user_id"] = int(user["id"])
+        result["user_id"] = int(owner["id"])
         return result
     except AmoSyntaxError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
