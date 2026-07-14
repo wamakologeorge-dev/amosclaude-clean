@@ -42,7 +42,8 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "requests>=2.31,<3" \
         "httpx>=0.27,<1" \
         "aiofiles>=23.2,<25" \
-        "python-dotenv>=1.0,<2"
+        "python-dotenv>=1.0,<2" \
+        "PyYAML>=6.0,<7"
 
 COPY . /app
 

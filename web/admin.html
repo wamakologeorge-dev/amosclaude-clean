@@ -25,6 +25,19 @@
     <section id="admin-metrics" class="admin-metrics" aria-label="Platform metrics"></section>
 
     <section class="admin-panel">
+      <div class="admin-panel-head"><div><h2>Owner Control Center</h2><p>Private one-computer runtime, model, service registry, and encrypted configuration status.</p></div></div>
+      <div id="owner-runtime" class="admin-metrics" aria-label="Owner runtime status">
+        <article class="admin-metric"><span>Access mode</span><strong>Loading…</strong></article>
+        <article class="admin-metric"><span>Model runtime</span><strong>Loading…</strong></article>
+        <article class="admin-metric"><span>Active model</span><strong>Loading…</strong></article>
+        <article class="admin-metric"><span>Registered services</span><strong>Loading…</strong></article>
+      </div>
+      <div class="admin-table-wrap"><table><thead><tr><th>Service</th><th>Type</th><th>Status</th><th>Last seen</th></tr></thead><tbody id="owner-services-body"><tr><td colspan="4">Loading services…</td></tr></tbody></table></div>
+      <div class="admin-panel-head"><div><h3>Encrypted Vault</h3><p>Values remain masked in the browser. Only the owner account can read this list or change settings.</p></div></div>
+      <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Value</th><th>Secret</th><th>Updated</th></tr></thead><tbody id="owner-settings-body"><tr><td colspan="4">Loading Vault settings…</td></tr></tbody></table></div>
+    </section>
+
+    <section class="admin-panel">
       <div class="admin-panel-head"><div><h2>Users</h2><p>Promote administrators, suspend accounts, and review activity.</p></div><input id="admin-user-search" type="search" placeholder="Search users" /></div>
       <div class="admin-table-wrap"><table><thead><tr><th>User</th><th>Provider</th><th>Repositories</th><th>Sessions</th><th>Status</th><th>Actions</th></tr></thead><tbody id="admin-users-body"><tr><td colspan="6">Loading users…</td></tr></tbody></table></div>
     </section>
