@@ -38,6 +38,39 @@ paths:
       responses:
         '200': {description: Task state}
         '404': {description: Task not found}
+  /tasks/{task_id}/logs:
+    get:
+      operationId: getVerifiedTaskLogs
+      summary: Read task evidence events
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Ordered task event list}
+  /tasks/{task_id}/approve:
+    post:
+      operationId: approveVerifiedTask
+      summary: Approve a gated task for execution
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Task queued}
+  /tasks/{task_id}/cancel:
+    post:
+      operationId: cancelVerifiedTask
+      summary: Cancel unstarted work and refund reserved credits
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Task cancelled}
 components:
   securitySchemes:
     bearerApiKey:

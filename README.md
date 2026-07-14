@@ -55,6 +55,19 @@ python scripts/workspace_task.py package
 
 `.github/workflows/workspace-ci.yml` moves the same validation into GitHub Actions. Every pull request and protected branch update runs the complete test suite on Python 3.11 and 3.12, validates workspace automation, performs a security scan, builds the installable distribution, and stores the resulting wheel and source archive as workflow artifacts.
 
+## Five-minute API quickstart
+
+Create an Amosclaud customer key from `/api-access`, purchase prepaid agent credits, and submit work:
+
+```bash
+curl https://amosclaud.com/api/v1/tasks \
+  -H "Authorization: Bearer $AMOSCLAUD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Review my project and return evidence","mode":"review","execution_target":"cloud"}'
+```
+
+External tools can discover the public contract at `/.well-known/ai-plugin.json` and `/openapi.yaml`. A dependency-light Python client and runnable example live in `packages/sdk-python` and `examples/request_verified_work.py`.
+
 ### Amosclaud Memory Guard
 
 `amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
