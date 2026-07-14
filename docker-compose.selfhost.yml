@@ -40,6 +40,7 @@ services:
       PORT: "8000"
       ENVIRONMENT: production
       AMOSCLAUD_ACCESS_MODE: ${AMOSCLAUD_ACCESS_MODE:-local}
+      AMOSCLAUD_WORKSPACE: /workspace
       AUTH_COOKIE_SECURE: "false"
       AUTH_DB_PATH: /data/auth.db
       REPOSITORY_STORAGE_PATH: /data/repositories
@@ -48,10 +49,13 @@ services:
       AMOSCLAUD_MODEL_URL: http://model:11434
       AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
       AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
+      AMOSCLAUD_EXTERNAL_GITHUB: "false"
+      AMOSCLAUD_EXTERNAL_AI_KEYS: "false"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - amosclaud-data:/data
+      - ./AmosclaudWorkspace:/workspace
     depends_on:
       model:
         condition: service_healthy
