@@ -1,0 +1,58 @@
+openapi: 3.1.0
+info:
+  title: Amosclaud Developer API
+  version: 1.0.1
+  description: One authenticated API for verified software work.
+servers:
+  - url: https://amosclaud.com/api/v1
+security:
+  - bearerApiKey: []
+paths:
+  /tasks:
+    post:
+      operationId: createVerifiedTask
+      summary: Request verified software work
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskRequest'}
+      responses:
+        '202': {description: Task accepted}
+        '401': {description: Invalid Amosclaud API key}
+        '402': {description: Prepaid credits required}
+    get:
+      operationId: listVerifiedTasks
+      summary: List owned tasks
+      responses:
+        '200': {description: Owned task list}
+  /tasks/{task_id}:
+    get:
+      operationId: getVerifiedTask
+      summary: Read task state and artifacts
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Task state}
+        '404': {description: Task not found}
+components:
+  securitySchemes:
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: amos_live_...
+  schemas:
+    TaskRequest:
+      type: object
+      required: [objective]
+      properties:
+        objective: {type: string, minLength: 3}
+        repository: {type: [string, 'null']}
+        mode: {enum: [ask, build, test, review, deploy, monitor]}
+        delivery: {enum: [report, patch, pull_request]}
+        execution_target: {enum: [auto, cloud, self_hosted, github]}
+        runner_id: {type: [string, 'null']}
+        require_approval: {type: boolean, default: true}

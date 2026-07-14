@@ -6,6 +6,7 @@ Run directly:
 Or with uvicorn:
     uvicorn amoscloud_ai.main:app --host 0.0.0.0 --port 8000
 """
+
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -66,7 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
     storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     WorkspaceEngine()
-    log.info(f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}")
+    log.info(
+        f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}"
+    )
     yield
     log.info("Shutting down Amosclaud AI server")
 
@@ -147,16 +150,33 @@ def create_app() -> FastAPI:
     app.include_router(wifi.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
+    project_dir = web_dir.parent
     if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
     @app.get("/service-worker.js", include_in_schema=False)
     async def service_worker():
-        return FileResponse(web_dir / "service-worker.js", media_type="application/javascript", headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+        return FileResponse(
+            web_dir / "service-worker.js",
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+        )
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     async def web_manifest():
-        return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+        return FileResponse(
+            web_dir / "manifest.webmanifest",
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @app.get("/.well-known/ai-plugin.json", include_in_schema=False)
+    async def ai_plugin_manifest():
+        return FileResponse(web_dir / "ai-plugin.json", media_type="application/json")
+
+    @app.get("/openapi.yaml", include_in_schema=False)
+    async def developer_openapi_contract():
+        return FileResponse(project_dir / "openapi.yaml", media_type="application/yaml")
 
     @app.get("/api-access", include_in_schema=False)
     async def api_access_page():
@@ -239,4 +259,9 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    uvicorn.run("amoscloud_ai.main:app", host=settings.host, port=settings.port, reload=settings.environment == "development")
+    uvicorn.run(
+        "amoscloud_ai.main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.environment == "development",
+    )
