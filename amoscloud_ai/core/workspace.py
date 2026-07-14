@@ -120,6 +120,17 @@ class WorkspaceEngine:
             )
         return items
 
+    def read_text(self, relative: str) -> dict[str, str]:
+        path = self._safe_path(relative, must_exist=True)
+        if not path.is_file():
+            raise WorkspaceError("Workspace item is not a file")
+        if path.stat().st_size > 2 * 1024 * 1024:
+            raise WorkspaceError("Workspace item is too large to open")
+        return {
+            "path": path.relative_to(self.root).as_posix(),
+            "content": path.read_text(encoding="utf-8"),
+        }
+
     def read_item(self, relative: str) -> dict[str, Any]:
         path = self._safe_path(relative, must_exist=True)
         if not path.is_file():
