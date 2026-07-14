@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <title>Plans · Amosclaud</title>
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
+  <style>
+    :root{color-scheme:dark;--bg:#070b16;--card:#11182b;--line:#27324a;--text:#f7f9ff;--muted:#a9b4cb;--brand:#7c8cff;--good:#55d6a3}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#273365 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.5 Inter,system-ui,sans-serif}
+    a{color:inherit}.shell{max-width:1100px;margin:auto;padding:24px}.nav{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;gap:10px;align-items:center;text-decoration:none;font-weight:800}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--brand)}
+    .hero{text-align:center;padding:74px 10px 42px}.eyebrow{color:#9aa8ff;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.hero h1{font-size:clamp(36px,6vw,64px);line-height:1.05;margin:12px 0}.hero p{max-width:720px;margin:auto;color:var(--muted);font-size:19px}
+    .plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.card{background:linear-gradient(160deg,#141d34,#0e1527);border:1px solid var(--line);border-radius:24px;padding:30px;position:relative}.card.full{border-color:#7182ff;box-shadow:0 20px 80px #4050d72b}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#2a3765;color:#cdd4ff;font-size:13px;font-weight:700}
+    h2{font-size:28px;margin:18px 0 5px}.description{color:var(--muted);min-height:48px}.features{list-style:none;padding:0;margin:24px 0}.features li{padding:8px 0}.features li:before{content:"✓";color:var(--good);font-weight:900;margin-right:10px}.actions{display:grid;gap:10px}.button{border:1px solid var(--line);border-radius:12px;padding:13px 16px;background:#19233c;color:var(--text);font:inherit;font-weight:750;cursor:pointer;text-decoration:none;text-align:center}.button.primary{background:var(--brand);border-color:var(--brand)}.button:disabled{opacity:.5;cursor:not-allowed}
+    .activation{max-width:720px;margin:28px auto;background:#0e1527;border:1px solid var(--line);border-radius:18px;padding:22px}.activation form{display:flex;gap:10px}.activation input{flex:1;min-width:0;background:#080d19;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font:inherit}.status{text-align:center;color:var(--muted);min-height:24px;margin:20px}.security{text-align:center;color:var(--muted);font-size:14px;padding:15px 0 45px}
+    @media(max-width:760px){.plans{grid-template-columns:1fr}.hero{padding-top:50px}.activation form{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="nav"><a class="brand" href="/"><span class="mark">A</span>Amosclaud</a><a href="/">Return to workspace</a></nav>
+    <header class="hero">
+      <div class="eyebrow">Self-hosted agent provider</div>
+      <h1>Start locally. Unlock the full platform.</h1>
+      <p>Your source, repositories, and runtime stay under your control. Upgrade when you need the complete autonomous build and delivery toolset.</p>
+    </header>
+    <main>
+      <section class="plans" aria-label="Amosclaud plans">
+        <article class="card">
+          <span class="badge">Included</span><h2>Community</h2>
+          <p class="description">The folder-first foundation for personal self-hosted projects.</p>
+          <ul id="community-features" class="features"><li>Self-hosted folder server</li><li>Local repositories and storage</li><li>Bring your own model runtime</li></ul>
+          <a class="button" href="/">Continue with Community</a>
+        </article>
+        <article class="card full">
+          <span class="badge">Complete platform</span><h2>Full Package</h2>
+          <p class="description">The professional Amosclaud agent provider, builder, and server.</p>
+          <ul id="full-features" class="features"><li>Autonomous agent workflows</li><li>Advanced build, test, review, and deployment</li><li>External provider adapters</li><li>Commercial-use entitlement</li></ul>
+          <div class="actions">
+            <button class="button primary" data-checkout="monthly">Choose monthly billing</button>
+            <button class="button" data-checkout="annual">Choose annual billing</button>
+            <button id="manage-button" class="button" hidden>Manage subscription</button>
+          </div>
+        </article>
+      </section>
+      <section class="activation">
+        <h2>Already have a license?</h2>
+        <p class="description">Activate a Full Package key issued directly by Amosclaud.</p>
+        <form id="license-form"><input id="license-key" autocomplete="off" placeholder="AMOS-FULL-…" required><button class="button" type="submit">Activate</button></form>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p class="security">Payments are handled by Stripe. Amosclaud never stores card numbers. API keys and local project data remain on your server.</p>
+    </main>
+  </div>
+<script>
+const statusNode=document.querySelector("#status");
+const say=(message,error=false)=>{statusNode.textContent=message;statusNode.style.color=error?"#ff9ca8":"#a9b4cb"};
+async function post(path,body){
+  const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(typeof payload.detail==="string"?payload.detail:"Request could not be completed");
+  return payload;
+}
+document.querySelectorAll("[data-checkout]").forEach(button=>button.addEventListener("click",async()=>{
+  button.disabled=true;say("Opening secure checkout…");
+  try{const result=await post("/api/v1/billing/checkout",{interval:button.dataset.checkout});location.href=result.url}
+  catch(error){say(error.message,true);button.disabled=false}
+}));
+document.querySelector("#manage-button").addEventListener("click",async()=>{
+  try{const result=await post("/api/v1/billing/portal");location.href=result.url}catch(error){say(error.message,true)}
+});
+document.querySelector("#license-form").addEventListener("submit",async event=>{
+  event.preventDefault();say("Activating license…");
+  try{const result=await post("/api/v1/billing/license/activate",{key:document.querySelector("#license-key").value});say("Full Package activated.");showPlan(result)}
+  catch(error){say(error.message,true)}
+});
+function showPlan(plan){
+  if(plan.plan==="full"){say("Full Package is active.");document.querySelector("#manage-button").hidden=plan.source!=="stripe"}
+}
+(async()=>{
+  const query=new URLSearchParams(location.search);
+  if(query.get("checkout")==="success")say("Payment received. Waiting for secure subscription confirmation…");
+  try{const response=await fetch("/api/v1/billing/status");if(response.ok)showPlan(await response.json())}catch(_){}
+})();
+</script>
+</body>
+</html>
