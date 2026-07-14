@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from amoscloud_ai.models import PipelineStatus
+from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
 
 
 SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules"}
@@ -74,6 +75,56 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
         f"Mode: {mode}",
         f"Objective: {objective}",
     ]
+
+    if mode == "build":
+        try:
+            engineering = run_engineering_agent(
+                root,
+                objective,
+                workspace_path=metadata.get("workspace_path"),
+                apply_changes=bool(metadata.get("apply_changes", False)),
+            )
+            failed_engineering_checks = [
+                check for check in engineering.checks if not check.get("passed", False)
+            ]
+            checks.append(
+                CheckResult(
+                    name="engineering-agent",
+                    status="failed" if failed_engineering_checks else "passed",
+                    summary=engineering.summary,
+                    details=[
+                        f"Run: {engineering.run_id}",
+                        f"Applied: {engineering.applied}",
+                        *[
+                            f"{change.status}: {change.path} ({change.bytes_written} bytes)"
+                            for change in engineering.changes
+                        ],
+                        *engineering.evidence,
+                    ],
+                )
+            )
+            for check in engineering.checks:
+                checks.append(
+                    CheckResult(
+                        name=f"engineering-{check['name']}",
+                        status="passed" if check.get("passed") else "failed",
+                        summary=(
+                            f"{check['name']} passed."
+                            if check.get("passed")
+                            else f"{check['name']} failed."
+                        ),
+                        details=str(check.get("output", "")).splitlines()[-30:],
+                    )
+                )
+        except EngineeringAgentError as exc:
+            checks.append(
+                CheckResult(
+                    name="engineering-agent",
+                    status="failed",
+                    summary="The engineering loop stopped safely.",
+                    details=[str(exc)],
+                )
+            )
 
     checks.append(_git_status_check(root))
     checks.append(_conflict_marker_check(root))
