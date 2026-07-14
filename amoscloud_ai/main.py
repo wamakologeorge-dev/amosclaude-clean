@@ -43,6 +43,7 @@ from amoscloud_ai.api.routes import (
     organizations,
     passkey_signup,
     pipelines,
+    provider_api,
     pr_tasks,
     repositories,
     repository_templates,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
     app.include_router(billing.router, prefix="/api/v1")
+    app.include_router(provider_api.router, prefix="/api/v1")
     app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
