@@ -52,6 +52,7 @@ def initialize(root: Path, config: ModelConfig | None = None) -> dict:
         "checkpoints/versions",
         "logs",
         "logs/service",
+        "training/jobs",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
     config.save(root)

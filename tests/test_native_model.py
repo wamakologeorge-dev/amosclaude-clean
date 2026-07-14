@@ -88,6 +88,13 @@ def test_openai_compatible_server_uses_local_checkpoint(tmp_path, monkeypatch):
             "/v1/logs/verify", headers={"Authorization": "Bearer private-model-token"}
         )
         assert verified.json()["valid"] is True
+        assert client.get("/v1/training/licenses").status_code == 401
+        licenses = client.get(
+            "/v1/training/licenses",
+            headers={"Authorization": "Bearer private-model-token"},
+        )
+        assert licenses.status_code == 200
+        assert licenses.json()["approved"] is False
 
 
 def test_versioned_checkpoints_evaluate_promote_and_rollback(tmp_path):

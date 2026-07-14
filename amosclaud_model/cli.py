@@ -7,6 +7,7 @@ from pathlib import Path
 from amosclaud_model.config import model_root
 from amosclaud_model.model import FolderLanguageModel
 from amosclaud_model.service_log import ModelServiceLog
+from amosclaud_model.training_service import audit_dataset_licenses
 from amosclaud_model.workspace import import_folder, initialize
 
 
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     logs.add_argument("--event")
     commands.add_parser("log-summary", help="Summarize model service activity")
     commands.add_parser("verify-logs", help="Verify the tamper-evident event chain")
+    commands.add_parser("license-audit", help="Verify dataset rights before training")
     args = parser.parse_args(argv)
     root = (args.home or model_root()).expanduser().resolve()
     initialize(root)
@@ -76,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         result = ModelServiceLog(root).summary()
     elif args.command == "verify-logs":
         result = ModelServiceLog(root).verify()
+    elif args.command == "license-audit":
+        result = audit_dataset_licenses(root)
     else:
         result = {
             "root": str(root),

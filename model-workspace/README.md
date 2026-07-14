@@ -23,6 +23,7 @@ export AMOSCLAUD_MODEL_HOME="$HOME/.amosclaud/model"
 amosclaud-model init
 amosclaud-model import ./my-licensed-training-folder --license apache-2.0
 amosclaud-model import ./model-workspace/datasets/curated --license project-owned
+amosclaud-model license-audit
 amosclaud-model train
 amosclaud-model evaluate
 amosclaud-model checkpoints
@@ -67,3 +68,29 @@ Training writes immutable versions under `checkpoints/versions`, records SHA-256
 evaluation metrics in `checkpoints/index.jsonl`, and atomically promotes the new checkpoint.
 Use `amosclaud-model promote CHECKPOINT_ID` or `amosclaud-model rollback` to recover a known
 checkpoint. Evaluation examples belong in `datasets/eval` and are never included in training.
+
+## Protected training service
+
+The model server can train or evaluate in the background without blocking inference-control
+requests. Only one job runs at a time, and job state survives in `training/jobs/`.
+
+```bash
+curl -X POST http://127.0.0.1:8091/v1/training/jobs \
+  -H "Authorization: Bearer $AMOSCLAUD_MODEL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"operation":"train"}'
+curl http://127.0.0.1:8091/v1/training/jobs \
+  -H "Authorization: Bearer $AMOSCLAUD_MODEL_TOKEN"
+```
+
+The service refuses training until every imported dataset record has an approved rights label.
+Built-in labels are `project-owned`, `Amosclaud project-owned`, `MIT`, `Apache-2.0`,
+`BSD-2-Clause`, `BSD-3-Clause`, `CC0-1.0`, and `commercial-license`. A legal review can add
+organization-specific labels with `AMOSCLAUD_TRAINING_LICENSE_ALLOWLIST`. This allowlist is a
+technical control, not a substitute for actual permission.
+
+There is no universal training license. For every dataset, keep its license or signed contract,
+source URL, acquisition date, allowed purposes, attribution requirements, privacy review, and
+deletion obligations. Use `project-owned` only when Amosclaud owns the material or contributors
+have explicitly granted training rights. A public repository with no license remains
+`unverified` and must not be imported.

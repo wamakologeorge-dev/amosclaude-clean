@@ -14,6 +14,7 @@ from amosclaud_model import __version__
 from amosclaud_model.config import model_root
 from amosclaud_model.model import FolderLanguageModel, tokenize
 from amosclaud_model.service_log import ModelServiceLog
+from amosclaud_model.training_service import TrainingService, audit_dataset_licenses
 from amosclaud_model.workspace import initialize
 
 
@@ -29,6 +30,10 @@ class CompletionRequest(BaseModel):
     max_tokens: int = Field(default=512, ge=1, le=4096)
 
 
+class TrainingRequest(BaseModel):
+    operation: str = Field(default="train", pattern="^(train|evaluate)$")
+
+
 def _authorize(authorization: str | None = Header(default=None)) -> None:
     expected = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
     if expected and authorization != f"Bearer {expected}":
@@ -40,6 +45,7 @@ def create_app() -> FastAPI:
     initialize(root)
     model = FolderLanguageModel(root)
     service_log = ModelServiceLog(root)
+    training = TrainingService(root)
     app = FastAPI(title="Amosclaud Native Model", version=__version__)
 
     @app.get("/health")
@@ -135,6 +141,30 @@ def create_app() -> FastAPI:
     @app.get("/v1/logs/verify", dependencies=[Depends(_authorize)])
     def verify_logs() -> dict:
         return service_log.verify()
+
+    @app.get("/v1/training/licenses", dependencies=[Depends(_authorize)])
+    def training_licenses() -> dict:
+        return audit_dataset_licenses(root)
+
+    @app.post("/v1/training/jobs", status_code=202, dependencies=[Depends(_authorize)])
+    def create_training_job(body: TrainingRequest) -> dict:
+        try:
+            return training.submit(body.operation)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except RuntimeError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @app.get("/v1/training/jobs", dependencies=[Depends(_authorize)])
+    def training_jobs(limit: int = 25) -> dict:
+        return {"object": "list", "data": training.list(limit)}
+
+    @app.get("/v1/training/jobs/{job_id}", dependencies=[Depends(_authorize)])
+    def training_job(job_id: str) -> dict:
+        job = training.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Training job not found")
+        return job
 
     return app
 
