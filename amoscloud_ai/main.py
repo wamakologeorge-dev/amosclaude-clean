@@ -156,6 +156,10 @@ def create_app() -> FastAPI:
     async def web_manifest():
         return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
 
+    @app.get("/api-access", include_in_schema=False)
+    async def api_access_page():
+        return FileResponse(web_dir / "api-access.html")
+
     @app.get("/plans", include_in_schema=False)
     async def plans_page():
         return FileResponse(web_dir / "plans.html")
