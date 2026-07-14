@@ -31,18 +31,24 @@ jobs:
             --exclude 'dist' --exclude '__pycache__' --exclude '*.pyc' \
             --exclude 'tests' --exclude 'desktop' --exclude 'upload' \
             --exclude 'install-amosclaud.ps1' --exclude 'install-amosclaud.sh' \
+            --exclude 'install-virtual-memory.ps1' --exclude 'install-virtual-memory.sh' \
             ./ dist/Amosclaud/app/
-          cp install-amosclaud.ps1 install-amosclaud.sh dist/Amosclaud/
+          cp install-amosclaud.ps1 install-amosclaud.sh \
+            install-virtual-memory.ps1 install-virtual-memory.sh dist/Amosclaud/
           cat > dist/Amosclaud/START_HERE.txt <<'EOF'
           AMOSCLAUD SERVER
 
           Windows: right-click install-amosclaud.ps1 and run with PowerShell.
           Linux/macOS: open a terminal here and run ./install-amosclaud.sh.
 
+          Optional virtual memory:
+          Windows: run install-virtual-memory.ps1 to inspect, then use -Apply as Administrator.
+          Linux: run ./install-virtual-memory.sh to inspect, then use --apply with sudo.
+
           The installer starts local services and optionally pairs this computer
           with amosclaud.com using a private runner credential you provide.
           EOF
-          chmod +x dist/Amosclaud/install-amosclaud.sh
+          chmod +x dist/Amosclaud/install-amosclaud.sh dist/Amosclaud/install-virtual-memory.sh
           (cd dist && zip -qr Amosclaud-Server.zip Amosclaud)
           tar -C dist -czf dist/Amosclaud-Server.tar.gz Amosclaud
           (cd dist && sha256sum Amosclaud-Server.zip Amosclaud-Server.tar.gz > SHA256SUMS.txt)

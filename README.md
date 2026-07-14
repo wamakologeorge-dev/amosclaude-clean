@@ -15,6 +15,10 @@ The installer creates private local configuration, starts restartable Docker ser
 
 A `server-v*` tag builds `Amosclaud-Server.zip`, `Amosclaud-Server.tar.gz`, and `SHA256SUMS.txt` through `.github/workflows/server-release.yml`.
 
+### Amosclaud Memory Guard
+
+`amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
+
 ## Sign in from any device
 
 Amosclaud accounts work across phones, tablets, laptops, and desktop computers.
