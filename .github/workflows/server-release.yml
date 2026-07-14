@@ -1,0 +1,55 @@
+name: Amosclaud Server Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["server-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build app-style archives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p dist/Amosclaud/app dist/Amosclaud/AmosclaudWorkspace
+          rsync -a \
+            --exclude '.git' --exclude '.github' --exclude '.ipynb_checkpoints' \
+            --exclude 'dist' --exclude '__pycache__' --exclude '*.pyc' \
+            --exclude 'tests' --exclude 'desktop' --exclude 'upload' \
+            --exclude 'install-amosclaud.ps1' --exclude 'install-amosclaud.sh' \
+            ./ dist/Amosclaud/app/
+          cp install-amosclaud.ps1 install-amosclaud.sh dist/Amosclaud/
+          cat > dist/Amosclaud/START_HERE.txt <<'EOF'
+          AMOSCLAUD SERVER
+
+          Windows: right-click install-amosclaud.ps1 and run with PowerShell.
+          Linux/macOS: open a terminal here and run ./install-amosclaud.sh.
+
+          The installer starts local services and optionally pairs this computer
+          with amosclaud.com using a private runner credential you provide.
+          EOF
+          chmod +x dist/Amosclaud/install-amosclaud.sh
+          (cd dist && zip -qr Amosclaud-Server.zip Amosclaud)
+          tar -C dist -czf dist/Amosclaud-Server.tar.gz Amosclaud
+          (cd dist && sha256sum Amosclaud-Server.zip Amosclaud-Server.tar.gz > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: amosclaud-server-package
+          path: |
+            dist/Amosclaud-Server.zip
+            dist/Amosclaud-Server.tar.gz
+            dist/SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/Amosclaud-Server.zip
+            dist/Amosclaud-Server.tar.gz
+            dist/SHA256SUMS.txt
+          generate_release_notes: true

@@ -4,6 +4,17 @@ Amosclaud is a self-hosted development platform with native accounts, `@amosclau
 
 Current version: **1.0.1**
 
+## Install the server package
+
+GitHub server releases are app-style archives with one top-level `Amosclaud` folder, not a deeply nested repository checkout. Download the ZIP on Windows or the tarball on Linux/macOS, extract it, and run the installer once:
+
+- Windows: right-click `install-amosclaud.ps1`, then run it with PowerShell.
+- Linux/macOS: run `./install-amosclaud.sh` from a terminal.
+
+The installer creates private local configuration, starts restartable Docker services, and can pair the computer with the Amosclaud Task Router using a one-time private-runner credential. Paired runners connect outbound to `amosclaud.com`; downloads never execute silently and the service does not open an inbound remote-control port.
+
+A `server-v*` tag builds `Amosclaud-Server.zip`, `Amosclaud-Server.tar.gz`, and `SHA256SUMS.txt` through `.github/workflows/server-release.yml`.
+
 ## Sign in from any device
 
 Amosclaud accounts work across phones, tablets, laptops, and desktop computers.

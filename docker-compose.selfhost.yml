@@ -56,7 +56,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - amosclaud-data:/data
-      - ./AmosclaudWorkspace:/workspace
+      - ${AMOSCLAUD_WORKSPACE_PATH:-./AmosclaudWorkspace}:/workspace
     depends_on:
       model:
         condition: service_healthy
@@ -68,6 +68,20 @@ services:
       timeout: 8s
       retries: 30
       start_period: 20s
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["connected-runner"]
+    restart: unless-stopped
+    env_file:
+      - .env.runner
+    environment:
+      AMOSCLAUD_RUNNER_WORKSPACE: /runner-workspace
+    volumes:
+      - ${AMOSCLAUD_RUNNER_WORKSPACE:-./AmosclaudWorkspace}:/runner-workspace
+    command: ["python", "-m", "amoscloud_ai.runner_client"]
 
 volumes:
   amosclaud-data:
