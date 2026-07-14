@@ -40,6 +40,7 @@ services:
       PORT: "8000"
       ENVIRONMENT: production
       AMOSCLAUD_ACCESS_MODE: ${AMOSCLAUD_ACCESS_MODE:-local}
+      AMOSCLAUD_TRUST_CONTAINER_GATEWAY: "true"
       AMOSCLAUD_WORKSPACE: /workspace
       AUTH_COOKIE_SECURE: "false"
       AUTH_DB_PATH: /data/auth.db
