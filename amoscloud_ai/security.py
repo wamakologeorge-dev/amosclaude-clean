@@ -8,6 +8,9 @@ import time
 from collections import defaultdict, deque
 from threading import Lock
 
+import redis
+from redis.exceptions import RedisError
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -26,15 +29,27 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "900"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "20"))
-        self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes", "on"}
-        self.trust_container_gateway = os.getenv("AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false").strip().lower() in {
-            "1", "true", "yes", "on"
+        self.redis_url = os.getenv("REDIS_URL", "").strip()
+        self.production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
+        self.redis = (
+            redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None
+        )
+        self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
         }
+        self.trust_container_gateway = os.getenv(
+            "AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         configured = os.getenv(
             "TRUSTED_ORIGINS",
             "https://amosclaud.com,https://www.amosclaud.com,http://localhost,http://localhost:8000",
         )
-        self.trusted_origins = {item.strip().rstrip("/") for item in configured.split(",") if item.strip()}
+        self.trusted_origins = {
+            item.strip().rstrip("/") for item in configured.split(",") if item.strip()
+        }
 
     def _client_host(self, request: Request) -> str:
         if self.trust_proxy_headers:
@@ -72,6 +87,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
         cutoff = now - self.auth_window_seconds
         key = self._client_key(request)
+        if self.redis:
+            redis_key = f"amosclaud:rate:auth:{key}"
+            try:
+                count = self.redis.incr(redis_key)
+                if count == 1:
+                    self.redis.expire(redis_key, self.auth_window_seconds)
+                return count > self.auth_max_attempts
+            except RedisError:
+                if self.production:
+                    return True
         with self._lock:
             bucket = self._attempts[key]
             while bucket and bucket[0] < cutoff:
@@ -121,7 +146,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+        )
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; "
@@ -129,7 +156,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             "frame-ancestors 'none'; form-action 'self'",
         )
         if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
-            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        if request.url.path.startswith(("/api/", "/auth")) or request.url.path in {"/login", "/admin"}:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        if request.url.path.startswith(("/api/", "/auth")) or request.url.path in {
+            "/login",
+            "/admin",
+        }:
             response.headers.setdefault("Cache-Control", "no-store")
         return response

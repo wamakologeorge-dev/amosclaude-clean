@@ -105,9 +105,9 @@ async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
     del owner
     registry = _registry()
     endpoint = registry.resolve("amos://model") or _vault().get("AMOSCLAUD_MODEL_URL") or os.getenv(
-        "AMOSCLAUD_MODEL_URL", "http://model:11434"
+        "AMOSCLAUD_MODEL_URL", "http://model:8091"
     )
-    model = _vault().get("AMOSCLAUD_MODEL") or os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b")
+    model = _vault().get("AMOSCLAUD_MODEL") or os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     timeout = float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "15"))
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:

@@ -53,9 +53,11 @@ from amoscloud_ai.api.routes import (
     repositories,
     repository_templates,
     reviews,
+    server_stations,
     storage,
     task_router,
     wifi,
+    webhooks,
     workspaces,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
@@ -63,11 +65,17 @@ from amoscloud_ai.config import settings
 from amoscloud_ai.core.workspace import WorkspaceEngine
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
+from amoscloud_ai.db_migrations import run_migrations
+from amosclaud_metrics.integration import install_metrics
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Authentication creates its base tables lazily; migrations own all new schema.
+    with auth._connect():
+        pass
+    run_migrations(DB_PATH)
     repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
     storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     WorkspaceEngine()
@@ -89,6 +97,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(SecurityMiddleware)
+    install_metrics(app)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_hosts,
@@ -146,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(local_workspace.router, prefix="/api/v1")
     app.include_router(storage.router, prefix="/api/v1")
     app.include_router(task_router.router, prefix="/api/v1")
+    app.include_router(server_stations.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
@@ -153,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(core.router, prefix="/api/v1")
     app.include_router(amo_tokens.router, prefix="/api/v1")
     app.include_router(wifi.router, prefix="/api/v1")
+    app.include_router(webhooks.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
     project_dir = web_dir.parent

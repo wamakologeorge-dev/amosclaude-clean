@@ -288,12 +288,47 @@ Recommended production variables:
 AUTH_DB_PATH=/data/auth.db
 AUTH_COOKIE_SECURE=true
 AUTH_SESSION_DAYS=7
+AMOSCLAUD_MASTER_KEY=replace-with-a-stable-random-secret
+REDIS_URL=redis://redis:6379/0
 AMOS_MAIL_DOMAIN=amosclaud.com
 PASSKEY_RP_ID=amosclaud.com
 PASSKEY_ORIGIN=https://amosclaud.com
 PASSKEY_RP_NAME=Amosclaud
 PASSKEY_SETUP_MINUTES=10
 ```
+
+`AMOSCLAUD_MASTER_KEY` encrypts developer webhook secrets and must remain stable.
+`REDIS_URL` provides shared authentication limits when more than one API process is running.
+On startup, Amosclaud applies checksum-protected database migrations automatically.
+
+## Signed developer webhooks
+
+Signed webhooks notify external developer systems when routed work finishes. After signing in,
+create a webhook with `POST /api/v1/webhooks` and subscribe to `task.completed`, `task.failed`,
+or `task.cancelled`. The response shows the `whsec_...` signing secret once.
+
+Every delivery includes `X-Amosclaud-Event`, `X-Amosclaud-Event-Id`,
+`X-Amosclaud-Timestamp`, and `X-Amosclaud-Signature`. Verify the signature by calculating
+HMAC-SHA256 over `<timestamp>.<raw request body>` with the webhook secret and compare it to
+the `v1=...` header using a constant-time comparison. Production webhook URLs must use HTTPS.
+
+## Server Stations
+
+A Server Station is a self-hosted computer that securely claims Amosclaud tasks. Create and
+manage stations through `/api/v1/server-stations`. Registration and token rotation return a
+credential once; only its hash is retained. Stations report their version, capabilities, and
+system profile through the heartbeat endpoint. The control API marks stale stations offline,
+shows queued/running/completed/failed work totals, and lets the owner revoke a station without
+deleting its audit history. Revoking a station releases its unstarted assigned work so another
+station can claim it.
+
+## Metrics Server and SSY
+
+The dedicated metrics service runs on `127.0.0.1:9090` with Docker Compose. It exports
+Prometheus metrics at `/metrics`, a JSON operational view at `/v1/summary`, and the Amosclaud
+System Service Yard at `/v1/ssy`. SSY combines API, native-model, database, task, station,
+webhook, memory, disk, load, and uptime health without exposing user content or credentials.
+Set a stable `AMOSCLAUD_METRICS_TOKEN` in production.
 
 The persistent `/data` volume is required so user accounts, passkeys, sessions, mail, and other SQLite-backed records survive restarts and deployments.
 

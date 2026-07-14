@@ -407,6 +407,13 @@ def cancel_task(
         )
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+    from amoscloud_ai.api.routes.webhooks import dispatch_webhook_event
+
+    dispatch_webhook_event(
+        user_id,
+        "task.cancelled",
+        {"task_id": task_id, "status": "cancelled", "summary": "Task cancelled."},
+    )
     return _task_dict(row)
 
 
@@ -593,4 +600,17 @@ def complete_task(
         updated = db.execute(
             "SELECT * FROM global_tasks WHERE id=?", (task_id,)
         ).fetchone()
+    from amoscloud_ai.api.routes.webhooks import dispatch_webhook_event
+
+    dispatch_webhook_event(
+        int(row["user_id"]),
+        f"task.{body.status}",
+        {
+            "task_id": task_id,
+            "status": body.status,
+            "summary": body.summary.strip(),
+            "artifacts": body.artifacts,
+            "pull_request_url": body.pull_request_url,
+        },
+    )
     return _task_dict(updated)
