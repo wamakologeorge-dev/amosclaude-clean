@@ -11,7 +11,8 @@ requires-python = ">=3.11"
 authors = [
   {name = "Amosclaud Team", email = "support@amosclaud.com"}
 ]
-license = {text = "Proprietary"}
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE", "LICENSE-COMMERCIAL.txt"]
 keywords = ["amosclaud", "amcl", "programming-language", "fastapi", "cicd", "repositories", "deployment", "pwa"]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -33,6 +34,7 @@ Documentation = "https://amosclaud.com/docs"
 amosclaud = "amoscloud_ai.main:main"
 amosclaud-runner = "amoscloud_ai.runner_client:main"
 amosclaud-memory = "amoscloud_ai.virtual_memory:main"
+amosclaud-workspace = "amoscloud_ai.workspace_control:main"
 amcl = "amosclaud_language.cli:main"
 
 [tool.setuptools.packages.find]
@@ -40,3 +42,14 @@ include = ["amoscloud_ai*", "amosclaud_language*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100

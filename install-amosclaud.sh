@@ -7,7 +7,9 @@ cd "$app_root"
 
 command -v docker >/dev/null || { echo "Docker is required. Install and start Docker, then retry." >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "The Docker engine is not running." >&2; exit 1; }
-mkdir -p "$install_root/AmosclaudWorkspace"
+workspace="$install_root/AmosclaudWorkspace"
+[[ "$app_root" != "$install_root" ]] && workspace="$install_root/workspace/projects"
+mkdir -p "$workspace"
 touch .env.runner
 chmod 600 .env.runner
 
@@ -20,7 +22,7 @@ if [[ ! -f .env ]]; then
     "AMOSCLAUD_ACCESS_MODE=local" "AMOSCLAUD_MODEL=qwen2.5-coder:3b" > .env
 fi
 grep -q '^AMOSCLAUD_WORKSPACE_PATH=' .env || printf '%s\n' \
-  "AMOSCLAUD_WORKSPACE_PATH=$install_root/AmosclaudWorkspace" >> .env
+  "AMOSCLAUD_WORKSPACE_PATH=$workspace" >> .env
 
 profile=()
 read -r -p "Connect this computer to amosclaud.com as a private runner? (y/N) " connect
@@ -32,7 +34,7 @@ if [[ "$connect" =~ ^[Yy]$ ]]; then
   printf '%s\n' "AMOSCLAUD_API_URL=https://amosclaud.com" "AMOSCLAUD_RUNNER_ID=$runner_id" \
     "AMOSCLAUD_RUNNER_TOKEN=$runner_token" > .env.runner
   grep -q '^AMOSCLAUD_RUNNER_WORKSPACE=' .env || printf '%s\n' \
-    "AMOSCLAUD_RUNNER_WORKSPACE=$install_root/AmosclaudWorkspace" >> .env
+    "AMOSCLAUD_RUNNER_WORKSPACE=$workspace" >> .env
   profile=(--profile connected-runner)
 fi
 

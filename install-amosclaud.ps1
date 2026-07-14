@@ -10,7 +10,8 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 docker info *> $null
 if ($LASTEXITCODE -ne 0) { throw "Docker Desktop is installed but its engine is not running." }
 
-New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot "AmosclaudWorkspace") | Out-Null
+$WorkspaceRelative = if ($AppRoot -ne $InstallRoot) { "workspace\projects" } else { "AmosclaudWorkspace" }
+New-Item -ItemType Directory -Force -Path (Join-Path $InstallRoot $WorkspaceRelative) | Out-Null
 if (-not (Test-Path ".env.runner")) { New-Item -ItemType File ".env.runner" | Out-Null }
 if (-not (Test-Path ".env")) {
     $owner = Read-Host "Owner email"
@@ -25,7 +26,7 @@ if (-not (Test-Path ".env")) {
         "AMOSCLAUD_MODEL=qwen2.5-coder:3b"
     ) | Set-Content -Encoding UTF8 ".env"
 }
-$workspace = (Resolve-Path (Join-Path $InstallRoot "AmosclaudWorkspace")).Path
+$workspace = (Resolve-Path (Join-Path $InstallRoot $WorkspaceRelative)).Path
 if (-not (Select-String -Quiet -Path ".env" -Pattern '^AMOSCLAUD_WORKSPACE_PATH=')) {
     Add-Content ".env" "AMOSCLAUD_WORKSPACE_PATH=$workspace"
 }

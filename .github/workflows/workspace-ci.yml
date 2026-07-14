@@ -1,0 +1,79 @@
+name: Amosclaud Workspace CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "agent/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workspace-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install declared dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Install Amosclaud
+        run: python -m pip install -e .
+      - name: Compile Python sources
+        run: python -m compileall -q amoscloud_ai amosclaud_language scripts
+      - name: Run complete test suite
+        run: python scripts/workspace_task.py test
+
+  quality:
+    name: Workspace quality and security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install black bandit
+      - name: Check workspace automation formatting
+        run: >-
+          python -m black --check
+          amoscloud_ai/workspace_control.py
+          amoscloud_ai/virtual_memory.py
+          scripts/workspace_task.py
+          tests/test_workspace_control.py
+          tests/test_virtual_memory.py
+      - name: Scan privileged workspace automation
+        run: >-
+          python -m bandit -q
+          amoscloud_ai/workspace_control.py
+          amoscloud_ai/virtual_memory.py
+          scripts/workspace_task.py
+      - name: Validate shell entrypoints
+        run: bash -n amosclaud-workspace.sh install-amosclaud.sh install-virtual-memory.sh
+
+  build:
+    name: Build installable package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install build
+      - run: python scripts/workspace_task.py build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: amosclaud-python-package
+          path: dist/*
