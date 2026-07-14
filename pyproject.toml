@@ -31,6 +31,7 @@ Documentation = "https://amosclaud.com/docs"
 
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"
+amosclaud-runner = "amoscloud_ai.runner_client:main"
 amcl = "amosclaud_language.cli:main"
 
 [tool.setuptools.packages.find]
