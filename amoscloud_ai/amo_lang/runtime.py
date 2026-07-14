@@ -28,6 +28,7 @@ class AmoInstruction:
     opcode: str
     arguments: tuple[str, ...]
     line: int
+    allowed_capabilities: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -54,6 +55,7 @@ class AmoProgram:
 def parse_amo(source: str) -> AmoProgram:
     program = AmoProgram()
     saw_header = False
+    saw_statement = False
 
     for line_number, raw in enumerate(source.splitlines(), start=1):
         stripped = raw.strip()
@@ -68,9 +70,16 @@ def parse_amo(source: str) -> AmoProgram:
             continue
 
         keyword, *args = tokens
+        if not saw_statement:
+            saw_statement = True
+            if keyword != "amo" or args != ["1"]:
+                raise AmoSyntaxError("Amo program must begin with 'amo 1'")
+
         if keyword == "amo":
             if args != ["1"]:
                 raise AmoSyntaxError(f"Line {line_number}: expected 'amo 1'")
+            if saw_header:
+                raise AmoSyntaxError(f"Line {line_number}: duplicate 'amo 1' header")
             saw_header = True
         elif keyword == "agent":
             _require_count(args, 1, line_number, "agent <name>")
@@ -89,7 +98,9 @@ def parse_amo(source: str) -> AmoProgram:
                 raise AmoSyntaxError(f"Line {line_number}: expected remember <key> <value>")
             program.memory[args[0]] = args[1]
         elif keyword in {"say", "list", "read", "write", "recall"}:
-            program.instructions.append(AmoInstruction(keyword, tuple(args), line_number))
+            program.instructions.append(
+                AmoInstruction(keyword, tuple(args), line_number, frozenset(program.capabilities))
+            )
         else:
             raise AmoSyntaxError(f"Line {line_number}: unknown instruction '{keyword}'")
 
@@ -119,24 +130,51 @@ class AmoRuntime:
         output: list[str] = []
         trace: list[dict[str, Any]] = []
 
-        for instruction in program.instructions:
-            started = datetime.now(timezone.utc).isoformat()
-            result = self._execute_instruction(program, instruction, memory, output)
-            trace.append(
+        try:
+            for instruction in program.instructions:
+                started = datetime.now(timezone.utc).isoformat()
+                try:
+                    result = self._execute_instruction(program, instruction, memory, output)
+                except Exception as exc:
+                    trace.append(
+                        {
+                            "line": instruction.line,
+                            "opcode": instruction.opcode,
+                            "status": "failed",
+                            "started_at": started,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    )
+                    raise
+                trace.append(
+                    {
+                        "line": instruction.line,
+                        "opcode": instruction.opcode,
+                        "status": "completed",
+                        "started_at": started,
+                        "result": result,
+                    }
+                )
+        except Exception:
+            self.workspace.append_activity(
                 {
-                    "line": instruction.line,
-                    "opcode": instruction.opcode,
-                    "status": "completed",
-                    "started_at": started,
-                    "result": result,
+                    "action": "amo.executed",
+                    "agent": program.name,
+                    "goal": program.goal,
+                    "instructions": len(program.instructions),
+                    "status": "failed",
+                    "trace": trace,
                 }
             )
+            raise
 
         event = {
             "action": "amo.executed",
             "agent": program.name,
             "goal": program.goal,
             "instructions": len(program.instructions),
+            "status": "completed",
+            "trace": trace,
         }
         self.workspace.append_activity(event)
         return {
@@ -185,7 +223,7 @@ class AmoRuntime:
             self._require(program, "workspace.read", instruction.line)
             if len(args) != 2:
                 raise AmoSyntaxError(f"Line {instruction.line}: expected read <path> <memory-key>")
-            item = self.workspace.read_item(args[0])
+            item = self.workspace.read_text(args[0])
             memory[args[1]] = item["content"]
             return {"path": item["path"], "stored_as": args[1]}
 
@@ -209,5 +247,7 @@ class AmoRuntime:
 
     @staticmethod
     def _require(program: AmoProgram, capability: str, line: int) -> None:
-        if capability not in program.capabilities:
+        instruction = next((item for item in program.instructions if item.line == line), None)
+        capabilities = instruction.allowed_capabilities if instruction is not None else frozenset()
+        if capability not in capabilities:
             raise PermissionError(f"Line {line}: capability '{capability}' was not declared")
