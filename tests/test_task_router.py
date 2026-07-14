@@ -114,13 +114,31 @@ def test_cancel_refunds_reserved_credits(monkeypatch, tmp_path):
 
 
 def test_runner_cannot_claim_another_accounts_task(monkeypatch, tmp_path):
-    _account(monkeypatch, tmp_path)
-    runner = request(
-        "POST", "/api/v1/runners", json={"name": "Owner runner"}, cookies={"amos_session": "test"}
-    ).json()
+    first_user = _account(monkeypatch, tmp_path)
+    created = request(
+        "POST",
+        "/api/v1/tasks",
+        json={"objective": "Private owner task", "mode": "build", "require_approval": False},
+        cookies={"amos_session": "first"},
+    )
+    assert created.status_code == 202
+
     with auth._connect() as db:
-        db.execute("UPDATE task_runners SET user_id=999 WHERE id=?", (runner["id"],))
+        cursor = db.execute(
+            "INSERT INTO users(name,email,provider,is_admin,created_at) VALUES (?,?,?,0,?)",
+            ("Second User", "second@example.com", "password", datetime.now(timezone.utc).isoformat()),
+        )
+        second_user = int(cursor.lastrowid)
         db.commit()
+    assert second_user != first_user
+    monkeypatch.setattr(
+        task_router,
+        "get_user_from_session",
+        lambda _token: {"id": second_user, "name": "Second User"},
+    )
+    runner = request(
+        "POST", "/api/v1/runners", json={"name": "Second runner"}, cookies={"amos_session": "second"}
+    ).json()
     response = request(
         "POST",
         f"/api/v1/runners/{runner['id']}/claim",
