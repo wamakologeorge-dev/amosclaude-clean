@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
+from amoscloud_ai.api.routes.billing import require_full_package
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
@@ -97,6 +98,11 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
         raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}")
+
+    user = get_user_from_session(request.cookies.get("amos_session"))
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to run the Amosclaud agent")
+    require_full_package(int(user["id"]))
 
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
