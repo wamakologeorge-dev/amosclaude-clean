@@ -1,6 +1,6 @@
 # Amosclaud Agent Server — Portable Folder
 
-Amosclaud is distributed as a complete, self-hosted folder. It owns its virtual environment, configuration, repositories, storage, database, agent runtime, and server process.
+Amosclaud is distributed as a complete, self-hosted folder. It owns its virtual environment, configuration, repositories, storage, database, workspace, and server process.
 
 ## Requirements
 
@@ -11,8 +11,9 @@ Amosclaud is distributed as a complete, self-hosted folder. It owns its virtual 
 ## Start on Windows
 
 1. Extract the ZIP archive to a permanent folder.
-2. Double-click `start-windows.bat`.
-3. Open `http://localhost:8000`.
+2. Open `START_HERE.html`.
+3. Double-click `start-windows.bat`.
+4. Open `http://localhost:8000`.
 
 ## Start on Linux or macOS
 
@@ -23,38 +24,25 @@ chmod +x start-local.sh
 
 Then open `http://localhost:8000`.
 
-## Agent provider modes
+## Activate the Amosclaud agent
 
-Amosclaud remains the provider identity presented to clients.
+The local platform starts without a secret. The AI agent requires a customer Amosclaud API key with purchased agent-credit balance.
 
-### Self-hosted model runtime
-
-Configure an OpenAI-compatible local endpoint in `.env`:
-
-```env
-AMOSCLAUD_MODEL_URL=http://127.0.0.1:11434
-AMOSCLAUD_MODEL=qwen2.5-coder:3b
-```
-
-### Optional API-key adapters
-
-External adapters are disabled by default. To enable one intentionally:
+1. Sign in at `https://amosclaud.com/api-access`.
+2. Purchase an agent-credit pack.
+3. Create an installation API key.
+4. Copy the key into this folder's `.env`:
 
 ```env
-AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS=true
-ANTHROPIC_API_KEY=your-key
-ANTHROPIC_MODEL=your-model
+AMOSCLAUD_API_URL=https://amosclaud.com
+AMOSCLAUD_API_KEY=amos_live_your_customer_key
 ```
 
-or:
+The complete key is displayed once. Do not commit it or share the configured folder.
 
-```env
-AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS=true
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=your-model
-```
+## Owner provider infrastructure
 
-Never commit the populated `.env` file or share a release folder containing private keys.
+Private self-hosted model credentials and third-party provider keys belong only on Amosclaud-controlled provider infrastructure. They are never embedded in customer archives.
 
 ## Folder ownership
 
