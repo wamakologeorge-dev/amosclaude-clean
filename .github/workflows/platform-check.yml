@@ -29,6 +29,7 @@ jobs:
             amoscloud-ai:test
 
       - name: Wait for container health
+        id: health
         run: |
           ready=false
           for i in $(seq 1 20); do
@@ -40,7 +41,18 @@ jobs:
             echo "Waiting... attempt $i"
             sleep 3
           done
-          [ "$ready" = "true" ] || exit 1
+          if [ "$ready" != "true" ]; then
+            docker logs amoscloud_test > platform-container.log 2>&1 || true
+            exit 1
+          fi
+
+      - name: Upload platform diagnostics
+        if: failure() && steps.health.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-container-diagnostics
+          path: platform-container.log
+          if-no-files-found: warn
 
       - name: Verify secured dashboard flow
         run: |
