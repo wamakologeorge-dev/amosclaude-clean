@@ -20,6 +20,7 @@ router = APIRouter(tags=["global-task-router"])
 
 TaskMode = Literal["ask", "build", "test", "review", "deploy", "monitor"]
 TaskDelivery = Literal["report", "patch", "pull_request"]
+ExecutionTarget = Literal["auto", "cloud", "self_hosted", "github"]
 TaskStatus = Literal[
     "queued", "awaiting_approval", "running", "completed", "failed", "cancelled"
 ]
@@ -31,6 +32,7 @@ class TaskCreate(BaseModel):
     mode: TaskMode = "build"
     delivery: TaskDelivery = "pull_request"
     runner_id: str | None = Field(default=None, max_length=64)
+    execution_target: ExecutionTarget = "auto"
     require_approval: bool = True
     metadata: dict = Field(default_factory=dict)
 
@@ -90,6 +92,7 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
             mode TEXT NOT NULL,
             delivery TEXT NOT NULL,
             status TEXT NOT NULL,
+            execution_target TEXT NOT NULL DEFAULT 'auto',
             runner_id TEXT,
             require_approval INTEGER NOT NULL DEFAULT 1,
             reserved_credits INTEGER NOT NULL,
@@ -120,6 +123,11 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
             ON global_tasks(status, created_at);
         """
     )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(global_tasks)").fetchall()}
+    if "execution_target" not in columns:
+        db.execute(
+            "ALTER TABLE global_tasks ADD COLUMN execution_target TEXT NOT NULL DEFAULT 'auto'"
+        )
     db.commit()
 
 
@@ -205,6 +213,13 @@ def create_task(
     user_id = _actor(amos_session, authorization)
     task_id = "task_" + uuid.uuid4().hex
     cost = _task_cost(body)
+    execution_target = body.execution_target
+    if execution_target == "auto":
+        execution_target = "self_hosted" if body.runner_id else ("github" if body.repository else "cloud")
+    if execution_target == "self_hosted" and not body.runner_id:
+        raise HTTPException(status_code=422, detail="Select a private runner for self-hosted execution")
+    if execution_target == "github" and not body.repository:
+        raise HTTPException(status_code=422, detail="Select a connected GitHub repository")
 
     with _connect() as db:
         _ensure_schema(db)
@@ -223,9 +238,9 @@ def create_task(
         status = "awaiting_approval" if body.require_approval else "queued"
         db.execute(
             """INSERT INTO global_tasks
-               (id,user_id,repository,objective,mode,delivery,status,runner_id,
+               (id,user_id,repository,objective,mode,delivery,status,execution_target,runner_id,
                 require_approval,reserved_credits,metadata_json,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 task_id,
                 user_id,
@@ -234,6 +249,7 @@ def create_task(
                 body.mode,
                 body.delivery,
                 status,
+                execution_target,
                 body.runner_id,
                 int(body.require_approval),
                 cost,
@@ -244,6 +260,9 @@ def create_task(
         _event(db, task_id, "task.created", f"Task accepted in {status} state.", {"credits_reserved": cost})
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+    if status == "queued" and execution_target in {"cloud", "github"}:
+        from amoscloud_ai.cloud_task_runner import dispatch_cloud_task
+        dispatch_cloud_task(task_id)
     return _task_dict(row)
 
 
@@ -321,6 +340,9 @@ def approve_task(
         _event(db, task_id, "task.approved", "Task approved and queued.")
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+    if row["execution_target"] in {"cloud", "github"}:
+        from amoscloud_ai.cloud_task_runner import dispatch_cloud_task
+        dispatch_cloud_task(task_id)
     return _task_dict(row)
 
 
@@ -443,7 +465,8 @@ def claim_task(
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             """SELECT * FROM global_tasks
-               WHERE user_id=? AND status='queued' AND (runner_id IS NULL OR runner_id=?)
+               WHERE user_id=? AND status='queued' AND execution_target='self_hosted'
+                 AND (runner_id IS NULL OR runner_id=?)
                ORDER BY created_at LIMIT 1""",
             (runner["user_id"], runner_id),
         ).fetchone()
