@@ -87,6 +87,14 @@ External tools can discover the public contract at `/.well-known/ai-plugin.json`
 
 `amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
 
+### Progressive agent memory
+
+The engineering agent maintains durable searchable learning under `.amosclaud/memory/`.
+Every completed run recalls relevant earlier lessons, records its verified outcome, and updates
+a daily learning summary. Memory grows with available storage instead of being loaded entirely
+into RAM. Inspect it with `amosclaud-agent-memory stats`, `recent`, `recall`, or `consolidate`.
+Set `AMOSCLAUD_AGENT_MEMORY_HOME` when the memory should live on a separate persistent volume.
+
 ## Sign in from any device
 
 Amosclaud accounts work across phones, tablets, laptops, and desktop computers.
