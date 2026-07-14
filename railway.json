@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "startCommand": "sh -c 'AMOSCLAUD_ACCESS_MODE=${AMOSCLAUD_ACCESS_MODE:-public} ENVIRONMENT=${ENVIRONMENT:-production} TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-true} uvicorn amoscloud_ai.main:app --host 0.0.0.0 --port ${PORT:-8000}'",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
