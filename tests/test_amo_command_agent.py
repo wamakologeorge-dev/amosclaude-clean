@@ -72,3 +72,25 @@ def test_command_agent_never_allows_workspace_escape(tmp_path: Path):
 
     assert result["completed"][0]["status"] == "failed"
     assert not (tmp_path / "outside.txt").exists()
+
+
+def test_command_agent_does_not_scan_write_content_for_actions(tmp_path: Path):
+    agent = AmosclaudCommandAgent(WorkspaceEngine(tmp_path / "workspace"))
+
+    plan = agent.plan(
+        'Write file "notes/message.txt" with Please read file "notes/secret.txt"'
+    )
+
+    assert [step.action for step in plan.steps] == ["workspace.write"]
+
+
+def test_command_agent_preserves_multiline_file_content(tmp_path: Path):
+    workspace = WorkspaceEngine(tmp_path / "workspace")
+    agent = AmosclaudCommandAgent(workspace)
+    content = "first line\nsecond line"
+    plan = agent.plan(f'Write file "notes/multiline.txt" with {content}')
+
+    result = agent.execute(plan)
+
+    assert result["status"] == "completed"
+    assert (workspace.root / "notes" / "multiline.txt").read_text(encoding="utf-8") == content
