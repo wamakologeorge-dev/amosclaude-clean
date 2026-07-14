@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 from collections import defaultdict, deque
@@ -11,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from amoscloud_ai.core.access import AccessPolicy
+from amoscloud_ai.core.access import AccessMode, AccessPolicy
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -26,6 +27,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "900"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "20"))
         self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes", "on"}
+        self.trust_container_gateway = os.getenv("AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
         configured = os.getenv(
             "TRUSTED_ORIGINS",
             "https://amosclaud.com,https://www.amosclaud.com,http://localhost,http://localhost:8000",
@@ -38,6 +42,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             if forwarded:
                 return forwarded
         return request.client.host if request.client else "unknown"
+
+    def _network_allowed(self, policy: AccessPolicy, host: str) -> bool:
+        if policy.allows_client(host):
+            return True
+        if policy.mode is not AccessMode.LOCAL or not self.trust_container_gateway:
+            return False
+        try:
+            return ipaddress.ip_address(host).is_private
+        except ValueError:
+            return False
 
     def _client_key(self, request: Request) -> str:
         return f"{self._client_host(request)}:{request.url.path}"
@@ -73,7 +87,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         except ValueError as exc:
             return JSONResponse({"detail": str(exc)}, status_code=503)
 
-        if not policy.allows_client(self._client_host(request)):
+        client_host = self._client_host(request)
+        if not self._network_allowed(policy, client_host):
             return JSONResponse(
                 {
                     "detail": "This Amosclaud installation does not allow access from this network.",
