@@ -27,17 +27,34 @@ from amoscloud_ai.api.routes.task_router import _ensure_schema, _event, _json, _
 from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
 
 
-def _finish(task_id: str, status: str, summary: str, *, artifacts=None, pull_request_url=None, evidence=None) -> None:
+def _finish(
+    task_id: str,
+    status: str,
+    summary: str,
+    *,
+    artifacts=None,
+    pull_request_url=None,
+    evidence=None,
+) -> None:
     with _connect() as db:
         _ensure_schema(db)
-        task = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+        task = db.execute(
+            "SELECT * FROM global_tasks WHERE id=?", (task_id,)
+        ).fetchone()
         if not task or task["status"] not in {"queued", "running"}:
             return
         db.execute(
             """UPDATE global_tasks
                SET status=?,summary=?,artifacts_json=?,pull_request_url=?,finished_at=?
                WHERE id=?""",
-            (status, summary[:20_000], _json(artifacts or []), pull_request_url, _now(), task_id),
+            (
+                status,
+                summary[:20_000],
+                _json(artifacts or []),
+                pull_request_url,
+                _now(),
+                task_id,
+            ),
         )
         if status == "failed":
             credit_tokens(
@@ -61,7 +78,9 @@ def _start(task_id: str) -> dict | None:
     with _connect() as db:
         _ensure_schema(db)
         db.execute("BEGIN IMMEDIATE")
-        task = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+        task = db.execute(
+            "SELECT * FROM global_tasks WHERE id=?", (task_id,)
+        ).fetchone()
         if not task or task["status"] != "queued":
             db.rollback()
             return None
@@ -72,7 +91,12 @@ def _start(task_id: str) -> dict | None:
         if cursor.rowcount != 1:
             db.rollback()
             return None
-        _event(db, task_id, "task.started", f"Started on {task['execution_target']} execution target.")
+        _event(
+            db,
+            task_id,
+            "task.started",
+            f"Started on {task['execution_target']} execution target.",
+        )
         db.commit()
         return dict(task)
 
@@ -80,7 +104,9 @@ def _start(task_id: str) -> dict | None:
 def _repository(task: dict) -> dict:
     repository = (task.get("repository") or "").strip()
     if not repository:
-        raise RuntimeError("A connected repository is required for this execution target")
+        raise RuntimeError(
+            "A connected repository is required for this execution target"
+        )
     with github_db() as db:
         row = db.execute(
             """SELECT * FROM repositories
@@ -89,7 +115,9 @@ def _repository(task: dict) -> dict:
             (task["user_id"], repository, repository),
         ).fetchone()
         if not row or not row["github_full_name"]:
-            raise RuntimeError("Connect and import this GitHub repository before routing work")
+            raise RuntimeError(
+                "Connect and import this GitHub repository before routing work"
+            )
         connection = _connection(db, int(task["user_id"]))
         token = _decrypt_token(connection["access_token_ciphertext"])
     return {**dict(row), "token": token}
@@ -127,7 +155,11 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
     tempdir = Path(tempfile.mkdtemp(prefix=f"amosclaud-{task['id']}-"))
     token = repository.pop("token")
     branch = f"amosclaud/task-{task['id'].removeprefix('task_')[:12]}"
-    base = repository.get("github_default_branch") or repository.get("default_branch") or "main"
+    base = (
+        repository.get("github_default_branch")
+        or repository.get("default_branch")
+        or "main"
+    )
     evidence: list[str] = []
     artifacts: list[dict] = []
     pull_request_url: str | None = None
@@ -139,7 +171,9 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
             depth=1,
         )
         repo = Repo(tempdir)
-        repo.remote("origin").set_url(_public_remote_url(repository["github_full_name"]))
+        repo.remote("origin").set_url(
+            _public_remote_url(repository["github_full_name"])
+        )
         repo.git.checkout("-b", branch)
 
         if task["mode"] in {"ask", "review", "monitor"}:
@@ -156,12 +190,18 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
             for check in run.checks
         )
         if any(not check.get("passed", False) for check in run.checks):
-            raise RuntimeError("Verification failed after applying the proposed changes")
+            raise RuntimeError(
+                "Verification failed after applying the proposed changes"
+            )
 
         diff = repo.git.diff("--", ".")
         if diff:
             artifacts.append(
-                {"type": "patch", "name": f"{task['id']}.patch", "content": diff[:200_000]}
+                {
+                    "type": "patch",
+                    "name": f"{task['id']}.patch",
+                    "content": diff[:200_000],
+                }
             )
 
         if task["delivery"] == "pull_request" and repo.is_dirty(untracked_files=True):
@@ -171,7 +211,9 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
                 config.set_value("user", "email", "agent@amosclaud.com")
             repo.index.commit(f"Amosclaud: {task['objective'][:72]}")
             remote = repo.remote("origin")
-            remote.set_url(_authenticated_clone_url(repository["github_full_name"], token))
+            remote.set_url(
+                _authenticated_clone_url(repository["github_full_name"], token)
+            )
             try:
                 repo.git.push("--set-upstream", "origin", branch)
             finally:
@@ -201,7 +243,9 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
 
         return run.summary, artifacts, pull_request_url, evidence
     except (GitCommandError, httpx.HTTPError, EngineeringAgentError) as exc:
-        raise RuntimeError(f"Connected GitHub execution failed safely: {type(exc).__name__}") from exc
+        raise RuntimeError(
+            f"Connected GitHub execution failed safely: {type(exc).__name__}"
+        ) from exc
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
 
@@ -225,7 +269,12 @@ def execute_cloud_task(task_id: str) -> None:
             evidence=evidence,
         )
     except Exception as exc:
-        _finish(task_id, "failed", str(exc))
+        _finish(
+            task_id,
+            "failed",
+            f"Execution stopped safely: {type(exc).__name__}",
+            evidence=["Reserved credits were refunded."],
+        )
 
 
 def dispatch_cloud_task(task_id: str) -> None:

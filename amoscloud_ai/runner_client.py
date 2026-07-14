@@ -19,7 +19,9 @@ class RunnerConfigurationError(RuntimeError):
 
 
 def _configuration() -> tuple[str, str, str, Path, float]:
-    api_url = os.getenv("AMOSCLAUD_API_URL", "https://amosclaud.com").strip().rstrip("/")
+    api_url = (
+        os.getenv("AMOSCLAUD_API_URL", "https://amosclaud.com").strip().rstrip("/")
+    )
     runner_id = os.getenv("AMOSCLAUD_RUNNER_ID", "").strip()
     runner_token = os.getenv("AMOSCLAUD_RUNNER_TOKEN", "").strip()
     workspace_raw = os.getenv("AMOSCLAUD_RUNNER_WORKSPACE", "").strip()
@@ -29,8 +31,12 @@ def _configuration() -> tuple[str, str, str, Path, float]:
         )
     workspace = Path(workspace_raw).expanduser().resolve()
     if not workspace.is_dir():
-        raise RunnerConfigurationError("AMOSCLAUD_RUNNER_WORKSPACE must be an existing folder")
-    interval = max(5.0, min(float(os.getenv("AMOSCLAUD_RUNNER_POLL_SECONDS", "15")), 300.0))
+        raise RunnerConfigurationError(
+            "AMOSCLAUD_RUNNER_WORKSPACE must be an existing folder"
+        )
+    interval = max(
+        5.0, min(float(os.getenv("AMOSCLAUD_RUNNER_POLL_SECONDS", "15")), 300.0)
+    )
     return api_url, runner_id, runner_token, workspace, interval
 
 
@@ -167,7 +173,10 @@ def main() -> None:
                 if worked:
                     continue
             except httpx.HTTPStatusError as exc:
-                print(f"Runner API rejected the request: {exc.response.status_code}", file=sys.stderr)
+                print(
+                    f"Runner API rejected the request: {exc.response.status_code}",
+                    file=sys.stderr,
+                )
             except httpx.HTTPError as exc:
                 print(f"Runner network error: {type(exc).__name__}", file=sys.stderr)
             time.sleep(interval)

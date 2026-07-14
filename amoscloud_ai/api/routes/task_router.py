@@ -39,7 +39,9 @@ class TaskCreate(BaseModel):
 
 class RunnerCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    capabilities: list[str] = Field(default_factory=lambda: ["ask", "build", "test", "review"], max_length=30)
+    capabilities: list[str] = Field(
+        default_factory=lambda: ["ask", "build", "test", "review"], max_length=30
+    )
     labels: list[str] = Field(default_factory=list, max_length=30)
 
 
@@ -66,8 +68,7 @@ def _hash(value: str) -> str:
 
 
 def _ensure_schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS task_runners (
             id TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
@@ -121,9 +122,10 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
             ON global_tasks(user_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_global_tasks_status_created
             ON global_tasks(status, created_at);
-        """
-    )
-    columns = {row[1] for row in db.execute("PRAGMA table_info(global_tasks)").fetchall()}
+        """)
+    columns = {
+        row[1] for row in db.execute("PRAGMA table_info(global_tasks)").fetchall()
+    }
     if "execution_target" not in columns:
         db.execute(
             "ALTER TABLE global_tasks ADD COLUMN execution_target TEXT NOT NULL DEFAULT 'auto'"
@@ -133,11 +135,13 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
 
 def _json(value) -> str:
     import json
+
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
 def _loads(value: str | None, fallback):
     import json
+
     if not value:
         return fallback
     try:
@@ -160,12 +164,16 @@ def _actor(
 
 
 def _task_cost(body: TaskCreate) -> int:
-    base = {"ask": 1, "test": 3, "review": 4, "build": 5, "monitor": 2, "deploy": 6}[body.mode]
+    base = {"ask": 1, "test": 3, "review": 4, "build": 5, "monitor": 2, "deploy": 6}[
+        body.mode
+    ]
     context = min(5, len(body.objective) // 2_000)
     return base + context
 
 
-def _event(db: sqlite3.Connection, task_id: str, event_type: str, message: str, details=None) -> None:
+def _event(
+    db: sqlite3.Connection, task_id: str, event_type: str, message: str, details=None
+) -> None:
     db.execute(
         """INSERT INTO global_task_events(task_id,event_type,message,details_json,created_at)
            VALUES (?,?,?,?,?)""",
@@ -190,7 +198,9 @@ def _owned_task(db: sqlite3.Connection, task_id: str, user_id: int) -> sqlite3.R
     return row
 
 
-def _runner_auth(db: sqlite3.Connection, runner_id: str, authorization: str | None) -> sqlite3.Row:
+def _runner_auth(
+    db: sqlite3.Connection, runner_id: str, authorization: str | None
+) -> sqlite3.Row:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Runner credential required")
     raw = authorization.removeprefix("Bearer ").strip()
@@ -200,7 +210,9 @@ def _runner_auth(db: sqlite3.Connection, runner_id: str, authorization: str | No
         (runner_id, _hash(raw)),
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=401, detail="Runner credential is invalid or revoked")
+        raise HTTPException(
+            status_code=401, detail="Runner credential is invalid or revoked"
+        )
     return row
 
 
@@ -215,11 +227,19 @@ def create_task(
     cost = _task_cost(body)
     execution_target = body.execution_target
     if execution_target == "auto":
-        execution_target = "self_hosted" if body.runner_id else ("github" if body.repository else "cloud")
+        execution_target = (
+            "self_hosted"
+            if body.runner_id
+            else ("github" if body.repository else "cloud")
+        )
     if execution_target == "self_hosted" and not body.runner_id:
-        raise HTTPException(status_code=422, detail="Select a private runner for self-hosted execution")
+        raise HTTPException(
+            status_code=422, detail="Select a private runner for self-hosted execution"
+        )
     if execution_target == "github" and not body.repository:
-        raise HTTPException(status_code=422, detail="Select a connected GitHub repository")
+        raise HTTPException(
+            status_code=422, detail="Select a connected GitHub repository"
+        )
 
     with _connect() as db:
         _ensure_schema(db)
@@ -257,11 +277,18 @@ def create_task(
                 _now(),
             ),
         )
-        _event(db, task_id, "task.created", f"Task accepted in {status} state.", {"credits_reserved": cost})
+        _event(
+            db,
+            task_id,
+            "task.created",
+            f"Task accepted in {status} state.",
+            {"credits_reserved": cost},
+        )
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
     if status == "queued" and execution_target in {"cloud", "github"}:
         from amoscloud_ai.cloud_task_runner import dispatch_cloud_task
+
         dispatch_cloud_task(task_id)
     return _task_dict(row)
 
@@ -342,6 +369,7 @@ def approve_task(
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
     if row["execution_target"] in {"cloud", "github"}:
         from amoscloud_ai.cloud_task_runner import dispatch_cloud_task
+
         dispatch_cloud_task(task_id)
     return _task_dict(row)
 
@@ -357,7 +385,9 @@ def cancel_task(
         _ensure_schema(db)
         row = _owned_task(db, task_id, user_id)
         if row["status"] not in {"queued", "awaiting_approval"}:
-            raise HTTPException(status_code=409, detail="Only unstarted tasks can be cancelled")
+            raise HTTPException(
+                status_code=409, detail="Only unstarted tasks can be cancelled"
+            )
         db.execute(
             "UPDATE global_tasks SET status='cancelled',cancelled_at=? WHERE id=?",
             (_now(), task_id),
@@ -369,7 +399,12 @@ def cancel_task(
             reason="task_cancel_refund",
             reference=task_id,
         )
-        _event(db, task_id, "task.cancelled", "Task cancelled and reserved credits refunded.")
+        _event(
+            db,
+            task_id,
+            "task.cancelled",
+            "Task cancelled and reserved credits refunded.",
+        )
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
     return _task_dict(row)
@@ -382,7 +417,9 @@ def register_runner(
 ) -> dict:
     user = get_user_from_session(amos_session)
     if not user:
-        raise HTTPException(status_code=401, detail="Sign in to register a private runner")
+        raise HTTPException(
+            status_code=401, detail="Sign in to register a private runner"
+        )
     runner_id = "runner_" + uuid.uuid4().hex
     raw_token = "amos_runner_" + secrets.token_urlsafe(36)
     with _connect() as db:
@@ -426,7 +463,11 @@ def list_runners(amos_session: str | None = Cookie(default=None)) -> list[dict]:
         ).fetchall()
     return [
         {
-            **dict(row),
+            **{
+                key: value
+                for key, value in dict(row).items()
+                if key not in {"capabilities_json", "labels_json"}
+            },
             "capabilities": _loads(row["capabilities_json"], []),
             "labels": _loads(row["labels_json"], []),
         }
@@ -491,7 +532,9 @@ def claim_task(
             (_now(), runner_id),
         )
         db.commit()
-        row = db.execute("SELECT * FROM global_tasks WHERE id=?", (row["id"],)).fetchone()
+        row = db.execute(
+            "SELECT * FROM global_tasks WHERE id=?", (row["id"],)
+        ).fetchone()
     return _task_dict(row)
 
 
@@ -547,5 +590,7 @@ def complete_task(
             (_now(), runner_id),
         )
         db.commit()
-        updated = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+        updated = db.execute(
+            "SELECT * FROM global_tasks WHERE id=?", (task_id,)
+        ).fetchone()
     return _task_dict(updated)
