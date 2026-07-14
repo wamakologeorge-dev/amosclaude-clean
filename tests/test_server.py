@@ -103,7 +103,7 @@ def test_full_package_user_can_run_autonomous_agent(monkeypatch):
     assert data["objective"] == "verify server health"
     assert data["pipeline_id"]
     assert data["status"] in ("pending", "success", "failed")
-    assert data["reply"].startswith("Amosclaud Autonomous Server:")
+    assert data["reply"].startswith("Amosclaud Autonomous Runtime:")
     assert data["checks"]
     assert data["logs"]
 
