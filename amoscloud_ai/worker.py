@@ -194,6 +194,20 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
         raise self.retry(exc=exc, countdown=5)
 
 
+
+@celery_app.task(name="amoscloud_ai.run_global_task", bind=True, max_retries=2)
+def run_global_task(self, task_id: str) -> dict[str, str]:
+    """Execute one approved Global Task Router job."""
+    try:
+        from amoscloud_ai.cloud_task_runner import execute_cloud_task
+
+        execute_cloud_task(task_id)
+        return {"task_id": task_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Global task %s failed in worker", task_id)
+        raise self.retry(exc=exc, countdown=10)
+
+
 def main() -> None:
     """Start the Celery worker when invoked as a module."""
     argv = ["worker", "--loglevel", settings.log_level.lower(), "-c", "2"]
