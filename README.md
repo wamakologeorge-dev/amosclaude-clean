@@ -95,6 +95,18 @@ a daily learning summary. Memory grows with available storage instead of being l
 into RAM. Inspect it with `amosclaud-agent-memory stats`, `recent`, `recall`, or `consolidate`.
 Set `AMOSCLAUD_AGENT_MEMORY_HOME` when the memory should live on a separate persistent volume.
 
+### Self-hosted model network
+
+The website control plane does not need a permanent inbound connection to a model computer.
+Paired Server Stations advertise `model.inference` only when their local model health check is
+ready. The control plane encrypts each short-lived request, an authorized owner station claims it
+over its outbound connection, and the prompt and response ciphertext are cleared after delivery.
+
+Configure the control plane with `AMOSCLAUD_NETWORK_OWNER_USER_ID` and a stable
+`AMOSCLAUD_MASTER_KEY`. On the paired station, configure its station credential plus the local
+`AMOSCLAUD_MODEL_URL` and matching `AMOSCLAUD_MODEL_TOKEN`, then run `amosclaud-runner`. The old
+fixed model URL remains a fallback for a single-machine installation.
+
 ## Sign in from any device
 
 Amosclaud accounts work across phones, tablets, laptops, and desktop computers.

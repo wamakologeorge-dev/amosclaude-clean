@@ -41,7 +41,9 @@ def _model_headers() -> dict[str, str]:
     return headers
 
 
-def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+def _amosclaud_api_reply(
+    history: list[dict[str, str]], system_prompt: str
+) -> ProviderResult | None:
     endpoint = os.getenv("AMOSCLAUD_API_URL", "").strip().rstrip("/")
     api_key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
     if not endpoint or not api_key:
@@ -89,6 +91,24 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
 
 def probe() -> dict[str, object]:
     """Perform a real inference request before declaring the agent ready."""
+    from amoscloud_ai.model_network import network_status, request_inference
+
+    network = network_status()
+    if network.get("ready"):
+        result = request_inference(
+            [{"role": "user", "content": "Reply with exactly: AMOSCLAUD_AGENT_READY"}],
+            "You are the Amosclaud readiness probe. Follow the exact response instruction.",
+            timeout=20,
+        )
+        reply_text = result["reply"].strip() if result else ""
+        return {
+            "ready": "AMOSCLAUD_AGENT_READY" in reply_text,
+            "provider": "amosclaud",
+            "runtime": "model-network",
+            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+            "stations": network.get("ready_stations", 0),
+            "detail": reply_text[:200],
+        }
     endpoint = _model_endpoint()
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     if not endpoint:
@@ -122,7 +142,9 @@ def probe() -> dict[str, object]:
         }
 
 
-def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+def _external_adapter_reply(
+    history: list[dict[str, str]], system_prompt: str
+) -> ProviderResult | None:
     if not _external_adapters_enabled():
         return None
 
@@ -165,6 +187,15 @@ def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -
 
 def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
     """Return a response from the first-party Amosclaud provider."""
+    from amoscloud_ai.model_network import request_inference
+
+    network_result = request_inference(history, system_prompt)
+    if network_result:
+        return ProviderResult(
+            reply=network_result["reply"],
+            runtime=f"model-network:{network_result.get('runtime', 'station')}",
+        )
+
     api_result = _amosclaud_api_reply(history, system_prompt)
     if api_result:
         return api_result
@@ -193,6 +224,8 @@ def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
 
 def status() -> dict[str, object]:
     """Return safe provider status without exposing credentials."""
+    from amoscloud_ai.model_network import network_status
+
     return {
         "provider": "amosclaud",
         "amosclaud_api_configured": bool(
@@ -202,4 +235,5 @@ def status() -> dict[str, object]:
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
         "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+        "model_network": network_status(),
     }
