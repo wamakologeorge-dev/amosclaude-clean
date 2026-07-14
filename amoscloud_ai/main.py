@@ -22,18 +22,22 @@ from amoscloud_ai.api.routes import (
     account,
     admin,
     agent,
+    agent_readiness,
+    amo_tokens,
     amos_mail,
     amos_secure_code,
     auth,
     chat,
     community,
     copilot,
+    core,
     deployments,
     feed,
     first_party_chat,
     github_repositories,
     github_travel,
     health,
+    local_workspace,
     organizations,
     passkey_signup,
     pipelines,
@@ -47,6 +51,7 @@ from amoscloud_ai.api.routes import (
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
+from amoscloud_ai.core.workspace import WorkspaceEngine
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
 
@@ -56,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
     storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    WorkspaceEngine()
     log.info(f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}")
     yield
     log.info("Shutting down Amosclaud AI server")
@@ -66,7 +72,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Self-hosted CI/CD, deployment automation, authentication, native repository hosting, organizations, workspaces, storage, Amos Mail, developer community, and managed Wi-Fi.",
+        description="Folder-first, self-hosted Amosclaud platform for local AI, repositories, projects, tasks, knowledge, storage, and automation.",
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         lifespan=lifespan,
@@ -110,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(agent_readiness.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(pr_tasks.router, prefix="/api/v1")
     app.include_router(github_travel.router, prefix="/api/v1")
@@ -121,11 +128,14 @@ def create_app() -> FastAPI:
     app.include_router(repository_templates.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
     app.include_router(workspaces.router, prefix="/api/v1")
+    app.include_router(local_workspace.router, prefix="/api/v1")
     app.include_router(storage.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(core.router, prefix="/api/v1")
+    app.include_router(amo_tokens.router, prefix="/api/v1")
     app.include_router(wifi.router, prefix="/api/v1")
 
     web_dir = Path(__file__).resolve().parent.parent / "web"
@@ -139,6 +149,10 @@ def create_app() -> FastAPI:
     @app.get("/manifest.webmanifest", include_in_schema=False)
     async def web_manifest():
         return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/download", include_in_schema=False)
+    async def download_page():
+        return FileResponse(web_dir / "download.html")
 
     @app.get("/feed", include_in_schema=False)
     async def public_feed():
