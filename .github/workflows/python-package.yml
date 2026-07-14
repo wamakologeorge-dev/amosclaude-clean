@@ -57,7 +57,7 @@ jobs:
           exit "$status"
       - name: Upload backend test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-${{ matrix.python-version }}-diagnostics
           path: pytest-${{ matrix.python-version }}.log
