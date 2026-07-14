@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import shutil
+
 # Only resolved, fixed executables are used; shell execution is never enabled.
 import subprocess  # nosec B404
 from dataclasses import asdict, dataclass
@@ -96,9 +97,7 @@ def inspect_memory() -> MemoryPlan:
     if managed:
         action = f"Use the {system} installer to review the OS-managed pagefile or swap policy."
     elif swap_total >= recommendation:
-        action = (
-            "Existing swap meets the Amosclaud recommendation; no change is needed."
-        )
+        action = "Existing swap meets the Amosclaud recommendation; no change is needed."
     else:
         action = f"Create {recommendation // GIB} GiB at {LINUX_SWAPFILE} with explicit approval."
     return MemoryPlan(
@@ -123,10 +122,7 @@ def apply_linux_swap(size_bytes: int) -> None:
         raise VirtualMemoryError("Swap size must be between 2 and 16 GiB")
     if LINUX_SWAPFILE.exists():
         raise VirtualMemoryError(f"Refusing to replace existing {LINUX_SWAPFILE}")
-    commands = {
-        name: shutil.which(name)
-        for name in ("fallocate", "mkswap", "swapon", "swapoff")
-    }
+    commands = {name: shutil.which(name) for name in ("fallocate", "mkswap", "swapon", "swapoff")}
     for command, executable in commands.items():
         if not executable:
             raise VirtualMemoryError(f"Required host command is missing: {command}")
@@ -137,12 +133,8 @@ def apply_linux_swap(size_bytes: int) -> None:
             check=True,
         )  # nosec B603
         LINUX_SWAPFILE.chmod(0o600)
-        subprocess.run(
-            [commands["mkswap"], str(LINUX_SWAPFILE)], check=True
-        )  # nosec B603
-        subprocess.run(
-            [commands["swapon"], str(LINUX_SWAPFILE)], check=True
-        )  # nosec B603
+        subprocess.run([commands["mkswap"], str(LINUX_SWAPFILE)], check=True)  # nosec B603
+        subprocess.run([commands["swapon"], str(LINUX_SWAPFILE)], check=True)  # nosec B603
         fstab = Path("/etc/fstab")
         entry = f"{LINUX_SWAPFILE} none swap sw 0 0"
         current = fstab.read_text(encoding="utf-8") if fstab.exists() else ""
@@ -150,29 +142,21 @@ def apply_linux_swap(size_bytes: int) -> None:
             with fstab.open("a", encoding="utf-8") as handle:
                 handle.write(f"\n{entry}\n")
     except Exception:
-        subprocess.run(
-            [commands["swapoff"], str(LINUX_SWAPFILE)], check=False
-        )  # nosec B603
+        subprocess.run([commands["swapoff"], str(LINUX_SWAPFILE)], check=False)  # nosec B603
         LINUX_SWAPFILE.unlink(missing_ok=True)
         raise
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="amosclaud-memory")
-    parser.add_argument(
-        "command", choices=["status", "apply"], nargs="?", default="status"
-    )
+    parser.add_argument("command", choices=["status", "apply"], nargs="?", default="status")
     parser.add_argument("--size-gib", type=int)
-    parser.add_argument(
-        "--yes", action="store_true", help="Confirm a privileged host change"
-    )
+    parser.add_argument("--yes", action="store_true", help="Confirm a privileged host change")
     args = parser.parse_args()
     plan = inspect_memory()
     if args.command == "apply":
         if not args.yes:
-            parser.error(
-                "apply requires --yes because it changes host storage and /etc/fstab"
-            )
+            parser.error("apply requires --yes because it changes host storage and /etc/fstab")
         apply_linux_swap((args.size_gib or plan.recommended_swap_bytes // GIB) * GIB)
         plan = inspect_memory()
     print(json.dumps(asdict(plan), indent=2))
