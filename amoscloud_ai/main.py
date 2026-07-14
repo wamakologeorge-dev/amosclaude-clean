@@ -49,6 +49,7 @@ from amoscloud_ai.api.routes import (
     repository_templates,
     reviews,
     storage,
+    task_router,
     wifi,
     workspaces,
 )
@@ -136,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(workspaces.router, prefix="/api/v1")
     app.include_router(local_workspace.router, prefix="/api/v1")
     app.include_router(storage.router, prefix="/api/v1")
+    app.include_router(task_router.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
@@ -159,6 +161,10 @@ def create_app() -> FastAPI:
     @app.get("/api-access", include_in_schema=False)
     async def api_access_page():
         return FileResponse(web_dir / "api-access.html")
+
+    @app.get("/tasks", include_in_schema=False)
+    async def tasks_page():
+        return FileResponse(web_dir / "tasks.html")
 
     @app.get("/plans", include_in_schema=False)
     async def plans_page():
