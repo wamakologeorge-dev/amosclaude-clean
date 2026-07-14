@@ -4,6 +4,74 @@ Amosclaud is a self-hosted development platform with native accounts, `@amosclau
 
 Current version: **1.0.1**
 
+## Install the server package
+
+GitHub server releases are app-style archives with one top-level `Amosclaud` folder, not a deeply nested repository checkout. Download the ZIP on Windows or the tarball on Linux/macOS, extract it, and run the installer once:
+
+- Windows: right-click `install-amosclaud.ps1`, then run it with PowerShell.
+- Linux/macOS: run `./install-amosclaud.sh` from a terminal.
+
+The installer creates private local configuration, starts restartable Docker services, and can pair the computer with the Amosclaud Task Router using a one-time private-runner credential. Paired runners connect outbound to `amosclaud.com`; downloads never execute silently and the service does not open an inbound remote-control port.
+
+A `server-v*` tag builds `Amosclaud-Server.zip`, `Amosclaud-Server.tar.gz`, and `SHA256SUMS.txt` through `.github/workflows/server-release.yml`.
+
+The downloaded package is an automated workspace with this stable layout:
+
+```text
+Amosclaud/
+├── app/                 # managed application internals
+├── config/              # configuration templates
+├── data/                # durable application data
+├── logs/                # local operational logs
+├── workspace/projects/  # developer-controlled projects
+├── PACKAGE_MANIFEST.json
+└── amosclaud-workspace.*
+```
+
+Use `amosclaud-workspace doctor`, `start`, `stop`, `status`, or `logs` instead of navigating through application source folders. The installer creates missing workspace directories automatically and preserves the existing `AmosclaudWorkspace` location for source-based installations.
+
+### Build and dependency management
+
+- `pyproject.toml` defines the installable Amosclaud package, console commands, and build backend.
+- `requirements.txt` declares supported runtime dependencies.
+- `requirements-dev.txt` declares reproducible test, lint, security, and release tooling.
+- `Makefile` provides short Unix developer commands.
+- `python scripts/workspace_task.py <task>` provides the same core automation on Windows, Linux, and macOS.
+
+```bash
+make setup
+make build
+make test
+make quality
+make package
+```
+
+On Windows, the equivalent complete build is:
+
+```powershell
+python scripts/workspace_task.py setup
+python scripts/workspace_task.py package
+```
+
+`.github/workflows/workspace-ci.yml` moves the same validation into GitHub Actions. Every pull request and protected branch update runs the complete test suite on Python 3.11 and 3.12, validates workspace automation, performs a security scan, builds the installable distribution, and stores the resulting wheel and source archive as workflow artifacts.
+
+## Five-minute API quickstart
+
+Create an Amosclaud customer key from `/api-access`, purchase prepaid agent credits, and submit work:
+
+```bash
+curl https://amosclaud.com/api/v1/tasks \
+  -H "Authorization: Bearer $AMOSCLAUD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Review my project and return evidence","mode":"review","execution_target":"cloud"}'
+```
+
+External tools can discover the public contract at `/.well-known/ai-plugin.json` and `/openapi.yaml`. A dependency-light Python client and runnable example live in `packages/sdk-python` and `examples/request_verified_work.py`.
+
+### Amosclaud Memory Guard
+
+`amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
+
 ## Sign in from any device
 
 Amosclaud accounts work across phones, tablets, laptops, and desktop computers.

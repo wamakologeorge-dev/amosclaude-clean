@@ -1,36 +1,5 @@
-import os
-from setuptools import setup, find_packages
+"""Compatibility shim; package metadata is authoritative in pyproject.toml."""
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+from setuptools import setup
 
-requirements = []
-if os.path.exists("requirements.txt"):
-    with open("requirements.txt", "r", encoding="utf-8") as fh:
-        requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
-
-setup(
-    name="amoscloud-ai",
-    version="1.0.0",
-    author="Amosclaud Team",
-    author_email="dev@amosclaud.ai",
-    description="Professional CI/CD & Deployment Automation System",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/wamakologeorge-dev/amosclaude-clean",
-    packages=find_packages(exclude=["tests*"]),
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Programming Language :: Python :: 3.9",
-        "License :: OSI Approved :: MIT License",
-    ],
-    python_requires=">=3.9",
-    install_requires=requirements,
-    entry_points={
-        "console_scripts": [
-            "amoscloud-ai=amoscloud_ai.cli:main",
-            "amosclaud-platform=src.platform.platform_cli:main",
-        ],
-    },
-)
+setup()
