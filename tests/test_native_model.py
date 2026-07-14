@@ -77,9 +77,17 @@ def test_openai_compatible_server_uses_local_checkpoint(tmp_path, monkeypatch):
                 "messages": [{"role": "user", "content": "test"}],
             },
         )
-    assert response.status_code == 200
-    assert response.json()["amosclaud"]["runtime"] == "folder-native"
-    assert response.json()["choices"][0]["message"]["content"]
+        assert response.status_code == 200
+        assert response.json()["amosclaud"]["runtime"] == "folder-native"
+        assert response.json()["choices"][0]["message"]["content"]
+        logs = client.get("/v1/logs", headers={"Authorization": "Bearer private-model-token"})
+        assert logs.status_code == 200
+        assert logs.json()["data"][0]["event"] == "inference.completed"
+        assert client.get("/v1/logs/verify").status_code == 401
+        verified = client.get(
+            "/v1/logs/verify", headers={"Authorization": "Bearer private-model-token"}
+        )
+        assert verified.json()["valid"] is True
 
 
 def test_versioned_checkpoints_evaluate_promote_and_rollback(tmp_path):

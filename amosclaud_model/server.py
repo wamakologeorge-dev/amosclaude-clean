@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 from amosclaud_model import __version__
 from amosclaud_model.config import model_root
 from amosclaud_model.model import FolderLanguageModel, tokenize
+from amosclaud_model.service_log import ModelServiceLog
 from amosclaud_model.workspace import initialize
 
 
@@ -37,6 +39,7 @@ def create_app() -> FastAPI:
     root = model_root()
     initialize(root)
     model = FolderLanguageModel(root)
+    service_log = ModelServiceLog(root)
     app = FastAPI(title="Amosclaud Native Model", version=__version__)
 
     @app.get("/health")
@@ -57,6 +60,7 @@ def create_app() -> FastAPI:
 
     @app.post("/v1/chat/completions", dependencies=[Depends(_authorize)])
     def complete(body: CompletionRequest) -> dict:
+        request_id = "chatcmpl_" + uuid.uuid4().hex
         if not model.checkpoint_path.exists():
             raise HTTPException(
                 status_code=503, detail="Model needs training. Run `amosclaud-model train`."
@@ -66,11 +70,39 @@ def create_app() -> FastAPI:
             + "\n<assistant>\n"
         )
         started = time.monotonic()
-        reply = model.generate(prompt, body.max_tokens, body.temperature)
-        prompt_tokens = len(tokenize(prompt))
-        completion_tokens = len(tokenize(reply))
+        try:
+            reply = model.generate(prompt, body.max_tokens, body.temperature)
+            prompt_tokens = len(tokenize(prompt))
+            completion_tokens = len(tokenize(reply))
+            latency_ms = round((time.monotonic() - started) * 1000, 2)
+            checkpoint = json.loads(model.checkpoint_path.read_text(encoding="utf-8")).get(
+                "checkpoint_id", "unknown"
+            )
+            service_log.append(
+                "inference.completed",
+                request_id=request_id,
+                model=model.config.name,
+                checkpoint_id=checkpoint,
+                prompt_fingerprint=service_log.fingerprint(prompt),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+                latency_ms=latency_ms,
+                outcome="success",
+            )
+        except Exception as error:
+            service_log.append(
+                "inference.failed",
+                request_id=request_id,
+                model=model.config.name,
+                prompt_fingerprint=service_log.fingerprint(prompt),
+                latency_ms=round((time.monotonic() - started) * 1000, 2),
+                outcome="error",
+                error_type=type(error).__name__,
+            )
+            raise
         return {
-            "id": "chatcmpl_" + uuid.uuid4().hex,
+            "id": request_id,
             "object": "chat.completion",
             "created": int(time.time()),
             "model": model.config.name,
@@ -88,9 +120,21 @@ def create_app() -> FastAPI:
             },
             "amosclaud": {
                 "runtime": "folder-native",
-                "latency_ms": round((time.monotonic() - started) * 1000, 2),
+                "latency_ms": latency_ms,
             },
         }
+
+    @app.get("/v1/logs", dependencies=[Depends(_authorize)])
+    def logs(limit: int = 100, event: str | None = None) -> dict:
+        return {"object": "list", "data": service_log.events(limit, event)}
+
+    @app.get("/v1/logs/summary", dependencies=[Depends(_authorize)])
+    def log_summary() -> dict:
+        return service_log.summary()
+
+    @app.get("/v1/logs/verify", dependencies=[Depends(_authorize)])
+    def verify_logs() -> dict:
+        return service_log.verify()
 
     return app
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from amosclaud_model.config import model_root
 from amosclaud_model.model import FolderLanguageModel
+from amosclaud_model.service_log import ModelServiceLog
 from amosclaud_model.workspace import import_folder, initialize
 
 
@@ -34,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8091)
     commands.add_parser("status", help="Inspect the model workspace")
+    logs = commands.add_parser("logs", help="Inspect privacy-safe model service events")
+    logs.add_argument("--limit", type=int, default=50)
+    logs.add_argument("--event")
+    commands.add_parser("log-summary", help="Summarize model service activity")
+    commands.add_parser("verify-logs", help="Verify the tamper-evident event chain")
     args = parser.parse_args(argv)
     root = (args.home or model_root()).expanduser().resolve()
     initialize(root)
@@ -64,6 +70,12 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["AMOSCLAUD_MODEL_HOME"] = str(root)
         uvicorn.run("amosclaud_model.server:app", host=args.host, port=args.port, reload=False)
         return 0
+    elif args.command == "logs":
+        result = ModelServiceLog(root).events(args.limit, args.event)
+    elif args.command == "log-summary":
+        result = ModelServiceLog(root).summary()
+    elif args.command == "verify-logs":
+        result = ModelServiceLog(root).verify()
     else:
         result = {
             "root": str(root),
