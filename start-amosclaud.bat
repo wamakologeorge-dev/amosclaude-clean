@@ -40,14 +40,25 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Waiting for Amosclaud at http://localhost:8000 ...
+echo Waiting for the Amosclaud server...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..90 | ForEach-Object { try { $r=Invoke-WebRequest -UseBasicParsing http://localhost:8000/health -TimeoutSec 3; if($r.StatusCode -eq 200){$ok=$true; break} } catch {}; Start-Sleep -Seconds 2 }; if(-not $ok){exit 1}"
 if errorlevel 1 (
-  echo Amosclaud is still starting. The first model download can take several minutes.
+  echo Amosclaud server startup failed.
   echo Run: docker compose -f docker-compose.selfhost.yml logs -f
   pause
   exit /b 1
 )
 
+echo Verifying the agent, workspace, token authority, and local model response...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..120 | ForEach-Object { try { $r=Invoke-RestMethod http://localhost:8000/api/v1/agent/readiness -TimeoutSec 125; if($r.ready -eq $true){$ok=$true; break}; Write-Host ('Agent starting: ' + ($r.checks.model.detail)); } catch { Write-Host 'Agent readiness check is waiting...' }; Start-Sleep -Seconds 3 }; if(-not $ok){exit 1}"
+if errorlevel 1 (
+  echo Amosclaud server is running, but the agent did not produce a verified local-model response.
+  echo Review: http://localhost:8000/api/v1/agent/readiness
+  echo Logs: docker compose -f docker-compose.selfhost.yml logs -f model model-init app
+  pause
+  exit /b 1
+)
+
+echo Amosclaud agent is verified and ready.
 start "" "http://localhost:8000"
 exit /b 0
