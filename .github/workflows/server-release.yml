@@ -36,8 +36,14 @@ jobs:
           ROOT="Amosclaud-Agent-Server-${VERSION}"
           mkdir -p "release/${ROOT}"
           git archive HEAD | tar -x -C "release/${ROOT}"
-          rm -rf "release/${ROOT}/desktop" "release/${ROOT}/.github"
-          mkdir -p "release/${ROOT}/data/repositories" "release/${ROOT}/data/storage"
+          PACKAGE="release/${ROOT}"
+          rm -rf "${PACKAGE}/desktop" "${PACKAGE}/.github" "${PACKAGE}/tests" "${PACKAGE}/Infrastructure"
+          mkdir -p "${PACKAGE}/app" "${PACKAGE}/docs"
+          mv "${PACKAGE}/amoscloud_ai" "${PACKAGE}/amosclaud_language" "${PACKAGE}/web" "${PACKAGE}/app/"
+          mv "${PACKAGE}/pyproject.toml" "${PACKAGE}/requirements.txt" "${PACKAGE}/README.md" "${PACKAGE}/app/"
+          [[ -f "${PACKAGE}/PORTABLE_SERVER.md" ]] && mv "${PACKAGE}/PORTABLE_SERVER.md" "${PACKAGE}/docs/"
+          rm -f "${PACKAGE}/AGENTS.md" "${PACKAGE}/.gitignore"
+          mkdir -p "${PACKAGE}/data/repositories" "${PACKAGE}/data/storage"
           chmod +x "release/${ROOT}/start-local.sh"
           (
             cd release
