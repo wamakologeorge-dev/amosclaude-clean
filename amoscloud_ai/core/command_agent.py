@@ -4,7 +4,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from amoscloud_ai.amo_lang import AmoRuntime, parse_amo
 from amoscloud_ai.core.workspace import WorkspaceEngine
 
 
@@ -50,7 +49,6 @@ class AmosclaudCommandAgent:
 
     def __init__(self, workspace: WorkspaceEngine | None = None):
         self.workspace = workspace or WorkspaceEngine()
-        self.amo = AmoRuntime(self.workspace)
 
     def plan(self, instruction: str) -> AgentPlan:
         text = instruction.strip()
