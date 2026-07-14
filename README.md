@@ -1,3 +1,18 @@
+<p align="center">
+  <img src="web/amosclaud-agent-server-banner.png" alt="Amosclaud Agent Server" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/wamakologeorge-dev/amosclaude-clean/releases"><img alt="Release" src="https://img.shields.io/github/v/release/wamakologeorge-dev/amosclaude-clean?include_prereleases&style=for-the-badge"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-7586ff?style=for-the-badge">
+  <img alt="Self-hosted" src="https://img.shields.io/badge/Deployment-Self--hosted-55d6a3?style=for-the-badge">
+  <img alt="Platforms" src="https://img.shields.io/badge/Package-Windows%20%7C%20Linux%20%7C%20macOS-111827?style=for-the-badge">
+</p>
+
+<p align="center">
+  <strong>Portable agent provider · Engineering workspace · Repository server · Build platform</strong>
+</p>
+
 # Amosclaud
 
 Amosclaud is a self-hosted development platform with native accounts, `@amosclaud.com` mailboxes, repository hosting, source workspaces, storage, organizations, community tools, CI/CD pipelines, deployments, and an autonomous development agent.
