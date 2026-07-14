@@ -29,19 +29,26 @@ def _external_adapters_enabled() -> bool:
     }
 
 
-def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
-    endpoint = os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
-    if not endpoint:
-        return None
+def _model_endpoint() -> str:
+    return os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
 
+
+def _model_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     token = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+    endpoint = _model_endpoint()
+    if not endpoint:
+        return None
 
     response = httpx.post(
         f"{endpoint}/v1/chat/completions",
-        headers=headers,
+        headers=_model_headers(),
         json={
             "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
             "messages": [{"role": "system", "content": system_prompt}] + history,
@@ -56,6 +63,41 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
     if not text:
         raise RuntimeError("Amosclaud model returned an empty response")
     return ProviderResult(reply=text, runtime="self-hosted")
+
+
+def probe() -> dict[str, object]:
+    """Perform a real inference request before declaring the agent ready."""
+    endpoint = _model_endpoint()
+    model = os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b")
+    if not endpoint:
+        return {
+            "ready": False,
+            "provider": "amosclaud",
+            "runtime": "unconfigured",
+            "model": model,
+            "detail": "AMOSCLAUD_MODEL_URL is not configured",
+        }
+    try:
+        result = _self_hosted_reply(
+            [{"role": "user", "content": "Reply with exactly: AMOSCLAUD_AGENT_READY"}],
+            "You are the local Amosclaud readiness probe. Follow the user's exact response instruction.",
+        )
+        reply_text = result.reply.strip() if result else ""
+        return {
+            "ready": "AMOSCLAUD_AGENT_READY" in reply_text,
+            "provider": "amosclaud",
+            "runtime": result.runtime if result else "unconfigured",
+            "model": model,
+            "detail": reply_text[:200],
+        }
+    except Exception as exc:
+        return {
+            "ready": False,
+            "provider": "amosclaud",
+            "runtime": "self-hosted",
+            "model": model,
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
@@ -127,7 +169,7 @@ def status() -> dict[str, object]:
     """Return safe provider status without exposing credentials."""
     return {
         "provider": "amosclaud",
-        "self_hosted_configured": bool(os.getenv("AMOSCLAUD_MODEL_URL", "").strip()),
+        "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
         "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
     }

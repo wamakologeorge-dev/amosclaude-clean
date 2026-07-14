@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 from collections import defaultdict, deque
@@ -11,9 +12,11 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from amoscloud_ai.core.access import AccessMode, AccessPolicy
+
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """Apply security headers, request limits, origin checks, and basic abuse protection."""
+    """Apply network policy, security headers, request limits, origin checks, and abuse protection."""
 
     _lock = Lock()
     _attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -23,17 +26,35 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "900"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "20"))
+        self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes", "on"}
+        self.trust_container_gateway = os.getenv("AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
         configured = os.getenv(
             "TRUSTED_ORIGINS",
             "https://amosclaud.com,https://www.amosclaud.com,http://localhost,http://localhost:8000",
         )
         self.trusted_origins = {item.strip().rstrip("/") for item in configured.split(",") if item.strip()}
 
-    @staticmethod
-    def _client_key(request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        host = forwarded or (request.client.host if request.client else "unknown")
-        return f"{host}:{request.url.path}"
+    def _client_host(self, request: Request) -> str:
+        if self.trust_proxy_headers:
+            forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+            if forwarded:
+                return forwarded
+        return request.client.host if request.client else "unknown"
+
+    def _network_allowed(self, policy: AccessPolicy, host: str) -> bool:
+        if policy.allows_client(host):
+            return True
+        if policy.mode is not AccessMode.LOCAL or not self.trust_container_gateway:
+            return False
+        try:
+            return ipaddress.ip_address(host).is_private
+        except ValueError:
+            return False
+
+    def _client_key(self, request: Request) -> str:
+        return f"{self._client_host(request)}:{request.url.path}"
 
     def _rate_limited(self, request: Request) -> bool:
         sensitive = {
@@ -61,6 +82,21 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return False
 
     async def dispatch(self, request: Request, call_next):
+        try:
+            policy = AccessPolicy.from_environment()
+        except ValueError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=503)
+
+        client_host = self._client_host(request)
+        if not self._network_allowed(policy, client_host):
+            return JSONResponse(
+                {
+                    "detail": "This Amosclaud installation does not allow access from this network.",
+                    "access_mode": policy.mode.value,
+                },
+                status_code=403,
+            )
+
         content_length = request.headers.get("content-length")
         if content_length:
             try:
@@ -94,6 +130,6 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         )
         if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
             response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        if request.url.path.startswith("/api/") or request.url.path in {"/login", "/admin"}:
+        if request.url.path.startswith(("/api/", "/auth")) or request.url.path in {"/login", "/admin"}:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
