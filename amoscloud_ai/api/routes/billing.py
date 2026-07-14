@@ -14,6 +14,7 @@ from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
+from amoscloud_ai.agent_tokens import credit_tokens
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -397,7 +398,23 @@ async def stripe_webhook(
         ).fetchone():
             return {"received": True}
 
-        if event_type == "checkout.session.completed" and obj.get("subscription"):
+        metadata = obj.get("metadata") or {}
+        if (
+            event_type == "checkout.session.completed"
+            and metadata.get("kind") == "agent_tokens"
+            and obj.get("payment_status") == "paid"
+        ):
+            user_id = int(metadata.get("amosclaud_user_id") or obj.get("client_reference_id") or 0)
+            credits = int(metadata.get("credits") or 0)
+            if user_id and credits:
+                credit_tokens(
+                    db,
+                    user_id,
+                    credits,
+                    reason="stripe_token_purchase",
+                    reference=event_id,
+                )
+        elif event_type == "checkout.session.completed" and obj.get("subscription"):
             stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
             subscription = stripe.Subscription.retrieve(obj["subscription"])
             user_id = int((obj.get("metadata") or {}).get("amosclaud_user_id") or obj.get("client_reference_id") or 0)
