@@ -25,6 +25,8 @@ jobs:
             -e DATABASE_URL=sqlite:///./amoscloud.db \
             -e SECRET_KEY=test-secret-for-platform-check-only \
             -e AUTH_COOKIE_SECURE=false \
+            -e AMOSCLAUD_ACCESS_MODE=local \
+            -e AMOSCLAUD_TRUST_CONTAINER_GATEWAY=true \
             -p 8000:8000 \
             amoscloud-ai:test
 
