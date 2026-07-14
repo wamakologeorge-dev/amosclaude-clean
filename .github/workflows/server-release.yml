@@ -1,0 +1,175 @@
+name: Portable Agent Server Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "server-v*"
+name: Amosclaud Server Package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/server-release.yml"
+      - "docker-compose.selfhost.yml"
+      - "install-amosclaud.ps1"
+      - "install-amosclaud.sh"
+      - "amoscloud_ai/**"
+      - "requirements.txt"
+  push:
+    tags: ["server-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install and verify
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          python -m compileall -q amoscloud_ai amosclaud_language
+          python -c "from amoscloud_ai.main import app; assert app.title"
+
+      - name: Build portable folder archives
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          VERSION="${RELEASE_TAG#server-v}"
+          ROOT="Amosclaud-Agent-Server-${VERSION}"
+          mkdir -p "release/${ROOT}"
+          git archive HEAD | tar -x -C "release/${ROOT}"
+          PACKAGE="release/${ROOT}"
+          rm -rf "${PACKAGE}/desktop" "${PACKAGE}/.github" "${PACKAGE}/tests" "${PACKAGE}/Infrastructure"
+          mkdir -p "${PACKAGE}/app" "${PACKAGE}/docs"
+          mv "${PACKAGE}/amoscloud_ai" "${PACKAGE}/amosclaud_language" "${PACKAGE}/web" "${PACKAGE}/app/"
+          mv "${PACKAGE}/pyproject.toml" "${PACKAGE}/requirements.txt" "${PACKAGE}/README.md" "${PACKAGE}/app/"
+          [[ -f "${PACKAGE}/PORTABLE_SERVER.md" ]] && mv "${PACKAGE}/PORTABLE_SERVER.md" "${PACKAGE}/docs/"
+          rm -f "${PACKAGE}/AGENTS.md" "${PACKAGE}/.gitignore"
+          mkdir -p "${PACKAGE}/data/repositories" "${PACKAGE}/data/storage"
+          chmod +x "release/${ROOT}/start-local.sh"
+          (
+            cd release
+            zip -qr "${ROOT}.zip" "${ROOT}"
+            tar -czf "${ROOT}.tar.gz" "${ROOT}"
+            sha256sum "${ROOT}.zip" "${ROOT}.tar.gz" > SHA256SUMS.txt
+          )
+
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: amosclaud-agent-server-${{ github.ref_name }}
+          path: |
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish immutable GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Amosclaud Agent Server ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS.txt
+      - name: Install build dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Build app-style archives
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python scripts/workspace_task.py build
+          python -m pytest -q tests/test_workspace_control.py tests/test_virtual_memory.py tests/test_task_router.py
+          mkdir -p dist/Amosclaud/{app,config,data,logs,workspace/projects}
+          rsync -a \
+            --exclude '.git' --exclude '.github' --exclude '.ipynb_checkpoints' \
+            --exclude 'dist' --exclude '__pycache__' --exclude '*.pyc' \
+            --exclude 'tests' --exclude 'desktop' --exclude 'upload' \
+            --exclude 'install-amosclaud.ps1' --exclude 'install-amosclaud.sh' \
+            --exclude 'install-virtual-memory.ps1' --exclude 'install-virtual-memory.sh' \
+            --exclude 'amosclaud-workspace.ps1' --exclude 'amosclaud-workspace.sh' \
+            ./ dist/Amosclaud/app/
+          cp install-amosclaud.ps1 install-amosclaud.sh \
+            install-virtual-memory.ps1 install-virtual-memory.sh \
+            amosclaud-workspace.ps1 amosclaud-workspace.sh dist/Amosclaud/
+          cp .env.example dist/Amosclaud/config/server.env.example
+          cp Makefile requirements-dev.txt dist/Amosclaud/app/
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("dist/Amosclaud")
+          manifest = {
+              "name": "Amosclaud Server Workspace",
+              "version": "1.0.1",
+              "entrypoints": {
+                  "windows": "install-amosclaud.ps1",
+                  "unix": "install-amosclaud.sh",
+                  "workspace_windows": "amosclaud-workspace.ps1",
+                  "workspace_unix": "amosclaud-workspace.sh",
+              },
+              "directories": {
+                  "application": "app",
+                  "configuration": "config",
+                  "persistent_data": "data",
+                  "logs": "logs",
+                  "projects": "workspace/projects",
+              },
+          }
+          (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+          cat > dist/Amosclaud/START_HERE.txt <<'EOF'
+          AMOSCLAUD SERVER
+
+          Windows: right-click install-amosclaud.ps1 and run with PowerShell.
+          Linux/macOS: open a terminal here and run ./install-amosclaud.sh.
+
+          Optional virtual memory:
+          Windows: run install-virtual-memory.ps1 to inspect, then use -Apply as Administrator.
+          Linux: run ./install-virtual-memory.sh to inspect, then use --apply with sudo.
+
+          The installer starts local services and optionally pairs this computer
+          with amosclaud.com using a private runner credential you provide.
+
+          Workspace controls:
+          ./amosclaud-workspace.sh doctor|start|stop|status|logs
+          .\amosclaud-workspace.ps1 doctor|start|stop|status|logs
+          EOF
+          chmod +x dist/Amosclaud/install-amosclaud.sh \
+            dist/Amosclaud/install-virtual-memory.sh dist/Amosclaud/amosclaud-workspace.sh
+          (cd dist && zip -qr Amosclaud-Server.zip Amosclaud)
+          tar -C dist -czf dist/Amosclaud-Server.tar.gz Amosclaud
+          (cd dist && sha256sum Amosclaud-Server.zip Amosclaud-Server.tar.gz > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: amosclaud-server-package
+          path: |
+            dist/Amosclaud-Server.zip
+            dist/Amosclaud-Server.tar.gz
+            dist/SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/Amosclaud-Server.zip
+            dist/Amosclaud-Server.tar.gz
+            dist/SHA256SUMS.txt
+          generate_release_notes: true

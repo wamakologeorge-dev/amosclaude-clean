@@ -1,4 +1,4 @@
-"""Git Manager - Repository management for Amoscloud AI"""
+"""Git Manager - Repository management for Amosclaud AI"""
 
 import logging
 from typing import Dict, List, Optional, Any

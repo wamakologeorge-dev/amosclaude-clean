@@ -1,0 +1,58 @@
+name: Build and Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Compile backend and CLI
+        run: |
+          python -m compileall -q amoscloud_ai cli src
+
+      - name: Run platform tests
+        env:
+          ENVIRONMENT: development
+          AUTH_DB_PATH: ./data/build-verify-auth.db
+          REPOSITORY_STORAGE_PATH: ./data/build-verify-repositories
+          AMOSCLAUD_STORAGE_PATH: ./data/build-verify-storage
+          SECRET_KEY: build-verify-secret-key-with-at-least-32-characters
+          AUTH_COOKIE_SECURE: "false"
+        run: pytest tests/ -v --tb=short
+
+      - name: Verify web application assets
+        run: |
+          test -f web/index.html
+          test -f web/login.html
+          test -f web/workspace.js
+          test -f web/service-worker.js
+          grep -q "async function api" web/workspace.js
+          grep -q "manifest.webmanifest" web/service-worker.js
+
+      - name: Verify CLI uses live Amosclaud APIs
+        run: |
+          grep -q '"/health"' cli/client.py
+          grep -q '"/api/v1/pipelines"' cli/client.py
+          ! grep -q '"/api/v1/cmood/' cli/client.py

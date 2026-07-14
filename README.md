@@ -1,76 +1,449 @@
-# 🚀 Amoscloud AI Platform
+<p align="center">
+  <img src="web/amosclaud-agent-server-banner.png" alt="Amosclaud Agent Server" width="100%">
+</p>
 
-![Amoscloud AI Status](https://img.shields.io/badge/Amoscloud--AI-%F0%9F%9F%A2_Live_%26_Active-brightgreen)
+<p align="center">
+  <a href="https://github.com/wamakologeorge-dev/amosclaude-clean/releases"><img alt="Release" src="https://img.shields.io/github/v/release/wamakologeorge-dev/amosclaude-clean?include_prereleases&style=for-the-badge"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-7586ff?style=for-the-badge">
+  <img alt="Self-hosted" src="https://img.shields.io/badge/Deployment-Self--hosted-55d6a3?style=for-the-badge">
+  <img alt="Platforms" src="https://img.shields.io/badge/Package-Windows%20%7C%20Linux%20%7C%20macOS-111827?style=for-the-badge">
+</p>
 
-Self-hosted CI/CD & Deployment Automation Platform. Runs entirely from GitHub — no external cloud needed.
+<p align="center">
+  <strong>Portable agent provider · Engineering workspace · Repository server · Build platform</strong>
+</p>
 
-## Quick Start
+# Amosclaud
 
-### Option 1: Run with Docker (Full Platform)
+Amosclaud is a self-hosted development platform with native accounts, `@amosclaud.com` mailboxes, repository hosting, source workspaces, storage, organizations, community tools, CI/CD pipelines, deployments, and an autonomous development agent.
 
-```bash
-git clone https://github.com/wamakologeorge-dev/amosclaude-clean
-cd amosclaude-clean
-docker-compose up --build
+Current version: **1.0.1**
+
+## Install the server package
+
+GitHub server releases are app-style archives with one top-level `Amosclaud` folder, not a deeply nested repository checkout. Download the ZIP on Windows or the tarball on Linux/macOS, extract it, and run the installer once:
+
+- Windows: right-click `install-amosclaud.ps1`, then run it with PowerShell.
+- Linux/macOS: run `./install-amosclaud.sh` from a terminal.
+
+The installer creates private local configuration, starts restartable Docker services, and can pair the computer with the Amosclaud Task Router using a one-time private-runner credential. Paired runners connect outbound to `amosclaud.com`; downloads never execute silently and the service does not open an inbound remote-control port.
+
+A `server-v*` tag builds `Amosclaud-Server.zip`, `Amosclaud-Server.tar.gz`, and `SHA256SUMS.txt` through `.github/workflows/server-release.yml`.
+
+The downloaded package is an automated workspace with this stable layout:
+
+```text
+Amosclaud/
+├── app/                 # managed application internals
+├── config/              # configuration templates
+├── data/                # durable application data
+├── logs/                # local operational logs
+├── workspace/projects/  # developer-controlled projects
+├── PACKAGE_MANIFEST.json
+└── amosclaud-workspace.*
 ```
 
-- Dashboard: http://localhost — served by nginx on port 80
-- API Docs: http://localhost:8000/docs
+Use `amosclaud-workspace doctor`, `start`, `stop`, `status`, or `logs` instead of navigating through application source folders. The installer creates missing workspace directories automatically and preserves the existing `AmosclaudWorkspace` location for source-based installations.
 
-### Option 2: Run directly with Python
+### Build and dependency management
+
+- `pyproject.toml` defines the installable Amosclaud package, console commands, and build backend.
+- `requirements.txt` declares supported runtime dependencies.
+- `requirements-dev.txt` declares reproducible test, lint, security, and release tooling.
+- `Makefile` provides short Unix developer commands.
+- `python scripts/workspace_task.py <task>` provides the same core automation on Windows, Linux, and macOS.
 
 ```bash
-pip install -r requirements.txt
+make setup
+make build
+make test
+make quality
+make package
+```
+
+On Windows, the equivalent complete build is:
+
+```powershell
+python scripts/workspace_task.py setup
+python scripts/workspace_task.py package
+```
+
+`.github/workflows/workspace-ci.yml` moves the same validation into GitHub Actions. Every pull request and protected branch update runs the complete test suite on Python 3.11 and 3.12, validates workspace automation, performs a security scan, builds the installable distribution, and stores the resulting wheel and source archive as workflow artifacts.
+
+## Five-minute API quickstart
+
+Create an Amosclaud customer key from `/api-access`, purchase prepaid agent credits, and submit work:
+
+```bash
+curl https://amosclaud.com/api/v1/tasks \
+  -H "Authorization: Bearer $AMOSCLAUD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Review my project and return evidence","mode":"review","execution_target":"cloud"}'
+```
+
+External tools can discover the public contract at `/.well-known/ai-plugin.json` and `/openapi.yaml`. A dependency-light Python client and runnable example live in `packages/sdk-python` and `examples/request_verified_work.py`.
+
+### Amosclaud Memory Guard
+
+`amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
+
+### Progressive agent memory
+
+The engineering agent maintains durable searchable learning under `.amosclaud/memory/`.
+Every completed run recalls relevant earlier lessons, records its verified outcome, and updates
+a daily learning summary. Memory grows with available storage instead of being loaded entirely
+into RAM. Inspect it with `amosclaud-agent-memory stats`, `recent`, `recall`, or `consolidate`.
+Set `AMOSCLAUD_AGENT_MEMORY_HOME` when the memory should live on a separate persistent volume.
+
+### Self-hosted model network
+
+The website control plane does not need a permanent inbound connection to a model computer.
+Paired Server Stations advertise `model.inference` only when their local model health check is
+ready. The control plane encrypts each short-lived request, an authorized owner station claims it
+over its outbound connection, and the prompt and response ciphertext are cleared after delivery.
+
+Configure the control plane with `AMOSCLAUD_NETWORK_OWNER_USER_ID` and a stable
+`AMOSCLAUD_MASTER_KEY`. On the paired station, configure its station credential plus the local
+`AMOSCLAUD_MODEL_URL` and matching `AMOSCLAUD_MODEL_TOKEN`, then run `amosclaud-runner`. The old
+fixed model URL remains a fallback for a single-machine installation.
+
+## Sign in from any device
+
+Amosclaud accounts work across phones, tablets, laptops, and desktop computers.
+
+Returning users can sign in with:
+
+- fingerprint, Face ID, Touch ID, Windows Hello, device PIN, or screen lock through passkeys
+- Amosclaud username and password as a fallback
+
+Users may enter either their full address, such as `username@amosclaud.com`, or only the username. The same account is used on every supported device.
+
+## Install Amosclaud as an app
+
+Amosclaud is an installable Progressive Web App. It runs from `https://amosclaud.com`, opens in its own app window, keeps the Amosclaud icon on the device, and uses the same account and server as the website.
+
+### Android
+
+1. Open `https://amosclaud.com` in Chrome.
+2. Sign in or create an Amosclaud account.
+3. Tap **Install Amosclaud app** when the button appears.
+4. If the button is not shown, open Chrome's menu and tap **Install app** or **Add to Home screen**.
+
+### iPhone and iPad
+
+1. Open `https://amosclaud.com` in Safari.
+2. Tap the **Share** button.
+3. Tap **Add to Home Screen**.
+4. Confirm the name **Amosclaud**, then tap **Add**.
+
+Apple devices complete installation through Safari's Share menu.
+
+### Microsoft Windows
+
+1. Open `https://amosclaud.com` in Microsoft Edge or Google Chrome.
+2. Open the browser menu.
+3. Choose **Apps → Install Amosclaud** in Edge, or **Install Amosclaud** in Chrome.
+4. Amosclaud will appear in the Start menu and can be pinned to the taskbar.
+
+### Ubuntu and other Linux desktops
+
+1. Open `https://amosclaud.com` in Chrome, Chromium, or Microsoft Edge.
+2. Open the browser menu.
+3. Choose **Install Amosclaud**.
+4. Launch it from the desktop application menu.
+
+The installable app requires HTTPS in production. Local development works on `localhost`.
+
+## Native desktop packages
+
+Amosclaud also includes a desktop packaging foundation in the `desktop/` directory.
+
+Supported package targets:
+
+- Windows `.exe` installer for x64 and ARM64
+- macOS `.dmg` for Intel and Apple Silicon
+- Linux `.AppImage`
+- Debian/Ubuntu `.deb`
+
+The desktop shell uses Electron with context isolation, sandboxing, disabled Node.js integration in the web page, external-link protection, and automatic update checks.
+
+Desktop release builds are created by `.github/workflows/desktop-release.yml`. A tag in this format starts the release workflow:
+
+```text
+desktop-v1.0.0
+```
+
+The workflow builds platform-specific artifacts and attaches them to a GitHub Release. Code signing and Apple notarization credentials should be configured before distributing trusted production installers.
+
+### Run the desktop shell locally
+
+Requirements:
+
+- Node.js 22 or newer
+- npm
+
+```bash
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean/desktop
+npm install
+npm start
+```
+
+Build local packages:
+
+```bash
+npm run dist
+```
+
+The desktop application connects to `https://amosclaud.com` by default. For development, set `AMOSCLAUD_URL` before starting it.
+
+macOS or Linux:
+
+```bash
+AMOSCLAUD_URL=http://localhost:8000 npm start
+```
+
+Windows PowerShell:
+
+```powershell
+$env:AMOSCLAUD_URL="http://localhost:8000"
+npm start
+```
+
+## Repository creation and licenses
+
+The **New repository** form supports private or public repositories, optional README initialization, an optional standard `.gitignore`, and these license choices:
+
+- No license
+- MIT License
+- Apache License 2.0
+- GNU GPLv3
+- GNU AGPLv3
+- GNU LGPLv3
+- Mozilla Public License 2.0
+- BSD 2-Clause
+- BSD 3-Clause
+- ISC License
+- The Unlicense
+- Eclipse Public License 2.0
+- Boost Software License 1.0
+- Creative Commons Zero v1.0
+
+When selected, Amosclaud creates and commits the `LICENSE` file automatically. The template service is implemented in `amoscloud_ai/api/routes/repository_templates.py`.
+
+## Run locally with Python
+
+Requirements:
+
+- Python 3.11 or newer
+- Git
+
+```bash
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean
+python -m venv .venv
+```
+
+Activate the virtual environment.
+
+macOS, Ubuntu, or other Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Microsoft Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install and run:
+
+```bash
+python -m pip install --upgrade pip
+pip install -e .
+amosclaud
+```
+
+Open:
+
+- Amosclaud: `http://localhost:8000`
+- API documentation: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+
+A direct start also works:
+
+```bash
 python -m amoscloud_ai.main
 ```
 
-- Dashboard: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+## Run with Docker
 
-## What You Can Do
-
-- 🔁 Manage CI/CD pipelines
-- 🚀 Trigger and rollback deployments
-- 💚 Monitor server health in real-time
-- 📊 View live dashboard at `/`
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Web dashboard |
-| `GET` | `/health` | Server health check |
-| `GET` | `/api/v1/pipelines` | List all pipelines |
-| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
-| `GET` | `/api/v1/deployments` | List all deployments |
-| `POST` | `/api/v1/deployments` | Start a deployment |
-| `GET` | `/docs` | Interactive API docs (Swagger UI) |
-
-## Project Structure
-
+```bash
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean
+docker compose -f Infrastructure/docker-compose.yml up --build
 ```
+
+Open `http://localhost:8000`.
+
+## Railway production deployment
+
+Railway should start Amosclaud with:
+
+```bash
+bash Scripts/start.sh
+```
+
+Attach a persistent Railway volume and mount it at:
+
+```text
+/data
+```
+
+Recommended production variables:
+
+```env
+AUTH_DB_PATH=/data/auth.db
+AUTH_COOKIE_SECURE=true
+AUTH_SESSION_DAYS=7
+AMOSCLAUD_MASTER_KEY=replace-with-a-stable-random-secret
+REDIS_URL=redis://redis:6379/0
+AMOS_MAIL_DOMAIN=amosclaud.com
+PASSKEY_RP_ID=amosclaud.com
+PASSKEY_ORIGIN=https://amosclaud.com
+PASSKEY_RP_NAME=Amosclaud
+PASSKEY_SETUP_MINUTES=10
+```
+
+`AMOSCLAUD_MASTER_KEY` encrypts developer webhook secrets and must remain stable.
+`REDIS_URL` provides shared authentication limits when more than one API process is running.
+On startup, Amosclaud applies checksum-protected database migrations automatically.
+
+## Signed developer webhooks
+
+Signed webhooks notify external developer systems when routed work finishes. After signing in,
+create a webhook with `POST /api/v1/webhooks` and subscribe to `task.completed`, `task.failed`,
+or `task.cancelled`. The response shows the `whsec_...` signing secret once.
+
+Every delivery includes `X-Amosclaud-Event`, `X-Amosclaud-Event-Id`,
+`X-Amosclaud-Timestamp`, and `X-Amosclaud-Signature`. Verify the signature by calculating
+HMAC-SHA256 over `<timestamp>.<raw request body>` with the webhook secret and compare it to
+the `v1=...` header using a constant-time comparison. Production webhook URLs must use HTTPS.
+
+## Server Stations
+
+A Server Station is a self-hosted computer that securely claims Amosclaud tasks. Create and
+manage stations through `/api/v1/server-stations`. Registration and token rotation return a
+credential once; only its hash is retained. Stations report their version, capabilities, and
+system profile through the heartbeat endpoint. The control API marks stale stations offline,
+shows queued/running/completed/failed work totals, and lets the owner revoke a station without
+deleting its audit history. Revoking a station releases its unstarted assigned work so another
+station can claim it.
+
+## Metrics Server and SSY
+
+The dedicated metrics service runs on `127.0.0.1:9090` with Docker Compose. It exports
+Prometheus metrics at `/metrics`, a JSON operational view at `/v1/summary`, and the Amosclaud
+System Service Yard at `/v1/ssy`. SSY combines API, native-model, database, task, station,
+webhook, memory, disk, load, and uptime health without exposing user content or credentials.
+Set a stable `AMOSCLAUD_METRICS_TOKEN` in production.
+
+The persistent `/data` volume is required so user accounts, passkeys, sessions, mail, and other SQLite-backed records survive restarts and deployments.
+
+Optional GitHub repository linking:
+
+```env
+GITHUB_CLIENT_ID=your-client-id
+GITHUB_CLIENT_SECRET=your-client-secret
+GITHUB_CALLBACK_URL=https://amosclaud.com/api/v1/auth/github/callback
+```
+
+Optional internet mail delivery:
+
+```env
+MAIL_SMTP_HOST=your-smtp-host
+MAIL_SMTP_PORT=587
+MAIL_SMTP_USERNAME=your-smtp-username
+MAIL_SMTP_PASSWORD=your-smtp-password
+MAIL_SMTP_FROM=verified-sender@amosclaud.com
+MAIL_SMTP_TLS=true
+```
+
+Internal messages between Amosclaud mailboxes work through the Amosclaud database. Trusted public-internet mail also requires correct MX, SPF, DKIM, and DMARC records for `amosclaud.com`, plus an approved mail provider.
+
+## App and package metadata
+
+Installable web application metadata:
+
+```text
+web/manifest.webmanifest
+web/service-worker.js
+web/app-install.js
+web/amosclaud-app-icon.svg
+```
+
+Desktop package metadata:
+
+```text
+desktop/package.json
+desktop/main.js
+desktop/preload.js
+.github/workflows/desktop-release.yml
+```
+
+Python package and patch-version metadata:
+
+```text
+pyproject.toml
+amoscloud_ai/__init__.py
+```
+
+The `amosclaud` console command starts `amoscloud_ai.main:main`.
+
+## Main product routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Amosclaud Agent workspace |
+| `/login` | Native Amosclaud sign-in and account creation |
+| `/repositories` | Native repository list and creation |
+| `/workspace/{repository_id}` | Repository source workspace |
+| `/mail` | Amos Mail inbox and compose interface |
+| `/community` | Developer community |
+| `/feed` | Public pipeline and review feed |
+| `/docs` | FastAPI documentation |
+| `/health` | Server health check |
+
+## Project structure
+
+```text
 amosclaude-clean/
-├── amoscloud_ai/          # Main FastAPI application package
-│   ├── api/routes/        # health, pipelines, deployments routes
-│   ├── main.py            # App entry point — serves API + web dashboard
-│   ├── config.py          # Settings (pydantic-settings)
-│   └── models.py          # Pydantic models
-├── web/                   # Frontend dashboard (served at /)
-│   ├── index.html         # Dashboard UI
-│   ├── style.css          # Dark theme CSS
-│   └── app.js             # API fetch + auto-refresh
-├── tests/                 # pytest test suite
-├── Dockerfile             # Multi-stage build
-├── docker-compose.yml     # Full stack: API + Redis + nginx
-└── nginx.conf             # Reverse proxy config
+├── amoscloud_ai/
+│   ├── api/routes/          # Authentication, mail, repositories, storage, agent, and other APIs
+│   ├── main.py              # FastAPI entry point and web routes
+│   └── __init__.py          # Version and package metadata
+├── web/                     # Website and installable PWA files
+├── desktop/                 # Electron desktop application and packaging metadata
+├── .github/workflows/       # CI and desktop release automation
+├── Infrastructure/          # Container files
+├── Scripts/start.sh         # Railway and production startup script
+├── tests/                   # Automated tests
+├── pyproject.toml           # Python build and package metadata
+├── requirements.txt         # Runtime dependencies
+└── README.md
 ```
 
-## Environment Variables
+## Release notes: 1.0.1 patch
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (optional) |
-| `SECRET_KEY` | `change-me-in-production` | App secret key — **must be changed in production**. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `ENVIRONMENT` | `development` | `development` or `production` |
-| `LOG_LEVEL` | `INFO` | Logging level |
+- Added installable app support for Android, iOS, Microsoft Windows, Ubuntu, and other Linux desktops.
+- Added passkey sign-in using fingerprint, Face ID, Touch ID, Windows Hello, device PIN, or screen lock.
+- Kept username and password login as a cross-device fallback.
+- Added the Electron desktop packaging foundation for Windows, macOS, and Linux.
+- Added a GitHub Actions desktop release workflow.
+- Added a web app manifest, service worker, app icon, and installation prompt.
+- Added Python package metadata and the `amosclaud` command.
+- Added repository license selection and automatic `LICENSE` creation.
+- Added optional standard `.gitignore` initialization.
+- Updated platform, deployment, mail, passkey, repository, and installation instructions.
