@@ -29,5 +29,5 @@ if (-not $env:HOST) { $env:HOST = "127.0.0.1" }
 if (-not $env:PORT) { $env:PORT = "8000" }
 
 Write-Host "Amosclaud Agent Server: http://localhost:$env:PORT"
-Set-Location $AppRoot
+Set-Location $Root
 & $VenvPython -m uvicorn amoscloud_ai.main:app --host $env:HOST --port $env:PORT
