@@ -28,6 +28,7 @@ from amoscloud_ai.api.routes import (
     amos_mail,
     amos_secure_code,
     auth,
+    billing,
     chat,
     community,
     copilot,
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, include_in_schema=False)
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
+    app.include_router(billing.router, prefix="/api/v1")
     app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
@@ -151,6 +153,10 @@ def create_app() -> FastAPI:
     @app.get("/manifest.webmanifest", include_in_schema=False)
     async def web_manifest():
         return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/plans", include_in_schema=False)
+    async def plans_page():
+        return FileResponse(web_dir / "plans.html")
 
     @app.get("/download", include_in_schema=False)
     async def download_page():
