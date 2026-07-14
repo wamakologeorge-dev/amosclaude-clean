@@ -1,6 +1,8 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
+$AppRoot = Join-Path $Root "app"
+if (-not (Test-Path $AppRoot)) { $AppRoot = $Root }
 
 if (-not (Get-Command py -ErrorAction SilentlyContinue) -and -not (Get-Command python -ErrorAction SilentlyContinue)) {
     throw "Python 3.11 or newer is required."
@@ -13,7 +15,7 @@ if (-not (Test-Path ".venv")) {
 
 $VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
 & $VenvPython -m pip install --upgrade pip
-& $VenvPython -m pip install -e .
+& $VenvPython -m pip install -e $AppRoot
 
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
@@ -27,4 +29,5 @@ if (-not $env:HOST) { $env:HOST = "127.0.0.1" }
 if (-not $env:PORT) { $env:PORT = "8000" }
 
 Write-Host "Amosclaud Agent Server: http://localhost:$env:PORT"
+Set-Location $AppRoot
 & $VenvPython -m uvicorn amoscloud_ai.main:app --host $env:HOST --port $env:PORT
