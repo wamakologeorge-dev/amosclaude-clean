@@ -9,7 +9,7 @@ class Settings:
     PROJECT_VERSION: str = "1.0.0"
 
     # JWT Settings (should match your amosflow auth service)
-    SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "super-secret-jwt-key")
+    SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
     ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
