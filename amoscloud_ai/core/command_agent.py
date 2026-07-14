@@ -79,7 +79,7 @@ class AmosclaudCommandAgent:
             text,
             re.IGNORECASE,
         )
-        if read_match:
+        if read_match and write_match is None:
             steps.append(
                 AgentStep(
                     "workspace.read",
@@ -192,14 +192,13 @@ class AmosclaudCommandAgent:
 
     def _execute_step(self, step: AgentStep) -> Any:
         if step.action == "workspace.write":
-            source = (
-                'amo 1\n'
-                'agent "Command Agent"\n'
-                'goal "Follow the owner instruction safely"\n'
-                'allow workspace.write\n'
-                f'write "{step.arguments["path"]}" "{self._escape(step.arguments["content"])}"\n'
-            )
-            return self.amo.execute(parse_amo(source))
+            path = self.workspace._safe_path(step.arguments["path"])
+            content = step.arguments["content"]
+            self.workspace._atomic_write_text(path, content)
+            return {
+                "path": path.relative_to(self.workspace.root).as_posix(),
+                "bytes": len(content.encode("utf-8")),
+            }
 
         if step.action == "workspace.read":
             item = self.workspace.read_item(step.arguments["path"])
@@ -225,7 +224,3 @@ class AmosclaudCommandAgent:
             raise NotImplementedError("approved adapter not connected yet")
 
         raise AgentCommandError(f"Unsupported action: {step.action}")
-
-    @staticmethod
-    def _escape(value: str) -> str:
-        return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
