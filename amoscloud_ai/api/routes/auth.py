@@ -280,8 +280,8 @@ def forgot_password(body: EmailRequest) -> dict:
     return {"message": "If the account exists, Amosclaud sent a reset code"}
 
 
-@router.post("/password/reset", status_code=204)
-def reset_password(body: PasswordResetRequest) -> None:
+@router.post("/password/reset", status_code=204, response_class=Response)
+def reset_password(body: PasswordResetRequest) -> Response:
     email = _normalise_email(body.email)
     with _connect() as db:
         user = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
@@ -291,6 +291,7 @@ def reset_password(body: PasswordResetRequest) -> None:
         db.execute("UPDATE users SET password_hash=?,provider='password' WHERE id=?", (_hash_password(body.password), user["id"]))
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -301,7 +302,7 @@ def me(amos_session: str | None = Cookie(default=None)) -> UserResponse:
     return _user_response(user)
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, response_class=Response)
 def logout(response: Response, amos_session: str | None = Cookie(default=None)) -> Response:
     if amos_session:
         with _connect() as db:

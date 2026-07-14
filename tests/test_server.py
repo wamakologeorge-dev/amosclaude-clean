@@ -7,7 +7,7 @@ import asyncio
 import httpx
 
 from amoscloud_ai.main import create_app
-from amoscloud_ai.api.routes import agent
+from amoscloud_ai.api.routes import agent, deployments
 
 app = create_app()
 
@@ -173,6 +173,26 @@ def test_start_deployment():
     assert data["copilot_reply"].startswith("Amosclaud Autonomous Server:")
     assert data["copilot_role"] == "autonomous build, deployment, and monitoring server"
     assert data["delegation_target"] == "Amosclaud autonomous pipeline"
+
+
+def test_worker_deployment_requires_authenticated_user(monkeypatch):
+    payload = {
+        "version": "v1.0.0",
+        "environment": "staging",
+        "repo_url": "https://github.com/example/project.git",
+        "start_command": "python app.py",
+    }
+    denied = request("POST", "/api/v1/deployments", json=payload)
+    assert denied.status_code == 401
+    monkeypatch.setattr(deployments.auth_routes, "get_user_from_session", lambda token: {"id": 1})
+    accepted = request(
+        "POST",
+        "/api/v1/deployments",
+        json=payload,
+        cookies={"amos_session": "valid-session"},
+    )
+    assert accepted.status_code == 201
+    assert accepted.json()["status"] == "pending"
 
 
 def test_get_deployment_not_found():

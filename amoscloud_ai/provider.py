@@ -72,7 +72,7 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
         f"{endpoint}/v1/chat/completions",
         headers=_model_headers(),
         json={
-            "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
+            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
             "messages": [{"role": "system", "content": system_prompt}] + history,
             "temperature": 0.2,
             "max_tokens": 1200,
@@ -90,7 +90,7 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
 def probe() -> dict[str, object]:
     """Perform a real inference request before declaring the agent ready."""
     endpoint = _model_endpoint()
-    model = os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b")
+    model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     if not endpoint:
         return {
             "ready": False,
@@ -201,5 +201,5 @@ def status() -> dict[str, object]:
         ),
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
-        "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
+        "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
     }

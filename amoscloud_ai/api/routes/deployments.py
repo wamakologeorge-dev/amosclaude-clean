@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Cookie, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes import auth as auth_routes
@@ -208,7 +208,15 @@ async def get_deployment(deployment_id: str) -> DeploymentResponse:
 
 
 @router.post("", response_model=DeploymentResponse, status_code=201, summary="Start a deployment")
-async def start_deployment(config: DeploymentConfig) -> DeploymentResponse:
+async def start_deployment(
+    config: DeploymentConfig,
+    amos_session: str | None = Cookie(default=None),
+) -> DeploymentResponse:
+    if config.repo_url and config.start_command and not auth_routes.get_user_from_session(amos_session):
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in before queuing a deployment worker task",
+        )
     deployment_id = str(uuid.uuid4())
     log.info("Starting deployment %s to %s", deployment_id, config.environment)
     reply = deployment_reply(DeploymentStatus.PENDING)

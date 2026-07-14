@@ -24,10 +24,12 @@ def test_plan_only_does_not_write(monkeypatch, tmp_path):
     class Result:
         status = "ready"
         runtime = "test"
-        reply = json.dumps({
-            "summary": "Update value",
-            "changes": [{"path": "app.py", "content": "VALUE = 2\n", "reason": "requested"}],
-        })
+        reply = json.dumps(
+            {
+                "summary": "Update value",
+                "changes": [{"path": "app.py", "content": "VALUE = 2\n", "reason": "requested"}],
+            }
+        )
 
     monkeypatch.setattr(engineering_agent.provider, "reply", lambda *_args, **_kwargs: Result())
     result = engineering_agent.run_engineering_agent(tmp_path, "update value", apply_changes=False)
@@ -35,6 +37,8 @@ def test_plan_only_does_not_write(monkeypatch, tmp_path):
     assert result.applied is False
     assert source.read_text(encoding="utf-8") == "VALUE = 1\n"
     assert result.changes[0].status == "planned"
+    assert "stored a new lesson" in result.evidence[-1]
+    assert (tmp_path / ".amosclaud" / "memory" / "memory.db").exists()
 
 
 def test_apply_creates_backup(monkeypatch, tmp_path):
@@ -44,14 +48,18 @@ def test_apply_creates_backup(monkeypatch, tmp_path):
     class Result:
         status = "ready"
         runtime = "test"
-        reply = json.dumps({
-            "summary": "Update value",
-            "changes": [{"path": "app.py", "content": "VALUE = 2\n", "reason": "requested"}],
-        })
+        reply = json.dumps(
+            {
+                "summary": "Update value",
+                "changes": [{"path": "app.py", "content": "VALUE = 2\n", "reason": "requested"}],
+            }
+        )
 
     monkeypatch.setattr(engineering_agent.provider, "reply", lambda *_args, **_kwargs: Result())
     monkeypatch.setattr(engineering_agent, "_checks", lambda *_args: [])
     result = engineering_agent.run_engineering_agent(tmp_path, "update value", apply_changes=True)
 
     assert source.read_text(encoding="utf-8") == "VALUE = 2\n"
-    assert (tmp_path / ".amosclaud" / "backups" / result.run_id / "app.py").read_text() == "VALUE = 1\n"
+    assert (
+        tmp_path / ".amosclaud" / "backups" / result.run_id / "app.py"
+    ).read_text() == "VALUE = 1\n"

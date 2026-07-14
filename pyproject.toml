@@ -34,11 +34,14 @@ Documentation = "https://amosclaud.com/docs"
 amosclaud = "amoscloud_ai.main:main"
 amosclaud-runner = "amoscloud_ai.runner_client:main"
 amosclaud-memory = "amoscloud_ai.virtual_memory:main"
+amosclaud-agent-memory = "amoscloud_ai.agent_memory:main"
 amosclaud-workspace = "amoscloud_ai.workspace_control:main"
+amosclaud-model = "amosclaud_model.cli:main"
+amosclaud-metrics = "amosclaud_metrics.server:main"
 amcl = "amosclaud_language.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["amoscloud_ai*", "amosclaud_language*"]
+include = ["amoscloud_ai*", "amosclaud_language*", "amosclaud_model*", "amosclaud_metrics*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

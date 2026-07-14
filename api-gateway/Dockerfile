@@ -28,7 +28,7 @@ EXPOSE 8000
 ENV SERVICE_A_URL="http://localhost:8001"
 ENV SERVICE_B_URL="http://localhost:8002"
 ENV SERVICE_C_URL="http://localhost:8003"
-ENV JWT_SECRET_KEY="super-secret-jwt-key" # IMPORTANT: Change this in production!
+ENV JWT_SECRET_KEY=""
 
 # Command to run the API Gateway
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

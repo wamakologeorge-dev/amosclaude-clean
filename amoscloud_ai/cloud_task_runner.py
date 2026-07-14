@@ -72,6 +72,19 @@ def _finish(
             {"evidence": (evidence or [])[:200], "artifacts": (artifacts or [])[:100]},
         )
         db.commit()
+    from amoscloud_ai.api.routes.webhooks import dispatch_webhook_event
+
+    dispatch_webhook_event(
+        int(task["user_id"]),
+        f"task.{status}",
+        {
+            "task_id": task_id,
+            "status": status,
+            "summary": summary[:20_000],
+            "artifacts": artifacts or [],
+            "pull_request_url": pull_request_url,
+        },
+    )
 
 
 def _start(task_id: str) -> dict | None:

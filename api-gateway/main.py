@@ -6,8 +6,12 @@ import httpx
 import logging
 import time
 
-from .config import settings
-from .dependencies import get_current_user, rate_limiter
+try:
+    from .config import settings
+    from .dependencies import get_current_user, rate_limiter
+except ImportError:  # Docker starts this module as top-level `main:app`.
+    from config import settings
+    from dependencies import get_current_user, rate_limiter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +25,7 @@ app = FastAPI(
 
 # Initialize HTTPX client for proxying requests
 # Use a timeout to prevent hanging requests
-http_client = httpx.AsyncClient(timeout=30.0)
+http_client = httpx.AsyncClient(timeout=30.0, trust_env=False)
 
 # --- Middleware for Logging ---
 @app.middleware("http")
