@@ -41,6 +41,28 @@ def _model_headers() -> dict[str, str]:
     return headers
 
 
+def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+    endpoint = os.getenv("AMOSCLAUD_API_URL", "").strip().rstrip("/")
+    api_key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
+    if not endpoint or not api_key:
+        return None
+    response = httpx.post(
+        f"{endpoint}/api/v1/provider/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "model": os.getenv("AMOSCLAUD_API_MODEL", "amosclaud-agent"),
+            "messages": [{"role": "system", "content": system_prompt}] + history,
+        },
+        timeout=float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "120")),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    text = (payload["choices"][0]["message"]["content"] or "").strip()
+    if not text:
+        raise RuntimeError("Amosclaud API returned an empty response")
+    return ProviderResult(reply=text, runtime="amosclaud-api")
+
+
 def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
     endpoint = _model_endpoint()
     if not endpoint:
@@ -143,6 +165,10 @@ def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -
 
 def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
     """Return a response from the first-party Amosclaud provider."""
+    api_result = _amosclaud_api_reply(history, system_prompt)
+    if api_result:
+        return api_result
+
     try:
         self_hosted = _self_hosted_reply(history, system_prompt)
         if self_hosted:
@@ -169,6 +195,10 @@ def status() -> dict[str, object]:
     """Return safe provider status without exposing credentials."""
     return {
         "provider": "amosclaud",
+        "amosclaud_api_configured": bool(
+            os.getenv("AMOSCLAUD_API_URL", "").strip()
+            and os.getenv("AMOSCLAUD_API_KEY", "").strip()
+        ),
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
         "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
