@@ -88,7 +88,7 @@ def test_full_package_user_can_run_autonomous_agent(monkeypatch):
         "objective": "verify server health",
         "branch": "main",
     }
-    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: {"id": 1})
+    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: {"id": 1, "name": "Full Package User"})
     monkeypatch.setattr(agent, "require_full_package", lambda _user_id: None)
     resp = request(
         "POST",
