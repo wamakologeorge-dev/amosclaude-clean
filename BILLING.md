@@ -43,3 +43,28 @@ An authenticated administrator can issue a license with `POST /api/v1/billing/li
 - Never commit live credentials or populated `.env` files.
 - Verify every webhook signature from the raw request body.
 - Do not grant access from the checkout redirect alone; wait for a verified webhook.
+
+
+## Amosclaud API keys and agent credits
+
+Customer installations use `AMOSCLAUD_API_KEY`; they never receive Amosclaud's private upstream model credentials. A signed-in customer creates a key at `/api-access`. Only the key hash is stored.
+
+Prepaid credit packs are configured with:
+
+```env
+STRIPE_AGENT_STARTER_PRICE_ID=price_...
+STRIPE_AGENT_BUILDER_PRICE_ID=price_...
+STRIPE_AGENT_STUDIO_PRICE_ID=price_...
+AMOSCLAUD_AGENT_CREDITS_PER_REQUEST=1
+```
+
+A verified `checkout.session.completed` event credits the wallet exactly once. Each successful agent request debits the configured credit amount. Runtime failures refund the debit.
+
+The downloadable package uses:
+
+```env
+AMOSCLAUD_API_URL=https://amosclaud.com
+AMOSCLAUD_API_KEY=amos_live_customer_key
+```
+
+Owner OpenAI, Anthropic, or self-hosted model credentials must remain only on Amosclaud-controlled provider infrastructure.
