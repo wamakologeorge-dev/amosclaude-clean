@@ -8,6 +8,26 @@ servers:
 security:
   - bearerApiKey: []
 paths:
+  /downloads/latest:
+    get:
+      operationId: getLatestServerDownloads
+      summary: Discover current Amosclaud server packages and checksums
+      security: []
+      responses:
+        '200': {description: Stable platform download manifest}
+  /downloads/{platform_name}:
+    get:
+      operationId: downloadServerPackage
+      summary: Download an allowlisted server package
+      security: []
+      parameters:
+        - in: path
+          name: platform_name
+          required: true
+          schema: {enum: [windows, linux, macos, checksums]}
+      responses:
+        '307': {description: Redirect to the verified GitHub Release asset}
+        '404': {description: Platform not found}
   /tasks:
     post:
       operationId: createVerifiedTask
