@@ -18,6 +18,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if not exist "AmosclaudWorkspace" mkdir "AmosclaudWorkspace"
+
 if not exist ".env" (
   echo First-time Amosclaud owner setup.
   set /p AMOS_OWNER_EMAIL=Enter the email address you will use for the owner account: 
@@ -30,7 +32,7 @@ if not exist ".env" (
   echo Created a private local configuration for %AMOS_OWNER_EMAIL%.
 )
 
-echo Starting Amosclaud and the local model runtime...
+echo Starting Amosclaud, the folder workspace, and the local model runtime...
 docker compose -f docker-compose.selfhost.yml up -d --build
 if errorlevel 1 (
   echo Amosclaud could not start. Review the Docker output above.
