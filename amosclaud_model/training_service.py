@@ -20,6 +20,8 @@ DEFAULT_ALLOWED_LICENSES = {
     "mit",
     "project-owned",
     "amosclaud project-owned",
+    "amosclaud-contributor-license-1.0",
+    "amosclaud-commercial-dataset-license-1.0",
     "commercial-license",
 }
 

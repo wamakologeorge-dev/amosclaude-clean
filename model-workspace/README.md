@@ -89,6 +89,11 @@ Built-in labels are `project-owned`, `Amosclaud project-owned`, `MIT`, `Apache-2
 organization-specific labels with `AMOSCLAUD_TRAINING_LICENSE_ALLOWLIST`. This allowlist is a
 technical control, not a substitute for actual permission.
 
+Amosclaud's draft agreements are under `docs/legal/`: the Training Data Contributor Agreement,
+Commercial Training Data License, and Dataset Rights Schedule. After legal review and signature,
+their manifest labels are `amosclaud-contributor-license-1.0` and
+`amosclaud-commercial-dataset-license-1.0`.
+
 There is no universal training license. For every dataset, keep its license or signed contract,
 source URL, acquisition date, allowed purposes, attribution requirements, privacy review, and
 deletion obligations. Use `project-owned` only when Amosclaud owns the material or contributors

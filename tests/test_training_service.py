@@ -43,3 +43,19 @@ def test_training_rejects_unverified_dataset_rights(tmp_path):
         assert False, "unlicensed training should fail"
     except ValueError as error:
         assert "license audit failed" in str(error)
+
+
+def test_amosclaud_training_agreement_labels_are_approved(tmp_path):
+    root = _licensed_workspace(tmp_path)
+    manifest = root / "datasets" / "manifest.jsonl"
+    manifest.write_text(
+        json.dumps(
+            {
+                "id": "contributor-1",
+                "dataset": "contribution",
+                "license": "amosclaud-contributor-license-1.0",
+            }
+        )
+        + "\n"
+    )
+    assert audit_dataset_licenses(root)["approved"] is True
