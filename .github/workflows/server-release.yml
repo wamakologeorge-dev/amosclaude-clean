@@ -1,0 +1,68 @@
+name: Portable Agent Server Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "server-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install and verify
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          python -m compileall -q amoscloud_ai amosclaud_language
+          python -c "from amoscloud_ai.main import app; assert app.title"
+
+      - name: Build portable folder archives
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -Eeuo pipefail
+          VERSION="${RELEASE_TAG#server-v}"
+          ROOT="Amosclaud-Agent-Server-${VERSION}"
+          mkdir -p "release/${ROOT}"
+          git archive HEAD | tar -x -C "release/${ROOT}"
+          rm -rf "release/${ROOT}/desktop" "release/${ROOT}/.github"
+          mkdir -p "release/${ROOT}/data/repositories" "release/${ROOT}/data/storage"
+          chmod +x "release/${ROOT}/start-local.sh"
+          (
+            cd release
+            zip -qr "${ROOT}.zip" "${ROOT}"
+            tar -czf "${ROOT}.tar.gz" "${ROOT}"
+            sha256sum "${ROOT}.zip" "${ROOT}.tar.gz" > SHA256SUMS.txt
+          )
+
+      - name: Upload build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: amosclaud-agent-server-${{ github.ref_name }}
+          path: |
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish immutable GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Amosclaud Agent Server ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS.txt
