@@ -1,0 +1,7 @@
+{
+  "framework": "amosclaud-native",
+  "agent": "verified-software-worker",
+  "modes": ["ask", "build", "test", "review", "deploy", "monitor"],
+  "targets": ["cloud", "self_hosted", "github"],
+  "guardrails": ["workspace_confinement", "approval_gate", "verification_evidence", "credit_cap"]
+}

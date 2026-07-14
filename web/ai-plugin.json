@@ -1,0 +1,12 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Amosclaud Verified Work",
+  "name_for_model": "amosclaud_verified_work",
+  "description_for_human": "Request verified software work from cloud, private, or GitHub runners.",
+  "description_for_model": "Create and inspect authenticated engineering tasks that return evidence, patches, tests, logs, or pull requests.",
+  "auth": {"type": "service_http", "authorization_type": "bearer"},
+  "api": {"type": "openapi", "url": "https://amosclaud.com/openapi.yaml"},
+  "logo_url": "https://amosclaud.com/icons/icon-512.png",
+  "contact_email": "support@amosclaud.com",
+  "legal_info_url": "https://amosclaud.com/terms"
+}

@@ -7,6 +7,7 @@ import asyncio
 import httpx
 
 from amoscloud_ai.main import create_app
+from amoscloud_ai.api.routes import agent
 
 app = create_app()
 
@@ -71,13 +72,30 @@ def test_autonomous_agent_profile():
     assert data["scope"] == ["amosclaud.com", "Amosclaud autonomous pipeline"]
 
 
-def test_autonomous_agent_run():
+def test_autonomous_agent_run_requires_authentication():
     payload = {
         "mode": "autonomous-check",
         "objective": "verify server health",
         "branch": "main",
     }
     resp = request("POST", "/api/v1/agent/run", json=payload)
+    assert resp.status_code == 401
+
+
+def test_full_package_user_can_run_autonomous_agent(monkeypatch):
+    payload = {
+        "mode": "autonomous-check",
+        "objective": "verify server health",
+        "branch": "main",
+    }
+    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: {"id": 1, "name": "Full Package User"})
+    monkeypatch.setattr(agent, "require_full_package", lambda _user_id: None)
+    resp = request(
+        "POST",
+        "/api/v1/agent/run",
+        json=payload,
+        cookies={"amos_session": "test-session"},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["accepted"] is True
