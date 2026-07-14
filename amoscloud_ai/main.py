@@ -1,4 +1,4 @@
-"""Amoscloud AI – FastAPI application entry point.
+"""Amosclaud AI – FastAPI application entry point.
 
 Run directly:
     python -m amoscloud_ai.main
@@ -6,69 +6,213 @@ Run directly:
 Or with uvicorn:
     uvicorn amoscloud_ai.main:app --host 0.0.0.0 --port 8000
 """
-
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amoscloud_ai import __version__
-from amoscloud_ai.api.routes import deployments, health, pipelines
+from amoscloud_ai.api.routes import (
+    account,
+    admin,
+    agent,
+    agent_readiness,
+    amo_runtime,
+    amo_tokens,
+    amos_mail,
+    amos_secure_code,
+    auth,
+    chat,
+    community,
+    copilot,
+    core,
+    deployments,
+    feed,
+    first_party_chat,
+    github_repositories,
+    github_travel,
+    health,
+    local_workspace,
+    organizations,
+    passkey_signup,
+    pipelines,
+    pr_tasks,
+    repositories,
+    repository_templates,
+    reviews,
+    storage,
+    wifi,
+    workspaces,
+)
+from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
+from amoscloud_ai.core.workspace import WorkspaceEngine
 from amoscloud_ai.logger import log
+from amoscloud_ai.security import SecurityMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    log.info(
-        f"🚀 {settings.app_name} v{__version__} starting "
-        f"[{settings.environment}] on {settings.host}:{settings.port}"
-    )
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    repositories.REPOSITORY_ROOT.mkdir(parents=True, exist_ok=True)
+    storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
+    WorkspaceEngine()
+    log.info(f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}")
     yield
-    log.info("Shutting down Amoscloud AI server")
+    log.info("Shutting down Amosclaud AI server")
 
 
 def create_app() -> FastAPI:
+    production = settings.environment.lower() in {"production", "prod"}
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description=(
-            "Self-hosted CI/CD & Deployment Automation server. "
-            "Manage pipelines, deployments, and database migrations via REST API."
-        ),
-        docs_url="/docs",
-        redoc_url="/redoc",
+        description="Folder-first, self-hosted Amosclaud platform for local AI, repositories, projects, tasks, knowledge, storage, and automation.",
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
         lifespan=lifespan,
     )
-
-    # CORS
+    app.add_middleware(SecurityMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_hosts,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Amosclaud-Owner-Key"],
     )
 
-    # Routers
-    app.include_router(health.router)
-    app.include_router(pipelines.router, prefix="/api/v1")
-    app.include_router(deployments.router, prefix="/api/v1")
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        log.exception("Unhandled request failure on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Amosclaud could not complete this request. The error was recorded in the server logs.",
+                "error": "internal_server_error",
+                "path": request.url.path,
+            },
+        )
 
-    # Mount web dashboard static files
-    web_dir = os.path.join(os.path.dirname(__file__), "..", "web")
-    if os.path.exists(web_dir):
+    @app.middleware("http")
+    async def block_suspended_accounts(request: Request, call_next):
+        token = request.cookies.get("amos_session")
+        if token and admin.is_session_suspended(token):
+            response = JSONResponse({"detail": "This account is suspended"}, status_code=403)
+            response.delete_cookie("amos_session", path="/")
+            return response
+        return await call_next(request)
+
+    app.include_router(health.router)
+    app.include_router(first_party_chat.router)
+    app.include_router(chat.router, include_in_schema=False)
+    app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(auth.router, include_in_schema=False)
+    app.include_router(account.router, prefix="/api/v1")
+    app.include_router(amos_secure_code.router, prefix="/api/v1")
+    app.include_router(passkey_signup.router, prefix="/api/v1")
+    app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(agent_readiness.router, prefix="/api/v1")
+    app.include_router(amo_runtime.router, prefix="/api/v1")
+    app.include_router(copilot.router, prefix="/api/v1")
+    app.include_router(pr_tasks.router, prefix="/api/v1")
+    app.include_router(github_travel.router, prefix="/api/v1")
+    app.include_router(pipelines.router, prefix="/api/v1")
+    app.include_router(reviews.router, prefix="/api/v1")
+    app.include_router(deployments.router, prefix="/api/v1")
+    app.include_router(repositories.router, prefix="/api/v1")
+    app.include_router(github_repositories.router, prefix="/api/v1")
+    app.include_router(repository_templates.router, prefix="/api/v1")
+    app.include_router(organizations.router, prefix="/api/v1")
+    app.include_router(workspaces.router, prefix="/api/v1")
+    app.include_router(local_workspace.router, prefix="/api/v1")
+    app.include_router(storage.router, prefix="/api/v1")
+    app.include_router(community.router, prefix="/api/v1")
+    app.include_router(feed.router, prefix="/api/v1")
+    app.include_router(amos_mail.router, prefix="/api/v1")
+    app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(core.router, prefix="/api/v1")
+    app.include_router(amo_tokens.router, prefix="/api/v1")
+    app.include_router(wifi.router, prefix="/api/v1")
+
+    web_dir = Path(__file__).resolve().parent.parent / "web"
+    if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
+    @app.get("/service-worker.js", include_in_schema=False)
+    async def service_worker():
+        return FileResponse(web_dir / "service-worker.js", media_type="application/javascript", headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"})
+
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    async def web_manifest():
+        return FileResponse(web_dir / "manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.get("/download", include_in_schema=False)
+    async def download_page():
+        return FileResponse(web_dir / "download.html")
+
+    @app.get("/feed", include_in_schema=False)
+    async def public_feed():
+        return FileResponse(web_dir / "feed.html")
+
+    @app.get("/community", include_in_schema=False)
+    async def community_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "community.html")
+
+    @app.get("/login", include_in_schema=False)
+    async def login_page(request: Request):
+        if get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "login.html")
+
+    @app.get("/repositories", include_in_schema=False)
+    async def repositories_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "repositories.html")
+
+    @app.get("/admin", include_in_schema=False)
+    async def admin_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "admin.html")
+
+    @app.get("/admin/wifi", include_in_schema=False)
+    async def wifi_admin_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/", status_code=302)
+        return FileResponse(web_dir / "wifi.html")
+
+    @app.get("/mail", include_in_schema=False)
+    async def mail_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "mail.html")
+
+    @app.get("/workspace/{repository_id}", include_in_schema=False)
+    async def repository_workspace(repository_id: int, request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "workspace.html")
+
     @app.get("/", include_in_schema=False)
-    async def dashboard() -> FileResponse:
-        index_path = os.path.join(os.path.dirname(__file__), "..", "web", "index.html")
-        return FileResponse(index_path)
+    async def dashboard(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "index.html")
 
     return app
 
@@ -76,16 +220,5 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def main() -> None:
-    uvicorn.run(
-        "amoscloud_ai.main:app",
-        host=settings.host,
-        port=settings.port,
-        workers=settings.workers,
-        reload=settings.debug,
-        log_level=settings.log_level.lower(),
-    )
-
-
 if __name__ == "__main__":
-    main()
+    uvicorn.run("amoscloud_ai.main:app", host=settings.host, port=settings.port, reload=settings.environment == "development")

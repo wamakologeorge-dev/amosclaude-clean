@@ -1,0 +1,34 @@
+# .github/workflows/cmood_agent_trigger.yml
+name: cmood Autonomous Agent Trigger
+
+on:
+  push:
+    branches:
+      - main
+  issue_comment:
+    types: [created]
+    if: contains(github.event.comment.body, '/cmood') && github.event.issue.pull_request # Trigger on /cmood comment in PRs
+
+jobs:
+  run_cmood_agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.9'
+
+      - name: Install cmood dependencies
+        run: pip install -r cmood/requirements.txt
+
+      - name: Execute cmood agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add other cmood-specific environment variables here
+        run: |
+          echo "cmood start job output should show running..."
+          python cmood/agent.py --task "process_latest_changes" --repo "${{ github.repository }}" --ref "${{ github.sha }}"
+          echo "cmood ci clone cmood cloud clone cmood mood agent is working cmood wait arguments with agent..."

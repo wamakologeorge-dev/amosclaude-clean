@@ -1,0 +1,65 @@
+AMOSCLAUD COMMERCIAL LICENSE
+Version 1.0 - Draft for Legal Review
+
+Copyright (c) 2026 Amosclaud. All rights reserved.
+
+1. License Grant
+Subject to payment of applicable fees and compliance with this License, Amosclaud grants the customer a limited, non-exclusive, non-transferable, revocable right to access and use the Amosclaud software and services during the applicable subscription term.
+
+2. Ownership
+Amosclaud and its licensors retain all right, title, and interest in the software, platform, documentation, trademarks, service marks, and related intellectual property. No ownership rights are transferred to the customer.
+
+3. Plans and Feature Entitlements
+(a) Trial: New users may receive a 15-day free trial.
+(b) Developer Plan: USD 29 per month. The Amosclaud AI Agent is disabled.
+(c) Pro Plan: USD 100 per month. The Amosclaud AI Agent is enabled.
+(d) Enterprise Plan: Pricing is displayed or quoted separately. The Amosclaud AI Agent is enabled.
+(e) Organization Access: Connection to GitHub organizations is available only where the user and the organization authorize access. Organization owners may limit access to selected repositories.
+
+4. AI Agent Restrictions
+The Amosclaud AI Agent may inspect repositories, run tests, identify code-health issues, prepare proposed fixes, create working branches, and open pull requests when authorized. Unless explicitly configured otherwise, the Agent must not:
+- merge pull requests;
+- push directly to protected default branches;
+- delete repositories;
+- change organization settings;
+- deploy to production; or
+- perform destructive database operations
+without explicit user confirmation and sufficient repository permissions.
+
+5. Repository and Organization Access
+Customers may connect supported GitHub accounts and organizations. Access is limited to repositories and permissions granted through the applicable GitHub authorization or GitHub App installation. Amosclaud does not receive access to organizations or repositories that have not authorized the service.
+
+6. User Content
+Customers retain ownership of code, files, data, and other content they upload or connect. Customers grant Amosclaud a limited license to process that content only as needed to provide, secure, support, and improve the subscribed services, subject to the applicable privacy terms.
+
+7. Acceptable Use
+Customers must not use Amosclaud to violate law, infringe intellectual property rights, distribute malware, gain unauthorized access, interfere with third-party systems, or bypass plan restrictions.
+
+8. Subscription, Billing, and Suspension
+Subscriptions renew monthly unless canceled. Amosclaud may suspend access for non-payment, abuse, security risk, or material breach. Features may be disabled when a subscription does not include them.
+
+9. Account Management
+Users may request password recovery, email recovery, account deletion, and account restoration during any published recovery period. Security verification may be required.
+
+10. Warranty Disclaimer
+THE SOFTWARE AND SERVICES ARE PROVIDED "AS IS" AND "AS AVAILABLE" TO THE MAXIMUM EXTENT PERMITTED BY LAW. AMOSCLAUD DISCLAIMS ALL IMPLIED WARRANTIES, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+11. Limitation of Liability
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, AMOSCLAUD WILL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR LOSS OF PROFITS, DATA, OR BUSINESS. AMOSCLAUD'S TOTAL LIABILITY WILL NOT EXCEED THE AMOUNT PAID BY THE CUSTOMER FOR THE SERVICE DURING THE THREE MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM.
+
+12. Termination
+Amosclaud may terminate or suspend this License for material breach. Upon termination, the customer's right to use the service ends, subject to any data export or retention rights stated in the applicable service terms.
+
+13. Changes
+Amosclaud may update this License by providing reasonable notice. Continued use after the effective date of an update constitutes acceptance where permitted by law.
+
+14. Governing Terms
+This draft must be completed with the applicable governing law, venue, privacy policy, data-processing terms, refund policy, and enterprise agreement before production use.
+
+15. Multi-Agent AI Service
+Where included in the applicable plan, the Amosclaud AI Agent may coordinate three internal AI helpers within one user-facing chatbot: Builder AI, Tester AI, and Reviewer AI. These helpers operate behind the main Agent and do not create separate user accounts or separate chat interfaces. The multi-agent feature is disabled on the Developer plan and enabled on Pro and Enterprise plans, subject to authorization, usage limits, and applicable service terms.
+
+16. Google Authentication
+Amosclaud may allow users to register or sign in using Google authentication. Google sign-in is used only to verify identity and retrieve authorized profile information, such as name and verified email address. Access to Google services beyond authentication requires separate, explicit authorization. Where the same verified email is used across supported sign-in methods, Amosclaud may link those methods to one account to prevent duplicate accounts.
+
+NOTICE: This document is a business draft and is not a substitute for advice from a qualified attorney.
