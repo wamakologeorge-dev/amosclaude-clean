@@ -50,43 +50,43 @@
       </aside>
 
       <section class="notebook-panel chat-panel">
-        <div class="panel-head"><h2>Agent</h2><button class="notebook-action" type="button">Customize</button></div>
-        <div class="chat-hero"><h2>What are you building?</h2><p>Give Amosclaud a goal. It will explain the plan, work through the files, test the result, and prepare deployment.</p></div>
+        <div class="panel-head"><h2>Autonomous</h2><span class="notebook-action">Primary runtime</span></div>
+        <div class="chat-hero"><h2>What are you building?</h2><p>Give Amosclaud Autonomous a goal. It can inspect repositories, run builds and tests, review work, deploy, and monitor services without depending on a separate model agent.</p></div>
         <section class="agent-section">
-          <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Server</h2><p id="agent-mission">Loading autonomous server profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
+          <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Runtime</h2><p id="agent-mission">Loading autonomous runtime profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
           <div class="agent-layout-visual">
             <div class="agent-controls-stack">
-              <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud is ready. Send an instruction to begin.</div></div>
+              <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud Autonomous is ready. Send an instruction to begin.</div></div>
               <div class="agent-compose">
-                <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">Ask</option><option value="build">Build</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option></select>
-                <textarea id="agent-objective-input" rows="3" placeholder="Ask Amosclaud to create, fix, test, explain, deploy, or monitor something..."></textarea>
-                <button id="btn-run-agent" class="btn-primary">Send</button>
+                <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">Check</option><option value="build">Build</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option></select>
+                <textarea id="agent-objective-input" rows="3" placeholder="Tell Autonomous what to check, build, test, review, deploy, or monitor..."></textarea>
+                <button id="btn-run-agent" class="btn-primary">Run Autonomous</button>
               </div>
             </div>
             <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
           </div>
         </section>
-        <div class="notebook-footer-note">Amosclaud should only report work as completed after repository tools confirm it.</div>
+        <div class="notebook-footer-note">Amosclaud reports completion only after repository and runtime tools confirm real results.</div>
       </section>
 
       <aside class="notebook-panel studio-panel">
-        <div class="panel-head"><h2>Studio</h2><span>Tools</span></div>
+        <div class="panel-head"><h2>Studio</h2><span>Manual + Autonomous</span></div>
         <div class="panel-body">
           <div class="studio-grid">
-            <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run pipeline</span></button>
-            <button class="studio-tool"><strong>Test</strong><span>Check source</span></button>
-            <button class="studio-tool"><strong>Review</strong><span>Inspect changes</span></button>
-            <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start release</span></button>
-            <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Open source</span></a>
+            <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run pipeline manually</span></button>
+            <a class="studio-tool" href="/repositories"><strong>Test</strong><span>Open repository tools</span></a>
+            <a class="studio-tool" href="/repositories"><strong>Review</strong><span>Inspect changes manually</span></a>
+            <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start release manually</span></button>
+            <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Open source control</span></a>
             <a class="studio-tool" href="/community"><strong>Community</strong><span>Open chat</span></a>
             <a class="studio-tool" href="/mail"><strong>Amos Mail</strong><span>Open @amosclaud.com inbox</span></a>
             <a class="studio-tool" href="/admin" data-admin-only hidden><strong>Administrator</strong><span>Open platform controls</span></a>
             <button class="studio-tool"><strong>Storage</strong><span>Open files</span></button>
-            <button class="studio-tool"><strong>Report</strong><span>View results</span></button>
-            <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Connections</strong><span>Check GitHub and model</span></button>
+            <button class="studio-tool"><strong>Report</strong><span>View confirmed results</span></button>
+            <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Runtime health</strong><span>Check Autonomous and server</span></button>
           </div>
-          <div id="agent-connection-status" class="studio-summary" aria-live="polite">Connection status has not been checked yet.</div>
-          <div class="studio-summary">Studio output, build results, deployment status, and generated reports will appear here.</div>
+          <div id="agent-connection-status" class="studio-summary" aria-live="polite">Runtime health has not been checked yet.</div>
+          <div class="studio-summary">Build results, deployment status, monitoring output, and generated reports appear here.</div>
 
           <section class="stats-row">
             <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
