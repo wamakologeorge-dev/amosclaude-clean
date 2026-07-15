@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Sign in · Amosclaud</title>
+  <title>Access Amosclaud</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
@@ -21,13 +21,13 @@
       <div class="brand-mark">A</div>
       <p class="eyebrow">AMOSCLAUD</p>
       <h1>Your Amosclaud account and mail in one step.</h1>
-      <p>Create the account once, then return with your fingerprint, Face ID, phone PIN, screen lock, or Amosclaud mail and password.</p>
+      <p>Use your existing account, or create it once. Amosclaud will not create another account when the same username and password already match.</p>
     </section>
 
     <section class="auth-card" aria-labelledby="auth-title">
       <div class="tabs" role="tablist">
         <button id="login-tab" class="tab active" type="button">Sign in</button>
-        <button id="register-tab" class="tab" type="button">Create account</button>
+        <button id="register-tab" class="tab" type="button">Continue securely</button>
       </div>
 
       <h2 id="auth-title">Welcome back</h2>
@@ -39,14 +39,14 @@
       <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
         <label id="identifier-field">Amosclaud mail or username<input id="identifier" name="username" autocomplete="username" required placeholder="username@amosclaud.com" /></label>
-        <label id="username-field" class="hidden">Choose username
+        <label id="username-field" class="hidden">Amosclaud username
           <div class="address-input"><input id="username" name="amos-username" autocomplete="nickname" minlength="3" maxlength="32" /><span>@amosclaud.com</span></div>
         </label>
         <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
-        <p id="password-hint" class="hint hidden">Use at least 10 characters. Your device will ask you to confirm signup.</p>
+        <p id="password-hint" class="hint hidden">Enter the password for this username. Amosclaud signs in when it exists and creates it only when it does not.</p>
         <section id="device-note" class="device-note hidden">
           <strong>Private device check</strong>
-          <span>Amosclaud uses your device’s built-in security. Your fingerprint, face, or PIN never goes to Amosclaud.</span>
+          <span>A new passkey is requested only when this account does not already exist. Your fingerprint, face, or PIN never goes to Amosclaud.</span>
         </section>
         <button id="submit-button" class="primary-button" type="submit">Sign in with password</button>
       </form>
@@ -54,8 +54,8 @@
       <p id="message" class="message" role="alert" aria-live="polite"></p>
     </section>
   </main>
-  <script src="/static/login.js"></script>
   <script src="/static/login-recovery.js"></script>
+  <script src="/static/login.js"></script>
   <script src="/static/app-install.js"></script>
 </body>
 </html>
