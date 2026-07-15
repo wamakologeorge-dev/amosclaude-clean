@@ -224,7 +224,7 @@ def create_app() -> FastAPI:
     @app.get("/login", include_in_schema=False)
     async def login_page(request: Request):
         if get_user_from_session(request.cookies.get("amos_session")):
-            return RedirectResponse("/", status_code=302)
+            return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "login.html")
 
     @app.get("/repositories", include_in_schema=False)
@@ -239,7 +239,7 @@ def create_app() -> FastAPI:
         if not user:
             return RedirectResponse("/login", status_code=302)
         if not bool(user["is_admin"]):
-            return RedirectResponse("/", status_code=302)
+            return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "admin.html")
 
     @app.get("/admin/wifi", include_in_schema=False)
@@ -248,7 +248,7 @@ def create_app() -> FastAPI:
         if not user:
             return RedirectResponse("/login", status_code=302)
         if not bool(user["is_admin"]):
-            return RedirectResponse("/", status_code=302)
+            return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "wifi.html")
 
     @app.get("/mail", include_in_schema=False)
@@ -263,11 +263,25 @@ def create_app() -> FastAPI:
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "workspace.html")
 
+    @app.get("/cloud/agent", include_in_schema=False)
+    async def cloud_agent_page(request: Request):
+        """Canonical hosted workspace for Amosclaud Autonomous Cloud Agent."""
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "index.html")
+
+    @app.get("/autonomous", include_in_schema=False)
+    async def autonomous_legacy_route(request: Request):
+        """Keep old bookmarks working while moving users to the cloud agent URL."""
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/cloud/agent", status_code=308)
+
     @app.get("/", include_in_schema=False)
     async def dashboard(request: Request):
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
-        return FileResponse(web_dir / "index.html")
+        return RedirectResponse("/cloud/agent", status_code=302)
 
     return app
 
