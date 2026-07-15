@@ -24,7 +24,7 @@ router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
 AGENT_NAME = "Amosclaud Autonomous Runtime"
 AGENT_OWNER = "Amosclaud"
-AGENT_ROLE = "autonomous build, deployment, and monitoring runtime"
+AGENT_ROLE = "autonomous build, deployment, and monitoring server"
 AGENT_HOME = "amosclaud.com"
 AGENT_PIPELINE = "Amosclaud autonomous pipeline"
 AGENT_MODE = "autonomous"
