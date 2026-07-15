@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Owner Identity · Amosclaud</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{max-width:900px;margin:auto;padding:22px}.card{background:#101925;border:1px solid #2b3748;border-radius:24px;padding:24px;margin:18px 0}.status{display:inline-block;padding:9px 14px;border-radius:999px;background:#302d1c;color:#ffd76a}.status.ok{background:#173a2a;color:#7df0a5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.metric{background:#0b1420;border:1px solid #334154;border-radius:18px;padding:18px}.metric span{display:block;color:#9eabc0;margin-bottom:8px}.metric strong{font-size:1.15rem;word-break:break-word}input{box-sizing:border-box;width:100%;padding:15px;border-radius:14px;border:1px solid #40506a;background:#07111d;color:#fff;font-size:1rem}button,a.button{display:inline-block;border:0;border-radius:14px;padding:13px 17px;font-weight:750;background:#2673ea;color:#fff;text-decoration:none;margin-top:12px}.muted{color:#9eabc0}.notice{padding:16px;border-radius:16px;background:#172335;border:1px solid #334154;white-space:pre-wrap}.danger{color:#ff9ca4}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <section class="card">
+    <p class="muted">AMOSCLAUD PLATFORM IDENTITY</p>
+    <h1>Owner Recognition Center</h1>
+    <p>This page connects your signed-in administrator account to the single persistent platform-owner identity used by Autonomous, Runtime Control Center, Vault and service diagnostics.</p>
+    <span class="status" id="badge">Checking identity…</span>
+  </section>
+
+  <section class="card">
+    <h2>Signed-in identity</h2>
+    <div class="grid" id="identity"><div class="metric"><span>Status</span><strong>Loading…</strong></div></div>
+  </section>
+
+  <section class="card" id="claim-card" hidden>
+    <h2>Recognize this administrator as owner</h2>
+    <p class="muted">This does not change your password, passkeys, sessions or user content. It creates one protected owner mapping to your existing user ID.</p>
+    <label for="confirmation">Type <strong>MAKE ME AMOSCLAUD OWNER</strong></label>
+    <input id="confirmation" autocomplete="off" placeholder="MAKE ME AMOSCLAUD OWNER">
+    <button id="claim">Recognize me as owner</button>
+  </section>
+
+  <section class="card">
+    <h2>Autonomous recognition test</h2>
+    <div class="notice" id="result">Waiting for identity check.</div>
+    <a class="button" href="/admin">Open Administrator Dashboard</a>
+    <a class="button" href="/cloud/agent">Open Autonomous Agent</a>
+  </section>
+</main>
+<script>
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function request(path,options={}){const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...options});if(r.status===401){location.href='/login';throw new Error('Sign in required')}let body={};try{body=await r.json()}catch(_){}if(!r.ok)throw new Error(body.detail||`HTTP ${r.status}`);return body}
+function render(data){
+  const ok=!!data.recognized;
+  const badge=document.getElementById('badge'); badge.textContent=ok?'Recognized platform owner':'Administrator not yet recognized as owner'; badge.className=`status${ok?' ok':''}`;
+  document.getElementById('identity').innerHTML=[['Name',data.name],['Email',data.email],['Administrator',data.is_admin?'Yes':'No'],['Owner recognized',ok?'Yes':'No'],['Recognition source',data.source],['Autonomous role',data.autonomous_recognition]].map(([a,b])=>`<div class="metric"><span>${esc(a)}</span><strong>${esc(b)}</strong></div>`).join('');
+  document.getElementById('claim-card').hidden=ok||!data.claim_available;
+  document.getElementById('result').textContent=ok?'PASS: Autonomous, Runtime Control Center, Vault and model diagnostics now receive this account as owner. Refresh the Admin page.':data.claim_available?'ACTION REQUIRED: confirm this existing administrator account as the persistent owner below.':'BLOCKED: another account is already registered as platform owner. Use a controlled owner-transfer migration.';
+}
+async function load(){try{render(await request('/api/v1/core/owner/status'))}catch(e){document.getElementById('result').textContent=e.message;document.getElementById('result').classList.add('danger')}}
+document.getElementById('claim').addEventListener('click',async()=>{const button=document.getElementById('claim');button.disabled=true;try{await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation:document.getElementById('confirmation').value})});await load()}catch(e){document.getElementById('result').textContent=e.message;document.getElementById('result').classList.add('danger')}finally{button.disabled=false}});
+load();
+</script>
+</body>
+</html>
