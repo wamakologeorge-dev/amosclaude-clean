@@ -24,7 +24,7 @@ UPSTREAM_TOKEN = os.getenv("AMOSCLAUD_MODEL_UPSTREAM_TOKEN", "").strip()
 STATION_TOKEN = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
 REQUEST_TIMEOUT = max(10.0, min(float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")), 600.0))
 
-app = FastAPI(title=STATION_NAME, version="1.1.0")
+app = FastAPI(title=STATION_NAME, version="1.1.1")
 
 
 class Message(BaseModel):
@@ -67,15 +67,19 @@ def _upstream_endpoint(path: str) -> str:
 def _safe_upstream_detail(response: httpx.Response) -> str:
     """Return useful bounded diagnostics without exposing credentials."""
     detail = ""
-    try:
-        payload = response.json()
-        if isinstance(payload, dict):
-            candidate = payload.get("detail") or payload.get("error") or payload.get("message")
-            if isinstance(candidate, dict):
-                candidate = candidate.get("message") or candidate.get("detail")
-            if candidate is not None:
-                detail = str(candidate)
-    except (ValueError, TypeError):
+    content_type = response.headers.get("content-type", "").lower()
+    if "json" in content_type:
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                candidate = payload.get("detail") or payload.get("error") or payload.get("message")
+                if isinstance(candidate, dict):
+                    candidate = candidate.get("message") or candidate.get("detail")
+                if candidate is not None:
+                    detail = str(candidate)
+        except (ValueError, TypeError):
+            detail = response.text
+    else:
         detail = response.text
     detail = " ".join((detail or "").split())[:300]
     return detail or response.reason_phrase or "upstream request failed"
@@ -86,6 +90,21 @@ def _raise_for_upstream(response: httpx.Response, service: str) -> None:
         return
     detail = _safe_upstream_detail(response)
     raise RuntimeError(f"{service} HTTP {response.status_code}: {detail}")
+
+
+def _json_payload(response: httpx.Response, service: str) -> dict[str, Any]:
+    """Parse only JSON success responses and return a clear upstream error otherwise."""
+    content_type = response.headers.get("content-type", "").lower()
+    if "json" not in content_type:
+        detail = _safe_upstream_detail(response)
+        raise RuntimeError(f"{service} returned non-JSON content ({content_type or 'unknown'}): {detail}")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"{service} returned invalid JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"{service} returned an invalid JSON object")
+    return payload
 
 
 def _ollama_completion(client: httpx.Client, body: CompletionRequest) -> str:
@@ -101,7 +120,7 @@ def _ollama_completion(client: httpx.Client, body: CompletionRequest) -> str:
         timeout=REQUEST_TIMEOUT,
     )
     _raise_for_upstream(response, "Ollama")
-    payload = response.json()
+    payload = _json_payload(response, "Ollama")
     reply = payload.get("message", {}).get("content")
     if not isinstance(reply, str) or not reply.strip():
         raise RuntimeError("Ollama returned no assistant content")
@@ -122,11 +141,17 @@ def _openai_completion(client: httpx.Client, body: CompletionRequest) -> str:
         timeout=REQUEST_TIMEOUT,
     )
     _raise_for_upstream(response, "OpenAI-compatible upstream")
-    payload = response.json()
+    payload = _json_payload(response, "OpenAI-compatible upstream")
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
         raise RuntimeError("OpenAI-compatible upstream returned no choices")
-    reply = choices[0].get("message", {}).get("content")
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        raise RuntimeError("OpenAI-compatible upstream returned an invalid choice")
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("OpenAI-compatible upstream returned no assistant message")
+    reply = message.get("content")
     if not isinstance(reply, str) or not reply.strip():
         raise RuntimeError("OpenAI-compatible upstream returned no assistant content")
     return reply.strip()
