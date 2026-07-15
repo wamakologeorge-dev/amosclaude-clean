@@ -1,8 +1,4 @@
-"""Autonomous repository runtime for the Amosclaud server.
-
-The runtime is deterministic by default and does not require an AI agent.
-An engineering agent can be enabled explicitly with metadata.use_agent=true.
-"""
+"""Autonomous repository runtime and Agentic Cloud Engine adapter."""
 
 from __future__ import annotations
 
@@ -15,21 +11,8 @@ from typing import Any, Optional
 
 from amoscloud_ai.models import PipelineStatus
 
-
-SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules"}
-TEXT_SUFFIXES = {
-    ".py",
-    ".js",
-    ".ts",
-    ".html",
-    ".css",
-    ".md",
-    ".yml",
-    ".yaml",
-    ".json",
-    ".txt",
-    ".sh",
-}
+SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules", ".amosclaud"}
+TEXT_SUFFIXES = {".py", ".js", ".ts", ".html", ".css", ".md", ".yml", ".yaml", ".json", ".txt", ".sh"}
 
 
 @dataclass
@@ -52,13 +35,8 @@ class AutonomousRunResult:
             "status": self.status.value,
             "reply": self.reply,
             "checks": [
-                {
-                    "name": check.name,
-                    "status": check.status,
-                    "summary": check.summary,
-                    "details": check.details,
-                }
-                for check in self.checks
+                {"name": item.name, "status": item.status, "summary": item.summary, "details": item.details}
+                for item in self.checks
             ],
             "logs": self.logs,
         }
@@ -68,281 +46,144 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def run_autonomous_server(
-    mode: str,
-    objective: str,
-    metadata: Optional[dict[str, Any]] = None,
-) -> AutonomousRunResult:
-    """Run repository operations without requiring an AI agent.
-
-    Set ``metadata["use_agent"]`` to true to add the optional engineering
-    agent step for build runs. If that optional component is unavailable, the
-    core runtime continues with deterministic checks instead of crashing.
-    """
+def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
     root = repo_root()
-    metadata = metadata or {}
-    use_agent = mode == "build" and bool(metadata.get("use_agent", False))
+    metadata = dict(metadata or {})
+    use_agent = bool(metadata.get("use_agent", False)) or mode == "fix"
     checks: list[CheckResult] = []
     logs = [
-        f"Amosclaud Autonomous Runtime: repo access confirmed at {root}",
+        f"Amosclaud Autonomous Cloud Agent: repository access confirmed at {root}",
         f"Mode: {mode}",
         f"Objective: {objective}",
-        f"Executor: {'runtime + optional agent' if use_agent else 'runtime only'}",
+        f"Executor: {'five-engine agentic core' if use_agent else 'deterministic runtime'}",
     ]
 
     if use_agent:
-        checks.extend(_run_optional_engineering_agent(root, objective, metadata))
+        checks.extend(_run_agentic_cloud_core(root, objective, mode, metadata))
     elif mode == "build":
-        checks.append(
-            CheckResult(
-                name="build-runtime",
-                status="passed",
-                summary="Build is running through the autonomous runtime without an AI agent.",
-                details=["Set metadata.use_agent=true only when AI-guided engineering is required."],
-            )
-        )
+        checks.append(CheckResult("build-runtime", "passed", "Build checks are running without model-guided changes."))
 
-    checks.append(_git_status_check(root))
-    checks.append(_conflict_marker_check(root))
-    checks.append(_python_compile_check(root))
-
-    if mode in {"autonomous-check", "build", "monitor"}:
+    checks.extend([_git_status_check(root), _conflict_marker_check(root), _python_compile_check(root)])
+    if mode in {"autonomous-check", "build", "fix", "monitor"}:
         checks.append(_server_tests_check(root))
-
-    failed = [check for check in checks if check.status == "failed"]
-    warnings = [check for check in checks if check.status == "warning"]
 
     for check in checks:
         logs.append(f"{check.name}: {check.status} - {check.summary}")
-        logs.extend(check.details[:10])
+        logs.extend(check.details[:20])
 
+    failed = [check for check in checks if check.status == "failed"]
+    warnings = [check for check in checks if check.status == "warning"]
     if failed:
-        status = PipelineStatus.FAILED
-        reply = (
-            "Amosclaud Autonomous Runtime: operation finished and needs action. "
-            f"{len(failed)} blocking check(s) failed."
+        return AutonomousRunResult(
+            PipelineStatus.FAILED,
+            f"Amosclaud Autonomous Cloud Agent needs attention. {len(failed)} blocking check(s) failed.",
+            checks,
+            logs,
         )
-    elif warnings:
-        status = PipelineStatus.SUCCESS
-        reply = (
-            "Amosclaud Autonomous Runtime: operation completed with warnings. "
-            "The runtime remains operational without an AI agent."
-        )
-    else:
-        status = PipelineStatus.SUCCESS
-        reply = (
-            "Amosclaud Autonomous Runtime: repository scan, compile, and tests "
-            "completed successfully without requiring an AI agent."
-        )
-
-    if metadata:
-        logs.append(f"Metadata: {metadata}")
-
-    return AutonomousRunResult(status=status, reply=reply, checks=checks, logs=logs)
+    reply = "Amosclaud Autonomous Cloud Agent completed the objective with verification evidence."
+    if warnings:
+        reply = "Amosclaud Autonomous Cloud Agent completed the objective with warnings and evidence."
+    return AutonomousRunResult(PipelineStatus.SUCCESS, reply, checks, logs)
 
 
-def _run_optional_engineering_agent(
-    root: Path,
-    objective: str,
-    metadata: dict[str, Any],
-) -> list[CheckResult]:
-    """Run the AI engineering layer only when explicitly requested."""
+def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dict[str, Any]) -> list[CheckResult]:
     try:
-        from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
-    except (ImportError, ModuleNotFoundError) as exc:
-        return [
-            CheckResult(
-                name="engineering-agent",
-                status="warning",
-                summary="Optional engineering agent is unavailable; autonomous runtime continued.",
-                details=[str(exc)],
-            )
-        ]
-
-    try:
-        engineering = run_engineering_agent(
-            root,
-            objective,
-            workspace_path=metadata.get("workspace_path"),
-            apply_changes=bool(metadata.get("apply_changes", False)),
-        )
-    except EngineeringAgentError as exc:
-        return [
-            CheckResult(
-                name="engineering-agent",
-                status="warning",
-                summary="Optional engineering agent stopped; autonomous runtime continued.",
-                details=[str(exc)],
-            )
-        ]
+        from amoscloud_ai.agentic_cloud_engine import run_agentic_cloud_engine
+        run = run_agentic_cloud_engine(root, objective, mode, metadata)
     except Exception as exc:
-        return [
-            CheckResult(
-                name="engineering-agent",
-                status="warning",
-                summary="Optional engineering agent failed; autonomous runtime continued safely.",
-                details=[f"{type(exc).__name__}: {exc}"],
-            )
-        ]
+        return [CheckResult("agentic-cloud-core", "failed", "The five-engine agent stopped safely.", [f"{type(exc).__name__}: {exc}"])]
 
-    failed_agent_checks = [check for check in engineering.checks if not check.get("passed", False)]
     results = [
         CheckResult(
-            name="engineering-agent",
-            status="failed" if failed_agent_checks else "passed",
-            summary=engineering.summary,
-            details=[
-                f"Run: {engineering.run_id}",
-                f"Applied: {engineering.applied}",
-                *[
-                    f"{change.status}: {change.path} ({change.bytes_written} bytes)"
-                    for change in engineering.changes
-                ],
-                *engineering.evidence,
+            "agentic-cloud-core",
+            "passed" if run.status == "success" else "failed",
+            run.summary,
+            [
+                f"Run: {run.run_id}",
+                f"Write authorization: {run.authorized_writes}",
+                *[f"Plan: {step}" for step in run.plan],
+                *[f"Changed: {path}" for path in run.changed_files],
+                *run.memory,
             ],
         )
     ]
-    for check in engineering.checks:
+    for event in run.events:
+        results.append(CheckResult(event.engine, event.status, event.message, [f"Log service: {event.log_service}", *event.evidence]))
+    for check in run.checks:
         results.append(
             CheckResult(
-                name=f"engineering-{check['name']}",
-                status="passed" if check.get("passed") else "failed",
-                summary=f"{check['name']} {'passed' if check.get('passed') else 'failed'}.",
-                details=str(check.get("output", "")).splitlines()[-30:],
+                f"agent-{check.get('name', 'verification')}",
+                "passed" if check.get("passed") else "failed",
+                f"{check.get('name', 'verification')} {'passed' if check.get('passed') else 'failed'}.",
+                str(check.get("output", "")).splitlines()[-30:],
             )
         )
     return results
 
 
 def _run_command(root: Path, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        args,
-        cwd=root,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
-    )
+    return subprocess.run(args, cwd=root, text=True, capture_output=True, timeout=timeout, check=False)
 
 
 def _git_status_check(root: Path) -> CheckResult:
     if not (root / ".git").exists():
-        return CheckResult(
-            name="git-status",
-            status="passed",
-            summary="Git metadata is not included in the production container; repository files are available.",
-        )
-
+        return CheckResult("git-status", "passed", "Production container has no Git metadata; repository files are available.")
     try:
-        result = _run_command(root, ["git", "status", "--short"], timeout=10)
+        result = _run_command(root, ["git", "status", "--short"], 10)
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
-        return CheckResult(
-            name="git-status",
-            status="warning",
-            summary="Git status is unavailable in this runtime.",
-            details=[str(exc)],
-        )
-
+        return CheckResult("git-status", "warning", "Git status is unavailable.", [str(exc)])
     if result.returncode != 0:
-        error = result.stderr.strip() or result.stdout.strip()
-        if "not a git repository" in error.lower():
-            return CheckResult(
-                name="git-status",
-                status="passed",
-                summary="Production container has no Git metadata; repository files are available.",
-            )
-        return CheckResult(
-            name="git-status",
-            status="warning",
-            summary="Unable to read repository status in this runtime.",
-            details=[error],
-        )
-
+        return CheckResult("git-status", "warning", "Unable to read repository status.", [(result.stderr or result.stdout).strip()])
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     unmerged = [line for line in lines if line.startswith(("UU", "AA", "DD", "AU", "UA", "DU", "UD"))]
     if unmerged:
-        return CheckResult(
-            name="git-status",
-            status="failed",
-            summary=f"{len(unmerged)} unmerged file(s) need resolution.",
-            details=unmerged,
-        )
+        return CheckResult("git-status", "failed", f"{len(unmerged)} unmerged file(s) need resolution.", unmerged)
     if lines:
-        return CheckResult(
-            name="git-status",
-            status="warning",
-            summary=f"{len(lines)} changed file(s) in the workspace.",
-            details=lines[:25],
-        )
-    return CheckResult(name="git-status", status="passed", summary="Workspace is clean.")
+        return CheckResult("git-status", "warning", f"{len(lines)} changed file(s) in the workspace.", lines[:25])
+    return CheckResult("git-status", "passed", "Workspace is clean.")
 
 
 def _conflict_marker_check(root: Path) -> CheckResult:
     markers: list[str] = []
     for path in _iter_text_files(root):
         try:
-            for number, line in enumerate(
-                path.read_text(encoding="utf-8", errors="ignore").splitlines(),
-                start=1,
-            ):
+            for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
                 if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
                     markers.append(f"{path.relative_to(root)}:{number}: {line[:80]}")
                     break
         except OSError:
             continue
-
     if markers:
-        return CheckResult(
-            name="conflict-markers",
-            status="failed",
-            summary=f"{len(markers)} file(s) still contain merge conflict markers.",
-            details=markers,
-        )
-    return CheckResult(name="conflict-markers", status="passed", summary="No conflict markers found.")
+        return CheckResult("conflict-markers", "failed", f"{len(markers)} file(s) contain conflict markers.", markers)
+    return CheckResult("conflict-markers", "passed", "No conflict markers found.")
 
 
 def _python_compile_check(root: Path) -> CheckResult:
     files = [
         "amoscloud_ai/api/routes/agent.py",
-        "amoscloud_ai/api/routes/copilot.py",
+        "amoscloud_ai/agentic_cloud_engine.py",
         "amoscloud_ai/autonomous_server.py",
         "amoscloud_ai/main.py",
         "amoscloud_ai/models.py",
         "amoscloud_ai/worker.py",
     ]
-    existing = [str(root / file_path) for file_path in files if (root / file_path).exists()]
-    result = _run_command(root, [sys.executable, "-m", "py_compile", *existing], timeout=30)
-    if result.returncode != 0:
-        return CheckResult(
-            name="python-compile",
-            status="failed",
-            summary="Python compile check failed.",
-            details=(result.stderr or result.stdout).splitlines()[:20],
-        )
-    return CheckResult(name="python-compile", status="passed", summary=f"Compiled {len(existing)} key module(s).")
+    existing = [str(root / item) for item in files if (root / item).exists()]
+    result = _run_command(root, [sys.executable, "-m", "py_compile", *existing], 30)
+    if result.returncode:
+        return CheckResult("python-compile", "failed", "Python compile check failed.", (result.stderr or result.stdout).splitlines()[:30])
+    return CheckResult("python-compile", "passed", f"Compiled {len(existing)} key module(s).")
 
 
 def _server_tests_check(root: Path) -> CheckResult:
     if os.environ.get("PYTEST_CURRENT_TEST"):
-        return CheckResult(
-            name="server-tests",
-            status="warning",
-            summary="Skipped nested pytest run while endpoint tests are already executing.",
-        )
-
-    python_bin = root / "venv" / "bin" / "python"
-    executable = str(python_bin) if python_bin.exists() else sys.executable
-    result = _run_command(root, [executable, "-m", "pytest", "tests/test_server.py"], timeout=60)
+        return CheckResult("server-tests", "warning", "Skipped nested pytest while endpoint tests are running.")
+    executable = str(root / "venv" / "bin" / "python") if (root / "venv" / "bin" / "python").exists() else sys.executable
+    result = _run_command(root, [executable, "-m", "pytest", "tests/test_server.py"], 90)
     output = (result.stdout + "\n" + result.stderr).splitlines()
-    if result.returncode != 0:
-        return CheckResult(
-            name="server-tests",
-            status="failed",
-            summary="Focused server tests failed.",
-            details=output[-30:],
-        )
+    if result.returncode:
+        return CheckResult("server-tests", "failed", "Focused server tests failed.", output[-30:])
     summary = next((line for line in reversed(output) if " passed" in line), "Focused server tests passed.")
-    return CheckResult(name="server-tests", status="passed", summary=summary)
+    return CheckResult("server-tests", "passed", summary)
 
 
 def _iter_text_files(root: Path):
