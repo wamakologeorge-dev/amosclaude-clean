@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Amosclaud Workspace</title>
+  <title>Amosclaud Autonomous</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
@@ -18,87 +18,103 @@
   <link rel="stylesheet" href="/static/sidebar.css" />
   <link rel="stylesheet" href="/static/notebook-dashboard.css" />
   <link rel="stylesheet" href="/static/chat-scroll.css" />
+  <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
 </head>
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="topbar-left"><h1>Amosclaud Workspace</h1><span class="version-badge">v1.0.1</span></div>
+      <div class="topbar-left"><h1>Amosclaud</h1><span class="version-badge">v1.0.1</span></div>
       <div class="topbar-right">
         <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
         <span id="refresh-timer" class="refresh-label">Refresh in <span id="countdown">10</span>s</span>
-        <a class="notebook-action" href="/mail">Amos Mail</a>
         <a class="notebook-action" href="/repositories">Repositories</a>
         <a class="notebook-action" href="/community">Community</a>
-        <a class="notebook-action" href="/plans">Plans</a>
+        <a class="notebook-action" href="/mail">Mail</a>
         <a class="notebook-action" href="/admin" data-admin-only hidden>Admin</a>
         <span id="current-user" class="user-pill">Loading user…</span>
         <button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button>
       </div>
     </header>
 
-    <main id="content" class="notebook-shell">
-      <aside class="notebook-panel sources-panel">
-        <div class="panel-head"><h2>Sources</h2><span>＋</span></div>
-        <div class="panel-body">
-          <div class="sources-actions">
-            <a class="source-button" href="/repositories">＋ Add repository source</a>
-            <button class="source-button" type="button">＋ Add storage file</button>
-          </div>
-          <div class="source-search"><input type="search" placeholder="Search files and repositories" /><button class="source-button" type="button">Search</button></div>
-          <div class="source-empty">Saved repositories, files, deployment logs, and Amosclaud Storage items will appear here.</div>
+    <main class="autonomous-shell">
+      <section class="autonomous-page-head">
+        <div>
+          <h1>Autonomous operations</h1>
+          <p>Give Amosclaud a clear objective, choose an operating mode, and follow the verified result from repository inspection through build, test, deployment, or monitoring.</p>
         </div>
-      </aside>
-
-      <section class="notebook-panel chat-panel">
-        <div class="panel-head"><h2>Autonomous</h2><span class="notebook-action">Primary runtime</span></div>
-        <div class="chat-hero"><h2>What are you building?</h2><p>Give Amosclaud Autonomous a goal. It can inspect repositories, run builds and tests, review work, deploy, and monitor services without depending on a separate model agent.</p></div>
-        <section class="agent-section">
-          <div class="agent-header"><div><h2 id="agent-name">Amosclaud Autonomous Runtime</h2><p id="agent-mission">Loading autonomous runtime profile...</p></div><span id="agent-status" class="badge badge-pending">connecting</span></div>
-          <div class="agent-layout-visual">
-            <div class="agent-controls-stack">
-              <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Amosclaud Autonomous is ready. Send an instruction to begin.</div></div>
-              <div class="agent-compose">
-                <select id="agent-mode-input" aria-label="Autonomous mode"><option value="autonomous-check">Check</option><option value="build">Build</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option></select>
-                <textarea id="agent-objective-input" rows="3" placeholder="Tell Autonomous what to check, build, test, review, deploy, or monitor..."></textarea>
-                <button id="btn-run-agent" class="btn-primary">Run Autonomous</button>
-              </div>
-            </div>
-            <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
-          </div>
-        </section>
-        <div class="notebook-footer-note">Amosclaud reports completion only after repository and runtime tools confirm real results.</div>
+        <span class="runtime-state">Primary runtime online</span>
       </section>
 
-      <aside class="notebook-panel studio-panel">
-        <div class="panel-head"><h2>Studio</h2><span>Manual + Autonomous</span></div>
-        <div class="panel-body">
-          <div class="studio-grid">
-            <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run pipeline manually</span></button>
-            <a class="studio-tool" href="/repositories"><strong>Test</strong><span>Open repository tools</span></a>
-            <a class="studio-tool" href="/repositories"><strong>Review</strong><span>Inspect changes manually</span></a>
-            <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start release manually</span></button>
-            <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Open source control</span></a>
-            <a class="studio-tool" href="/community"><strong>Community</strong><span>Open chat</span></a>
-            <a class="studio-tool" href="/mail"><strong>Amos Mail</strong><span>Open @amosclaud.com inbox</span></a>
-            <a class="studio-tool" href="/admin" data-admin-only hidden><strong>Administrator</strong><span>Open platform controls</span></a>
-            <button class="studio-tool"><strong>Storage</strong><span>Open files</span></button>
-            <button class="studio-tool"><strong>Report</strong><span>View confirmed results</span></button>
-            <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Runtime health</strong><span>Check Autonomous and server</span></button>
+      <section class="autonomous-grid">
+        <article class="auto-card agent-workspace">
+          <div class="auto-card-header">
+            <div>
+              <h2 id="agent-name">Amosclaud Autonomous Runtime</h2>
+              <p id="agent-mission">Loading autonomous runtime profile...</p>
+            </div>
+            <span id="agent-status" class="badge badge-pending">connecting</span>
           </div>
-          <div id="agent-connection-status" class="studio-summary" aria-live="polite">Runtime health has not been checked yet.</div>
-          <div class="studio-summary">Build results, deployment status, monitoring output, and generated reports appear here.</div>
 
-          <section class="stats-row">
-            <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
-            <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
-            <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
-            <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
+          <section class="agent-section">
+            <div class="agent-header" aria-hidden="true"></div>
+            <div class="agent-layout-visual">
+              <div class="agent-controls-stack">
+                <div id="agent-replies" class="agent-replies" aria-live="polite">
+                  <div class="agent-reply muted">Amosclaud Autonomous is ready. Describe the result you need.</div>
+                </div>
+                <div class="agent-compose">
+                  <select id="agent-mode-input" aria-label="Autonomous mode">
+                    <option value="autonomous-check">Check</option>
+                    <option value="build">Build</option>
+                    <option value="deploy">Deploy</option>
+                    <option value="monitor">Monitor</option>
+                  </select>
+                  <textarea id="agent-objective-input" rows="3" placeholder="Example: Inspect the main branch, diagnose failing tests, verify the fix, and report the result."></textarea>
+                  <button id="btn-run-agent" class="btn-primary">Run task</button>
+                </div>
+              </div>
+              <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
+            </div>
+          </section>
+        </article>
+
+        <aside class="auto-sidebar">
+          <section class="auto-card auto-summary">
+            <h3>Runtime overview</h3>
+            <div class="auto-summary-list">
+              <div class="auto-summary-item"><span>Execution</span><strong>Autonomous</strong></div>
+              <div class="auto-summary-item"><span>Default branch</span><strong>main</strong></div>
+              <div class="auto-summary-item"><span>Capabilities</span><strong>Build · Test · Review</strong></div>
+              <div class="auto-summary-item"><span>Result policy</span><strong>Verified output only</strong></div>
+            </div>
           </section>
 
-          <section class="table-section"><h2>Recent pipelines</h2><div class="table-wrap"><table id="pipelines-table"><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody id="pipelines-body"><tr><td colspan="2">Loading…</td></tr></tbody></table></div></section>
-          <section class="table-section"><h2>Recent deployments</h2><div class="table-wrap"><table id="deployments-table"><thead><tr><th>Name</th><th>Status</th></tr></thead><tbody id="deployments-body"><tr><td colspan="2">Loading…</td></tr></tbody></table></div></section>
-        </div>
-      </aside>
+          <section class="auto-card auto-summary">
+            <h3>Quick actions</h3>
+            <div class="quick-actions">
+              <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run the pipeline manually</span></button>
+              <a class="studio-tool" href="/repositories"><strong>Repositories</strong><span>Inspect source and branches</span></a>
+              <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start a controlled release</span></button>
+              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Health</strong><span>Check runtime connectivity</span></button>
+            </div>
+            <div id="agent-connection-status" class="studio-summary" aria-live="polite">Runtime health has not been checked yet.</div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="status-strip">
+        <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
+      </section>
+
+      <p class="autonomous-note">Amosclaud reports completion only after repository and runtime tools confirm real results.</p>
+
+      <section hidden>
+        <table id="pipelines-table"><tbody id="pipelines-body"><tr><td>Loading…</td></tr></tbody></table>
+        <table id="deployments-table"><tbody id="deployments-body"><tr><td>Loading…</td></tr></tbody></table>
+      </section>
     </main>
   </div>
 
