@@ -47,7 +47,14 @@ def run_task(payload: AutonomousTaskRequest, self_key: str | None = Header(defau
 @router.post("/chat")
 def cloud_agent_chat(payload: CloudAgentChatRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
     require_self_key(self_key)
-    return chat_with_autonomous(payload.message, payload.evidence)
+    return chat_with_autonomous(
+        payload.message,
+        payload.evidence,
+        payload.result_locations,
+        execute=payload.execute,
+        authorized_writes=payload.authorized_writes,
+        workspace=payload.workspace,
+    )
 
 
 @router.post("/mini")
@@ -105,6 +112,16 @@ def health() -> dict[str, object]:
         "orchestrator": "AutonomousOrchestrator",
         "brain": "RollImageEngine",
         "cloud_agent": True,
+        "agent_assistant": True,
+        "assistant_capabilities": [
+            "answer questions",
+            "show plans",
+            "explain risks",
+            "recommend solutions",
+            "show easier safe paths",
+            "execute authorized jobs",
+            "verify and point to results",
+        ],
         "mini_autonomous": True,
         "autonomy_supervisor": True,
         "self_key_required": True,
