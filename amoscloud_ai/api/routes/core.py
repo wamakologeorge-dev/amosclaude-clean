@@ -13,6 +13,7 @@ from amoscloud_ai.api.routes.admin import _admin_user
 from amoscloud_ai.core.access import AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
 from amoscloud_ai.core.vault import AmosclaudVault, VaultError
+from amoscloud_ai.logger import log
 
 router = APIRouter(prefix="/core", tags=["amosclaud-core"])
 
@@ -40,7 +41,7 @@ def _vault() -> AmosclaudVault:
     try:
         return AmosclaudVault(db_path=_core_db_path())
     except VaultError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Encrypted settings storage is unavailable") from exc
 
 
 def _registry() -> ServiceRegistry:
@@ -188,9 +189,16 @@ async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
             response.raise_for_status()
             payload = response.json()
     except Exception as exc:
-        return {"status": "unreachable", "endpoint": endpoint, "model": model, "detail": str(exc), "recommended_action": "Start or register the local Amosclaud model service, then retry."}
+        log.warning("Model diagnostics probe failed for configured model service", exc_info=exc)
+        return {
+            "status": "unreachable",
+            "model": model,
+            "detail": "The configured model service did not respond successfully.",
+            "error_code": "model_service_unreachable",
+            "recommended_action": "Start or register the Amosclaud model service, then retry.",
+        }
     available = [item.get("name", "") for item in payload.get("models", []) if isinstance(item, dict)]
-    return {"status": "connected", "endpoint": endpoint, "model": model, "model_available": model in available, "available_models": available}
+    return {"status": "connected", "model": model, "model_available": model in available, "available_models": available}
 
 
 router.include_router(local_workspace.router)
