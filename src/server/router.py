@@ -1,8 +1,11 @@
 """HTTP control interface pointing every request to one Autonomous orchestrator."""
 from __future__ import annotations
 
+import hmac
+import os
 from dataclasses import asdict
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from src.agent.actions import run_autonomous
@@ -18,6 +21,8 @@ from .schemas import (
 
 router = APIRouter(prefix="/api/v2/autonomous", tags=["autonomous"])
 supervisor = AutonomySupervisor()
+SELF_KEY_ENV = "AMOSCLAUD_AUTONOMOUS_SELF_KEY"
+SELF_KEY_HEADER = "X-Amosclaud-Autonomous-Key"
 
 
 class MissionRequest(BaseModel):
@@ -29,8 +34,19 @@ class ApprovalDecision(BaseModel):
     approved: bool
 
 
+def require_self_key(x_amosclaud_autonomous_key: str | None = Header(default=None)) -> None:
+    """Authenticate internal Autonomous control traffic with its own secret."""
+    expected = os.getenv(SELF_KEY_ENV, "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail=f"{SELF_KEY_ENV} is not configured")
+    supplied = (x_amosclaud_autonomous_key or "").strip()
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Invalid Amosclaud Autonomous self key")
+
+
 @router.post("/run", response_model=AutonomousTaskResponse)
-def run_task(payload: AutonomousTaskRequest) -> dict:
+def run_task(payload: AutonomousTaskRequest, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return run_autonomous(
         objective=payload.objective,
         mode=payload.mode,
@@ -40,27 +56,32 @@ def run_task(payload: AutonomousTaskRequest) -> dict:
 
 
 @router.post("/chat")
-def cloud_agent_chat(payload: CloudAgentChatRequest) -> dict:
+def cloud_agent_chat(payload: CloudAgentChatRequest, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return chat_with_autonomous(payload.message, payload.evidence)
 
 
 @router.post("/mini")
-def mini_autonomous(payload: MiniAutonomousRequest) -> dict:
+def mini_autonomous(payload: MiniAutonomousRequest, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return run_mini_autonomous(payload.issue, workspace=payload.workspace, authorized_writes=payload.authorized_writes)
 
 
 @router.post("/missions")
-def create_mission(payload: MissionRequest) -> dict:
+def create_mission(payload: MissionRequest, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return asdict(supervisor.create_mission(payload.objective, payload.max_attempts))
 
 
 @router.get("/missions")
-def list_missions(limit: int = 50) -> list[dict]:
+def list_missions(limit: int = 50, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> list[dict]:
+    require_self_key(_)
     return supervisor.list_missions(limit)
 
 
 @router.get("/missions/{mission_id}")
-def get_mission(mission_id: str) -> dict:
+def get_mission(mission_id: str, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     try:
         return asdict(supervisor.get(mission_id))
     except KeyError as exc:
@@ -68,7 +89,8 @@ def get_mission(mission_id: str) -> dict:
 
 
 @router.post("/approvals/{approval_id}")
-def decide_approval(approval_id: str, payload: ApprovalDecision) -> dict:
+def decide_approval(approval_id: str, payload: ApprovalDecision, _: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     try:
         return supervisor.decide_approval(approval_id, payload.approved)
     except KeyError as exc:
@@ -76,12 +98,14 @@ def decide_approval(approval_id: str, payload: ApprovalDecision) -> dict:
 
 
 @router.post("/heartbeat")
-def heartbeat() -> dict:
+def heartbeat(_: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return supervisor.heartbeat()
 
 
 @router.get("/readiness")
-def readiness() -> dict:
+def readiness(_: None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+    require_self_key(_)
     return supervisor.readiness()
 
 
@@ -94,6 +118,8 @@ def health() -> dict[str, object]:
         "cloud_agent": True,
         "mini_autonomous": True,
         "autonomy_supervisor": True,
+        "self_key_required": True,
+        "self_key_environment": SELF_KEY_ENV,
         "single_entry_point": True,
         "paths": [
             "/api/v2/autonomous/run",
