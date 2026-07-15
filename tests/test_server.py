@@ -25,6 +25,7 @@ def request(method: str, path: str, **kwargs):
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
+
 def test_root_requires_authentication():
     resp = request("GET", "/")
     assert resp.status_code == 302
@@ -46,6 +47,7 @@ def test_dashboard_assets_are_served_by_the_application():
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
+
 def test_health_ok():
     resp = request("GET", "/health")
     assert resp.status_code == 200
@@ -59,6 +61,7 @@ def test_health_ok():
 # ---------------------------------------------------------------------------
 # Autonomous runtime
 # ---------------------------------------------------------------------------
+
 def test_autonomous_runtime_profile():
     resp = request("GET", "/api/v1/agent")
     assert resp.status_code == 200
@@ -112,6 +115,7 @@ def test_autonomous_runtime_rejects_unknown_mode():
 # ---------------------------------------------------------------------------
 # Pipelines
 # ---------------------------------------------------------------------------
+
 def test_list_pipelines_empty():
     resp = request("GET", "/api/v1/pipelines")
     assert resp.status_code == 200
@@ -127,8 +131,8 @@ def test_trigger_pipeline():
     assert data["trigger"] == "manual"
     assert data["branch"] == "main"
     assert data["message"]
-    assert data["copilot_reply"].startswith("Amosclaud Autonomous Runtime:")
-    assert data["copilot_role"] == "autonomous build, deployment, and monitoring runtime"
+    assert data["copilot_reply"].startswith("Amosclaud Autonomous Server:")
+    assert data["copilot_role"] == "autonomous build, deployment, and monitoring server"
     assert data["delegation_target"] == "Amosclaud autonomous pipeline"
     assert data["jobs"][0]["name"] == "Build"
     assert data["jobs"][0]["logs"]
@@ -150,6 +154,7 @@ def test_cancel_pipeline():
 # ---------------------------------------------------------------------------
 # Deployments
 # ---------------------------------------------------------------------------
+
 def test_list_deployments_empty():
     resp = request("GET", "/api/v1/deployments")
     assert resp.status_code == 200
@@ -164,8 +169,8 @@ def test_start_deployment():
     assert data["version"] == "v1.0.0"
     assert data["environment"] == "staging"
     assert data["message"]
-    assert data["copilot_reply"].startswith("Amosclaud Autonomous Runtime:")
-    assert data["copilot_role"] == "autonomous build, deployment, and monitoring runtime"
+    assert data["copilot_reply"].startswith("Amosclaud Autonomous Server:")
+    assert data["copilot_role"] == "autonomous build, deployment, and monitoring server"
     assert data["delegation_target"] == "Amosclaud autonomous pipeline"
 
 
