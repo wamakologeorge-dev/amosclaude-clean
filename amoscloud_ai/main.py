@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from amoscloud_ai import __version__, model_network
 from amoscloud_ai.api.routes import (
     account,
+    academy,
     admin,
     agent,
     agent_readiness,
@@ -72,7 +73,6 @@ from amosclaud_metrics.integration import install_metrics
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # Authentication creates its base tables lazily; migrations own all new schema.
     with auth._connect():
         pass
     run_migrations(DB_PATH)
@@ -162,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(amos_mail.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
     app.include_router(core.router, prefix="/api/v1")
+    app.include_router(academy.router, prefix="/api/v1")
     app.include_router(amo_tokens.router, prefix="/api/v1")
     app.include_router(wifi.router, prefix="/api/v1")
     app.include_router(webhooks.router, prefix="/api/v1")
@@ -242,6 +243,15 @@ def create_app() -> FastAPI:
             return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "admin.html")
 
+    @app.get("/admin/academy", include_in_schema=False)
+    async def academy_dashboard_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/cloud/agent", status_code=302)
+        return FileResponse(web_dir / "academy-dashboard.html")
+
     @app.get("/admin/wifi", include_in_schema=False)
     async def wifi_admin_page(request: Request):
         user = get_user_from_session(request.cookies.get("amos_session"))
@@ -265,14 +275,12 @@ def create_app() -> FastAPI:
 
     @app.get("/cloud/agent", include_in_schema=False)
     async def cloud_agent_page(request: Request):
-        """Canonical hosted workspace for Amosclaud Autonomous Cloud Agent."""
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "index.html")
 
     @app.get("/autonomous", include_in_schema=False)
     async def autonomous_legacy_route(request: Request):
-        """Keep old bookmarks working while moving users to the cloud agent URL."""
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return RedirectResponse("/cloud/agent", status_code=308)
