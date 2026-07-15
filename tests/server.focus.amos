@@ -26,7 +26,7 @@ EXPECT JSON name = "Amosclaud Autonomous Runtime"
 EXPECT JSON mode = "autonomous"
 END
 
-FOCUS model-network-status-contract
-CALL GET /api/v1/model-network/status
+FOCUS model-server-folder-status-contract
+CALL GET /api/v1/model-server-folder/status
 EXPECT STATUS 200
 END
