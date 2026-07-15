@@ -22,33 +22,35 @@ from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous Runtime"
+AGENT_NAME = "Amosclaud Autonomous Agent"
 AGENT_OWNER = "Amosclaud"
-AGENT_ROLE = "autonomous build, deployment, and monitoring server"
+AGENT_ROLE = "controlled autonomous engineering and operations agent"
 AGENT_HOME = "amosclaud.com"
 AGENT_PIPELINE = "Amosclaud autonomous pipeline"
-AGENT_MODE = "autonomous"
+AGENT_MODE = "agent"
 AGENT_SCOPE = [AGENT_HOME, AGENT_PIPELINE]
 AGENT_DIRECTIVES = [
-    "Continuously check Amosclaud-owned application health.",
-    "Run builds and tests through the Amosclaud pipeline.",
-    "Deploy or prepare deployments when the configured pipeline allows it.",
-    "Report run state through the server API and dashboard.",
+    "Understand the requested outcome before acting.",
+    "Inspect repository and runtime evidence before proposing a change.",
+    "Plan the smallest safe action and identify whether approval is required.",
+    "Build or fix only inside the authorized workspace.",
+    "Run verification after every applied change.",
+    "Report exact actions, evidence, failures, and recommended next steps.",
 ]
-ALLOWED_MODES = {"autonomous-check", "build", "deploy", "monitor"}
+ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
 GREETING_WORDS = {"hi", "hello", "hey", "hiya", "yo", "good morning", "good afternoon", "good evening"}
 
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
     if status == PipelineStatus.PENDING:
-        return f"{AGENT_NAME}: autonomous {mode} run queued for {objective}."
+        return f"{AGENT_NAME}: {mode} task queued. Objective: {objective}."
     if status == PipelineStatus.RUNNING:
-        return f"{AGENT_NAME}: autonomous {mode} run is active for {objective}."
+        return f"{AGENT_NAME}: inspecting, planning, acting, and verifying {objective}."
     if status == PipelineStatus.SUCCESS:
-        return f"{AGENT_NAME}: autonomous {mode} run completed for {objective}."
+        return f"{AGENT_NAME}: {mode} task completed with verified evidence for {objective}."
     if status == PipelineStatus.FAILED:
-        return f"{AGENT_NAME}: autonomous {mode} run failed for {objective}."
-    return f"{AGENT_NAME}: autonomous {mode} run was cancelled for {objective}."
+        return f"{AGENT_NAME}: {mode} task found a blocker for {objective}. Review the evidence and next action."
+    return f"{AGENT_NAME}: {mode} task was cancelled for {objective}."
 
 
 def _display_name(request: Request) -> str:
@@ -65,24 +67,43 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     message = objective.strip()
     normalised = " ".join(message.lower().rstrip(".!?").split())
 
-    if not message and mode == "build":
-        return f"Hi {name}. What do you want Amosclaud Autonomous to create today?"
+    if not message and mode in {"build", "fix"}:
+        return f"Hi {name}. Describe the result you want, the repository or folder, and whether I may apply changes."
     if normalised in GREETING_WORDS:
-        return f"Hi {name}. Amosclaud Autonomous is online. What should it build, test, deploy, or monitor?"
-    if normalised in {"build", "make", "create"}:
-        return f"Hi {name}. What do you want Amosclaud Autonomous to create today?"
+        return (
+            f"Hi {name}. Amosclaud Autonomous Agent is online. "
+            "I can inspect, plan, build, fix, verify, deploy, or monitor."
+        )
+    if normalised in {"build", "make", "create", "fix"}:
+        return f"Hi {name}. What outcome should I produce, and what must be true before I report success?"
     return None
 
 
-@router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous runtime profile")
+def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
+    """Translate a user mode into a controlled engineering execution policy."""
+    prepared = dict(metadata or {})
+    prepared["requested_mode"] = mode
+    prepared.setdefault("agent_workflow", True)
+    prepared.setdefault("phases", ["understand", "inspect", "plan", "act", "verify", "report"])
+
+    execution_mode = mode
+    if mode in {"build", "fix"}:
+        execution_mode = "build"
+        prepared.setdefault("use_agent", True)
+        # Selecting Fix is explicit authorization to write inside the controlled workspace.
+        prepared.setdefault("apply_changes", mode == "fix")
+    return execution_mode, prepared
+
+
+@router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous agent profile")
 async def get_agent() -> AutonomousAgentProfile:
     return AutonomousAgentProfile(
         name=AGENT_NAME,
         owner=AGENT_OWNER,
         role=AGENT_ROLE,
         mission=(
-            f"{AGENT_NAME} runs Amosclaud-owned checks, builds, deployments, "
-            f"and monitoring for {AGENT_HOME}."
+            f"{AGENT_NAME} turns an objective into a controlled plan, performs authorized "
+            f"repository or runtime actions, verifies the result, and reports evidence for {AGENT_HOME}."
         ),
         mode=AGENT_MODE,
         home=AGENT_HOME,
@@ -92,7 +113,7 @@ async def get_agent() -> AutonomousAgentProfile:
     )
 
 
-@router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous runtime run")
+@router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous agent task")
 async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
@@ -125,6 +146,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
+    execution_mode, metadata = _agent_metadata(mode, body.metadata)
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
     pipeline = PipelineResponse(
         id=pipeline_id,
@@ -136,7 +158,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         copilot_reply=reply,
         copilot_role=AGENT_ROLE,
         delegation_target=AGENT_PIPELINE,
-        jobs=[PipelineJob(id="autonomous-run", name="Autonomous Run", status=PipelineStatus.PENDING, logs=[reply])],
+        jobs=[PipelineJob(id="autonomous-run", name="Agent Task", status=PipelineStatus.PENDING, logs=[reply])],
     )
     payload = {
         "trigger": "autonomous",
@@ -144,9 +166,10 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         "commit_sha": None,
         "payload": {
             "run_id": run_id,
-            "mode": mode,
+            "mode": execution_mode,
+            "requested_mode": mode,
             "objective": objective,
-            "metadata": body.metadata,
+            "metadata": metadata,
         },
     }
     _save(pipeline, payload)
@@ -156,11 +179,11 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
         dispatch_task(run_pipeline_task, pipeline_id, payload)
         checks = []
-        logs = [reply]
+        logs = [reply, "Agent phases: understand → inspect → plan → act → verify → report"]
     except Exception as dispatch_error:
-        log.warning("Background worker unavailable; running autonomous runtime inline: %s", dispatch_error)
+        log.warning("Background worker unavailable; running autonomous agent inline: %s", dispatch_error)
         try:
-            result = run_autonomous_server(mode, objective, body.metadata)
+            result = run_autonomous_server(execution_mode, objective, metadata)
             pipeline.status = result.status
             pipeline.finished_at = datetime.now(timezone.utc)
             reply = result.reply
@@ -178,10 +201,10 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             logs = result.logs
             _save(pipeline, payload)
         except Exception as inline_error:
-            log.exception("Autonomous runtime inline run failed")
+            log.exception("Autonomous agent inline task failed")
             pipeline.status = PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
-            reply = f"{AGENT_NAME}: autonomous {mode} run failed safely for {objective}."
+            reply = f"{AGENT_NAME}: task stopped safely for {objective}."
             pipeline.message = reply
             pipeline.copilot_reply = reply
             if pipeline.jobs:

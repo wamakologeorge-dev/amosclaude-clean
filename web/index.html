@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Amosclaud Autonomous</title>
+  <title>Amosclaud Autonomous Agent</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
@@ -39,18 +39,18 @@
     <main class="autonomous-shell">
       <section class="autonomous-page-head">
         <div>
-          <h1>Autonomous operations</h1>
-          <p>Give Amosclaud a clear objective, choose an operating mode, and follow the verified result from repository inspection through build, test, deployment, or monitoring.</p>
+          <h1>Autonomous agent</h1>
+          <p>Describe the outcome. Amosclaud will understand, inspect, plan, act within your authorization, verify the result, and report evidence.</p>
         </div>
-        <span class="runtime-state">Primary runtime online</span>
+        <span class="runtime-state">Controlled agent online</span>
       </section>
 
       <section class="autonomous-grid">
         <article class="auto-card agent-workspace">
           <div class="auto-card-header">
             <div>
-              <h2 id="agent-name">Amosclaud Autonomous Runtime</h2>
-              <p id="agent-mission">Loading autonomous runtime profile...</p>
+              <h2 id="agent-name">Amosclaud Autonomous Agent</h2>
+              <p id="agent-mission">Loading autonomous agent profile...</p>
             </div>
             <span id="agent-status" class="badge badge-pending">connecting</span>
           </div>
@@ -60,17 +60,18 @@
             <div class="agent-layout-visual">
               <div class="agent-controls-stack">
                 <div id="agent-replies" class="agent-replies" aria-live="polite">
-                  <div class="agent-reply muted">Amosclaud Autonomous is ready. Describe the result you need.</div>
+                  <div class="agent-reply muted">I am ready. Tell me the result you need and what must be true before I report success.</div>
                 </div>
                 <div class="agent-compose">
                   <select id="agent-mode-input" aria-label="Autonomous mode">
-                    <option value="autonomous-check">Check</option>
-                    <option value="build">Build</option>
+                    <option value="autonomous-check">Inspect</option>
+                    <option value="build">Agent plan</option>
+                    <option value="fix">Fix + verify</option>
                     <option value="deploy">Deploy</option>
                     <option value="monitor">Monitor</option>
                   </select>
-                  <textarea id="agent-objective-input" rows="3" placeholder="Example: Inspect the main branch, diagnose failing tests, verify the fix, and report the result."></textarea>
-                  <button id="btn-run-agent" class="btn-primary">Run task</button>
+                  <textarea id="agent-objective-input" rows="3" placeholder="Example: Diagnose the failing server tests, apply the smallest safe fix, rerun verification, and report changed files and evidence."></textarea>
+                  <button id="btn-run-agent" class="btn-primary">Start agent task</button>
                 </div>
               </div>
               <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
@@ -80,12 +81,23 @@
 
         <aside class="auto-sidebar">
           <section class="auto-card auto-summary">
-            <h3>Runtime overview</h3>
+            <h3>Agent workflow</h3>
             <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>Execution</span><strong>Autonomous</strong></div>
-              <div class="auto-summary-item"><span>Default branch</span><strong>main</strong></div>
-              <div class="auto-summary-item"><span>Capabilities</span><strong>Build · Test · Review</strong></div>
-              <div class="auto-summary-item"><span>Result policy</span><strong>Verified output only</strong></div>
+              <div class="auto-summary-item"><span>1</span><strong>Understand objective</strong></div>
+              <div class="auto-summary-item"><span>2</span><strong>Inspect evidence</strong></div>
+              <div class="auto-summary-item"><span>3</span><strong>Plan safe action</strong></div>
+              <div class="auto-summary-item"><span>4</span><strong>Act when authorized</strong></div>
+              <div class="auto-summary-item"><span>5</span><strong>Verify and report</strong></div>
+            </div>
+          </section>
+
+          <section class="auto-card auto-summary">
+            <h3>Operating policy</h3>
+            <div class="auto-summary-list">
+              <div class="auto-summary-item"><span>Agent plan</span><strong>No files written</strong></div>
+              <div class="auto-summary-item"><span>Fix + verify</span><strong>Authorized workspace changes</strong></div>
+              <div class="auto-summary-item"><span>Success</span><strong>Evidence required</strong></div>
+              <div class="auto-summary-item"><span>Memory</span><strong>Repository lessons</strong></div>
             </div>
           </section>
 
@@ -109,7 +121,7 @@
         <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
       </section>
 
-      <p class="autonomous-note">Amosclaud reports completion only after repository and runtime tools confirm real results.</p>
+      <p class="autonomous-note">Fix mode may write only inside the controlled workspace. Amosclaud reports success only after verification tools confirm the result.</p>
 
       <section hidden>
         <table id="pipelines-table"><tbody id="pipelines-body"><tr><td>Loading…</td></tr></tbody></table>
