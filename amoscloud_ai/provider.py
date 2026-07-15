@@ -1,13 +1,8 @@
-"""First-party Amosclaud model provider.
-
-Clients always talk to Amosclaud. A self-hosted Amosclaud model endpoint is the
-primary runtime. External model services, when explicitly enabled, are internal
-adapters and are never exposed as the client-facing provider identity.
-"""
-
+"""First-party Amosclaud model provider with bounded retry and fallback routing."""
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -21,12 +16,7 @@ class ProviderResult:
 
 
 def _external_adapters_enabled() -> bool:
-    return os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
+    return os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _model_endpoint() -> str:
@@ -41,25 +31,38 @@ def _model_headers() -> dict[str, str]:
     return headers
 
 
-def _amosclaud_api_reply(
-    history: list[dict[str, str]], system_prompt: str
-) -> ProviderResult | None:
+def _timeout() -> httpx.Timeout:
+    total = max(30.0, float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")))
+    return httpx.Timeout(total, connect=min(20.0, total), read=total, write=min(60.0, total), pool=min(20.0, total))
+
+
+def _post_with_retry(url: str, *, headers: dict[str, str], json: dict) -> httpx.Response:
+    attempts = max(1, min(int(os.getenv("AMOSCLAUD_MODEL_RETRIES", "2")), 4))
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            response = httpx.post(url, headers=headers, json=json, timeout=_timeout())
+            response.raise_for_status()
+            return response
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(min(2 ** attempt, 4))
+    assert last_error is not None
+    raise RuntimeError(f"Amosclaud model endpoint did not answer after {attempts} attempt(s): {type(last_error).__name__}: {last_error}") from last_error
+
+
+def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
     endpoint = os.getenv("AMOSCLAUD_API_URL", "").strip().rstrip("/")
     api_key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
     if not endpoint or not api_key:
         return None
-    response = httpx.post(
+    response = _post_with_retry(
         f"{endpoint}/api/v1/provider/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": os.getenv("AMOSCLAUD_API_MODEL", "amosclaud-agent"),
-            "messages": [{"role": "system", "content": system_prompt}] + history,
-        },
-        timeout=float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "120")),
+        json={"model": os.getenv("AMOSCLAUD_API_MODEL", "amosclaud-agent"), "messages": [{"role": "system", "content": system_prompt}, *history]},
     )
-    response.raise_for_status()
-    payload = response.json()
-    text = (payload["choices"][0]["message"]["content"] or "").strip()
+    text = (response.json()["choices"][0]["message"]["content"] or "").strip()
     if not text:
         raise RuntimeError("Amosclaud API returned an empty response")
     return ProviderResult(reply=text, runtime="amosclaud-api")
@@ -69,30 +72,26 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
     endpoint = _model_endpoint()
     if not endpoint:
         return None
-
-    response = httpx.post(
+    response = _post_with_retry(
         f"{endpoint}/v1/chat/completions",
         headers=_model_headers(),
         json={
             "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
-            "messages": [{"role": "system", "content": system_prompt}] + history,
+            "messages": [{"role": "system", "content": system_prompt}, *history],
             "temperature": 0.2,
-            "max_tokens": 1200,
+            "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "1200")),
         },
-        timeout=float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "120")),
     )
-    response.raise_for_status()
-    payload = response.json()
-    text = (payload["choices"][0]["message"]["content"] or "").strip()
+    text = (response.json()["choices"][0]["message"]["content"] or "").strip()
     if not text:
         raise RuntimeError("Amosclaud model returned an empty response")
     return ProviderResult(reply=text, runtime="self-hosted")
 
 
 def probe() -> dict[str, object]:
-    """Perform a real inference request before declaring the agent ready."""
     from amoscloud_ai.model_network import network_status, request_inference
 
+    model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     network = network_status()
     if network.get("ready"):
         result = request_inference(
@@ -101,137 +100,89 @@ def probe() -> dict[str, object]:
             timeout=20,
         )
         reply_text = result["reply"].strip() if result else ""
-        return {
-            "ready": "AMOSCLAUD_AGENT_READY" in reply_text,
-            "provider": "amosclaud",
-            "runtime": "model-network",
-            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
-            "stations": network.get("ready_stations", 0),
-            "detail": reply_text[:200],
-        }
-    endpoint = _model_endpoint()
-    model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
-    if not endpoint:
-        return {
-            "ready": False,
-            "provider": "amosclaud",
-            "runtime": "unconfigured",
-            "model": model,
-            "detail": "AMOSCLAUD_MODEL_URL is not configured",
-        }
+        if "AMOSCLAUD_AGENT_READY" in reply_text:
+            return {"ready": True, "provider": "amosclaud", "runtime": "model-network", "model": model, "stations": network.get("ready_stations", 0), "detail": reply_text[:200]}
+    if not _model_endpoint():
+        return {"ready": False, "provider": "amosclaud", "runtime": "unconfigured", "model": model, "detail": "No ready model station and AMOSCLAUD_MODEL_URL is not configured"}
     try:
         result = _self_hosted_reply(
             [{"role": "user", "content": "Reply with exactly: AMOSCLAUD_AGENT_READY"}],
             "You are the local Amosclaud readiness probe. Follow the user's exact response instruction.",
         )
         reply_text = result.reply.strip() if result else ""
-        return {
-            "ready": "AMOSCLAUD_AGENT_READY" in reply_text,
-            "provider": "amosclaud",
-            "runtime": result.runtime if result else "unconfigured",
-            "model": model,
-            "detail": reply_text[:200],
-        }
+        return {"ready": "AMOSCLAUD_AGENT_READY" in reply_text, "provider": "amosclaud", "runtime": result.runtime if result else "unconfigured", "model": model, "detail": reply_text[:200]}
     except Exception as exc:
-        return {
-            "ready": False,
-            "provider": "amosclaud",
-            "runtime": "self-hosted",
-            "model": model,
-            "detail": f"{type(exc).__name__}: {exc}",
-        }
+        return {"ready": False, "provider": "amosclaud", "runtime": "self-hosted", "model": model, "detail": f"{type(exc).__name__}: {exc}"}
 
 
-def _external_adapter_reply(
-    history: list[dict[str, str]], system_prompt: str
-) -> ProviderResult | None:
+def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
     if not _external_adapters_enabled():
         return None
-
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         import anthropic
-
         client = anthropic.Anthropic(api_key=anthropic_key)
-        response = client.messages.create(
-            model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
-            max_tokens=1200,
-            system=system_prompt,
-            messages=history,
-        )
-        text = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        ).strip()
+        response = client.messages.create(model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"), max_tokens=1200, system=system_prompt, messages=history)
+        text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text").strip()
         if text:
             return ProviderResult(reply=text, runtime="external-adapter")
-
     openai_key = os.getenv("OPENAI_API_KEY")
     if openai_key:
         response = httpx.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {openai_key}"},
-            json={
-                "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-                "max_tokens": 1200,
-                "messages": [{"role": "system", "content": system_prompt}] + history,
-            },
+            json={"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"), "max_tokens": 1200, "messages": [{"role": "system", "content": system_prompt}, *history]},
             timeout=60,
         )
         response.raise_for_status()
         text = (response.json()["choices"][0]["message"]["content"] or "").strip()
         if text:
             return ProviderResult(reply=text, runtime="external-adapter")
-
     return None
 
 
 def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
-    """Return a response from the first-party Amosclaud provider."""
-    from amoscloud_ai.model_network import request_inference
+    from amoscloud_ai.model_network import network_status, request_inference
 
-    network_result = request_inference(history, system_prompt)
-    if network_result:
-        return ProviderResult(
-            reply=network_result["reply"],
-            runtime=f"model-network:{network_result.get('runtime', 'station')}",
-        )
+    errors: list[str] = []
+    network = network_status()
+    if network.get("ready"):
+        try:
+            network_result = request_inference(history, system_prompt)
+            if network_result:
+                return ProviderResult(reply=network_result["reply"], runtime=f"model-network:{network_result.get('runtime', 'station')}")
+            errors.append("model-network returned no result")
+        except Exception as exc:
+            errors.append(f"model-network {type(exc).__name__}: {exc}")
 
-    api_result = _amosclaud_api_reply(history, system_prompt)
-    if api_result:
-        return api_result
+    for factory in (_amosclaud_api_reply, _self_hosted_reply):
+        try:
+            result = factory(history, system_prompt)
+            if result:
+                return result
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}")
 
     try:
-        self_hosted = _self_hosted_reply(history, system_prompt)
-        if self_hosted:
-            return self_hosted
-    except Exception:
-        if not _external_adapters_enabled():
-            raise
+        adapted = _external_adapter_reply(history, system_prompt)
+        if adapted:
+            return adapted
+    except Exception as exc:
+        errors.append(f"external adapter {type(exc).__name__}: {exc}")
 
-    adapted = _external_adapter_reply(history, system_prompt)
-    if adapted:
-        return adapted
-
+    detail = "; ".join(errors)[-500:] if errors else "No model runtime is configured"
     return ProviderResult(
-        reply=(
-            "Amosclaud is running, but its model runtime is not connected. "
-            "Start the Amosclaud model service and verify AMOSCLAUD_MODEL_URL."
-        ),
-        runtime="unconfigured",
+        reply=f"Amosclaud model planning is unavailable. {detail}",
+        runtime="unavailable",
         status="degraded",
     )
 
 
 def status() -> dict[str, object]:
-    """Return safe provider status without exposing credentials."""
     from amoscloud_ai.model_network import network_status
-
     return {
         "provider": "amosclaud",
-        "amosclaud_api_configured": bool(
-            os.getenv("AMOSCLAUD_API_URL", "").strip()
-            and os.getenv("AMOSCLAUD_API_KEY", "").strip()
-        ),
+        "amosclaud_api_configured": bool(os.getenv("AMOSCLAUD_API_URL", "").strip() and os.getenv("AMOSCLAUD_API_KEY", "").strip()),
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
         "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
