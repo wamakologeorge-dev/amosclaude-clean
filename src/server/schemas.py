@@ -27,6 +27,10 @@ class AutonomousTaskResponse(BaseModel):
 class CloudAgentChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=12000)
     evidence: list[str] = Field(default_factory=list, max_length=20)
+    result_locations: list[str] = Field(default_factory=list, max_length=20)
+    execute: bool = False
+    authorized_writes: bool = False
+    workspace: str = "."
 
 
 class MiniAutonomousRequest(BaseModel):
