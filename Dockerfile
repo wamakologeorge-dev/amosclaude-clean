@@ -44,7 +44,8 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "stripe>=11,<15" \
         "aiofiles>=23.2,<25" \
         "python-dotenv>=1.0,<2" \
-        "PyYAML>=6.0,<7"
+        "PyYAML>=6.0,<7" \
+        "pytest>=8,<9"
 
 COPY . /app
 

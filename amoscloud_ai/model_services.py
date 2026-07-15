@@ -30,6 +30,15 @@ def _module(name: str) -> bool:
 
 def service_registry() -> list[ModelService]:
     network = model_network.network_status()
+    direct_model_url = os.getenv("AMOSCLAUD_MODEL_URL", "").strip()
+    model_ready = bool(network.get("ready")) or bool(direct_model_url)
+    if network.get("ready"):
+        model_detail = f"{network.get('ready_stations', 0)} model station(s) ready"
+    elif direct_model_url:
+        model_detail = "direct Amosclaud model endpoint configured"
+    else:
+        model_detail = network.get("detail") or "no model station or direct model endpoint is configured"
+
     data_root = Path(os.getenv("AMOSCLAUD_DATA_DIR", "data"))
     writable = True
     try:
@@ -40,12 +49,13 @@ def service_registry() -> list[ModelService]:
     except OSError:
         writable = False
 
+    pytest_ready = bool(shutil.which("python")) and _module("pytest")
     return [
         ModelService("agent-1-receive", "Receive Engine", "accept and normalize objectives", True, True, "API objective intake ready"),
         ModelService("agent-2-perceive", "Perception Engine", "inspect repository and runtime evidence", True, True, "repository scanner ready"),
-        ModelService("agent-3-model", "Model Planning Service", "create structured safe plans", True, bool(network.get("ready")), network.get("detail") or f"{network.get('ready_stations', 0)} model station(s) ready"),
+        ModelService("agent-3-model", "Model Planning Service", "create structured safe plans", True, model_ready, model_detail),
         ModelService("agent-4-action", "Controlled Action Engine", "apply authorized workspace changes", True, writable, "workspace storage writable" if writable else "workspace storage is not writable"),
-        ModelService("agent-5-verify", "Verification Engine", "compile and test changed code", True, bool(shutil.which("python")) and _module("pytest"), "Python and pytest ready" if _module("pytest") else "pytest is not installed"),
+        ModelService("agent-5-verify", "Verification Engine", "compile and test changed code", True, pytest_ready, "Python and pytest ready" if pytest_ready else "pytest is not installed"),
         ModelService("memory", "Agent Memory Service", "store repository lessons and run evidence", True, writable, "memory storage ready" if writable else "memory storage unavailable"),
         ModelService("logs", "Model Log Service", "record structured engine events", True, writable, "structured logging ready" if writable else "log storage unavailable"),
     ]
