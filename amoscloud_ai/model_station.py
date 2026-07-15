@@ -22,9 +22,9 @@ UPSTREAM_URL = os.getenv("AMOSCLAUD_MODEL_UPSTREAM_URL", "http://127.0.0.1:11434
 UPSTREAM_MODEL = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:7b").strip()
 UPSTREAM_TOKEN = os.getenv("AMOSCLAUD_MODEL_UPSTREAM_TOKEN", "").strip()
 STATION_TOKEN = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
-REQUEST_TIMEOUT = max(10.0, min(float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "120")), 600.0))
+REQUEST_TIMEOUT = max(10.0, min(float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")), 600.0))
 
-app = FastAPI(title=STATION_NAME, version="1.0.0")
+app = FastAPI(title=STATION_NAME, version="1.1.0")
 
 
 class Message(BaseModel):
@@ -53,9 +53,44 @@ def _headers() -> dict[str, str]:
     return headers
 
 
+def _upstream_endpoint(path: str) -> str:
+    """Join an upstream base URL without duplicating /v1 or /api."""
+    base = UPSTREAM_URL.rstrip("/")
+    normalized = "/" + path.lstrip("/")
+    if normalized.startswith("/v1/") and base.endswith("/v1"):
+        normalized = normalized[3:]
+    if normalized.startswith("/api/") and base.endswith("/api"):
+        normalized = normalized[4:]
+    return base + normalized
+
+
+def _safe_upstream_detail(response: httpx.Response) -> str:
+    """Return useful bounded diagnostics without exposing credentials."""
+    detail = ""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            candidate = payload.get("detail") or payload.get("error") or payload.get("message")
+            if isinstance(candidate, dict):
+                candidate = candidate.get("message") or candidate.get("detail")
+            if candidate is not None:
+                detail = str(candidate)
+    except (ValueError, TypeError):
+        detail = response.text
+    detail = " ".join((detail or "").split())[:300]
+    return detail or response.reason_phrase or "upstream request failed"
+
+
+def _raise_for_upstream(response: httpx.Response, service: str) -> None:
+    if response.is_success:
+        return
+    detail = _safe_upstream_detail(response)
+    raise RuntimeError(f"{service} HTTP {response.status_code}: {detail}")
+
+
 def _ollama_completion(client: httpx.Client, body: CompletionRequest) -> str:
     response = client.post(
-        f"{UPSTREAM_URL}/api/chat",
+        _upstream_endpoint("/api/chat"),
         headers=_headers(),
         json={
             "model": body.model or UPSTREAM_MODEL,
@@ -65,7 +100,7 @@ def _ollama_completion(client: httpx.Client, body: CompletionRequest) -> str:
         },
         timeout=REQUEST_TIMEOUT,
     )
-    response.raise_for_status()
+    _raise_for_upstream(response, "Ollama")
     payload = response.json()
     reply = payload.get("message", {}).get("content")
     if not isinstance(reply, str) or not reply.strip():
@@ -75,7 +110,7 @@ def _ollama_completion(client: httpx.Client, body: CompletionRequest) -> str:
 
 def _openai_completion(client: httpx.Client, body: CompletionRequest) -> str:
     response = client.post(
-        f"{UPSTREAM_URL}/v1/chat/completions",
+        _upstream_endpoint("/v1/chat/completions"),
         headers=_headers(),
         json={
             "model": body.model or UPSTREAM_MODEL,
@@ -86,9 +121,12 @@ def _openai_completion(client: httpx.Client, body: CompletionRequest) -> str:
         },
         timeout=REQUEST_TIMEOUT,
     )
-    response.raise_for_status()
+    _raise_for_upstream(response, "OpenAI-compatible upstream")
     payload = response.json()
-    reply = payload.get("choices", [{}])[0].get("message", {}).get("content")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("OpenAI-compatible upstream returned no choices")
+    reply = choices[0].get("message", {}).get("content")
     if not isinstance(reply, str) or not reply.strip():
         raise RuntimeError("OpenAI-compatible upstream returned no assistant content")
     return reply.strip()
@@ -116,15 +154,16 @@ def _probe() -> dict[str, Any]:
                 max_tokens=8,
             )
         )
-        ready = bool(reply.strip())
+        ready = reply.strip().upper().startswith("READY")
         return {
             "status": "ready" if ready else "not_ready",
             "ready": ready,
             "station": STATION_NAME,
             "backend": BACKEND,
             "model": UPSTREAM_MODEL,
-            "checkpoint": True,
+            "checkpoint": ready,
             "latency_ms": latency_ms,
+            "detail": "model inference probe passed" if ready else "model answered but failed the READY checkpoint",
         }
     except Exception as exc:
         return {
@@ -134,7 +173,7 @@ def _probe() -> dict[str, Any]:
             "backend": BACKEND,
             "model": UPSTREAM_MODEL,
             "checkpoint": False,
-            "detail": f"{type(exc).__name__}: {exc}",
+            "detail": f"{type(exc).__name__}: {exc}"[:500],
         }
 
 
@@ -152,10 +191,12 @@ def chat_completions(
     _authorize(authorization)
     try:
         reply, latency_ms = _complete(body)
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=502, detail=f"Upstream model rejected inference ({exc.response.status_code})") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail=f"Model upstream timed out after {REQUEST_TIMEOUT:.0f}s") from exc
+    except httpx.ConnectError as exc:
+        raise HTTPException(status_code=503, detail="Model upstream connection failed") from exc
     except (httpx.HTTPError, RuntimeError) as exc:
-        raise HTTPException(status_code=503, detail=f"Model station unavailable: {type(exc).__name__}") from exc
+        raise HTTPException(status_code=502, detail=str(exc)[:500]) from exc
     model_name = body.model or UPSTREAM_MODEL
     return {
         "id": "chatcmpl-" + uuid.uuid4().hex,
