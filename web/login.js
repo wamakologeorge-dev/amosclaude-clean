@@ -55,7 +55,11 @@ async function requestJson(url, options = {}) {
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
-  if (!response.ok) throw new Error(errorText(data.detail, `Authentication failed (${response.status})`));
+  if (!response.ok) {
+    const error = new Error(errorText(data.detail, `Authentication failed (${response.status})`));
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -76,9 +80,9 @@ function openWorkspace() {
   submitButton.disabled = true;
   passkeyLoginButton.disabled = true;
   showMessage('Success. Opening Amosclaud…', true);
-  window.location.replace('/');
+  window.location.replace('/cloud/agent');
   setTimeout(() => {
-    if (window.location.pathname === '/login') window.location.href = '/';
+    if (window.location.pathname === '/login') window.location.href = '/cloud/agent';
   }, 1200);
 }
 
@@ -161,12 +165,12 @@ function setMode(nextMode) {
   usernameInput.required = registering;
   identifierInput.required = !registering;
   passwordInput.minLength = registering ? 10 : 1;
-  passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
+  passwordInput.autocomplete = registering ? 'current-password' : 'current-password';
 
   if (registering) {
-    title.textContent = 'Create your Amosclaud account';
-    subtitle.textContent = 'Choose your @amosclaud.com mail address and confirm on this device.';
-    submitButton.textContent = 'Create account securely';
+    title.textContent = 'Continue with your Amosclaud account';
+    subtitle.textContent = 'Enter your @amosclaud.com username and password. Existing accounts sign in; new usernames create an account.';
+    submitButton.textContent = 'Continue securely';
   } else {
     title.textContent = 'Welcome back';
     subtitle.textContent = 'Use your fingerprint, device security, or Amosclaud mail and password.';
@@ -208,7 +212,7 @@ form.addEventListener('submit', async event => {
   if (!form.reportValidity()) return;
 
   submitButton.disabled = true;
-  submitButton.textContent = mode === 'login' ? 'Signing in…' : 'Creating account…';
+  submitButton.textContent = mode === 'login' ? 'Signing in…' : 'Checking account…';
   try {
     if (mode === 'login') {
       let mail = identifierInput.value.trim().toLowerCase();
@@ -222,12 +226,29 @@ form.addEventListener('submit', async event => {
       return;
     }
 
+    const username = usernameInput.value.trim().toLowerCase();
+    const address = `${username}@amosclaud.com`;
+
+    // The account-creation form doubles as login. Existing users are signed in
+    // instead of being forced to create another account or another passkey.
+    try {
+      await requestJson('/api/v1/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({email: address, password: passwordInput.value}),
+      });
+      await verifySession();
+      showMessage(`Welcome back, ${address}. Opening Amosclaud…`, true);
+      openWorkspace();
+      return;
+    } catch (loginError) {
+      if (loginError.status !== 401) throw loginError;
+    }
+
     if (!window.PublicKeyCredential || !navigator.credentials) {
       throw new Error('This browser does not support secure device confirmation. Update the browser or use another device.');
     }
 
-    const username = usernameInput.value.trim().toLowerCase();
-    showMessage('Preparing secure device confirmation…', true);
+    showMessage('No existing account matched. Creating your account…', true);
     const start = await requestJson('/api/v1/auth/register/passkey/start', {
       method: 'POST',
       body: JSON.stringify({name: nameInput.value.trim(), username, password: passwordInput.value}),
@@ -239,7 +260,7 @@ form.addEventListener('submit', async event => {
       body: JSON.stringify({username, credential: serialiseRegistrationCredential(credential)}),
     });
     await verifySession();
-    showMessage(`Account created: ${finished.address}. Opening Amosclaud…`, true);
+    showMessage(`Account ready: ${finished.address}. Opening Amosclaud…`, true);
     openWorkspace();
   } catch (error) {
     const cancelled = error?.name === 'NotAllowedError';
@@ -247,7 +268,7 @@ form.addEventListener('submit', async event => {
   } finally {
     if (!navigating) {
       submitButton.disabled = false;
-      submitButton.textContent = mode === 'login' ? 'Sign in with password' : 'Create account securely';
+      submitButton.textContent = mode === 'login' ? 'Sign in with password' : 'Continue securely';
     }
   }
 });
