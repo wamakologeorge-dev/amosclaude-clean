@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
-from amoscloud_ai.api.routes.billing import require_full_package
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
@@ -21,11 +20,11 @@ from amoscloud_ai.models import (
 )
 from amoscloud_ai.task_dispatch import dispatch_task
 
-router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
+router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous Server"
+AGENT_NAME = "Amosclaud Autonomous Runtime"
 AGENT_OWNER = "Amosclaud"
-AGENT_ROLE = "autonomous build, deployment, and monitoring server"
+AGENT_ROLE = "autonomous build, deployment, and monitoring runtime"
 AGENT_HOME = "amosclaud.com"
 AGENT_PIPELINE = "Amosclaud autonomous pipeline"
 AGENT_MODE = "autonomous"
@@ -67,15 +66,15 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     normalised = " ".join(message.lower().rstrip(".!?").split())
 
     if not message and mode == "build":
-        return f"Hi {name}. What do you want to create today?"
+        return f"Hi {name}. What do you want Amosclaud Autonomous to create today?"
     if normalised in GREETING_WORDS:
-        return f"Hi {name}. What do you want to create today?"
+        return f"Hi {name}. Amosclaud Autonomous is online. What should it build, test, deploy, or monitor?"
     if normalised in {"build", "make", "create"}:
-        return f"Hi {name}. What do you want to create today?"
+        return f"Hi {name}. What do you want Amosclaud Autonomous to create today?"
     return None
 
 
-@router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous server profile")
+@router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous runtime profile")
 async def get_agent() -> AutonomousAgentProfile:
     return AutonomousAgentProfile(
         name=AGENT_NAME,
@@ -93,7 +92,7 @@ async def get_agent() -> AutonomousAgentProfile:
     )
 
 
-@router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous server run")
+@router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous runtime run")
 async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
@@ -101,8 +100,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
     user = get_user_from_session(request.cookies.get("amos_session"))
     if not user:
-        raise HTTPException(status_code=401, detail="Sign in to run the Amosclaud agent")
-    require_full_package(int(user["id"]))
+        raise HTTPException(status_code=401, detail="Sign in to run Amosclaud Autonomous")
 
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
@@ -116,7 +114,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             mode=mode,
             objective=objective or "conversation",
             reply=conversational_reply,
-            pipeline_id=f"chat-{run_id}",
+            pipeline_id=f"runtime-{run_id}",
             status=PipelineStatus.SUCCESS,
             started_at=started_at,
             checks=[],
@@ -160,7 +158,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         checks = []
         logs = [reply]
     except Exception as dispatch_error:
-        log.warning("Background worker unavailable; running autonomous server inline: %s", dispatch_error)
+        log.warning("Background worker unavailable; running autonomous runtime inline: %s", dispatch_error)
         try:
             result = run_autonomous_server(mode, objective, body.metadata)
             pipeline.status = result.status
@@ -180,7 +178,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             logs = result.logs
             _save(pipeline, payload)
         except Exception as inline_error:
-            log.exception("Autonomous server inline run failed")
+            log.exception("Autonomous runtime inline run failed")
             pipeline.status = PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
             reply = f"{AGENT_NAME}: autonomous {mode} run failed safely for {objective}."
