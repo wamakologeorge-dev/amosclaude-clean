@@ -1,5 +1,4 @@
 """API schemas for the single Autonomous orchestrator."""
-
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -23,3 +22,14 @@ class AutonomousTaskResponse(BaseModel):
     checks: list[dict[str, Any]]
     duration_seconds: float
     blocker: str | None = None
+
+
+class CloudAgentChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=12000)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+
+
+class MiniAutonomousRequest(BaseModel):
+    issue: str = Field(min_length=1, max_length=12000)
+    workspace: str = "."
+    authorized_writes: bool = False
