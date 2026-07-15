@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Doctor Medical · Amosclaud</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{max-width:1100px;margin:auto;padding:20px}.hero,.card{border:1px solid #2b3748;border-radius:24px;background:#101925;padding:24px;margin-bottom:18px}.status{display:inline-block;padding:9px 14px;border-radius:999px;background:#173a2a;color:#7df0a5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.issue{border:1px solid #334154;border-radius:18px;padding:18px;background:#0b1420}.issue h3{margin:0 0 8px}.muted{color:#9eabc0}.phase{padding:8px 0;border-bottom:1px solid #253142}.phase:last-child{border:0}button{border:0;border-radius:14px;padding:12px 16px;font-weight:700;background:#2673ea;color:white;margin:4px}.danger{background:#9d3038}.empty{padding:40px;text-align:center;color:#9eabc0}code{white-space:pre-wrap;word-break:break-word}.pill{display:inline-block;padding:5px 10px;border-radius:999px;background:#1d2a3c;margin-right:6px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <section class="hero">
+    <div class="top"><div><div class="muted">AMOSCLAUD SELF-CARE OPERATIONS</div><h1>Doctor Medical Health</h1></div><span class="status" id="health">Checking…</span></div>
+    <p>Platform injury → diagnosis → medication plan → controlled treatment → verification → healed.</p>
+    <p class="muted">The mini Autonomous works underground, but code changes and final verification remain controlled by the main Autonomous Agent. User data is protected.</p>
+  </section>
+  <section class="card">
+    <div class="top"><h2>Platform issue mirror</h2><button onclick="loadAll()">Refresh</button></div>
+    <div id="issues" class="grid"><div class="empty">Loading issues…</div></div>
+  </section>
+</main>
+<script>
+const api='/api/v1/doctor';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function json(url,options={}){const r=await fetch(url,{credentials:'include',headers:{'Content-Type':'application/json'},...options});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||`${r.status} ${r.statusText}`);return r.json()}
+async function act(id,action){await json(`${api}/issues/${id}/action`,{method:'POST',body:JSON.stringify({action})});setTimeout(loadAll,400)}
+function issueCard(i){return `<article class="issue"><div class="top"><span class="pill">${esc(i.status)}</span><span class="muted">attempt ${esc(i.attempts)}/${esc(i.max_attempts)}</span></div><h3>${esc(i.title)}</h3><p class="muted">${esc(i.endpoint||i.source)}</p><p>${esc(i.result_summary||i.safe_detail||'Evidence collected. Diagnosis pending.')}</p><p><strong>Engine:</strong> ${esc(i.assigned_engine||'routing')}</p><details><summary>Treatment plan</summary><code>${esc(i.repair_plan||'Waiting for diagnosis')}</code></details><div><button onclick="act('${esc(i.id)}','diagnose')">Diagnose</button><button onclick="act('${esc(i.id)}','handoff')">Main agent fix</button><button onclick="act('${esc(i.id)}','verify')">Verify</button><button class="danger" onclick="act('${esc(i.id)}','stop')">Stop</button></div></article>`}
+async function loadAll(){try{const [health,issues]=await Promise.all([json(`${api}/health`),json(`${api}/issues`)]);document.getElementById('health').textContent=health.ready?`${health.open_issues} open · ${health.active_treatments} healing`:'Unavailable';document.getElementById('issues').innerHTML=issues.length?issues.map(issueCard).join(''):'<div class="empty">No platform injuries recorded.</div>'}catch(e){document.getElementById('health').textContent='Unavailable';document.getElementById('issues').innerHTML=`<div class="empty">${esc(e.message)}</div>`}}
+loadAll();setInterval(loadAll,15000);
+</script>
+</body>
+</html>
