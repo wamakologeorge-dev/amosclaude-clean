@@ -1,3 +1,5 @@
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from amoscloud_ai import model_station
@@ -30,3 +32,25 @@ def test_station_token_is_enforced(monkeypatch):
     monkeypatch.setattr(model_station, "STATION_TOKEN", "secret-token")
     client = TestClient(model_station.app)
     assert client.get("/health").status_code == 401
+
+
+def test_json_payload_rejects_plain_text_success_response():
+    response = httpx.Response(
+        200,
+        headers={"content-type": "text/plain"},
+        text="proxy returned an HTML or text response",
+    )
+
+    with pytest.raises(RuntimeError, match="non-JSON content"):
+        model_station._json_payload(response, "Test upstream")
+
+
+def test_json_payload_rejects_invalid_json_success_response():
+    response = httpx.Response(
+        200,
+        headers={"content-type": "application/json"},
+        text="not valid json",
+    )
+
+    with pytest.raises(RuntimeError, match="invalid JSON"):
+        model_station._json_payload(response, "Test upstream")
