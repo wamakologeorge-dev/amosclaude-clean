@@ -13,6 +13,7 @@ from amoscloud_ai.models import PipelineStatus
 
 SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules", ".amosclaud"}
 TEXT_SUFFIXES = {".py", ".js", ".ts", ".html", ".css", ".md", ".yml", ".yaml", ".json", ".txt", ".sh"}
+RUNTIME_PREFIX = "Amosclaud Autonomous Runtime:"
 
 
 @dataclass
@@ -49,7 +50,11 @@ def repo_root() -> Path:
 def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
     root = repo_root()
     metadata = dict(metadata or {})
-    use_agent = bool(metadata.get("use_agent", False)) or mode == "fix"
+
+    # Build, review, monitor, and test operations must remain available even when
+    # the planning model station is offline. Only an explicitly authorized fix
+    # requires the five-engine model-guided write path.
+    use_agent = mode == "fix"
     checks: list[CheckResult] = []
     logs = [
         f"Amosclaud Autonomous Cloud Agent: repository access confirmed at {root}",
@@ -61,7 +66,13 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
     if use_agent:
         checks.extend(_run_agentic_cloud_core(root, objective, mode, metadata))
     elif mode == "build":
-        checks.append(CheckResult("build-runtime", "passed", "Build checks are running without model-guided changes."))
+        checks.append(
+            CheckResult(
+                "build-runtime",
+                "passed",
+                "Deterministic build inspection is running without requiring the model station.",
+            )
+        )
 
     checks.extend([_git_status_check(root), _conflict_marker_check(root), _python_compile_check(root)])
     if mode in {"autonomous-check", "build", "fix", "monitor"}:
@@ -76,22 +87,31 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
     if failed:
         return AutonomousRunResult(
             PipelineStatus.FAILED,
-            f"Amosclaud Autonomous Cloud Agent needs attention. {len(failed)} blocking check(s) failed.",
+            f"{RUNTIME_PREFIX} {len(failed)} blocking check(s) failed. Review the exact evidence below.",
             checks,
             logs,
         )
-    reply = "Amosclaud Autonomous Cloud Agent completed the objective with verification evidence."
+    reply = f"{RUNTIME_PREFIX} completed the objective with verification evidence."
     if warnings:
-        reply = "Amosclaud Autonomous Cloud Agent completed the objective with warnings and evidence."
+        reply = f"{RUNTIME_PREFIX} completed the objective with warnings and evidence."
     return AutonomousRunResult(PipelineStatus.SUCCESS, reply, checks, logs)
 
 
 def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dict[str, Any]) -> list[CheckResult]:
     try:
         from amoscloud_ai.agentic_cloud_engine import run_agentic_cloud_engine
+
         run = run_agentic_cloud_engine(root, objective, mode, metadata)
     except Exception as exc:
-        return [CheckResult("agentic-cloud-core", "failed", "The five-engine agent stopped safely.", [f"{type(exc).__name__}: {exc}"])]
+        detail = f"{type(exc).__name__}: {exc}"
+        return [
+            CheckResult(
+                "agentic-cloud-core",
+                "failed",
+                "The authorized fix engine stopped safely before writing files.",
+                [detail, "Configure a ready Amosclaud model station before running Fix mode."],
+            )
+        ]
 
     results = [
         CheckResult(
@@ -108,7 +128,9 @@ def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dic
         )
     ]
     for event in run.events:
-        results.append(CheckResult(event.engine, event.status, event.message, [f"Log service: {event.log_service}", *event.evidence]))
+        results.append(
+            CheckResult(event.engine, event.status, event.message, [f"Log service: {event.log_service}", *event.evidence])
+        )
     for check in run.checks:
         results.append(
             CheckResult(
