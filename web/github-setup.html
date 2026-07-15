@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GitHub Integration · Amosclaud</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{max-width:760px;margin:auto;padding:20px}.card{background:#101925;border:1px solid #2b3748;border-radius:22px;padding:22px;margin:16px 0}.status{padding:14px;border-radius:14px;background:#2d2817;color:#ffd76a;white-space:pre-wrap}.ok{background:#173a2a;color:#7df0a5}.danger{background:#351c22;color:#ff9ca4}code{display:block;background:#07111d;border:1px solid #334154;border-radius:12px;padding:14px;overflow-wrap:anywhere;white-space:pre-wrap;margin:10px 0}.button{display:inline-flex;justify-content:center;align-items:center;padding:14px 18px;border-radius:14px;background:#2673ea;color:white;text-decoration:none;font-weight:750;margin:8px 8px 0 0}.muted{color:#a7b2c5}@media(max-width:640px){.wrap{padding:10px}.card{padding:18px}.button{width:100%;box-sizing:border-box;margin-right:0}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <section class="card">
+    <p class="muted">AMOSCLAUD PLATFORM CONNECTION</p>
+    <h1>GitHub Integration Setup</h1>
+    <p>This page prevents the raw “GitHub integration is not configured” screen and shows exactly what the runtime still needs.</p>
+    <div id="status" class="status">Checking GitHub integration…</div>
+  </section>
+  <section class="card">
+    <h2>Required Railway variables</h2>
+    <code>GITHUB_CLIENT_ID=your GitHub OAuth App client ID
+GITHUB_CLIENT_SECRET=your GitHub OAuth App client secret
+GITHUB_TOKEN_ENCRYPTION_KEY=a long random private secret
+GITHUB_REPOSITORY_CALLBACK_URL=https://amosclaud.com/api/v1/github/callback</code>
+    <p class="muted">Store these only in Railway Variables. Never place the client secret or encryption key in GitHub source code.</p>
+    <a class="button" href="https://github.com/settings/developers">Open GitHub OAuth Apps</a>
+    <a class="button" href="/repositories">Back to repositories</a>
+  </section>
+  <section class="card">
+    <h2>After Railway redeploys</h2>
+    <p>Return here and press Continue. GitHub will ask you to authorize Amosclaud, then return you to the repository page.</p>
+    <a id="continue" class="button" href="/api/v1/github/connect">Continue to GitHub authorization</a>
+  </section>
+</main>
+<script>
+(async()=>{
+ const status=document.getElementById('status');
+ try{
+   const response=await fetch('/api/v1/github/status',{credentials:'same-origin'});
+   if(response.status===401){location.href='/login';return}
+   const body=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(body.detail||`HTTP ${response.status}`);
+   if(body.connected){status.textContent=`Connected successfully as @${body.connection.github_login}.`;status.className='status ok';document.getElementById('continue').textContent='Reconnect GitHub'}
+   else{status.textContent='Your Amosclaud account is signed in, but GitHub OAuth has not been connected yet.'}
+ }catch(error){status.textContent=`GitHub status check failed: ${error.message}`;status.className='status danger'}
+})();
+</script>
+</body>
+</html>
