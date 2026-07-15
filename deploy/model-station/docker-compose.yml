@@ -7,13 +7,26 @@ services:
     ports:
       - "11434:11434"
 
+  model-bootstrap:
+    image: ollama/ollama:latest
+    depends_on:
+      - ollama
+    env_file:
+      - .env
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $${AMOSCLAUD_MODEL_NAME:-qwen2.5-coder:7b}"]
+    restart: "no"
+
   model-station:
     build:
       context: ../..
       dockerfile: deploy/model-station/Dockerfile
     restart: unless-stopped
     depends_on:
-      - ollama
+      model-bootstrap:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
