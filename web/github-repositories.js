@@ -1,6 +1,6 @@
 (() => {
   const integrationLink = document.querySelector('a[href="/api/v1/auth/github/link"]');
-  if (integrationLink) integrationLink.href = '/api/v1/github/connect';
+  if (integrationLink) integrationLink.href = '/static/github-setup.html';
 
   const main = document.querySelector('.repo-main');
   if (!main) return;
@@ -14,7 +14,7 @@
         <p id="github-connection-message">Checking your GitHub connection…</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a id="github-connect-button" class="repo-dashboard-link" href="/api/v1/github/connect">Connect GitHub</a>
+        <a id="github-connect-button" class="repo-dashboard-link" href="/static/github-setup.html">Set up GitHub</a>
         <button id="github-refresh-button" class="btn-ghost compact-button" type="button">Refresh</button>
       </div>
     </div>
@@ -124,12 +124,13 @@
     try {
       const status = await api('/api/v1/github/status');
       if (!status.connected) {
-        message.textContent = 'Connect GitHub to import repositories you own or collaborate on.';
+        message.textContent = 'GitHub is not connected. Open the guided setup to configure OAuth safely.';
+        connectButton.textContent = 'Set up GitHub';
         connectButton.hidden = false;
-        grid.innerHTML = '<div class="repository-empty">GitHub is not connected.</div>';
+        grid.innerHTML = '<div class="repository-empty">GitHub is not connected. Amosclaud will guide the owner through the required Railway variables.</div>';
         return;
       }
-      connectButton.textContent = 'Reconnect GitHub';
+      connectButton.textContent = 'GitHub settings';
       connectButton.hidden = false;
       message.textContent = `Connected as @${status.connection.github_login}. Select a repository to import.`;
       grid.innerHTML = '<div class="repository-empty">Loading GitHub repositories…</div>';
