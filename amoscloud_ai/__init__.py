@@ -6,6 +6,8 @@ import os
 import shutil
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 def _configure_persistent_auth_storage() -> None:
     """Choose durable authentication storage before auth routes are imported.
@@ -15,6 +17,9 @@ def _configure_persistent_auth_storage() -> None:
     account, session, and passkey database there so users are not recreated
     after each release. ``AUTH_DB_PATH`` always overrides this default.
     """
+    # Package initialization happens before ``amoscloud_ai.main`` imports, so
+    # load .env here before deciding whether the caller supplied an override.
+    load_dotenv()
     if os.getenv("AUTH_DB_PATH"):
         return
 
