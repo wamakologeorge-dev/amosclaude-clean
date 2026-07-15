@@ -1,39 +1,85 @@
-# Contributing to Amosclaud AI
+# Contributing to Amosclaud
 
-Thank you for contributing.
+Amosclaud is a developer-first, self-hosted platform. Contributions are welcome from developers, testers, technical writers, designers, and infrastructure engineers.
 
-## Development setup
+## Development principles
 
-1. Fork or clone the repository.
-2. Create a branch from `main`.
-3. Copy `.env.example` to `.env` and add only local values.
-4. Install dependencies:
+- Repository work is manual-first and auditable.
+- Amosclaud Autonomous is the primary execution runtime.
+- External model providers are optional integrations, never requirements for core operation.
+- Features must return real results and explicit errors; never report unverified work as successful.
+- Security, user ownership, and self-hosting take priority over convenience.
 
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
+## Local setup
 
-5. Run the application:
+Requirements:
 
-   ```bash
-   python -m amoscloud_ai.main
-   ```
-
-## Before submitting a pull request
-
-Run the checks used by CI:
+- Python 3.11 or newer
+- Git
+- Docker and Docker Compose for full-stack testing
 
 ```bash
-flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-pytest
+git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
+cd amosclaude-clean
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements-dev.txt
+pip install -e .
 ```
 
-Keep changes focused, avoid committing generated files or secrets, and update documentation when behavior changes.
+Run the standard validation suite:
 
-## Pull requests
+```bash
+python scripts/workspace_task.py test
+python scripts/workspace_task.py quality
+python scripts/workspace_task.py build
+```
 
-Describe what changed, why it changed, how it was tested, and any deployment or compatibility impact. Link related issues where applicable.
+## Contribution workflow
 
-## Security
+1. Create an issue for substantial changes.
+2. Create a focused branch from `main`.
+3. Make the smallest complete change that solves the problem.
+4. Add or update tests.
+5. Run the complete local validation suite.
+6. Open a pull request with evidence of the result.
+7. Merge manually only after required checks pass.
 
-Do not report vulnerabilities in public issues. Follow `SECURITY.md` instead.
+Recommended branch names:
+
+- `feature/<short-name>`
+- `fix/<short-name>`
+- `docs/<short-name>`
+- `security/<short-name>`
+
+## Pull request requirements
+
+Every pull request should include the problem, implementation approach, affected systems, tests performed, screenshots for interface changes, deployment or migration notes, and known limitations.
+
+Do not mix unrelated refactors into a feature or bug-fix pull request.
+
+## Code quality
+
+- Keep functions focused and readable.
+- Prefer explicit types and structured response models.
+- Validate all user-controlled paths, branches, URLs, and identifiers.
+- Never commit secrets, tokens, credentials, or private keys.
+- Preserve backward compatibility unless a breaking change is clearly documented.
+- Return truthful states: queued, running, success, failed, or cancelled.
+
+## Autonomous runtime rules
+
+Build, test, review, deploy, and monitor actions should route through Amosclaud Autonomous with `use_agent: false` by default. Optional model reasoning may be added behind an explicit user choice, but it must never be required for repository or deployment workflows.
+
+## Bug reports
+
+Use the bug report template and include the Amosclaud version or commit SHA, operating system, deployment platform, exact reproduction steps, expected and actual behavior, and sanitized logs.
+
+## Security issues
+
+Do not open a public issue for a vulnerability. Follow `SECURITY.md`.
+
+## License
+
+By contributing, you agree that your contribution may be distributed under the repository's applicable license terms.

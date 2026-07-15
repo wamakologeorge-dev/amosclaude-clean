@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible Amosclaud problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for helping improve Amosclaud. Remove secrets from all logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.1 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Repository workspace
+        - Autonomous runtime
+        - Build or tests
+        - Deployment
+        - Authentication
+        - API
+        - Desktop or mobile
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Explain the actual behavior and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Open...\n2. Select...\n3. Observe..."
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, browser, Python version, and deployment platform.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove passwords, tokens, cookies, private keys, and personal data.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I removed secrets and private information.
+          required: true

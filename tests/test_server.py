@@ -59,20 +59,20 @@ def test_health_ok():
 
 
 # ---------------------------------------------------------------------------
-# Autonomous Agent
+# Autonomous runtime
 # ---------------------------------------------------------------------------
 
-def test_autonomous_agent_profile():
+def test_autonomous_runtime_profile():
     resp = request("GET", "/api/v1/agent")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["name"] == "Amosclaud Autonomous Server"
+    assert data["name"] == "Amosclaud Autonomous Runtime"
     assert data["role"] == "autonomous build, deployment, and monitoring server"
     assert data["mode"] == "autonomous"
     assert data["scope"] == ["amosclaud.com", "Amosclaud autonomous pipeline"]
 
 
-def test_autonomous_agent_run_requires_authentication():
+def test_autonomous_runtime_requires_authentication():
     payload = {
         "mode": "autonomous-check",
         "objective": "verify server health",
@@ -82,14 +82,13 @@ def test_autonomous_agent_run_requires_authentication():
     assert resp.status_code == 401
 
 
-def test_full_package_user_can_run_autonomous_agent(monkeypatch):
+def test_authenticated_user_can_run_autonomous_runtime(monkeypatch):
     payload = {
         "mode": "autonomous-check",
         "objective": "verify server health",
         "branch": "main",
     }
-    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: {"id": 1, "name": "Full Package User"})
-    monkeypatch.setattr(agent, "require_full_package", lambda _user_id: None)
+    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: {"id": 1, "name": "Developer"})
     resp = request(
         "POST",
         "/api/v1/agent/run",
@@ -108,7 +107,7 @@ def test_full_package_user_can_run_autonomous_agent(monkeypatch):
     assert data["logs"]
 
 
-def test_autonomous_agent_rejects_unknown_mode():
+def test_autonomous_runtime_rejects_unknown_mode():
     resp = request("POST", "/api/v1/agent/run", json={"mode": "chat"})
     assert resp.status_code == 422
 
