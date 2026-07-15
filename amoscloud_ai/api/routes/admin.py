@@ -22,8 +22,7 @@ class UserUpdate(BaseModel):
 
 
 def _db() -> sqlite3.Connection:
-    # Always use the active authentication database path. This keeps admin
-    # middleware, tests, and self-hosted deployments on the same SQLite file.
+    """Open the canonical auth database and apply non-destructive admin schema updates."""
     db = auth_routes._connect()
     db.execute("PRAGMA foreign_keys = ON")
     user_columns = {row[1] for row in db.execute("PRAGMA table_info(users)").fetchall()}
@@ -58,6 +57,12 @@ def _admin_user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Row:
 
 def _table_exists(db: sqlite3.Connection, name: str) -> bool:
     return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone())
+
+
+def _table_columns(db: sqlite3.Connection, name: str) -> set[str]:
+    if not _table_exists(db, name):
+        return set()
+    return {str(row[1]) for row in db.execute(f'PRAGMA table_info("{name}")').fetchall()}
 
 
 def _count(db: sqlite3.Connection, table: str) -> int:
@@ -138,20 +143,32 @@ def list_users(
     limit: int = Query(default=100, ge=1, le=500),
     admin: sqlite3.Row = Depends(_admin_user),
 ) -> list[dict]:
+    """List users even when optional repository/session tables are absent or use another schema."""
     del admin
-    pattern = f"%{search.strip()}%"
+    cleaned = search.strip()
+    pattern = f"%{cleaned}%"
     with _db() as db:
+        repository_columns = _table_columns(db, "repositories")
+        session_columns = _table_columns(db, "sessions")
+        has_repositories = {"id", "owner_id"}.issubset(repository_columns)
+        has_sessions = {"token_hash", "user_id"}.issubset(session_columns)
+
+        repository_join = "LEFT JOIN repositories r ON r.owner_id=u.id" if has_repositories else ""
+        session_join = "LEFT JOIN sessions s ON s.user_id=u.id" if has_sessions else ""
+        repository_count = "COUNT(DISTINCT r.id)" if has_repositories else "0"
+        session_count = "COUNT(DISTINCT s.token_hash)" if has_sessions else "0"
+
         rows = db.execute(
-            """SELECT u.id,u.name,u.email,u.provider,u.is_admin,u.is_suspended,u.created_at,
-                      COUNT(DISTINCT r.id) AS repository_count,
-                      COUNT(DISTINCT s.token_hash) AS session_count
-               FROM users u
-               LEFT JOIN repositories r ON r.owner_id=u.id
-               LEFT JOIN sessions s ON s.user_id=u.id
-               WHERE (?='' OR u.name LIKE ? OR u.email LIKE ?)
-               GROUP BY u.id
-               ORDER BY u.created_at DESC LIMIT ?""",
-            (search.strip(), pattern, pattern, limit),
+            f"""SELECT u.id,u.name,u.email,u.provider,u.is_admin,u.is_suspended,u.created_at,
+                       {repository_count} AS repository_count,
+                       {session_count} AS session_count
+                FROM users u
+                {repository_join}
+                {session_join}
+                WHERE (?='' OR u.name LIKE ? OR u.email LIKE ?)
+                GROUP BY u.id
+                ORDER BY u.created_at DESC LIMIT ?""",
+            (cleaned, pattern, pattern, limit),
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -180,7 +197,7 @@ def update_user(user_id: int, body: UserUpdate, admin: sqlite3.Row = Depends(_ad
             raise HTTPException(status_code=422, detail="No user changes supplied")
         values.append(user_id)
         db.execute(f"UPDATE users SET {', '.join(updates)} WHERE id=?", values)
-        if body.is_suspended is True:
+        if body.is_suspended is True and _table_exists(db, "sessions"):
             db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         _audit(db, admin["id"], "update_user", "user", str(user_id), str(body.model_dump(exclude_none=True)))
         db.commit()
@@ -192,7 +209,8 @@ def update_user(user_id: int, body: UserUpdate, admin: sqlite3.Row = Depends(_ad
 def list_all_repositories(admin: sqlite3.Row = Depends(_admin_user)) -> list[dict]:
     del admin
     with _db() as db:
-        if not _table_exists(db, "repositories"):
+        columns = _table_columns(db, "repositories")
+        if not {"id", "name", "owner_id"}.issubset(columns):
             return []
         rows = db.execute(
             """SELECT r.id,r.name,r.description,r.visibility,r.default_branch,r.created_at,r.updated_at,
@@ -211,6 +229,8 @@ def list_all_repositories(admin: sqlite3.Row = Depends(_admin_user)) -> list[dic
 @router.delete("/repositories/{repository_id}", status_code=204)
 def remove_repository(repository_id: int, admin: sqlite3.Row = Depends(_admin_user)) -> Response:
     with _db() as db:
+        if not {"id", "name", "owner_id"}.issubset(_table_columns(db, "repositories")):
+            raise HTTPException(status_code=404, detail="Repository not found")
         row = db.execute("SELECT id,name,owner_id FROM repositories WHERE id=?", (repository_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Repository not found")
