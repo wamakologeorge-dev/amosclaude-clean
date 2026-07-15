@@ -93,8 +93,9 @@
           <button id="ws-review" type="button">Ask Autonomous to review</button>
           <button id="ws-deploy" type="button">Ask Autonomous to prepare deployment</button>
         </section>
-        <section class="ws-card">
-          <h3>Output</h3>
+        <section class="ws-card ws-output-card">
+          <h3>Autonomous result</h3>
+          <div id="ws-run-state" class="ws-run-state" aria-live="polite">Idle</div>
           <pre id="ws-output">Autonomous is idle. Select an optional operation to begin.</pre>
         </section>
       </div>
@@ -102,5 +103,6 @@
   </main>
 
   <script src="/static/workspace.js"></script>
+  <script src="/static/workspace-enhancements.js"></script>
 </body>
 </html>
