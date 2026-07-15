@@ -1,0 +1,41 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  model-station:
+    build:
+      context: ../..
+      dockerfile: deploy/model-station/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    env_file:
+      - .env
+    environment:
+      AMOSCLAUD_MODEL_BACKEND: ollama
+      AMOSCLAUD_MODEL_UPSTREAM_URL: http://ollama:11434
+    ports:
+      - "8090:8090"
+
+  station-runner:
+    build:
+      context: ../..
+      dockerfile: deploy/model-station/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - model-station
+    env_file:
+      - .env
+    environment:
+      AMOSCLAUD_MODEL_URL: http://model-station:8090
+    command: ["python", "-m", "amoscloud_ai.runner_client"]
+    volumes:
+      - ../..:/workspace:rw
+
+volumes:
+  ollama-data:
