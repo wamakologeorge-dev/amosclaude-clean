@@ -26,12 +26,12 @@
     return `${(value / 1073741824).toFixed(1)} GB`;
   };
 
-  function toast(message, isError = false) {
+  function toast(message, isError = false, timeoutMs = 6500) {
     const item = document.createElement('div');
     item.className = `admin-toast${isError ? ' error' : ''}`;
     item.textContent = message;
     byId('toast-container').appendChild(item);
-    setTimeout(() => item.remove(), 4200);
+    setTimeout(() => item.remove(), timeoutMs);
   }
 
   async function request(path, { owner = false, ...options } = {}) {
@@ -45,27 +45,23 @@
         signal: controller.signal,
         ...options,
       });
-      if (response.status === 401) { window.location.href = '/login'; throw new Error('Not authenticated'); }
+      if (response.status === 401) { window.location.href = '/login'; throw new Error(`${path}: not authenticated`); }
       if (response.status === 403 && owner) return null;
-      if (response.status === 403) { window.location.href = '/'; throw new Error('Administrator access required'); }
+      if (response.status === 403) { window.location.href = '/'; throw new Error(`${path}: administrator access required`); }
       if (!response.ok) {
-        let detail = `Request failed (${response.status})`;
+        let detail = `HTTP ${response.status}`;
         try { detail = (await response.json()).detail || detail; } catch (_) {}
-        throw new Error(detail);
+        throw new Error(`${path}: ${detail}`);
       }
       return response.status === 204 ? null : response.json();
     } catch (error) {
-      if (error.name === 'AbortError') throw new Error('Runtime request timed out');
+      if (error.name === 'AbortError') throw new Error(`${path}: request timed out`);
       throw error;
     } finally { clearTimeout(timeout); }
   }
 
   function setSnapshot(payload) {
-    const snapshot = {
-      schema: 'amosclaud.runtime.v1',
-      generated_at: new Date().toISOString(),
-      ...payload,
-    };
+    const snapshot = { schema: 'amosclaud.runtime.v1', generated_at: new Date().toISOString(), ...payload };
     snapshotNode.textContent = JSON.stringify(snapshot);
     runtimePanel.dataset.runtimeState = snapshot.state || 'unknown';
     runtimePanel.dataset.runtimeSchema = snapshot.schema;
@@ -99,7 +95,6 @@
       setSnapshot({ state: 'restricted', access_mode: 'owner-only', services: [] });
       return;
     }
-
     const safeServices = Array.isArray(services) ? services : [];
     const healthyCount = safeServices.filter(service => service.healthy).length;
     const runtimeState = model?.status === 'operational' && healthyCount === safeServices.length ? 'operational' : 'degraded';
@@ -110,19 +105,9 @@
       ['Registered services', `${healthyCount}/${safeServices.length} healthy`, 'Healthy service count'],
     ];
     ownerRuntime.innerHTML = runtimeItems.map(([label, value, note]) => `<article class="admin-metric" data-field="${escapeHtml(label.toLowerCase().replaceAll(' ','_'))}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`).join('');
-
-    ownerServicesBody.innerHTML = safeServices.length ? safeServices.map(service => `
-      <tr data-service="${escapeHtml(service.name)}" data-health="${service.healthy ? 'healthy' : 'offline'}">
-        <td><strong>${escapeHtml(service.name)}</strong></td>
-        <td>${escapeHtml(service.kind || 'service')}</td>
-        <td>${service.healthy ? '<span class="admin-badge ok">Healthy</span>' : '<span class="admin-badge warn">Offline</span>'}</td>
-        <td>${formatDate(service.last_seen)}</td>
-      </tr>`).join('') : '<tr><td colspan="4">No services are registered. The runtime can still operate through its internal address.</td></tr>';
-
+    ownerServicesBody.innerHTML = safeServices.length ? safeServices.map(service => `<tr data-service="${escapeHtml(service.name)}" data-health="${service.healthy ? 'healthy' : 'offline'}"><td><strong>${escapeHtml(service.name)}</strong></td><td>${escapeHtml(service.kind || 'service')}</td><td>${service.healthy ? '<span class="admin-badge ok">Healthy</span>' : '<span class="admin-badge warn">Offline</span>'}</td><td>${formatDate(service.last_seen)}</td></tr>`).join('') : '<tr><td colspan="4">No services are registered. The runtime can still operate through its internal address.</td></tr>';
     const safeSettings = Array.isArray(settings) ? settings : [];
-    ownerSettingsBody.innerHTML = safeSettings.length ? safeSettings.map(setting => `
-      <tr><td><strong>${escapeHtml(setting.name)}</strong></td><td>${escapeHtml(setting.value)}</td><td>${setting.is_secret ? '<span class="admin-badge admin">Secret</span>' : '<span class="admin-badge ok">Visible</span>'}</td><td>${formatDate(setting.updated_at)}</td></tr>`).join('') : '<tr><td colspan="4">No Vault settings saved. Bootstrap settings remain in the local environment file.</td></tr>';
-
+    ownerSettingsBody.innerHTML = safeSettings.length ? safeSettings.map(setting => `<tr><td><strong>${escapeHtml(setting.name)}</strong></td><td>${escapeHtml(setting.value)}</td><td>${setting.is_secret ? '<span class="admin-badge admin">Secret</span>' : '<span class="admin-badge ok">Visible</span>'}</td><td>${formatDate(setting.updated_at)}</td></tr>`).join('') : '<tr><td colspan="4">No Vault settings saved. Bootstrap settings remain in the local environment file.</td></tr>';
     setRuntimeState(runtimeState, runtimeState === 'operational' ? 'All registered runtime services are healthy and readable.' : `${healthyCount} of ${safeServices.length} registered services are healthy.`);
     setSnapshot({
       state: runtimeState,
@@ -184,10 +169,18 @@
   async function loadAll() {
     refresh.disabled = true;
     refresh.textContent = 'Refreshing…';
-    const results = await Promise.allSettled([loadOverview(), loadUsers(), loadRepositories(), loadAudit(), loadOwnerControl()]);
-    const failures = results.filter(result => result.status === 'rejected');
-    if (failures.length) toast(`${failures.length} dashboard request${failures.length === 1 ? '' : 's'} failed`, true);
-    lastUpdated.textContent = `Last updated ${new Date().toLocaleTimeString()}`;
+    const jobs = [
+      ['Overview', loadOverview],
+      ['Users', loadUsers],
+      ['Repositories', loadRepositories],
+      ['Audit log', loadAudit],
+      ['Owner runtime', loadOwnerControl],
+    ];
+    const results = await Promise.allSettled(jobs.map(([, loader]) => loader()));
+    const failures = results.map((result, index) => ({result, label: jobs[index][0]})).filter(item => item.result.status === 'rejected');
+    failures.forEach(({result, label}) => toast(`${label} failed: ${result.reason?.message || 'Unknown error'}`, true, 9000));
+    if (!failures.length) toast('Dashboard refreshed successfully');
+    lastUpdated.textContent = `Last updated ${new Date().toLocaleTimeString()}${failures.length ? ` · ${failures.length} failed` : ''}`;
     refresh.disabled = false;
     refresh.textContent = 'Refresh';
   }
