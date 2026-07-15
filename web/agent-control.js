@@ -6,20 +6,16 @@
   const statusBadge = document.getElementById('agent-status');
   const connectionButton = document.getElementById('btn-check-agent-connections');
   const connectionStatus = document.getElementById('agent-connection-status');
-
   if (!runButton || !objectiveInput || !modeInput || !replies) return;
 
   const compose = runButton.closest('.agent-compose');
   const controls = replies.parentElement;
   let controller = null;
-  let activityExpanded = false;
+  let activityExpanded = true;
 
   const activityToolbar = document.createElement('div');
   activityToolbar.className = 'agent-activity-toolbar';
-  activityToolbar.innerHTML = `
-    <strong>Autonomous activity</strong>
-    <button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="false">Show activity</button>
-  `;
+  activityToolbar.innerHTML = '<strong>Agent console</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
   controls.insertBefore(activityToolbar, replies);
 
   const toggleActivityButton = activityToolbar.querySelector('#btn-toggle-agent-activity');
@@ -31,28 +27,73 @@
   stopButton.hidden = true;
   compose.appendChild(stopButton);
 
+  const phases = ['Understand objective', 'Inspect evidence', 'Plan safe action', 'Act when authorized', 'Verify result', 'Report evidence'];
+
   function updateActivityView() {
     replies.classList.toggle('agent-replies-expanded', activityExpanded);
     replies.classList.toggle('agent-replies-collapsed', !activityExpanded);
     toggleActivityButton.textContent = activityExpanded ? 'Hide activity' : 'Show activity';
     toggleActivityButton.setAttribute('aria-expanded', String(activityExpanded));
     const messages = [...replies.querySelectorAll('.agent-reply')];
-    messages.forEach((message, index) => {
-      message.hidden = !activityExpanded && index !== messages.length - 1;
-    });
-    requestAnimationFrame(() => {
-      replies.scrollTop = replies.scrollHeight;
-    });
+    messages.forEach((message, index) => { message.hidden = !activityExpanded && index !== messages.length - 1; });
+    requestAnimationFrame(() => { replies.scrollTop = replies.scrollHeight; });
   }
 
-  function addMessage(text, role = 'agent') {
+  function addMessage(text, role = 'agent', extraClass = '') {
     replies.querySelector('.agent-reply.muted')?.remove();
     const item = document.createElement('div');
-    item.className = `agent-reply chat-message chat-message-${role}`;
-    item.textContent = String(text || 'Amosclaud Autonomous completed the request.');
+    item.className = `agent-reply chat-message chat-message-${role} ${extraClass}`.trim();
+    item.textContent = String(text || 'Amosclaud completed the request.');
     replies.appendChild(item);
     updateActivityView();
     return item;
+  }
+
+  function addPhaseBoard(mode, objective) {
+    const board = document.createElement('section');
+    board.className = 'agent-run-card';
+    board.innerHTML = `<div class="agent-run-heading"><strong>Task started</strong><span>${new Date().toLocaleTimeString()}</span></div><div class="agent-run-objective"></div><ol class="agent-phase-list"></ol>`;
+    board.querySelector('.agent-run-objective').textContent = objective;
+    const list = board.querySelector('.agent-phase-list');
+    phases.forEach((phase, index) => {
+      const item = document.createElement('li');
+      item.dataset.phase = String(index);
+      item.className = index === 0 ? 'active' : '';
+      item.innerHTML = `<span>${index + 1}</span><strong>${phase}</strong><small>${index === 3 && mode !== 'fix' ? 'No file writes authorized' : 'Waiting'}</small>`;
+      list.appendChild(item);
+    });
+    replies.appendChild(board);
+    updateActivityView();
+    return board;
+  }
+
+  function setPhase(board, index, state, note) {
+    const item = board?.querySelector(`[data-phase="${index}"]`);
+    if (!item) return;
+    item.className = state;
+    item.querySelector('small').textContent = note;
+  }
+
+  function renderResult(data, board) {
+    phases.forEach((_, index) => setPhase(board, index, 'complete', index === 3 ? (data.mode === 'fix' ? 'Authorized action completed' : 'No write action required') : 'Completed'));
+    const result = document.createElement('section');
+    result.className = `agent-evidence-card ${String(data.status || '').toLowerCase() === 'failed' ? 'failed' : 'success'}`;
+    const checks = Array.isArray(data.checks) ? data.checks : [];
+    result.innerHTML = `<div class="agent-evidence-heading"><strong>${data.status === 'failed' ? 'Needs attention' : 'Verified result'}</strong><span>${data.status || 'complete'}</span></div><p class="agent-result-copy"></p><div class="agent-check-grid"></div><details><summary>Technical evidence</summary><pre></pre></details>`;
+    result.querySelector('.agent-result-copy').textContent = data.reply || data.message || 'Task completed.';
+    const grid = result.querySelector('.agent-check-grid');
+    checks.forEach(check => {
+      const row = document.createElement('div');
+      row.className = `agent-check ${check.status || 'unknown'}`;
+      row.innerHTML = '<span></span><div><strong></strong><small></small></div>';
+      row.querySelector('span').textContent = check.status === 'passed' ? '✓' : check.status === 'failed' ? '×' : '!';
+      row.querySelector('strong').textContent = check.name || 'check';
+      row.querySelector('small').textContent = check.summary || check.status || 'No summary';
+      grid.appendChild(row);
+    });
+    result.querySelector('pre').textContent = (Array.isArray(data.logs) ? data.logs : []).join('\n') || 'No additional logs returned.';
+    replies.appendChild(result);
+    updateActivityView();
   }
 
   function statusClass(label, busy) {
@@ -74,46 +115,18 @@
     }
   }
 
-  function errorText(value, fallback) {
-    if (typeof value === 'string' && value.trim()) return value;
-    if (value && typeof value === 'object') {
-      if (typeof value.msg === 'string') return value.msg;
-      if (typeof value.message === 'string') return value.message;
-      if (Array.isArray(value)) return value.map(item => errorText(item, '')).filter(Boolean).join('; ');
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return fallback;
-      }
-    }
-    return fallback;
-  }
-
   async function readResponse(response) {
-    const contentType = response.headers.get('content-type') || '';
     const raw = await response.text();
     let data = {};
-
-    if (raw && contentType.includes('application/json')) {
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        data = { detail: 'The server returned invalid JSON.' };
-      }
-    } else if (raw) {
-      data = { detail: raw };
-    }
-
-    if (!response.ok) {
-      throw new Error(errorText(data.detail || data.message, `Request failed (${response.status})`));
-    }
+    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw || 'Invalid server response' }; }
+    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`);
     return data;
   }
 
   async function checkConnections() {
     if (!connectionButton || !connectionStatus) return;
     connectionButton.disabled = true;
-    connectionStatus.textContent = 'Checking Amosclaud Autonomous…';
+    connectionStatus.textContent = 'Checking agent, server, and model runtime…';
     try {
       const [healthResponse, profileResponse] = await Promise.all([
         fetch('/health', { credentials: 'same-origin', cache: 'no-store' }),
@@ -121,29 +134,20 @@
       ]);
       const health = await readResponse(healthResponse);
       const profile = await readResponse(profileResponse);
-      connectionStatus.textContent = `${profile.name || 'Amosclaud Autonomous Runtime'} is online. Server healthy: ${health.status || 'ok'}.`;
+      connectionStatus.textContent = `${profile.name || 'Amosclaud Autonomous Agent'} is online. Server: ${health.status || 'ok'}.`;
     } catch (error) {
       connectionStatus.textContent = `Platform needs attention: ${error.message}`;
-    } finally {
-      connectionButton.disabled = false;
-    }
+    } finally { connectionButton.disabled = false; }
   }
 
   async function sendAutonomous(mode, objective) {
+    const agentMode = mode === 'build' || mode === 'fix';
     const response = await fetch('/api/v1/agent/run', {
-      method: 'POST',
-      signal: controller.signal,
-      credentials: 'same-origin',
+      method: 'POST', signal: controller.signal, credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        mode,
-        objective,
-        branch: 'main',
-        metadata: {
-          branch: 'main',
-          use_agent: false,
-          source: 'platform-autonomous',
-        },
+        mode, objective, branch: 'main',
+        metadata: { branch: 'main', use_agent: agentMode, apply_changes: mode === 'fix', source: 'platform-agent-console' },
       }),
     });
     return readResponse(response);
@@ -152,69 +156,35 @@
   async function sendMessage() {
     const objective = objectiveInput.value.trim();
     const mode = modeInput.value;
-    if (!objective) {
-      objectiveInput.focus();
-      return;
-    }
-
+    if (!objective) { objectiveInput.focus(); return; }
     addMessage(objective, 'user');
+    const board = addPhaseBoard(mode, objective);
     objectiveInput.value = '';
-    objectiveInput.style.height = '';
     controller = new AbortController();
     setBusy(true, 'working');
-    const pending = addMessage('Amosclaud Autonomous is working on your request…', 'pending');
-
+    setPhase(board, 0, 'complete', 'Objective accepted');
+    setPhase(board, 1, 'active', 'Reading repository and runtime evidence');
     try {
       const data = await sendAutonomous(mode, objective);
-      pending.remove();
-      const checks = Array.isArray(data.checks) && data.checks.length
-        ? `\n\nChecks: ${data.checks.map(check => `${check.name}: ${check.status}`).join(', ')}`
-        : '';
-      addMessage(`${data.reply || data.message || 'Amosclaud Autonomous completed the request.'}${checks}`);
+      setPhase(board, 1, 'complete', 'Evidence inspected');
+      setPhase(board, 2, 'complete', mode === 'autonomous-check' ? 'Inspection plan completed' : 'Safe plan prepared');
+      setPhase(board, 3, 'complete', mode === 'fix' ? 'Authorized changes processed' : 'No write authorization used');
+      setPhase(board, 4, data.status === 'failed' ? 'failed' : 'complete', data.status === 'failed' ? 'Verification found a blocker' : 'Verification passed');
+      setPhase(board, 5, 'complete', 'Evidence reported');
+      renderResult(data, board);
       setBusy(false, data.status || 'ready');
     } catch (error) {
-      pending.remove();
-      if (error.name !== 'AbortError') {
-        addMessage(`Amosclaud Autonomous could not finish this request: ${error.message}`);
-        setBusy(false, 'error');
-      }
-    } finally {
-      controller = null;
-      objectiveInput.focus();
-    }
+      setPhase(board, 4, 'failed', error.name === 'AbortError' ? 'Task stopped' : error.message);
+      addMessage(error.name === 'AbortError' ? 'The agent task was stopped.' : `Amosclaud could not finish this request: ${error.message}`, 'agent', 'agent-error');
+      setBusy(false, error.name === 'AbortError' ? 'stopped' : 'error');
+    } finally { controller = null; objectiveInput.focus(); }
   }
 
-  toggleActivityButton.addEventListener('click', () => {
-    activityExpanded = !activityExpanded;
-    updateActivityView();
-  });
-
-  stopButton.addEventListener('click', () => {
-    controller?.abort();
-    controller = null;
-    setBusy(false, 'stopped');
-    addMessage('The autonomous request was stopped.');
-    objectiveInput.focus();
-  });
-
+  toggleActivityButton.addEventListener('click', () => { activityExpanded = !activityExpanded; updateActivityView(); });
+  stopButton.addEventListener('click', () => controller?.abort());
   connectionButton?.addEventListener('click', checkConnections);
-  runButton.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    sendMessage();
-  }, true);
-
-  objectiveInput.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      sendMessage();
-    }
-  });
-
-  objectiveInput.addEventListener('input', () => {
-    objectiveInput.style.height = 'auto';
-    objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight, 180)}px`;
-  });
-
+  runButton.addEventListener('click', event => { event.preventDefault(); event.stopImmediatePropagation(); sendMessage(); }, true);
+  objectiveInput.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
+  objectiveInput.addEventListener('input', () => { objectiveInput.style.height = 'auto'; objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight, 180)}px`; });
   updateActivityView();
 })();
