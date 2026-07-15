@@ -67,7 +67,7 @@ def test_autonomous_runtime_profile():
     assert resp.status_code == 200
     data = resp.json()
     assert data["name"] == "Amosclaud Autonomous Runtime"
-    assert data["role"] == "autonomous build, deployment, and monitoring server"
+    assert data["role"] == "autonomous build, deployment, and monitoring runtime"
     assert data["mode"] == "autonomous"
     assert data["scope"] == ["amosclaud.com", "Amosclaud autonomous pipeline"]
 
