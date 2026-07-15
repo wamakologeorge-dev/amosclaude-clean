@@ -6,7 +6,8 @@
   <title>Owner Identity · Amosclaud</title>
   <link rel="stylesheet" href="/static/styles.css">
   <style>
-    body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{max-width:900px;margin:auto;padding:22px}.card{background:#101925;border:1px solid #2b3748;border-radius:24px;padding:24px;margin:18px 0}.status{display:inline-block;padding:9px 14px;border-radius:999px;background:#302d1c;color:#ffd76a}.status.ok{background:#173a2a;color:#7df0a5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.metric{background:#0b1420;border:1px solid #334154;border-radius:18px;padding:18px}.metric span{display:block;color:#9eabc0;margin-bottom:8px}.metric strong{font-size:1.15rem;word-break:break-word}input{box-sizing:border-box;width:100%;padding:15px;border-radius:14px;border:1px solid #40506a;background:#07111d;color:#fff;font-size:1rem}button,a.button{display:inline-block;border:0;border-radius:14px;padding:13px 17px;font-weight:750;background:#2673ea;color:#fff;text-decoration:none;margin-top:12px}.muted{color:#9eabc0}.notice{padding:16px;border-radius:16px;background:#172335;border:1px solid #334154;white-space:pre-wrap}.danger{color:#ff9ca4}
+    body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{max-width:900px;margin:auto;padding:22px}.card{background:#101925;border:1px solid #2b3748;border-radius:24px;padding:24px;margin:18px 0}.status{display:inline-block;padding:9px 14px;border-radius:999px;background:#302d1c;color:#ffd76a}.status.ok{background:#173a2a;color:#7df0a5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.metric{background:#0b1420;border:1px solid #334154;border-radius:18px;padding:18px}.metric span{display:block;color:#9eabc0;margin-bottom:8px}.metric strong{font-size:1.15rem;word-break:break-word}input{box-sizing:border-box;width:100%;padding:15px;border-radius:14px;border:1px solid #40506a;background:#07111d;color:#fff;font-size:1rem}button,a.button{display:inline-block;border:0;border-radius:14px;padding:13px 17px;font-weight:750;background:#2673ea;color:#fff;text-decoration:none;margin-top:12px;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.6;cursor:wait}.muted{color:#9eabc0}.notice{padding:16px;border-radius:16px;background:#172335;border:1px solid #334154;white-space:pre-wrap}.danger{color:#ff9ca4}.claim-form{display:grid;gap:14px}.confirmation-help{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.fill-button{background:#1b2a40;font-size:.95rem;margin-top:0}.claim-button{width:100%;min-height:56px;font-size:1.05rem}.success{color:#7df0a5}
+    @media(max-width:640px){.wrap{padding:12px}.card{padding:18px;border-radius:20px}.confirmation-help{display:block}.fill-button{width:100%;margin-top:10px}.claim-button{position:relative;z-index:2}.grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -26,9 +27,15 @@
   <section class="card" id="claim-card" hidden>
     <h2>Recognize this administrator as owner</h2>
     <p class="muted">This does not change your password, passkeys, sessions or user content. It creates one protected owner mapping to your existing user ID.</p>
-    <label for="confirmation">Type <strong>MAKE ME AMOSCLAUD OWNER</strong></label>
-    <input id="confirmation" autocomplete="off" placeholder="MAKE ME AMOSCLAUD OWNER">
-    <button id="claim">Recognize me as owner</button>
+    <form id="claim-form" class="claim-form">
+      <div class="confirmation-help">
+        <label for="confirmation">Enter the exact confirmation phrase:</label>
+        <button id="fill-confirmation" class="fill-button" type="button">Fill confirmation phrase</button>
+      </div>
+      <input id="confirmation" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MAKE ME AMOSCLAUD OWNER" aria-describedby="claim-message">
+      <button id="claim" class="claim-button" type="submit">Recognize me as Amosclaud owner</button>
+      <div id="claim-message" class="notice">Tap “Fill confirmation phrase,” then tap the blue owner button.</div>
+    </form>
   </section>
 
   <section class="card">
@@ -39,6 +46,7 @@
   </section>
 </main>
 <script>
+const OWNER_PHRASE='MAKE ME AMOSCLAUD OWNER';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function request(path,options={}){const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...options});if(r.status===401){location.href='/login';throw new Error('Sign in required')}let body={};try{body=await r.json()}catch(_){}if(!r.ok)throw new Error(body.detail||`HTTP ${r.status}`);return body}
 function render(data){
@@ -49,7 +57,8 @@ function render(data){
   document.getElementById('result').textContent=ok?'PASS: Autonomous, Runtime Control Center, Vault and model diagnostics now receive this account as owner. Refresh the Admin page.':data.claim_available?'ACTION REQUIRED: confirm this existing administrator account as the persistent owner below.':'BLOCKED: another account is already registered as platform owner. Use a controlled owner-transfer migration.';
 }
 async function load(){try{render(await request('/api/v1/core/owner/status'))}catch(e){document.getElementById('result').textContent=e.message;document.getElementById('result').classList.add('danger')}}
-document.getElementById('claim').addEventListener('click',async()=>{const button=document.getElementById('claim');button.disabled=true;try{await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation:document.getElementById('confirmation').value})});await load()}catch(e){document.getElementById('result').textContent=e.message;document.getElementById('result').classList.add('danger')}finally{button.disabled=false}});
+document.getElementById('fill-confirmation').addEventListener('click',()=>{const input=document.getElementById('confirmation');input.value=OWNER_PHRASE;input.focus();document.getElementById('claim-message').textContent='Confirmation ready. Tap “Recognize me as Amosclaud owner.”'});
+document.getElementById('claim-form').addEventListener('submit',async event=>{event.preventDefault();const button=document.getElementById('claim');const message=document.getElementById('claim-message');const confirmation=document.getElementById('confirmation').value.trim().toUpperCase();if(confirmation!==OWNER_PHRASE){message.textContent='The phrase is incomplete. Tap “Fill confirmation phrase” first.';message.className='notice danger';return}button.disabled=true;button.textContent='Recognizing owner…';message.textContent='Saving the protected owner identity…';message.className='notice';try{await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation})});message.textContent='Success. Amosclaud now recognizes this account as owner.';message.className='notice success';await load()}catch(e){message.textContent=e.message;message.className='notice danger'}finally{button.disabled=false;button.textContent='Recognize me as Amosclaud owner'}});
 load();
 </script>
 </body>
