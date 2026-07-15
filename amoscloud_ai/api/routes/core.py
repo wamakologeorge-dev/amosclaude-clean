@@ -17,6 +17,13 @@ from amoscloud_ai.logger import log
 
 router = APIRouter(prefix="/core", tags=["amosclaud-core"])
 
+# Canonical founder identities. Authentication and administrator status are still
+# required before any owner-only route can use these addresses.
+FOUNDER_OWNER_EMAILS = {
+    "admin@amosclaud.com",
+    "georgemakulu@amosclaud.com",
+}
+
 
 class SettingWrite(BaseModel):
     value: str = Field(max_length=32768)
@@ -68,23 +75,35 @@ def _owner_db():
 def _configured_owner_emails() -> set[str]:
     values = [os.getenv("AMOSCLAUD_ADMIN_EMAIL", ""), os.getenv("AMOSCLAUD_OWNER_EMAIL", "")]
     values.extend(os.getenv("AMOSCLAUD_OWNER_ALIASES", "").split(","))
-    return {value.strip().lower() for value in values if value.strip()}
+    configured = {value.strip().lower() for value in values if value.strip()}
+    return FOUNDER_OWNER_EMAILS | configured
 
 
 def owner_identity(user) -> dict:
     """Return the unified owner decision used by Runtime and Autonomous."""
     email = str(user["email"]).strip().lower()
-    env_match = email in _configured_owner_emails()
+    founder_match = bool(user["is_admin"]) and email in FOUNDER_OWNER_EMAILS
+    env_match = bool(user["is_admin"]) and email in _configured_owner_emails()
     with _owner_db() as db:
         row = db.execute("SELECT user_id,claimed_at,recognition_source FROM platform_owner WHERE singleton=1").fetchone()
     db_match = bool(row and int(row["user_id"]) == int(user["id"]))
+    recognized = bool(founder_match or env_match or db_match)
+    source = (
+        "founder-account"
+        if founder_match
+        else "persistent-owner-record"
+        if db_match
+        else "environment-owner"
+        if env_match
+        else "not-recognized"
+    )
     return {
-        "recognized": bool(env_match or db_match),
+        "recognized": recognized,
         "user_id": int(user["id"]),
         "name": str(user["name"]),
         "email": email,
         "is_admin": bool(user["is_admin"]),
-        "source": "persistent-owner-record" if db_match else "environment-owner" if env_match else "not-recognized",
+        "source": source,
         "claimed_at": row["claimed_at"] if db_match and row else None,
     }
 
@@ -92,7 +111,7 @@ def owner_identity(user) -> dict:
 def _owner_user(admin=Depends(_admin_user)):
     identity = owner_identity(admin)
     if not identity["recognized"]:
-        raise HTTPException(status_code=403, detail="Amosclaud owner access required. Open /owner to verify or claim the owner identity.")
+        raise HTTPException(status_code=403, detail="Amosclaud owner access required. Open /owner to verify the owner identity.")
     return admin
 
 
@@ -105,9 +124,9 @@ def owner_status(admin=Depends(_admin_user)) -> dict:
         ).fetchone()
     return {
         **identity,
-        "claim_available": existing is None,
+        "claim_available": existing is None and not identity["recognized"],
         "persistent_owner": ({"user_id": int(existing["user_id"]), "name": existing["name"], "email": existing["email"], "claimed_at": existing["claimed_at"], "source": existing["recognition_source"]} if existing else None),
-        "autonomous_recognition": "owner" if identity["recognized"] else "administrator-only",
+        "autonomous_recognition": "founder-owner" if identity["source"] == "founder-account" else "owner" if identity["recognized"] else "administrator-only",
     }
 
 
