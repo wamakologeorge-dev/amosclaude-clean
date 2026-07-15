@@ -6,17 +6,31 @@ services:
       - ollama-data:/root/.ollama
     ports:
       - "11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
 
   model-bootstrap:
     image: ollama/ollama:latest
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: ["/bin/sh", "-c"]
-    command: ["until ollama list >/dev/null 2>&1; do sleep 2; done; ollama pull $${AMOSCLAUD_MODEL_NAME:-qwen2.5-coder:7b}"]
+    command:
+      - >-
+        set -eu;
+        model="$${AMOSCLAUD_MODEL_NAME:-qwen2.5-coder:7b}";
+        echo "Downloading model: $$model";
+        ollama pull "$$model";
+        ollama show "$$model" >/dev/null;
+        echo "Model checkpoint ready: $$model"
     restart: "no"
 
   model-station:
@@ -34,6 +48,21 @@ services:
       AMOSCLAUD_MODEL_UPSTREAM_URL: http://ollama:11434
     ports:
       - "8090:8090"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, os, urllib.request;
+          token=os.getenv('AMOSCLAUD_MODEL_TOKEN','');
+          req=urllib.request.Request('http://127.0.0.1:8090/health', headers={'Authorization': 'Bearer '+token} if token else {});
+          data=json.load(urllib.request.urlopen(req, timeout=320));
+          raise SystemExit(0 if data.get('ready') is True else 1)
+      interval: 30s
+      timeout: 330s
+      retries: 5
+      start_period: 60s
 
   station-runner:
     build:
@@ -41,7 +70,8 @@ services:
       dockerfile: deploy/model-station/Dockerfile
     restart: unless-stopped
     depends_on:
-      - model-station
+      model-station:
+        condition: service_healthy
     env_file:
       - .env
     environment:
