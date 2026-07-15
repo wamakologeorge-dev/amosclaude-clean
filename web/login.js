@@ -18,6 +18,7 @@ const subtitle = document.getElementById('auth-subtitle');
 const message = document.getElementById('message');
 
 let mode = 'login';
+let navigating = false;
 
 function showMessage(text, success = false) {
   message.textContent = text;
@@ -31,28 +32,54 @@ function errorText(detail, fallback = 'Authentication failed') {
   return detail.msg || detail.message || fallback;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {...options, signal: controller.signal});
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('The server took too long to respond. Please try again.');
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     credentials: 'same-origin',
+    cache: 'no-store',
     ...options,
     headers: {'Content-Type': 'application/json', ...(options.headers || {})},
   });
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
-  if (!response.ok) throw new Error(errorText(data.detail));
+  if (!response.ok) throw new Error(errorText(data.detail, `Authentication failed (${response.status})`));
   return data;
 }
 
 async function verifySession() {
-  const response = await fetch('/api/v1/auth/me', {
+  const response = await fetchWithTimeout('/api/v1/auth/me', {
     credentials: 'same-origin',
     cache: 'no-store',
-  });
+  }, 10000);
   if (!response.ok) {
-    throw new Error('Your account was accepted, but Amosclaud could not keep the login session. Use only www.amosclaud.com and check the persistent /data volume.');
+    throw new Error('Your credentials were accepted, but the login session could not be verified. Refresh once and sign in again.');
   }
   return response.json();
+}
+
+function openWorkspace() {
+  if (navigating) return;
+  navigating = true;
+  submitButton.disabled = true;
+  passkeyLoginButton.disabled = true;
+  showMessage('Success. Opening Amosclaud…', true);
+  window.location.replace('/');
+  setTimeout(() => {
+    if (window.location.pathname === '/login') window.location.href = '/';
+  }, 1200);
 }
 
 function base64urlToBytes(value) {
@@ -159,22 +186,19 @@ passkeyLoginButton.addEventListener('click', async () => {
       throw new Error('This browser does not support fingerprint sign-in.');
     }
     const start = await requestJson('/api/v1/auth/login/passkey/start', {method: 'POST', body: '{}'});
-    const credential = await navigator.credentials.get({
-      publicKey: prepareAuthenticationOptions(start.public_key),
-    });
+    const credential = await navigator.credentials.get({publicKey: prepareAuthenticationOptions(start.public_key)});
     if (!credential) throw new Error('Fingerprint sign-in was cancelled.');
     await requestJson('/api/v1/auth/login/passkey/finish', {
       method: 'POST',
       body: JSON.stringify({attempt: start.attempt, credential: serialiseAuthenticationCredential(credential)}),
     });
     await verifySession();
-    showMessage('Verified. Opening Amosclaud…', true);
-    setTimeout(() => window.location.assign('/'), 120);
+    openWorkspace();
   } catch (error) {
     const cancelled = error?.name === 'NotAllowedError';
     showMessage(cancelled ? 'Fingerprint or device confirmation was cancelled.' : error.message);
   } finally {
-    passkeyLoginButton.disabled = false;
+    if (!navigating) passkeyLoginButton.disabled = false;
   }
 });
 
@@ -184,6 +208,7 @@ form.addEventListener('submit', async event => {
   if (!form.reportValidity()) return;
 
   submitButton.disabled = true;
+  submitButton.textContent = mode === 'login' ? 'Signing in…' : 'Creating account…';
   try {
     if (mode === 'login') {
       let mail = identifierInput.value.trim().toLowerCase();
@@ -193,8 +218,7 @@ form.addEventListener('submit', async event => {
         body: JSON.stringify({email: mail, password: passwordInput.value}),
       });
       await verifySession();
-      showMessage('Success. Opening Amosclaud…', true);
-      setTimeout(() => window.location.assign('/'), 120);
+      openWorkspace();
       return;
     }
 
@@ -208,29 +232,31 @@ form.addEventListener('submit', async event => {
       method: 'POST',
       body: JSON.stringify({name: nameInput.value.trim(), username, password: passwordInput.value}),
     });
-
     const credential = await navigator.credentials.create({publicKey: prepareCreationOptions(start.public_key)});
     if (!credential) throw new Error('Device confirmation was cancelled.');
-
     const finished = await requestJson('/api/v1/auth/register/passkey/finish', {
       method: 'POST',
       body: JSON.stringify({username, credential: serialiseRegistrationCredential(credential)}),
     });
-
     await verifySession();
     showMessage(`Account created: ${finished.address}. Opening Amosclaud…`, true);
-    setTimeout(() => window.location.assign('/'), 250);
+    openWorkspace();
   } catch (error) {
     const cancelled = error?.name === 'NotAllowedError';
     showMessage(cancelled ? 'Device confirmation was cancelled or timed out. Try again.' : error.message);
   } finally {
-    submitButton.disabled = false;
+    if (!navigating) {
+      submitButton.disabled = false;
+      submitButton.textContent = mode === 'login' ? 'Sign in with password' : 'Create account securely';
+    }
   }
 });
 
 (async () => {
   try {
-    const response = await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'});
-    if (response.ok) window.location.assign('/');
-  } catch (_) {}
+    const response = await fetchWithTimeout('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'}, 5000);
+    if (response.ok) openWorkspace();
+  } catch (_) {
+    // Stay on the login page when the session probe is unavailable.
+  }
 })();
