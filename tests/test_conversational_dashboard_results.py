@@ -5,9 +5,9 @@ def test_conversational_agent_streams_real_execution_to_workbench():
     root = Path(__file__).resolve().parents[1]
     script = (root / "web" / "conversational-agent.js").read_text(encoding="utf-8")
 
-    assert "amosclaud:agent-start" in script
-    assert "amosclaud:agent-phase" in script
-    assert "amosclaud:agent-result" in script
+    assert "publish('agent-start'" in script
+    assert "publish('agent-phase'" in script
+    assert "publish('agent-result'" in script
     assert "/api/v1/pipelines/" in script
     assert "jobs.flatMap" in script
 
