@@ -14,12 +14,20 @@ class CodexProvider:
         self.model = model or os.getenv("AMOSCLAUD_CODEX_MODEL", "").strip()
         if not self.model:
             raise RuntimeError("Set AMOSCLAUD_CODEX_MODEL to an available OpenAI coding model")
+
+        self.max_output_tokens = int(os.getenv("AMOSCLAUD_CODEX_MAX_OUTPUT_TOKENS", "12000"))
+        if self.max_output_tokens < 256:
+            raise ValueError("AMOSCLAUD_CODEX_MAX_OUTPUT_TOKENS must be at least 256")
+
         if client is None:
+            api_key = os.getenv("OPENAI_API_KEY", "").strip()
+            if not api_key:
+                raise RuntimeError("Set OPENAI_API_KEY before enabling OpenAI/Codex execution")
             try:
                 from openai import OpenAI
             except ImportError as exc:
                 raise RuntimeError("Install the openai package to use CodexProvider") from exc
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = OpenAI(api_key=api_key)
         self.client = client
 
     def next_step(
@@ -31,7 +39,11 @@ class CodexProvider:
         memory: Sequence[str],
     ) -> AgentStep:
         tool_contract = [
-            {"name": tool.name, "description": tool.description, "requires_approval": tool.requires_approval}
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "requires_approval": tool.requires_approval,
+            }
             for tool in tools
         ]
         prompt = {
@@ -43,18 +55,30 @@ class CodexProvider:
                 "Return one JSON object only. Either return "
                 '{"thought":"...","tool":"tool_name","arguments":{...}} or '
                 '{"thought":"...","final_answer":"..."}. '
-                "Do not claim completion until observations contain evidence that the objective was verified."
+                "Never include secrets in output. Do not claim completion until observations "
+                "contain evidence that the objective was verified."
             ),
         }
         response = self.client.responses.create(
             model=self.model,
+            instructions=(
+                "You are the Amosclaud autonomous engineering planner. Choose exactly one next "
+                "action, obey tool permissions, keep changes inside the configured workspace, "
+                "and return valid JSON only."
+            ),
             input=json.dumps(prompt, ensure_ascii=False),
+            max_output_tokens=self.max_output_tokens,
+            store=False,
         )
         raw = getattr(response, "output_text", "")
+        if not raw:
+            raise ValueError("Codex provider returned an empty response")
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise ValueError("Codex provider returned invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise ValueError("Codex provider must return a JSON object")
         return AgentStep(
             thought=str(data.get("thought", "")),
             tool=data.get("tool"),
