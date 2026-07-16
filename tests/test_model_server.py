@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-import torch
+import pytest
 
-from amoscloud_ai.model_server import (
+torch = pytest.importorskip(
+    "torch",
+    reason="model-server tests require the optional PyTorch dependency",
+)
+
+from amoscloud_ai.model_server import (  # noqa: E402
     ByteTokenizer,
     ContextWindow,
     KVCache,
