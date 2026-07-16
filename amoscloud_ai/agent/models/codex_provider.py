@@ -8,15 +8,12 @@ from ..runtime import AgentStep, Tool
 
 
 class CodexProvider:
-    """OpenAI Responses API adapter for the Amosclaud agent loop.
-
-    The API key is read from OPENAI_API_KEY. The model defaults to the value
-    of AMOSCLAUD_CODEX_MODEL so deployments can select an available coding
-    model without changing application code.
-    """
+    """OpenAI Responses API adapter for the Amosclaud agent loop."""
 
     def __init__(self, *, model: str | None = None, client: Any | None = None) -> None:
-        self.model = model or os.getenv("AMOSCLAUD_CODEX_MODEL", "gpt-5.2-codex")
+        self.model = model or os.getenv("AMOSCLAUD_CODEX_MODEL", "").strip()
+        if not self.model:
+            raise RuntimeError("Set AMOSCLAUD_CODEX_MODEL to an available OpenAI coding model")
         if client is None:
             try:
                 from openai import OpenAI
