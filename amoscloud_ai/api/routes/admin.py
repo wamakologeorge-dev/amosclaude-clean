@@ -253,3 +253,54 @@ def audit_log(limit: int = Query(default=100, ge=1, le=500), admin: sqlite3.Row 
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+@router.get("/metadata")
+def platform_metadata(admin: sqlite3.Row = Depends(_admin_user)) -> dict:
+    """Return the redacted Amosclaud.py platform snapshot."""
+    del admin
+    from amoscloud_ai.Amosclaud import AmosclaudDashboard
+
+    return AmosclaudDashboard().snapshot()
+
+
+@router.post("/engineering-verification/run")
+def run_engineering_verification(admin: sqlite3.Row = Depends(_admin_user)) -> dict:
+    """Run bounded checks and retain a report before engineering completion is claimed."""
+    from amoscloud_ai.engineering_verification import EngineeringVerification
+
+    report = EngineeringVerification().run()
+    with _db() as db:
+        _audit(
+            db,
+            int(admin["id"]),
+            "engineering_verification",
+            "commit",
+            str(report.get("commit_sha", "")),
+            str(report.get("status", "failed")),
+        )
+        db.commit()
+    return report
+
+
+@router.get("/engineering-verification/reports")
+def engineering_verification_reports(
+    limit: int = Query(default=50, ge=1, le=200),
+    admin: sqlite3.Row = Depends(_admin_user),
+) -> list[dict]:
+    del admin
+    from amoscloud_ai.engineering_verification import EngineeringVerification
+
+    return EngineeringVerification().reports(limit)
+
+
+@router.get("/merge-results")
+def merge_results(
+    limit: int = Query(default=100, ge=1, le=500),
+    admin: sqlite3.Row = Depends(_admin_user),
+) -> list[dict]:
+    """Show first-parent repository history joined to retained verification evidence."""
+    del admin
+    from amoscloud_ai.engineering_verification import EngineeringVerification
+
+    return EngineeringVerification().merge_results(limit)
