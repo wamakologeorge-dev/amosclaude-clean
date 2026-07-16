@@ -16,7 +16,9 @@ from amosclaud_metadata import (
 )
 
 
-def test_store_appends_verified_record_atomically(tmp_path: Path) -> None:
+def test_store_appends_verified_record_atomically(
+    tmp_path: Path,
+) -> None:
     store = JsonMetadataStore(tmp_path)
     service = AmosclaudMetadataService(store)
     mission = MissionRecord(
@@ -25,9 +27,20 @@ def test_store_appends_verified_record_atomically(tmp_path: Path) -> None:
         mode="build",
         status="completed",
         current_phase="report",
-        completed_steps=("understand", "inspect", "plan", "act", "verify", "report"),
+        completed_steps=(
+            "understand",
+            "inspect",
+            "plan",
+            "act",
+            "verify",
+            "report",
+        ),
     )
-    envelope = service.verified("missions", mission, "pytest:test_store_appends_verified_record_atomically")
+    envelope = service.verified(
+        "missions",
+        mission,
+        "pytest:test_store_appends_verified_record_atomically",
+    )
     records = store.list_records("missions")
     assert len(records) == 1
     saved = json.loads(records[0].read_text(encoding="utf-8"))
@@ -43,8 +56,11 @@ def test_verified_record_requires_evidence(tmp_path: Path) -> None:
         service.verified("missions", {"mission_id": "mission-2"})
 
 
-def test_secret_fields_are_rejected() -> None:
-    envelope = MetadataEnvelope(record_type="runtime", payload={"api_key": "must-not-be-stored"})
+def test_sensitive_fields_are_rejected() -> None:
+    envelope = MetadataEnvelope(
+        record_type="runtime",
+        payload={"api_key": "must-not-be-stored"},
+    )
     with pytest.raises(MetadataValidationError, match="secret-like"):
         validate_envelope(envelope)
 
