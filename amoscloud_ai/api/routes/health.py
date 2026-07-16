@@ -38,12 +38,12 @@ def _broker_status() -> dict[str, object]:
     host = parsed.hostname
     port = parsed.port or {"redis": 6379, "rediss": 6379, "amqp": 5672, "amqps": 5671}.get(parsed.scheme)
     if not host or not port:
-        return {"configured": False, "reachable": False}
+        return {"configured": False, "reachable": False, "execution": "inline-fallback"}
     try:
         with socket.create_connection((host, port), timeout=0.35):
-            return {"configured": True, "reachable": True, "scheme": parsed.scheme}
+            return {"configured": True, "reachable": True, "scheme": parsed.scheme, "execution": "background-worker"}
     except OSError:
-        return {"configured": True, "reachable": False, "scheme": parsed.scheme}
+        return {"configured": True, "reachable": False, "scheme": parsed.scheme, "execution": "inline-fallback"}
 
 
 @router.get("/ready", summary="Autonomous service readiness")
