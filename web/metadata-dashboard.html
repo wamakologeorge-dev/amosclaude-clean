@@ -42,8 +42,8 @@ function rows(object,target){const entries=Object.entries(object||{});$(target).
 async function load(){
   $('refresh').disabled=true;
   try{
-    const response=await fetch('/api/v1/metadata/summary',{credentials:'same-origin'});
-    if(response.status===401){location.href='/login?next=/metadata-dashboard';return}
+    const response=await fetch('/api/v1/agent-chain/metadata/summary',{credentials:'same-origin'});
+    if(response.status===401){location.href='/login?next=/static/metadata-dashboard.html';return}
     if(!response.ok)throw new Error(`Metadata API returned ${response.status}`);
     const data=await response.json();
     $('records').textContent=data.totals.records;$('typesTotal').textContent=data.totals.types;$('invalid').textContent=data.totals.invalid_files;$('storage').textContent=data.storage;
