@@ -19,8 +19,7 @@
   <link rel="stylesheet" href="/static/notebook-dashboard.css" />
   <link rel="stylesheet" href="/static/chat-scroll.css" />
   <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
-  <link rel="stylesheet" href="/static/agent-console.css" />
-  <link rel="stylesheet" href="/static/live-autonomous-workbench.css" />
+  <link rel="stylesheet" href="/static/conversational-agent.css" />
 </head>
 <body>
   <div id="app">
@@ -42,7 +41,7 @@
       <section class="autonomous-page-head">
         <div>
           <h1>Amosclaud Autonomous Cloud Agent</h1>
-          <p>Talk through your idea naturally. Amosclaud asks the next useful question, remembers the brief, and starts verified work after you confirm.</p>
+          <p>Talk through your idea naturally. Amosclaud asks one useful question at a time, remembers the agreed brief, and executes only after you confirm.</p>
         </div>
         <span class="runtime-state">Conversational agent online</span>
       </section>
@@ -50,16 +49,20 @@
       <section class="autonomous-grid">
         <article class="auto-card agent-workspace">
           <div class="auto-card-header">
-            <div><h2 id="agent-name">Amosclaud Autonomous Cloud Agent</h2><p id="agent-mission">A calm conversational agent that can plan, act, execute jobs, verify, and report.</p></div>
+            <div>
+              <h2 id="agent-name">Amosclaud Autonomous Cloud Agent</h2>
+              <p id="agent-mission">A calm conversational agent that can understand, plan, act, execute jobs, verify, and report.</p>
+            </div>
             <span id="agent-status" class="badge badge-success">ready</span>
           </div>
           <section class="agent-section">
-            <div class="agent-header" aria-hidden="true"></div>
             <div class="agent-layout-visual">
               <div class="agent-controls-stack">
-                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. Tell me what you would like to create, and I’ll ask one question at a time.</div></div>
+                <div id="agent-replies" class="agent-replies" aria-live="polite">
+                  <div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. What would you like to create or work on today?</div>
+                </div>
                 <div class="agent-compose">
-                  <input id="agent-mode-input" type="hidden" value="autonomous-check">
+                  <input id="agent-mode-input" type="hidden" value="autonomous-check" />
                   <div class="agent-suggestions" aria-label="Suggested requests">
                     <button type="button" data-agent-suggestion="I want to create something new.">Create</button>
                     <button type="button" data-agent-suggestion="I need help fixing a problem.">Fix</button>
@@ -82,84 +85,31 @@
               <div class="auto-summary-item"><span>1</span><strong>Listen and understand</strong></div>
               <div class="auto-summary-item"><span>2</span><strong>Ask one useful question</strong></div>
               <div class="auto-summary-item"><span>3</span><strong>Remember the agreed brief</strong></div>
-              <div class="auto-summary-item"><span>4</span><strong>Act after you confirm</strong></div>
+              <div class="auto-summary-item"><span>4</span><strong>Act after confirmation</strong></div>
               <div class="auto-summary-item"><span>5</span><strong>Execute jobs and verify</strong></div>
-              <div class="auto-summary-item"><span>6</span><strong>Report exact results</strong></div>
-            </div>
-          </section>
-          <section class="auto-card auto-summary">
-            <h3>Operating policy</h3>
-            <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>Tone</span><strong>Kind, calm, and patient</strong></div>
-              <div class="auto-summary-item"><span>Conversation</span><strong>Follow up before execution</strong></div>
-              <div class="auto-summary-item"><span>Action</span><strong>Start after confirmation</strong></div>
-              <div class="auto-summary-item"><span>Success</span><strong>Evidence required</strong></div>
+              <div class="auto-summary-item"><span>6</span><strong>Report exact evidence</strong></div>
             </div>
           </section>
           <section class="auto-card auto-summary">
             <h3>Quick actions</h3>
             <div class="quick-actions">
-              <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run the pipeline manually</span></button>
-              <a class="studio-tool" href="/repositories"><strong>Repositories</strong><span>Inspect source and branches</span></a>
-              <a class="studio-tool" href="/bundles"><strong>Bundles</strong><span>Build and download packages</span></a>
-              <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start a controlled release</span></button>
-              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Health</strong><span>Check Autonomous and server runtime connectivity</span></button>
+              <a class="studio-tool" href="/repositories"><strong>Repositories</strong><span>Inspect real source and branches</span></a>
+              <a class="studio-tool" href="/bundles"><strong>Bundles</strong><span>Open generated packages</span></a>
+              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Health</strong><span>Check the live server runtime</span></button>
             </div>
-            <div id="agent-connection-status" class="studio-summary" aria-live="polite">Runtime health has not been checked yet.</div>
+            <div id="agent-connection-status" class="studio-summary" aria-live="polite"></div>
           </section>
         </aside>
       </section>
 
-      <section id="live-autonomous-workbench" class="autonomous-workbench" aria-labelledby="workbench-title">
-        <header class="workbench-head">
-          <div><h2 id="workbench-title">Live Autonomous Workbench</h2><p>Watch the mission, repository activity, verification, approvals, and result locations without exposing private reasoning.</p></div>
-          <span class="workbench-live" data-workbench-status>Ready</span>
-        </header>
-        <div class="workbench-grid">
-          <section class="workbench-panel">
-            <h3>Mission timeline</h3>
-            <div class="mission-meta">
-              <div><small>Mission</small><strong data-workbench-mission>Waiting for instruction</strong></div>
-              <div><small>Mode</small><strong data-workbench-mode>—</strong></div>
-              <div><small>Runtime</small><strong data-workbench-runtime>00:00</strong></div>
-            </div>
-            <div class="mission-progress" aria-label="Mission progress"><span data-workbench-progress></span></div>
-            <div class="workbench-timeline" data-workbench-timeline><div class="workbench-empty">Start an Agent task to watch each verified step here.</div></div>
-          </section>
-          <section class="workbench-panel">
-            <div class="workbench-tabs" role="tablist">
-              <button class="workbench-tab active" data-workbench-tab="files" type="button">Files</button>
-              <button class="workbench-tab" data-workbench-tab="checks" type="button">Tests</button>
-              <button class="workbench-tab" data-workbench-tab="results" type="button">Results</button>
-              <button class="workbench-tab" data-workbench-tab="approvals" type="button">Approvals</button>
-            </div>
-            <div class="workbench-view active" data-workbench-view="files"><div class="workbench-list" data-workbench-files><div class="workbench-empty">No files observed yet.</div></div></div>
-            <div class="workbench-view" data-workbench-view="checks"><div class="workbench-list" data-workbench-checks><div class="workbench-empty">No verification checks yet.</div></div></div>
-            <div class="workbench-view" data-workbench-view="results"><div class="workbench-list" data-workbench-results><div class="workbench-empty">No result locations yet.</div></div></div>
-            <div class="workbench-view" data-workbench-view="approvals"><div class="workbench-list" data-workbench-approvals><div class="workbench-empty">No approval is currently required.</div></div></div>
-          </section>
-        </div>
-      </section>
-
-      <section class="status-strip">
-        <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
-        <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
-        <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
-        <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
-      </section>
-      <p class="autonomous-note">Amosclaud follows the conversation, acts after confirmation, and reports success only after verification tools confirm the result.</p>
-      <section hidden><table id="pipelines-table"><tbody id="pipelines-body"><tr><td>Loading…</td></tr></tbody></table><table id="deployments-table"><tbody id="deployments-body"><tr><td>Loading…</td></tr></tbody></table></section>
+      <p class="autonomous-note">Amosclaud does not fabricate files, tests, jobs, deployments, or results. It reports only evidence returned by the live runtime.</p>
     </main>
   </div>
 
-  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
-  <div id="modal-pipeline" class="modal hidden"><h3>Trigger Pipeline</h3><label>Pipeline name<input id="pipeline-name-input" type="text" /></label><label>Branch<input id="pipeline-branch-input" type="text" value="main" /></label><div class="modal-actions"><button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button><button id="btn-confirm-pipeline" class="btn-primary">Trigger</button></div></div>
-  <div id="modal-deployment" class="modal hidden"><h3>Start Deployment</h3><label>Deployment name<input id="deployment-name-input" type="text" /></label><label>Environment<select id="deployment-env-input"><option value="production">production</option><option value="staging">staging</option><option value="development">development</option></select></label><div class="modal-actions"><button id="btn-cancel-deployment" class="btn-ghost">Cancel</button><button id="btn-confirm-deployment" class="btn-accent">Deploy</button></div></div>
   <div id="toast-container" aria-live="assertive"></div>
 
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
-  <script src="/static/live-autonomous-workbench.js"></script>
   <script src="/static/conversational-agent.js"></script>
   <script src="/static/autonomous-services.js"></script>
   <script src="/static/sidebar.js"></script>
