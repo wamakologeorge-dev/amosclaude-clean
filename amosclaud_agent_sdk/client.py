@@ -8,8 +8,9 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from .errors import AmosclaudSDKError
 
-class AmosclaudAgentError(RuntimeError):
+class AmosclaudAgentError(AmosclaudSDKError):
     """A safe, user-facing Amosclaud API failure."""
 
 @dataclass(slots=True)
