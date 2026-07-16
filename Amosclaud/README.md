@@ -52,3 +52,23 @@ amosclaud-tamper-server
 
 Its JSON card is available from `Amosclaud.byte.doc.json.tools.card.cb`; CI and runtime policies
 are exposed through the requested `Amosclaud.byte.py.ci...cb` module paths.
+
+Create and install a managed Y bundle with a CB receipt:
+
+```python
+from pathlib import Path
+from Amosclaud.y.bundle.system.cb import YBundleSystemCB
+
+system = YBundleSystemCB(Path("data/y-bundles"))
+record = system.build(
+    Path("my-app"),
+    name="my-app",
+    version="1.0.0",
+)
+assert system.verify(record.bundle_id)["valid"]
+installed_folder = system.install(record.bundle_id)
+```
+
+The Y bundle system maintains an atomic index, archive checksum, CB receipt checksum, embedded
+per-file manifest, and safe extraction limits. It rejects altered archives, altered receipts,
+absolute paths, `..` traversal, symlinks, oversized output, and excessive file counts.
