@@ -100,7 +100,7 @@ class AutoregressiveGenerator:
                         generated_ids,
                         skip_special_tokens=True,
                     )
-                    delta = full_text[len(emitted_text) :]
+                    delta = full_text[len(emitted_text):]
                     emitted_text = full_text
                     should_stop, _reason = stop.should_stop(
                         token_id,
