@@ -23,6 +23,9 @@ router.include_router(mapping_bundles.dashboard_router)
 router.include_router(control_bus_dashboard.router)
 router.include_router(amosclaud_cb_router, prefix="/api/v1")
 
+from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import router as byte_metadata_router
+router.include_router(byte_metadata_router, prefix="/api/v1")
+
 
 @router.get("/health", response_model=HealthResponse, summary="Service liveness check")
 async def health() -> HealthResponse:
