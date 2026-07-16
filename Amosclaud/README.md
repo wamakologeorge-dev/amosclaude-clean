@@ -40,3 +40,15 @@ assert verify_bundle(bundle.path)["valid"]
 
 `Amosclaud.lib.buddles` remains available as a compatibility import for the originally requested
 name. New integrations should use `Amosclaud.lib.bundles`.
+
+Run the evidence-only tamper detection server with:
+
+```bash
+export AMOSCLAUD_TAMPER_HOST=127.0.0.1
+export AMOSCLAUD_TAMPER_PORT=9060
+export AMOSCLAUD_TAMPER_EVIDENCE=data/security/tamper-evidence.jsonl
+amosclaud-tamper-server
+```
+
+Its JSON card is available from `Amosclaud.byte.doc.json.tools.card.cb`; CI and runtime policies
+are exposed through the requested `Amosclaud.byte.py.ci...cb` module paths.
