@@ -1,4 +1,10 @@
-"""Autonomous repository runtime and Agentic Cloud Engine adapter."""
+"""Autonomous repository runtime and Agentic Cloud Engine adapter.
+
+Build and fix objectives use the plan-first cloud agent by default. The agent
+receives the task, inspects context, plans before writing, executes authorized
+changes, verifies the result, and reports evidence. Deterministic checks remain
+available as a fallback when the model runtime is unavailable.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +19,8 @@ from amoscloud_ai.models import PipelineStatus
 
 SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules", ".amosclaud"}
 TEXT_SUFFIXES = {".py", ".js", ".ts", ".html", ".css", ".md", ".yml", ".yaml", ".json", ".txt", ".sh"}
-RUNTIME_PREFIX = "Amosclaud Autonomous Runtime:"
+RUNTIME_PREFIX = "Amosclaud Autonomous Agent:"
+AGENT_MODES = {"build", "fix"}
 
 
 @dataclass
@@ -48,29 +55,40 @@ def repo_root() -> Path:
 
 
 def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
+    """Run one objective through the agent lifecycle and deterministic verifier.
+
+    Build and fix modes use the agent unless ``metadata.use_agent`` is false.
+    Build mode executes changes by default; callers may set
+    ``metadata.apply_changes=false`` for plan-only behavior.
+    """
     root = repo_root()
     metadata = dict(metadata or {})
+    mode = (mode or "autonomous-check").strip().lower()
+    objective = " ".join((objective or "").split())
+    use_agent = mode in AGENT_MODES and bool(metadata.get("use_agent", True))
+    apply_changes = bool(metadata.get("apply_changes", mode in AGENT_MODES))
 
-    # Build, review, monitor, and test operations must remain available even when
-    # the planning model station is offline. Only an explicitly authorized fix
-    # requires the five-engine model-guided write path.
-    use_agent = mode == "fix"
     checks: list[CheckResult] = []
     logs = [
-        f"Amosclaud Autonomous Cloud Agent: repository access confirmed at {root}",
+        f"{RUNTIME_PREFIX} task received",
+        f"Repository: {root}",
         f"Mode: {mode}",
         f"Objective: {objective}",
-        f"Executor: {'five-engine agentic core' if use_agent else 'deterministic runtime'}",
+        f"Executor: {'plan-first cloud agent' if use_agent else 'deterministic runtime'}",
+        f"Write authorization: {apply_changes if use_agent else False}",
     ]
 
     if use_agent:
-        checks.extend(_run_agentic_cloud_core(root, objective, mode, metadata))
+        agent_checks, agent_logs = _run_plan_first_agent(root, objective, mode, metadata, apply_changes)
+        checks.extend(agent_checks)
+        logs.extend(agent_logs)
     elif mode == "build":
         checks.append(
             CheckResult(
                 "build-runtime",
-                "passed",
-                "Deterministic build inspection is running without requiring the model station.",
+                "warning",
+                "Build ran through deterministic inspection because the task agent was disabled.",
+                ["Set metadata.use_agent=true to receive, plan, execute, verify, and report the task."],
             )
         )
 
@@ -80,38 +98,56 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
 
     for check in checks:
         logs.append(f"{check.name}: {check.status} - {check.summary}")
-        logs.extend(check.details[:20])
+        logs.extend(check.details[:30])
 
     failed = [check for check in checks if check.status == "failed"]
     warnings = [check for check in checks if check.status == "warning"]
     if failed:
         return AutonomousRunResult(
             PipelineStatus.FAILED,
-            f"{RUNTIME_PREFIX} {len(failed)} blocking check(s) failed. Review the exact evidence below.",
+            f"{RUNTIME_PREFIX} executed the task but {len(failed)} blocking verification check(s) failed.",
             checks,
             logs,
         )
-    reply = f"{RUNTIME_PREFIX} completed the objective with verification evidence."
-    if warnings:
-        reply = f"{RUNTIME_PREFIX} completed the objective with warnings and evidence."
+
+    reply = f"{RUNTIME_PREFIX} received, planned, executed, and verified the objective successfully."
+    if not use_agent:
+        reply = f"{RUNTIME_PREFIX} completed deterministic verification without agent execution."
+    elif warnings:
+        reply = f"{RUNTIME_PREFIX} completed the task with warnings and verification evidence."
     return AutonomousRunResult(PipelineStatus.SUCCESS, reply, checks, logs)
 
 
-def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dict[str, Any]) -> list[CheckResult]:
+def _run_plan_first_agent(
+    root: Path,
+    objective: str,
+    requested_mode: str,
+    metadata: dict[str, Any],
+    apply_changes: bool,
+) -> tuple[list[CheckResult], list[str]]:
+    """Run receive → perceive → plan → act → verify with safe fallback."""
     try:
         from amoscloud_ai.agentic_cloud_engine import run_agentic_cloud_engine
 
-        run = run_agentic_cloud_engine(root, objective, mode, metadata)
+        engine_metadata = dict(metadata)
+        engine_metadata["apply_changes"] = apply_changes
+        # The engine's fix mode is its controlled write-capable task mode. Build
+        # remains plan-only when apply_changes is explicitly disabled.
+        engine_mode = "fix" if apply_changes else "build"
+        run = run_agentic_cloud_engine(root, objective, engine_mode, engine_metadata)
     except Exception as exc:
         detail = f"{type(exc).__name__}: {exc}"
-        return [
-            CheckResult(
-                "agentic-cloud-core",
-                "failed",
-                "The authorized fix engine stopped safely before writing files.",
-                [detail, "Configure a ready Amosclaud model station before running Fix mode."],
-            )
-        ]
+        return (
+            [
+                CheckResult(
+                    "agentic-cloud-core",
+                    "warning",
+                    "The task agent was unavailable; deterministic verification continued safely.",
+                    [detail, "Check the model provider and agent model-log-service."],
+                )
+            ],
+            ["Agent phase: blocked before execution", detail],
+        )
 
     results = [
         CheckResult(
@@ -120,6 +156,7 @@ def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dic
             run.summary,
             [
                 f"Run: {run.run_id}",
+                f"Requested mode: {requested_mode}",
                 f"Write authorization: {run.authorized_writes}",
                 *[f"Plan: {step}" for step in run.plan],
                 *[f"Changed: {path}" for path in run.changed_files],
@@ -127,10 +164,13 @@ def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dic
             ],
         )
     ]
+    agent_logs = [f"Agent run: {run.run_id}", f"Agent status: {run.status}"]
     for event in run.events:
         results.append(
             CheckResult(event.engine, event.status, event.message, [f"Log service: {event.log_service}", *event.evidence])
         )
+        agent_logs.append(f"{event.engine}: {event.status} - {event.message}")
+        agent_logs.extend(event.evidence[:20])
     for check in run.checks:
         results.append(
             CheckResult(
@@ -140,7 +180,7 @@ def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dic
                 str(check.get("output", "")).splitlines()[-30:],
             )
         )
-    return results
+    return results, agent_logs
 
 
 def _run_command(root: Path, args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
@@ -184,6 +224,7 @@ def _python_compile_check(root: Path) -> CheckResult:
     files = [
         "amoscloud_ai/api/routes/agent.py",
         "amoscloud_ai/agentic_cloud_engine.py",
+        "amoscloud_ai/task_agent.py",
         "amoscloud_ai/autonomous_server.py",
         "amoscloud_ai/main.py",
         "amoscloud_ai/models.py",
