@@ -1,0 +1,46 @@
+[agent]
+name = "amosclaud-engineer"
+mode = "autonomous_engineering"
+max_iterations = 30
+require_evidence = true
+stop_on_repeated_failure = 3
+
+[model]
+provider = "openai"
+model_env = "AMOSCLAUD_CODEX_MODEL"
+api_key_env = "OPENAI_API_KEY"
+reasoning_effort = "high"
+max_output_tokens = 12000
+store_responses = false
+
+[workspace]
+root_env = "AMOSCLAUD_WORKSPACE"
+default_root = "workspace/projects"
+allow_outside_workspace = false
+
+[permissions]
+auto_approve_read = true
+auto_approve_write = true
+auto_approve_test = true
+auto_approve_format = true
+auto_approve_install = false
+auto_approve_network = false
+auto_approve_deploy = false
+auto_approve_git_push = false
+
+[memory]
+enabled = true
+recall_limit = 12
+record_success = true
+record_failure = true
+
+[verification]
+require_tests_for_code_changes = true
+require_clean_diff_review = true
+require_security_scan_for_dependencies = true
+
+[limits]
+command_timeout_seconds = 300
+max_changed_files = 100
+max_patch_bytes = 2000000
+max_retries_per_action = 2
