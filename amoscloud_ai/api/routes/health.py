@@ -5,7 +5,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 
 from amoscloud_ai import provider
-from amoscloud_ai.api.routes import mapping_bundles, model_server_folder, openai_compat
+from amoscloud_ai.api.routes import (
+    control_bus_dashboard,
+    mapping_bundles,
+    model_server_folder,
+    openai_compat,
+)
 from amoscloud_ai.config import settings
 from amoscloud_ai.models import HealthResponse
 from amoscloud_ai.server.cb import router as amosclaud_cb_router
@@ -15,6 +20,7 @@ router.include_router(model_server_folder.router, prefix="/api/v1")
 router.include_router(openai_compat.router)
 router.include_router(mapping_bundles.api_router, prefix="/api/v1")
 router.include_router(mapping_bundles.dashboard_router)
+router.include_router(control_bus_dashboard.router)
 router.include_router(amosclaud_cb_router, prefix="/api/v1")
 
 
