@@ -58,6 +58,7 @@ from amoscloud_ai.api.routes import (
     repository_templates,
     reviews,
     server_stations,
+    service_keys,
     storage,
     task_router,
     wifi,
@@ -181,6 +182,8 @@ def create_app() -> FastAPI:
     app.include_router(storage.router, prefix="/api/v1")
     app.include_router(task_router.router, prefix="/api/v1")
     app.include_router(server_stations.router, prefix="/api/v1")
+    app.include_router(service_keys.admin_router, prefix="/api/v1")
+    app.include_router(service_keys.verify_router, prefix="/api/v1")
     app.include_router(model_network.router, prefix="/api/v1")
     app.include_router(community.router, prefix="/api/v1")
     app.include_router(feed.router, prefix="/api/v1")
@@ -303,6 +306,15 @@ def create_app() -> FastAPI:
         if not bool(user["is_admin"]):
             return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "bundles-api-docs.html")
+
+    @app.get("/admin/service-keys", include_in_schema=False)
+    async def service_key_control_panel(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/cloud/agent", status_code=302)
+        return FileResponse(web_dir / "service-key-control-panel.html")
 
     @app.get("/mail", include_in_schema=False)
     async def mail_page(request: Request):

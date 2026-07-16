@@ -8,6 +8,71 @@ servers:
 security:
   - bearerApiKey: []
 paths:
+  /admin/service-keys/status:
+    get:
+      operationId: getServiceKeyAuthorityStatus
+      summary: Read the real service-key authority status and counts
+      responses:
+        '200': {description: Hash-only key authority status}
+        '403': {description: Administrator access required}
+  /admin/service-keys:
+    get:
+      operationId: listServerServiceKeys
+      summary: List safe service-key metadata without plaintext credentials
+      responses:
+        '200': {description: Issued service-key prefixes and status}
+    post:
+      operationId: createServerServiceKey
+      summary: Create a scoped service key shown exactly once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, service, scopes]
+              properties:
+                name: {type: string}
+                service: {type: string}
+                scopes: {type: array, items: {type: string}}
+      responses:
+        '201': {description: One-time plaintext key and safe metadata}
+  /admin/service-keys/{key_id}/rotate:
+    post:
+      operationId: rotateServerServiceKey
+      summary: Revoke a service key and issue its replacement atomically
+      parameters:
+        - in: path
+          name: key_id
+          required: true
+          schema: {type: integer}
+      responses:
+        '201': {description: One-time replacement key}
+        '404': {description: Active service key not found}
+  /admin/service-keys/{key_id}:
+    delete:
+      operationId: revokeServerServiceKey
+      summary: Permanently revoke a service key
+      parameters:
+        - in: path
+          name: key_id
+          required: true
+          schema: {type: integer}
+      responses:
+        '204': {description: Service key revoked}
+  /service-keys/verify:
+    get:
+      operationId: verifyServerServiceKey
+      summary: Authenticate a service key and optionally require a scope
+      parameters:
+        - in: query
+          name: scope
+          required: false
+          schema: {type: string}
+      responses:
+        '200': {description: Authenticated service identity and permissions}
+        '401': {description: Invalid or revoked service key}
+        '403': {description: Required scope is missing}
   /agent/buddies/health:
     get:
       operationId: checkAgentBuddiesServer
