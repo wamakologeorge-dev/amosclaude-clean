@@ -9,7 +9,7 @@ def test_control_bus_dashboard_route_is_registered():
     assert "/control-bus" in paths
 
 
-def test_control_bus_dashboard_assets_exist():
+def test_control_bus_dashboard_assets_exist_and_use_live_data_only():
     root = Path(__file__).resolve().parents[1] / "web"
     html = (root / "amosclaud-control-bus.html").read_text(encoding="utf-8")
     js = (root / "amosclaud-control-bus.js").read_text(encoding="utf-8")
@@ -19,3 +19,7 @@ def test_control_bus_dashboard_assets_exist():
     assert "command-output" in html
     assert "provider-grid" in html
     assert ".metrics" in css
+    assert "bundle-name.Amosclaud.bytes" not in html
+    assert ">0</strong>" not in html
+    assert "Loading…" not in html
+    assert "No bundles were returned by the Amosclaud API." in js
