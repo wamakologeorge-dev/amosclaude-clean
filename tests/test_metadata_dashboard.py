@@ -5,6 +5,7 @@ from pathlib import Path
 
 from amoscloud_ai.api.routes import metadata_dashboard
 from amoscloud_ai.main import app
+from amoscloud_ai.route_discovery import route_paths
 
 
 def test_metadata_loader_summarizes_records(
@@ -52,5 +53,5 @@ def test_metadata_loader_reports_invalid_json(
 
 
 def test_metadata_api_is_registered_through_agent_chain() -> None:
-    paths = {route.path for route in app.routes}
+    paths = route_paths(app.routes)
     assert "/api/v1/agent-chain/metadata/summary" in paths
