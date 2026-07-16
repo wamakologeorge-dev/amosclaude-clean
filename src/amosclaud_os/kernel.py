@@ -58,10 +58,51 @@ class AutonomousKernel:
         with self._lock:
             self._missions += 1
             outcome = self._orchestrator.run(task).to_dict()
-        outcome["system_identity"] = asdict(self.identity)
-        outcome["mission_number"] = self._missions
-        outcome["workspace"] = str(self.workspace)
-        return outcome
+        return self._stamp(outcome)
+
+    def assist(
+        self,
+        *,
+        message: str,
+        evidence: list[str] | None = None,
+        result_locations: list[str] | None = None,
+        execute: bool = False,
+        authorized_writes: bool = False,
+    ) -> dict[str, Any]:
+        """Answer or execute through the official Amosclaud Agent Assistant."""
+        from src.agent.cloud_agent import chat_with_autonomous
+
+        with self._lock:
+            result = chat_with_autonomous(
+                message,
+                evidence or [],
+                result_locations or [],
+                execute=execute,
+                authorized_writes=authorized_writes,
+                workspace=str(self.workspace),
+            )
+        return self._stamp(result)
+
+    def repair(self, *, issue: str, authorized_writes: bool = False) -> dict[str, Any]:
+        """Send a bounded repair mission to Mini Autonomous through the same kernel."""
+        from src.agent.mini_autonomous import run_mini_autonomous
+
+        with self._lock:
+            self._missions += 1
+            result = run_mini_autonomous(
+                issue,
+                workspace=str(self.workspace),
+                authorized_writes=authorized_writes,
+            )
+        return self._stamp(result)
+
+    def _stamp(self, result: dict[str, Any]) -> dict[str, Any]:
+        stamped = dict(result)
+        stamped["system_identity"] = asdict(self.identity)
+        stamped["mission_number"] = self._missions
+        stamped["workspace"] = str(self.workspace)
+        stamped["source"] = "src.amosclaud_os.kernel.AutonomousKernel"
+        return stamped
 
     def status(self) -> dict[str, Any]:
         return {
