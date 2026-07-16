@@ -4,6 +4,7 @@ from .core import ByteFrame, ByteFrameError
 from .router import ByteRouter, RouteNotFound
 from .server import ByteClient, ByteServer
 from .system import ByteSystem
+from .tamper_server import TamperedDataServer, TamperEvidence, TamperEvidenceStore
 
 __all__ = [
     "ByteClient",
@@ -12,5 +13,8 @@ __all__ = [
     "ByteRouter",
     "ByteServer",
     "ByteSystem",
+    "TamperedDataServer",
+    "TamperEvidence",
+    "TamperEvidenceStore",
     "RouteNotFound",
 ]
