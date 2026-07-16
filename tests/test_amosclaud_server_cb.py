@@ -1,4 +1,5 @@
 from amoscloud_ai.main import create_app
+from amoscloud_ai.route_discovery import route_paths
 from amoscloud_ai.server.cb.Amosclaud import SERVER_ID, SUPPORTED_ACTIONS, _capabilities
 
 
@@ -12,7 +13,7 @@ def test_server_cb_capabilities_are_bounded():
 
 def test_server_cb_routes_are_registered():
     app = create_app()
-    paths = {route.path for route in app.routes}
+    paths = route_paths(app.routes)
     assert "/api/v1/server/cb/amosclaud" in paths
     assert "/api/v1/server/cb/amosclaud/capabilities" in paths
     assert "/api/v1/server/cb/amosclaud/command" in paths
