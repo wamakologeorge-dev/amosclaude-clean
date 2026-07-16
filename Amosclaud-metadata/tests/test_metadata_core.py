@@ -47,7 +47,7 @@ def test_store_appends_verified_record_atomically(
     assert saved["record_id"] == envelope.record_id
     assert saved["verification"] == "verified"
     assert saved["payload"]["mission_id"] == "mission-1"
-    assert not records[0].with_suffix(".json.tmp").exists()
+    assert list(tmp_path.rglob("*.tmp")) == []
 
 
 def test_verified_record_requires_evidence(tmp_path: Path) -> None:
@@ -62,6 +62,23 @@ def test_sensitive_fields_are_rejected() -> None:
         payload={"api_key": "must-not-be-stored"},
     )
     with pytest.raises(MetadataValidationError, match="secret-like"):
+        validate_envelope(envelope)
+
+
+def test_nested_sensitive_fields_are_rejected() -> None:
+    envelope = MetadataEnvelope(
+        record_type="deployment",
+        payload={
+            "provider": "cloud",
+            "configuration": {
+                "runtime_access_token": "must-not-be-stored",
+            },
+        },
+    )
+    with pytest.raises(
+        MetadataValidationError,
+        match=r"configuration\.runtime_access_token",
+    ):
         validate_envelope(envelope)
 
 
