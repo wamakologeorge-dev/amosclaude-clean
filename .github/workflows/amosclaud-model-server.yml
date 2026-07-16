@@ -52,18 +52,31 @@ jobs:
           python -m py_compile src/agent/prompts.py
 
       - name: Lint model-server boundary
+        shell: bash
         run: |
-          flake8 amoscloud_ai/model_server src/agent/prompts.py tests/test_model_server.py \
-            --count \
-            --select=E9,F63,F7,F82 \
-            --show-source \
-            --statistics
-          flake8 amoscloud_ai/model_server src/agent/prompts.py tests/test_model_server.py \
-            --count \
-            --max-complexity=12 \
-            --max-line-length=88 \
-            --show-source \
-            --statistics
+          set -o pipefail
+          {
+            flake8 amoscloud_ai/model_server src/agent/prompts.py tests/test_model_server.py \
+              --count \
+              --select=E9,F63,F7,F82 \
+              --show-source \
+              --statistics
+            flake8 amoscloud_ai/model_server src/agent/prompts.py tests/test_model_server.py \
+              --count \
+              --max-complexity=12 \
+              --max-line-length=88 \
+              --show-source \
+              --statistics
+          } 2>&1 | tee "model-server-lint-${{ matrix.python-version }}.txt"
+
+      - name: Upload lint diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-server-lint-${{ matrix.python-version }}
+          path: model-server-lint-${{ matrix.python-version }}.txt
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Install PyTorch model-server dependency
         run: |
