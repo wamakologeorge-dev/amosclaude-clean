@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#050816" />
+  <title>Amosclaud Metadata Dashboard</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/metadata.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/admin"><span>A</span><strong>Amosclaud.py</strong></a>
+    <nav><a href="/cloud/agent">Agent</a><a href="/admin">Admin</a><button id="refresh" type="button">Refresh</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">AMOSCLAUD METADATA CONTROL SURFACE</p><h1>The platform can explain itself.</h1><p class="lede">Live identity, runtime, agent, workspace, storage, network, and capability metadata—without revealing secrets.</p></div>
+      <div id="system-state" class="state pending">Connecting</div>
+    </section>
+    <section id="identity" class="identity-grid" aria-label="Platform identity"></section>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">LIVE SYSTEM GRAPH</p><h2>Amosclaud platform map</h2></div><span id="generated-at">Waiting for metadata</span></div>
+      <div class="system-map"><article><span>01</span><strong>Owner</strong><small>Authenticated administrator</small></article><i>→</i><article><span>02</span><strong>Amosclaud.py</strong><small>Metadata and control engine</small></article><i>→</i><article><span>03</span><strong>Amo Runtime</strong><small>Agent-native execution language</small></article><i>→</i><article><span>04</span><strong>Workspace</strong><small>Folder-first source of truth</small></article></div>
+    </section>
+    <section class="dashboard-grid">
+      <article class="panel"><div class="panel-head"><h2>Runtime</h2></div><dl id="runtime"></dl></article>
+      <article class="panel"><div class="panel-head"><h2>Agent</h2></div><dl id="agent"></dl></article>
+      <article class="panel"><div class="panel-head"><h2>Network</h2></div><dl id="network"></dl></article>
+      <article class="panel"><div class="panel-head"><h2>Storage</h2></div><dl id="storage"></dl></article>
+    </section>
+    <section class="panel"><div class="panel-head"><div><h2>Workspace inventory</h2><p>File counts from the portable AmosclaudWorkspace.</p></div></div><div id="workspace-counts" class="metric-grid"></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Platform capabilities</h2><p>Capabilities compiled into this installation.</p></div></div><div id="capabilities" class="capability-grid"></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Safe configuration metadata</h2><p>Only non-secret variable names are shown. Values and sensitive names remain redacted.</p></div><span class="secure">Secrets redacted</span></div><div id="configuration" class="chips"></div></section>
+    <p id="error" class="error" hidden></p>
+  </main>
+  <script src="/static/metadata.js"></script>
+</body>
+</html>
