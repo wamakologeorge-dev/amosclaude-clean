@@ -93,7 +93,6 @@ def _save(pipeline: PipelineResponse, payload: dict | None = None, error_detail:
 
 
 def _row_to_pipeline(row: sqlite3.Row) -> PipelineResponse:
-    jobs = [PipelineJob.model_validate(item) for item in json.loads(row["jobs_json"] or "[]")]
     return PipelineResponse(
         id=row["id"],
         status=PipelineStatus(row["status"]),
@@ -105,7 +104,7 @@ def _row_to_pipeline(row: sqlite3.Row) -> PipelineResponse:
         copilot_reply=row["copilot_reply"],
         copilot_role=row["copilot_role"],
         delegation_target=row["delegation_target"],
-        jobs=jobs,
+        jobs=[PipelineJob.model_validate(item) for item in json.loads(row["jobs_json"] or "[]")],
     )
 
 
@@ -116,8 +115,13 @@ def _get(pipeline_id: str) -> PipelineResponse | None:
 
 
 async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse:
+    autonomous = payload.get("trigger") == "autonomous"
     pipeline.status = PipelineStatus.RUNNING
-    pipeline.message = pipeline_reply(PipelineStatus.RUNNING)
+    pipeline.message = (
+        "Amosclaud Autonomous Agent: inspecting, planning, acting, and verifying."
+        if autonomous
+        else pipeline_reply(PipelineStatus.RUNNING)
+    )
     pipeline.copilot_reply = pipeline.message
     if pipeline.jobs:
         pipeline.jobs[0].status = PipelineStatus.RUNNING
@@ -126,7 +130,7 @@ async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineRe
     _save(pipeline, payload)
 
     try:
-        if payload.get("trigger") == "autonomous":
+        if autonomous:
             from amoscloud_ai.autonomous_server import run_autonomous_server
 
             run_payload = payload.get("payload", {})
@@ -135,7 +139,9 @@ async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineRe
                 run_payload.get("objective", "amosclaud.com autonomous operations"),
                 run_payload.get("metadata", {}),
             )
-            successful = result.status == PipelineStatus.SUCCESS
+            pipeline.status = result.status
+            pipeline.message = result.reply
+            pipeline.copilot_reply = result.reply
             if pipeline.jobs:
                 pipeline.jobs[0].logs.extend(result.logs)
         else:
@@ -143,31 +149,31 @@ async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineRe
 
             orchestrator = CIOrchestrator(config=payload)
             successful = await orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
+            pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
             if orchestrator.jobs:
                 pipeline.jobs = orchestrator.jobs
+            pipeline.message = pipeline_reply(pipeline.status)
+            pipeline.copilot_reply = pipeline.message
 
-        pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
         pipeline.finished_at = datetime.now(timezone.utc)
-        pipeline.message = pipeline_reply(pipeline.status)
-        pipeline.copilot_reply = pipeline.message
         if pipeline.jobs:
             pipeline.jobs[0].status = pipeline.status
             pipeline.jobs[0].finished_at = pipeline.finished_at
-            pipeline.jobs[0].logs.append(pipeline.message)
+            pipeline.jobs[0].logs.append(pipeline.message or "Pipeline completed.")
         _save(pipeline, payload)
         return pipeline
     except Exception as exc:
         log.exception("Pipeline %s failed", pipeline.id)
         pipeline.status = PipelineStatus.FAILED
         pipeline.finished_at = datetime.now(timezone.utc)
-        pipeline.message = f"Pipeline failed: {exc}"
-        pipeline.copilot_reply = f"Amosclaud Autonomous Server: pipeline failed safely and recorded {type(exc).__name__}."
+        pipeline.message = "Amosclaud pipeline stopped safely."
+        pipeline.copilot_reply = pipeline.message
         for job in pipeline.jobs:
             if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
                 job.status = PipelineStatus.FAILED
                 job.finished_at = pipeline.finished_at
-                job.logs.append(str(exc))
-        _save(pipeline, payload, str(exc))
+                job.logs.append(f"Failure category: {type(exc).__name__}")
+        _save(pipeline, payload, type(exc).__name__)
         return pipeline
 
 
@@ -218,9 +224,4 @@ async def cancel_pipeline(pipeline_id: str) -> None:
     pipeline.finished_at = datetime.now(timezone.utc)
     pipeline.message = pipeline_reply(PipelineStatus.CANCELLED)
     pipeline.copilot_reply = pipeline.message
-    for job in pipeline.jobs:
-        if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.FAILED, PipelineStatus.CANCELLED):
-            job.status = PipelineStatus.CANCELLED
-            job.finished_at = pipeline.finished_at
-            job.logs.append(pipeline.message)
     _save(pipeline)
