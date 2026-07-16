@@ -1,9 +1,9 @@
-from amoscloud_ai.api.routes.health import router
 from amoscloud_ai.api.routes.openai_compat import _generate_reply
+from amoscloud_ai.main import create_app
 
 
 def test_openai_compatible_routes_are_registered():
-    paths = {route.path for route in router.routes}
+    paths = {route.path for route in create_app().routes if hasattr(route, "path")}
     assert "/v1/models" in paths
     assert "/v1/chat/completions" in paths
 

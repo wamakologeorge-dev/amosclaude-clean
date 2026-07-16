@@ -24,7 +24,7 @@ from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous"
+AGENT_NAME = "Amosclaud Autonomous Agent"
 AGENT_OWNER = "Amosclaud"
 AGENT_ROLE = ASSISTANT_SYSTEM_TEMPLATE.role
 AGENT_HOME = "amosclaud.com"
