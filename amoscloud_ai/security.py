@@ -27,8 +27,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
-        self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "900"))
-        self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "20"))
+        # Keep brute-force protection without trapping a real user for 15 minutes.
+        # The v2 Redis namespace also releases stale locks created by the old flow,
+        # which submitted multiple login probes during one account action.
+        self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "300"))
+        self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "30"))
+        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v2"
         self.redis_url = os.getenv("REDIS_URL", "").strip()
         self.production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
         self.redis = (
@@ -88,7 +92,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         cutoff = now - self.auth_window_seconds
         key = self._client_key(request)
         if self.redis:
-            redis_key = f"amosclaud:rate:auth:{key}"
+            redis_key = f"amosclaud:rate:auth:{self.auth_rate_namespace}:{key}"
             try:
                 count = self.redis.incr(redis_key)
                 if count == 1:

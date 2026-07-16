@@ -16,18 +16,23 @@
 
   function canonicalAddress(value) {
     const address = String(value || '').trim().toLowerCase();
-    if (!address.includes('@')) return address;
+    if (!address.includes('@')) return `${address}@amosclaud.com`;
     const [local, domain] = address.split('@', 2);
     return domain === 'www.amosclaud.com' ? `${local}@amosclaud.com` : address;
   }
 
   async function request(url, options = {}) {
-    const response = await fetch(url, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      ...options,
-      headers: {'Content-Type': 'application/json', ...(options.headers || {})},
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        ...options,
+        headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+      });
+    } catch (_) {
+      throw new Error('Amosclaud could not reach the authentication server. Check the deployment health and try again.');
+    }
     const text = await response.text();
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
@@ -74,15 +79,17 @@
 
   function openWorkspace() {
     showMessage('Success. Opening Amosclaud…', true);
-    window.location.replace('/');
+    window.location.replace('/cloud/agent');
+  }
+
+  async function passwordLogin(address) {
+    return request('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({email: address, password: password.value}),
+    });
   }
 
   form.addEventListener('submit', async event => {
-    const corrected = canonicalAddress(identifier.value);
-    if (corrected !== identifier.value.trim().toLowerCase()) identifier.value = corrected;
-
-    // The normal sign-in handler remains unchanged. The create-account form is
-    // upgraded into a unified "create or reconnect" flow.
     if (!registerTab.classList.contains('active')) return;
 
     event.preventDefault();
@@ -95,33 +102,34 @@
     submitButton.textContent = 'Checking account…';
 
     try {
-      // First, treat the signup fields as login credentials. This prevents
-      // users from creating repeated accounts when the account already exists.
-      const login = await request('/api/v1/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({email: address, password: password.value}),
-      });
-      if (login.response.ok) {
-        showMessage(`Welcome back, ${address}.`, true);
-        openWorkspace();
-        return;
-      }
-      if (login.response.status !== 401) {
-        throw new Error(login.data.detail || 'Amosclaud could not check this account.');
-      }
-
-      if (!window.PublicKeyCredential || !navigator.credentials) {
-        throw new Error('No existing account matched, and this browser cannot create a secure device key.');
-      }
-
-      submitButton.textContent = 'Creating account…';
-      showMessage('No matching account was found. Creating it once now…', true);
+      // Ask the registration endpoint first. A 409 proves the account exists;
+      // only then do we attempt password sign-in. A wrong password can never
+      // silently create a second account.
       const start = await request('/api/v1/auth/register/passkey/start', {
         method: 'POST',
         body: JSON.stringify({name: name.value.trim(), username: selectedUsername, password: password.value}),
       });
-      if (!start.response.ok) throw new Error(start.data.detail || 'Account setup could not start.');
 
+      if (start.response.status === 409) {
+        const login = await passwordLogin(address);
+        if (!login.response.ok) {
+          if (login.response.status === 429) {
+            throw new Error('Sign-in is temporarily locked after repeated attempts. Use Forgot password or wait for the displayed retry period.');
+          }
+          throw new Error('This account already exists, but the password did not match. Use Forgot password. Amosclaud will not create another account.');
+        }
+        showMessage(`Welcome back, ${address}.`, true);
+        openWorkspace();
+        return;
+      }
+
+      if (!start.response.ok) throw new Error(start.data.detail || 'Amosclaud could not check this account.');
+      if (!window.PublicKeyCredential || !navigator.credentials) {
+        throw new Error('This is a new account, but this browser cannot create its secure device key.');
+      }
+
+      submitButton.textContent = 'Creating account…';
+      showMessage('New username confirmed. Creating this account once…', true);
       const credential = await navigator.credentials.create({publicKey: prepareCreationOptions(start.data.public_key)});
       if (!credential) throw new Error('Device confirmation was cancelled.');
 
@@ -139,10 +147,45 @@
     }
   }, true);
 
+  const forgot = document.createElement('button');
+  forgot.type = 'button';
+  forgot.className = 'tab';
+  forgot.style.marginTop = '12px';
+  forgot.textContent = 'Forgot password?';
+  form.insertAdjacentElement('afterend', forgot);
+
+  forgot.addEventListener('click', async () => {
+    const suggested = canonicalAddress(identifier.value || username.value);
+    const address = window.prompt('Enter your Amosclaud mail address', suggested || '');
+    if (!address) return;
+    try {
+      const sent = await request('/api/v1/auth/password/forgot', {
+        method: 'POST',
+        body: JSON.stringify({email: canonicalAddress(address)}),
+      });
+      if (!sent.response.ok) throw new Error(sent.data.detail || 'Password recovery could not start.');
+      const code = window.prompt('Enter the 6-digit reset code sent by Amosclaud');
+      if (!code) return;
+      const nextPassword = window.prompt('Enter a new password with at least 10 characters');
+      if (!nextPassword) return;
+      const reset = await request('/api/v1/auth/password/reset', {
+        method: 'POST',
+        body: JSON.stringify({email: canonicalAddress(address), code: code.trim(), password: nextPassword}),
+      });
+      if (!reset.response.ok) throw new Error(reset.data.detail || 'Password reset failed.');
+      identifier.value = canonicalAddress(address);
+      password.value = nextPassword;
+      document.getElementById('login-tab')?.click();
+      showMessage('Password changed. Sign in with the new password.', true);
+    } catch (error) {
+      showMessage(error?.message || 'Password recovery failed.');
+    }
+  });
+
   const stalePasskeyPattern = /not linked to an Amosclaud account/i;
   const observer = new MutationObserver(() => {
     if (stalePasskeyPattern.test(message.textContent || '')) {
-      message.textContent = 'This saved device key belongs to an older account record. Use Continue securely with the same Amosclaud username and password. Amosclaud will sign you in when the account exists, or create it only once when it does not.';
+      message.textContent = 'This device key is stale. Sign in with the matching Amosclaud mail and password, or use Forgot password. Do not create another account.';
       message.className = 'message';
     }
   });
