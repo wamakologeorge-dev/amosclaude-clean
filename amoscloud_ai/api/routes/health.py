@@ -48,17 +48,31 @@ def _broker_status() -> dict[str, object]:
 
 @router.get("/ready", summary="Autonomous service readiness")
 async def readiness() -> dict[str, object]:
-    """Return component readiness without exposing keys, hosts, or raw errors."""
+    """Return component readiness without exposing keys, hosts, or raw errors.
+
+    Provider configuration and verified runtime readiness are intentionally
+    separate. A URL or key being present does not prove that inference works.
+    """
     provider_state = provider.status()
     broker_state = _broker_status()
-    model_ready = bool(
-        provider_state.get("model_network", {}).get("ready")
-        or provider_state.get("self_hosted_configured")
+    model_verified = bool(provider_state.get("model_network", {}).get("ready"))
+    model_configured = bool(
+        provider_state.get("self_hosted_configured")
         or provider_state.get("amosclaud_api_configured")
-        or (provider_state.get("external_adapters_enabled") and provider_state.get("openai_configured"))
+        or (
+            provider_state.get("external_adapters_enabled")
+            and provider_state.get("openai_configured")
+        )
     )
+    if model_verified:
+        readiness_state = "ready"
+    elif model_configured:
+        readiness_state = "configured_unverified"
+    else:
+        readiness_state = "degraded"
+
     return {
-        "status": "ready" if model_ready else "degraded",
+        "status": readiness_state,
         "web": {"ready": True},
         "autonomous_api": {
             "ready": True,
@@ -67,6 +81,10 @@ async def readiness() -> dict[str, object]:
             "auth": ["session", "X-Amosclaud-Owner-Key", "X-API-Key"],
         },
         "worker": broker_state,
+        "model_runtime": {
+            "configured": model_configured,
+            "verified_ready": model_verified,
+        },
         "provider": provider_state,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
