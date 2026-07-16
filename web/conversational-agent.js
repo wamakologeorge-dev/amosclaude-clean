@@ -5,10 +5,9 @@
   const statusBadge = document.getElementById('agent-status');
   if (!runButton || !objectiveInput || !replies) return;
 
-  const storageKey = 'amosclaud-conversational-agent-v2';
+  const storageKey = 'amosclaud-conversational-agent-v3';
   const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
   const conversation = Array.isArray(saved.conversation) ? saved.conversation : [];
-  const intake = saved.intake && typeof saved.intake === 'object' ? saved.intake : {};
   let controller = null;
 
   const confirmationPhrases = new Set([
@@ -25,7 +24,7 @@
   }
 
   function saveState() {
-    sessionStorage.setItem(storageKey, JSON.stringify({ conversation: conversation.slice(-20), intake }));
+    sessionStorage.setItem(storageKey, JSON.stringify({ conversation: conversation.slice(-20) }));
   }
 
   function addMessage(text, role = 'agent', className = '') {
@@ -58,47 +57,20 @@
   }
 
   function identifyIntent(text) {
-    const value = normalise(text);
-    if (/\b(deploy|release|publish)\b/.test(value)) return 'deploy';
-    if (/\b(monitor|watch|track)\b/.test(value)) return 'monitor';
-    if (/\b(fix|repair|broken|problem|error|bug)\b/.test(value)) return 'fix';
-    if (/\b(create|build|make|develop)\b/.test(value)) return 'create';
-    return intake.intent || 'create';
+    const context = `${conversation.map(item => item.content).join(' ')} ${text}`.toLowerCase();
+    if (/\b(deploy|release|publish)\b/.test(context)) return 'deploy';
+    if (/\b(monitor|watch|track)\b/.test(context)) return 'monitor';
+    if (/\b(fix|repair|broken|problem|error|bug)\b/.test(context)) return 'fix';
+    if (/\b(create|build|make|develop|website|application|app)\b/.test(context)) return 'build';
+    return 'autonomous-check';
   }
 
-  function recordAnswer(text) {
-    if (!intake.intent) { intake.intent = identifyIntent(text); intake.request = text; return; }
-    if (!intake.outcome) { intake.outcome = text; return; }
-    if (!intake.users) { intake.users = text; return; }
-    if (!intake.workflow) { intake.workflow = text; return; }
-    if (!intake.success) intake.success = text;
-  }
-
-  function nextQuestion() {
-    if (!intake.outcome) {
-      if (intake.intent === 'fix') return 'I understand. What exactly is going wrong, and what should happen instead?';
-      if (intake.intent === 'deploy') return 'I understand. What project should be deployed, and where should it go?';
-      if (intake.intent === 'monitor') return 'I understand. What system should I monitor, and what change should I report?';
-      return 'I understand. What exactly would you like me to create?';
-    }
-    if (!intake.users) return 'Who will use it or benefit from it?';
-    if (!intake.workflow) return 'What is the first important thing the user should be able to do?';
-    if (!intake.success) return 'What must be true before I can honestly report that the job is complete?';
-    return null;
-  }
-
-  function agreedBrief() {
-    return [
-      `Requested work: ${intake.request || intake.intent || 'engineering task'}`,
-      `Outcome: ${intake.outcome || ''}`,
-      `Users: ${intake.users || ''}`,
-      `First workflow: ${intake.workflow || ''}`,
-      `Success condition: ${intake.success || ''}`,
-    ].filter(line => !line.endsWith(': ')).join('\n');
-  }
-
-  function confirmationReply() {
-    return `Thank you. Here is the brief I understood:\n\n${agreedBrief()}\n\nReply “Proceed” when you want me to start the real job.`;
+  function agreedContext() {
+    return conversation
+      .filter(item => item.role === 'user')
+      .map(item => item.content)
+      .filter(Boolean)
+      .join('\n');
   }
 
   async function readJson(response) {
@@ -127,10 +99,10 @@
     let latest = initial;
     let lastPhase = -1;
     const phases = [
-      ['Understand', 'I’m understanding the agreed brief and preparing the real job…'],
-      ['Inspect', 'I’m inspecting the real project evidence now…'],
-      ['Act', 'I’m executing the authorized job and recording real progress…'],
-      ['Verify', 'I’m testing and verifying the actual result…'],
+      ['Understand', 'I’m understanding the agreed request and preparing the real job…'],
+      ['Inspect', 'Autonomous is inspecting the real project evidence now…'],
+      ['Act', 'Autonomous and its internal workers are executing the authorized job…'],
+      ['Verify', 'Autonomous is testing and verifying the actual result…'],
     ];
     for (let attempt = 0; attempt < 180; attempt += 1) {
       const currentStatus = String(latest.status || '').toLowerCase();
@@ -150,17 +122,22 @@
     throw new Error('The live job is still running. Its saved pipeline remains available for another status check.');
   }
 
-  async function executeConfirmedJob(raw, presence) {
+  async function askAutonomous(raw, confirmed, presence) {
+    const mode = confirmed ? identifyIntent(raw) : 'autonomous-check';
     const response = await fetch('/api/v1/agent/run', {
       method: 'POST', credentials: 'same-origin', signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        mode: intake.intent === 'deploy' ? 'deploy' : intake.intent === 'monitor' ? 'monitor' : 'fix',
+        mode,
         objective: raw,
         branch: 'main',
         metadata: {
-          branch: 'main', conversation: conversation.slice(-12), previous_objective: agreedBrief(),
-          conversation_first: true, user_confirmed_execution: true,
+          branch: 'main',
+          conversation: conversation.slice(-12),
+          previous_objective: agreedContext(),
+          conversation_first: true,
+          user_confirmed_execution: confirmed,
+          single_visible_agent: true,
         },
       }),
     });
@@ -177,42 +154,33 @@
     objectiveInput.value = '';
     objectiveInput.style.height = '';
 
-    const confirmed = confirmationPhrases.has(normalise(raw)) && Boolean(intake.success);
+    const confirmed = confirmationPhrases.has(normalise(raw));
     controller = new AbortController();
     setStatus(confirmed ? 'executing' : 'writing', true);
     const presence = addPresence(
-      confirmed ? 'Thank you. I’m starting the real job now…' : 'I’m reading your answer carefully…',
+      confirmed ? 'Thank you. Autonomous is starting the real job now…' : 'Amosclaud Autonomous is understanding your message…',
       confirmed ? 'executing' : 'writing',
     );
 
-    if (confirmed) publish('agent-start', { objective: agreedBrief(), mode: intake.intent || 'fix' });
+    if (confirmed) publish('agent-start', { objective: agreedContext(), mode: identifyIntent(raw) });
 
     try {
-      if (!confirmed) {
-        recordAnswer(raw);
-        const question = nextQuestion();
-        presence.remove();
-        const reply = question || confirmationReply();
-        addMessage(reply, 'agent');
-        remember('assistant', reply);
-        setStatus('ready');
-        return;
-      }
-
-      const data = await executeConfirmedJob(raw, presence);
+      const data = await askAutonomous(raw, confirmed, presence);
       presence.remove();
       const reply = data.copilot_reply || data.reply || data.message;
-      if (!reply) throw new Error('The live runtime returned no result message.');
+      if (!reply) throw new Error('The Autonomous runtime returned no response.');
       addMessage(reply, 'agent');
       remember('assistant', reply);
-      publish('agent-phase', { index: 4, phase: 'Verify', state: 'complete', note: 'Verification finished and evidence was recorded.' });
-      publish('agent-result', data);
+      if (!String(data.pipeline_id || '').startsWith('conversation-')) {
+        publish('agent-phase', { index: 4, phase: 'Verify', state: 'complete', note: 'Verification finished and evidence was recorded.' });
+        publish('agent-result', data);
+      }
       setStatus(String(data.status || '').toLowerCase() === 'failed' ? 'error' : 'ready');
     } catch (error) {
       presence.remove();
       const message = error.name === 'AbortError'
-        ? 'I stopped the job. We can continue calmly from the same brief when you are ready.'
-        : `I’m sorry, the live job could not finish: ${error.message}`;
+        ? 'I stopped the job. We can continue from the same conversation when you are ready.'
+        : `I’m sorry, Autonomous could not complete this request: ${error.message}`;
       addMessage(message, 'agent', error.name === 'AbortError' ? '' : 'agent-error');
       if (confirmed) publish('agent-error', { message });
       setStatus(error.name === 'AbortError' ? 'ready' : 'error');
