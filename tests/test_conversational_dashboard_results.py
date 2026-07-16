@@ -12,6 +12,19 @@ def test_conversational_agent_streams_real_execution_to_workbench():
     assert "jobs.flatMap" in script
 
 
+def test_every_chat_message_is_routed_through_autonomous():
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "web" / "conversational-agent.js").read_text(encoding="utf-8")
+
+    assert "fetch('/api/v1/agent/run'" in script
+    assert "conversation: conversation.slice(-12)" in script
+    assert "single_visible_agent: true" in script
+    assert "recordAnswer" not in script
+    assert "nextQuestion" not in script
+    assert "Success condition:" not in script
+    assert "First workflow:" not in script
+
+
 def test_workbench_renders_results_inline_without_broken_pipeline_page_link():
     root = Path(__file__).resolve().parents[1]
     script = (root / "web" / "live-autonomous-workbench.js").read_text(encoding="utf-8")
