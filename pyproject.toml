@@ -43,7 +43,13 @@ amosclaud-metrics = "amosclaud_metrics.server:main"
 amcl = "amosclaud_language.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["amoscloud_ai*", "amosclaud_language*", "amosclaud_model*", "amosclaud_metrics*"]
+include = [
+  "Amosclaud*",
+  "amoscloud_ai*",
+  "amosclaud_language*",
+  "amosclaud_model*",
+  "amosclaud_metrics*",
+]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
