@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from amoscloud_ai.logger import log
 from amoscloud_ai.models import PipelineStatus
 
 SKIP_DIRS = {".git", ".pytest_cache", "__pycache__", "venv", ".venv", "node_modules", ".amosclaud"}
@@ -54,13 +55,11 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
-    """Run one objective through the agent lifecycle and deterministic verifier.
-
-    Build and fix modes use the agent unless ``metadata.use_agent`` is false.
-    Build mode executes changes by default; callers may set
-    ``metadata.apply_changes=false`` for plan-only behavior.
-    """
+def run_autonomous_server(
+    mode: str,
+    objective: str,
+    metadata: Optional[dict[str, Any]] = None,
+) -> AutonomousRunResult:
     root = repo_root()
     metadata = dict(metadata or {})
     mode = (mode or "autonomous-check").strip().lower()
@@ -88,7 +87,7 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
                 "build-runtime",
                 "warning",
                 "Build ran through deterministic inspection because the task agent was disabled.",
-                ["Set metadata.use_agent=true to receive, plan, execute, verify, and report the task."],
+                ["Set metadata.use_agent=true for plan-first execution."],
             )
         )
 
@@ -125,28 +124,29 @@ def _run_plan_first_agent(
     metadata: dict[str, Any],
     apply_changes: bool,
 ) -> tuple[list[CheckResult], list[str]]:
-    """Run receive → perceive → plan → act → verify with safe fallback."""
     try:
         from amoscloud_ai.agentic_cloud_engine import run_agentic_cloud_engine
 
         engine_metadata = dict(metadata)
         engine_metadata["apply_changes"] = apply_changes
-        # The engine's fix mode is its controlled write-capable task mode. Build
-        # remains plan-only when apply_changes is explicitly disabled.
         engine_mode = "fix" if apply_changes else "build"
         run = run_agentic_cloud_engine(root, objective, engine_mode, engine_metadata)
     except Exception as exc:
-        detail = f"{type(exc).__name__}: {exc}"
+        log.exception("Plan-first autonomous agent failed before completion")
+        category = type(exc).__name__
         return (
             [
                 CheckResult(
                     "agentic-cloud-core",
                     "warning",
                     "The task agent was unavailable; deterministic verification continued safely.",
-                    [detail, "Check the model provider and agent model-log-service."],
+                    [
+                        f"Failure category: {category}",
+                        "Check the private server logs, model provider, and agent model-log-service.",
+                    ],
                 )
             ],
-            ["Agent phase: blocked before execution", detail],
+            ["Agent phase: blocked before execution", f"Failure category: {category}"],
         )
 
     results = [
@@ -167,7 +167,12 @@ def _run_plan_first_agent(
     agent_logs = [f"Agent run: {run.run_id}", f"Agent status: {run.status}"]
     for event in run.events:
         results.append(
-            CheckResult(event.engine, event.status, event.message, [f"Log service: {event.log_service}", *event.evidence])
+            CheckResult(
+                event.engine,
+                event.status,
+                event.message,
+                [f"Log service: {event.log_service}", *event.evidence],
+            )
         )
         agent_logs.append(f"{event.engine}: {event.status} - {event.message}")
         agent_logs.extend(event.evidence[:20])
@@ -189,13 +194,17 @@ def _run_command(root: Path, args: list[str], timeout: int = 30) -> subprocess.C
 
 def _git_status_check(root: Path) -> CheckResult:
     if not (root / ".git").exists():
-        return CheckResult("git-status", "passed", "Production container has no Git metadata; repository files are available.")
+        return CheckResult(
+            "git-status",
+            "passed",
+            "Production container has no Git metadata; repository files are available.",
+        )
     try:
         result = _run_command(root, ["git", "status", "--short"], 10)
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
-        return CheckResult("git-status", "warning", "Git status is unavailable.", [str(exc)])
+        return CheckResult("git-status", "warning", "Git status is unavailable.", [type(exc).__name__])
     if result.returncode != 0:
-        return CheckResult("git-status", "warning", "Unable to read repository status.", [(result.stderr or result.stdout).strip()])
+        return CheckResult("git-status", "warning", "Unable to read repository status.")
     lines = [line for line in result.stdout.splitlines() if line.strip()]
     unmerged = [line for line in lines if line.startswith(("UU", "AA", "DD", "AU", "UA", "DU", "UD"))]
     if unmerged:
@@ -211,7 +220,7 @@ def _conflict_marker_check(root: Path) -> CheckResult:
         try:
             for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
                 if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
-                    markers.append(f"{path.relative_to(root)}:{number}: {line[:80]}")
+                    markers.append(f"{path.relative_to(root)}:{number}")
                     break
         except OSError:
             continue
@@ -223,17 +232,25 @@ def _conflict_marker_check(root: Path) -> CheckResult:
 def _python_compile_check(root: Path) -> CheckResult:
     files = [
         "amoscloud_ai/api/routes/agent.py",
+        "amoscloud_ai/api/routes/health.py",
+        "amoscloud_ai/api/routes/pipelines.py",
         "amoscloud_ai/agentic_cloud_engine.py",
-        "amoscloud_ai/task_agent.py",
         "amoscloud_ai/autonomous_server.py",
+        "amoscloud_ai/provider.py",
+        "amoscloud_ai/task_agent.py",
+        "amoscloud_ai/worker.py",
         "amoscloud_ai/main.py",
         "amoscloud_ai/models.py",
-        "amoscloud_ai/worker.py",
     ]
     existing = [str(root / item) for item in files if (root / item).exists()]
-    result = _run_command(root, [sys.executable, "-m", "py_compile", *existing], 30)
+    result = _run_command(root, [sys.executable, "-m", "py_compile", *existing], 45)
     if result.returncode:
-        return CheckResult("python-compile", "failed", "Python compile check failed.", (result.stderr or result.stdout).splitlines()[:30])
+        return CheckResult(
+            "python-compile",
+            "failed",
+            "Python compile check failed.",
+            (result.stderr or result.stdout).splitlines()[:30],
+        )
     return CheckResult("python-compile", "passed", f"Compiled {len(existing)} key module(s).")
 
 
