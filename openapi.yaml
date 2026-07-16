@@ -8,6 +8,62 @@ servers:
 security:
   - bearerApiKey: []
 paths:
+  /bundles/health:
+    get:
+      operationId: checkBundlesApiHost
+      summary: Check persistent Amosclaud bundle storage
+      security: []
+      responses:
+        '200': {description: Bundle host is alive}
+  /bundles:
+    get:
+      operationId: listAmosclaudBundles
+      summary: List hosted Amosclaud software bundles
+      responses:
+        '200': {description: Authenticated bundle catalog}
+        '401': {description: Invalid Amosclaud API key}
+    post:
+      operationId: uploadAmosclaudBundle
+      summary: Publish a checksum-verified Amosclaud software bundle
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, version, platform]
+              properties:
+                file: {type: string, format: binary}
+                version: {type: string}
+                platform: {type: string}
+                channel: {type: string, default: stable}
+      responses:
+        '201': {description: Bundle stored atomically}
+        '409': {description: Bundle version already exists}
+  /bundles/{bundle_id}:
+    get:
+      operationId: getAmosclaudBundleMetadata
+      summary: Read bundle version, platform, size, and checksum
+      parameters:
+        - in: path
+          name: bundle_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Bundle metadata}
+        '404': {description: Bundle not found}
+  /bundles/{bundle_id}/download:
+    get:
+      operationId: downloadHostedAmosclaudBundle
+      summary: Download an authenticated Amosclaud bundle
+      parameters:
+        - in: path
+          name: bundle_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Bundle archive with SHA-256 response header}
+        '404': {description: Bundle not found}
   /downloads/latest:
     get:
       operationId: getLatestServerDownloads
