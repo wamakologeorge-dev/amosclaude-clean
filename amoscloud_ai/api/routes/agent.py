@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 
+from amoscloud_ai.agent.assistant_system_template import ASSISTANT_SYSTEM_TEMPLATE
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.api.routes.autonomous_keys import authenticate_autonomous_key
 from amoscloud_ai.autonomous_server import run_autonomous_server
@@ -23,21 +24,14 @@ from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous Agent"
+AGENT_NAME = "Amosclaud Autonomous"
 AGENT_OWNER = "Amosclaud"
-AGENT_ROLE = "controlled autonomous engineering and operations agent"
+AGENT_ROLE = ASSISTANT_SYSTEM_TEMPLATE.role
 AGENT_HOME = "amosclaud.com"
 AGENT_PIPELINE = "Amosclaud autonomous pipeline"
 AGENT_MODE = "agent"
 AGENT_SCOPE = [AGENT_HOME, AGENT_PIPELINE]
-AGENT_DIRECTIVES = [
-    "Understand the requested outcome before acting.",
-    "Inspect repository and runtime evidence before proposing a change.",
-    "Plan the smallest safe action and identify whether approval is required.",
-    "Build or fix only inside the authorized workspace.",
-    "Run verification after every applied change.",
-    "Report exact actions, evidence, failures, and recommended next steps.",
-]
+AGENT_DIRECTIVES = list(ASSISTANT_SYSTEM_TEMPLATE.principles)
 ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
 GREETING_WORDS = {
     "hi",
@@ -98,17 +92,11 @@ EXECUTION_PHRASES = {
     "build it",
     "begin building",
 }
-FOLLOW_UP_EXECUTION = {
-    "do it",
-    "proceed",
+FOLLOW_UP_EXECUTION = EXECUTION_PHRASES | {
     "start",
     "start now",
-    "build it",
     "fix it",
     "deploy it",
-    "now start to build",
-    "start to build",
-    "start building",
     "make it",
     "continue",
 }
@@ -131,26 +119,35 @@ def _authenticated_user(request: Request):
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
     if status == PipelineStatus.PENDING:
-        return f"{AGENT_NAME}: {mode} task queued. Objective: {objective}."
+        return f"Queued {mode} task: {objective}"
     if status == PipelineStatus.RUNNING:
-        return f"{AGENT_NAME}: inspecting, planning, acting, and verifying {objective}."
+        return f"Working on {objective}: inspecting evidence, acting, and verifying."
     if status == PipelineStatus.SUCCESS:
-        return f"{AGENT_NAME}: {mode} task completed with verified evidence for {objective}."
-    if status == PipelineStatus.FAILED:
-        return (
-            f"{AGENT_NAME}: {mode} task found a blocker for {objective}. "
-            "Review the evidence and next action."
+        return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+            objective=objective,
+            status="success",
+            evidence=(f"The {mode} runtime completed with verified evidence.",),
         )
-    return f"{AGENT_NAME}: {mode} task was cancelled for {objective}."
+    if status == PipelineStatus.FAILED:
+        return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+            objective=objective,
+            status="blocked",
+            evidence=("The runtime reported a blocking failure.",),
+            next_action="Review the failing check and apply the smallest safe repair.",
+        )
+    return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+        objective=objective,
+        status="cancelled",
+    )
 
 
 def _display_name(request: Request) -> str:
     user = _authenticated_user(request)
     if not user:
-        return "there"
-    raw_name = (user["name"] or "there").strip()
-    first_name = raw_name.split()[0] if raw_name else "there"
-    return first_name[:1].upper() + first_name[1:]
+        return ""
+    raw_name = str(user["name"] or "").strip()
+    first_name = raw_name.split()[0] if raw_name else ""
+    return first_name[:1].upper() + first_name[1:] if first_name else ""
 
 
 def _normalise(value: str) -> str:
@@ -159,13 +156,12 @@ def _normalise(value: str) -> str:
 
 def _resolve_follow_up(objective: str, metadata: dict | None) -> tuple[str, bool]:
     """Attach a short execution follow-up to the prior conversational objective."""
+
     current = objective.strip()
     normalised = _normalise(current)
     prepared = dict(metadata or {})
     previous = str(prepared.get("previous_objective") or "").strip()
-    is_execution = normalised in FOLLOW_UP_EXECUTION or any(
-        phrase == normalised for phrase in EXECUTION_PHRASES
-    )
+    is_execution = normalised in FOLLOW_UP_EXECUTION
     if previous and is_execution:
         return f"Build the previously discussed outcome: {previous}", True
     return current, False
@@ -185,70 +181,21 @@ def _is_guidance_request(message: str, mode: str) -> bool:
     return asks_for_guidance and not explicitly_execute
 
 
-def _guidance_reply(request: Request, objective: str) -> str:
-    name = _display_name(request)
-    message = objective.strip()
-    normalised = " ".join(message.lower().split())
+def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
+    """Return a natural answer only when no engineering execution is required."""
 
-    if "website" in normalised or "platform" in normalised:
-        subject = "platform" if "platform" in normalised else "website"
-        return (
-            f"Hi {name}. Yes — I can guide you.\n\n"
-            "Plan:\n"
-            f"1. Define the {subject} purpose, users, and first successful workflow.\n"
-            "2. Choose the simplest architecture that fits the goal.\n"
-            "3. Design the interface, API contracts, database, and permissions.\n"
-            "4. Build one complete vertical feature before adding more systems.\n"
-            "5. Test security, accessibility, performance, recovery, and deployment.\n"
-            "6. Verify a preview before publishing.\n\n"
-            "What can go wrong: unclear requirements, too many early features, "
-            "insecure secrets, broken permissions, lost data, and unverified deployment.\n\n"
-            "Recommended solution: start with a small working version and expand "
-            "after each verified milestone.\n\n"
-            "Easier way: describe the platform name, purpose, first users, required "
-            "pages, and whether I may create files. Then say ‘start to build’."
-        )
-
-    return (
-        f"Hi {name}. I understand your question.\n\n"
-        "Plan:\n"
-        "1. Confirm the outcome you want.\n"
-        "2. Inspect only the evidence related to that outcome.\n"
-        "3. Explain the risks and possible failure points.\n"
-        "4. Recommend the safest correct solution.\n"
-        "5. Show an easier alternative when one exists.\n"
-        "6. Execute only when authorized, then verify and point to the result.\n\n"
-        "No repository tests were started because this was a guidance question."
-    )
-
-
-def _conversation_reply(
-    request: Request,
-    mode: str,
-    objective: str,
-) -> str | None:
     name = _display_name(request)
     message = objective.strip()
     normalised = _normalise(message)
 
     if not message and mode in {"build", "fix"}:
-        return (
-            f"Hi {name}. Describe the result you want, the repository or folder, "
-            "and whether I may apply changes."
-        )
+        return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(mode, name)
     if normalised in GREETING_WORDS:
-        return (
-            f"Hi {name}. Amosclaud Autonomous Agent is online. I can answer "
-            "questions, explain plans and risks, inspect, build, fix, verify, "
-            "deploy, or monitor."
-        )
+        return ASSISTANT_SYSTEM_TEMPLATE.greeting(name)
     if _is_guidance_request(message, mode):
-        return _guidance_reply(request, message)
+        return ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
     if normalised in {"build", "make", "create", "fix"}:
-        return (
-            f"Hi {name}. What outcome should I produce, and what must be true "
-            "before I report success?"
-        )
+        return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
     return None
 
 
@@ -260,6 +207,7 @@ def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
         "phases",
         ["understand", "inspect", "plan", "act", "verify", "report"],
     )
+    prepared.setdefault("assistant_template_version", ASSISTANT_SYSTEM_TEMPLATE.version)
     execution_mode = mode
     if mode in {"build", "fix"}:
         execution_mode = "build"
@@ -279,9 +227,8 @@ async def get_agent() -> AutonomousAgentProfile:
         owner=AGENT_OWNER,
         role=AGENT_ROLE,
         mission=(
-            f"{AGENT_NAME} turns an objective into a controlled plan, performs "
-            "authorized repository or runtime actions, verifies the result, and "
-            f"reports evidence for {AGENT_HOME}."
+            "Answer naturally when the user is talking, and use the governed "
+            "Autonomous pipeline when the user requests engineering work."
         ),
         mode=AGENT_MODE,
         home=AGENT_HOME,
@@ -332,9 +279,7 @@ async def run_agent(
             status=PipelineStatus.SUCCESS,
             started_at=started_at,
             checks=[],
-            logs=[
-                "Agent Assistant response delivered without engineering verification."
-            ],
+            logs=["Conversational response returned without engineering execution."],
         )
 
     from amoscloud_ai.api.routes.pipelines import _save
@@ -343,10 +288,14 @@ async def run_agent(
     objective = objective or f"{AGENT_HOME} autonomous operations"
     execution_mode, metadata = _agent_metadata(mode, body.metadata)
     metadata.setdefault("authenticated_user_id", int(user["id"]))
-    metadata.setdefault("authentication", "autonomous-key" if _bearer_token(request) else "session")
+    metadata.setdefault(
+        "authentication",
+        "autonomous-key" if _bearer_token(request) else "session",
+    )
     if continued:
         metadata["conversation_continuation"] = True
         metadata["original_follow_up"] = supplied_objective
+
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
     pipeline = PipelineResponse(
         id=pipeline_id,
@@ -422,7 +371,12 @@ async def run_agent(
             log.exception("Autonomous agent inline task failed")
             pipeline.status = PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
-            reply = f"{AGENT_NAME}: task stopped safely for {objective}."
+            reply = ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+                objective=objective,
+                status="failed",
+                evidence=(f"Runtime error: {type(inline_error).__name__}",),
+                next_action="Review the server log and repair the first verified root cause.",
+            )
             pipeline.message = reply
             pipeline.copilot_reply = reply
             if pipeline.jobs:
