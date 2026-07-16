@@ -1,0 +1,25 @@
+system:
+  name: Amosclaud OS
+  version: 3.0.0
+  head_driver: Amosclaud Autonomous
+  architecture: single-autonomous-kernel
+  composition_root: src.amosclaud_os.kernel.AutonomousKernel
+  governance: founder-governed
+
+routing:
+  assistant: autonomous-kernel
+  engineering_loop: autonomous-kernel
+  mini_autonomous: autonomous-kernel
+  mission_control: autonomous-kernel
+  agent_operations: autonomous-kernel
+  model_router: autonomous-kernel
+  assertion_doctor: autonomous-kernel
+  recovery_engine: autonomous-kernel
+  learning_academy: autonomous-kernel
+
+rules:
+  - No feature may construct an independent Autonomous brain.
+  - All write operations require explicit authorization and workspace isolation.
+  - All success claims require verification evidence.
+  - Failures must report blockers and recovery evidence truthfully.
+  - User-visible timelines show actions and evidence, not private hidden reasoning.
