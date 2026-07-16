@@ -42,7 +42,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         length = x.size(1)
         if offset < 0 or offset + length > self.table.size(1):
             raise ValueError("position range exceeds configured maximum")
-        positions = self.table[:, offset : offset + length]
+        positions = self.table[:, offset:offset + length]
         return self.dropout(
             x + positions.to(dtype=x.dtype, device=x.device)
         )
