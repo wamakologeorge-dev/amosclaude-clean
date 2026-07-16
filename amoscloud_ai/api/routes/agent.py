@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
+from amoscloud_ai.api.routes.chat import _authorize_platform_key, _is_owner
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
@@ -39,19 +41,6 @@ AGENT_DIRECTIVES = [
 ]
 ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
 GREETING_WORDS = {"hi", "hello", "hey", "hiya", "yo", "good morning", "good afternoon", "good evening"}
-GUIDANCE_PHRASES = {
-    "can you guide", "guide me", "help me", "how do i", "how can i", "how should i",
-    "what should", "what can go wrong", "explain", "show me a plan", "give me a plan",
-    "easier way", "right solution", "best solution", "what is", "why is", "why does",
-}
-ACTION_WORDS = {
-    "build", "create", "fix", "change", "delete", "deploy", "commit", "merge",
-    "run", "test", "verify", "inspect", "monitor", "review", "publish",
-}
-EXECUTION_PHRASES = {
-    "do it", "proceed", "apply the fix", "make the changes", "execute", "start building",
-    "start to build", "now start to build", "start the build", "build it", "begin building",
-}
 FOLLOW_UP_EXECUTION = {
     "do it", "proceed", "start", "start now", "build it", "fix it", "deploy it",
     "now start to build", "start to build", "start building", "make it", "continue",
@@ -84,91 +73,62 @@ def _normalise(value: str) -> str:
 
 
 def _resolve_follow_up(objective: str, metadata: dict | None) -> tuple[str, bool]:
-    """Attach a short execution follow-up to the previous conversational objective."""
     current = objective.strip()
-    normalised = _normalise(current)
-    prepared = dict(metadata or {})
-    previous = str(prepared.get("previous_objective") or "").strip()
-    if previous and (normalised in FOLLOW_UP_EXECUTION or any(phrase == normalised for phrase in EXECUTION_PHRASES)):
+    previous = str(dict(metadata or {}).get("previous_objective") or "").strip()
+    if previous and _normalise(current) in FOLLOW_UP_EXECUTION:
         return f"Build the previously discussed outcome: {previous}", True
     return current, False
 
 
-def _is_guidance_request(message: str, mode: str) -> bool:
-    normalised = " ".join(message.lower().split())
-    if not normalised:
-        return False
-    explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
-    asks_for_guidance = "?" in message or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
-    if mode == "autonomous-check" and not explicitly_execute:
-        return asks_for_guidance or not any(word in normalised.split() for word in ACTION_WORDS)
-    return asks_for_guidance and not explicitly_execute
-
-
-def _guidance_reply(request: Request, objective: str) -> str:
-    name = _display_name(request)
-    message = objective.strip()
-    normalised = " ".join(message.lower().split())
-
-    if "website" in normalised or "platform" in normalised:
-        subject = "platform" if "platform" in normalised else "website"
-        return (
-            f"Hi {name}. Yes — I can guide you.\n\n"
-            "Plan:\n"
-            f"1. Define the {subject} purpose, users, and first successful workflow.\n"
-            "2. Choose the simplest architecture that fits the goal.\n"
-            "3. Design the mobile-first interface, API contracts, database, and permissions.\n"
-            "4. Build one complete vertical feature before adding more systems.\n"
-            "5. Test security, accessibility, performance, recovery, and deployment.\n"
-            "6. Deploy to a preview environment, verify it, then publish.\n\n"
-            "What can go wrong: unclear requirements, too many early features, insecure secrets, broken permissions, lost data, and deploying without verification.\n\n"
-            "Recommended solution: begin with a small working version and expand after each verified milestone.\n\n"
-            "Easier way: describe the platform name, purpose, first users, required pages, and whether I may create files. Then say ‘start to build’ and I will carry this objective into the engineering run."
-        )
-
-    return (
-        f"Hi {name}. I understand your question.\n\n"
-        "Plan:\n"
-        "1. Confirm the outcome you want.\n"
-        "2. Inspect only the evidence related to that outcome.\n"
-        "3. Explain the risks and possible failure points.\n"
-        "4. Recommend the safest correct solution.\n"
-        "5. Show an easier alternative when one exists.\n"
-        "6. Execute only when you clearly authorize the job, then verify and point you to the result.\n\n"
-        "No repository tests were started because this was a guidance question, not an engineering execution request."
-    )
-
-
 def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
-    name = _display_name(request)
-    message = objective.strip()
-    normalised = _normalise(message)
-
-    if not message and mode in {"build", "fix"}:
-        return f"Hi {name}. Describe the result you want, the repository or folder, and whether I may apply changes."
+    normalised = _normalise(objective)
+    if not objective and mode in {"build", "fix"}:
+        return f"Hi {_display_name(request)}. Describe the result you want and what must be true before I report success."
     if normalised in GREETING_WORDS:
         return (
-            f"Hi {name}. Amosclaud Autonomous Agent is online. "
-            "I can answer questions, explain plans and risks, inspect, build, fix, verify, deploy, or monitor."
+            f"Hi {_display_name(request)}. Amosclaud Autonomous Agent is online. "
+            "I can inspect, plan, build, fix, verify, deploy, or monitor."
         )
-    if _is_guidance_request(message, mode):
-        return _guidance_reply(request, message)
-    if normalised in {"build", "make", "create", "fix"}:
-        return f"Hi {name}. What outcome should I produce, and what must be true before I report success?"
     return None
 
 
-def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
+def _agent_metadata(mode: str, metadata: dict | None, auth_method: str) -> tuple[str, dict]:
     prepared = dict(metadata or {})
     prepared["requested_mode"] = mode
+    prepared["auth_method"] = auth_method
     prepared.setdefault("agent_workflow", True)
     prepared.setdefault("phases", ["understand", "inspect", "plan", "act", "verify", "report"])
     execution_mode = mode
     if mode in {"build", "fix"}:
         execution_mode = "build"
         prepared.setdefault("use_agent", True)
-        prepared.setdefault("apply_changes", mode == "fix")
+        # Codex-style task requests execute after planning unless the caller
+        # deliberately asks for plan-only mode with apply_changes=false.
+        prepared.setdefault("apply_changes", True)
     return execution_mode, prepared
+
+
+async def _authorize_request(
+    request: Request,
+    x_amosclaud_owner_key: Optional[str],
+    x_api_key: Optional[str],
+) -> str:
+    if get_user_from_session(request.cookies.get("amos_session")):
+        return "session"
+    if _is_owner(x_amosclaud_owner_key):
+        return "owner-key"
+    if x_api_key:
+        # Unlike the public chat route, autonomous execution always requires a
+        # valid key when no signed-in browser session is present.
+        await _authorize_platform_key(x_api_key, None)
+        return "api-key"
+    raise HTTPException(
+        status_code=401,
+        detail=(
+            "Sign in or provide X-Amosclaud-Owner-Key or a valid X-API-Key "
+            "to run Amosclaud Autonomous."
+        ),
+    )
 
 
 @router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous agent profile")
@@ -177,7 +137,10 @@ async def get_agent() -> AutonomousAgentProfile:
         name=AGENT_NAME,
         owner=AGENT_OWNER,
         role=AGENT_ROLE,
-        mission=(f"{AGENT_NAME} turns an objective into a controlled plan, performs authorized repository or runtime actions, verifies the result, and reports evidence for {AGENT_HOME}."),
+        mission=(
+            f"{AGENT_NAME} turns an objective into a controlled plan, performs authorized "
+            f"repository or runtime actions, verifies the result, and reports evidence for {AGENT_HOME}."
+        ),
         mode=AGENT_MODE,
         home=AGENT_HOME,
         pipeline=AGENT_PIPELINE,
@@ -187,15 +150,17 @@ async def get_agent() -> AutonomousAgentProfile:
 
 
 @router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous agent task")
-async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
+async def run_agent(
+    body: AutonomousAgentRunRequest,
+    request: Request,
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None),
+) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
         raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}")
 
-    user = get_user_from_session(request.cookies.get("amos_session"))
-    if not user:
-        raise HTTPException(status_code=401, detail="Sign in to run Amosclaud Autonomous")
-
+    auth_method = await _authorize_request(request, x_amosclaud_owner_key, x_api_key)
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
     supplied_objective = (body.objective or "").strip()
@@ -212,14 +177,14 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             status=PipelineStatus.SUCCESS,
             started_at=started_at,
             checks=[],
-            logs=["Agent Assistant response delivered without starting engineering verification."],
+            logs=["Conversation response delivered without starting an engineering task."],
         )
 
     from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
-    execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    execution_mode, metadata = _agent_metadata(mode, body.metadata, auth_method)
     if continued:
         metadata["conversation_continuation"] = True
         metadata["original_follow_up"] = supplied_objective
@@ -240,17 +205,28 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         "trigger": "autonomous",
         "branch": body.branch,
         "commit_sha": None,
-        "payload": {"run_id": run_id, "mode": execution_mode, "requested_mode": mode, "objective": objective, "metadata": metadata},
+        "payload": {
+            "run_id": run_id,
+            "mode": execution_mode,
+            "requested_mode": mode,
+            "objective": objective,
+            "metadata": metadata,
+        },
     }
     _save(pipeline, payload)
 
     try:
         from amoscloud_ai.worker import run_pipeline_task
+
         dispatch_task(run_pipeline_task, pipeline_id, payload)
         checks = []
-        logs = [reply, "Agent phases: understand → inspect → plan → act → verify → report"]
+        logs = [
+            reply,
+            "Agent phases: understand → inspect → plan → act → verify → report",
+            f"Poll /api/v1/pipelines/{pipeline_id} for the verified result.",
+        ]
     except Exception as dispatch_error:
-        log.warning("Background worker unavailable; running autonomous agent inline: %s", dispatch_error)
+        log.warning("Background worker unavailable; running autonomous agent inline: %s", type(dispatch_error).__name__)
         try:
             result = run_autonomous_server(execution_mode, objective, metadata)
             pipeline.status = result.status
@@ -263,7 +239,10 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].started_at = started_at
                 pipeline.jobs[0].finished_at = pipeline.finished_at
                 pipeline.jobs[0].logs.extend(result.logs)
-            checks = [{"name": check.name, "status": check.status, "summary": check.summary, "details": check.details} for check in result.checks]
+            checks = [
+                {"name": check.name, "status": check.status, "summary": check.summary, "details": check.details}
+                for check in result.checks
+            ]
             logs = result.logs
             _save(pipeline, payload)
         except Exception as inline_error:
@@ -277,10 +256,10 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].status = PipelineStatus.FAILED
                 pipeline.jobs[0].started_at = started_at
                 pipeline.jobs[0].finished_at = pipeline.finished_at
-                pipeline.jobs[0].logs.append(f"Runtime error: {type(inline_error).__name__}: {inline_error}")
+                pipeline.jobs[0].logs.append(f"Runtime failure category: {type(inline_error).__name__}")
             checks = []
-            logs = [reply, f"Runtime error: {type(inline_error).__name__}"]
-            _save(pipeline, payload, str(inline_error))
+            logs = [reply, f"Runtime failure category: {type(inline_error).__name__}"]
+            _save(pipeline, payload, type(inline_error).__name__)
 
     return AutonomousAgentRunResponse(
         accepted=True,
