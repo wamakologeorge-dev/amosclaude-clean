@@ -20,7 +20,7 @@
 
   const activityToolbar = document.createElement('div');
   activityToolbar.className = 'agent-activity-toolbar';
-  activityToolbar.innerHTML = '<strong>Autonomous execution console</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
+  activityToolbar.innerHTML = '<strong>Agent plan</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
   controls.insertBefore(activityToolbar, replies);
 
   const toggleActivityButton = activityToolbar.querySelector('#btn-toggle-agent-activity');
@@ -33,6 +33,26 @@
   compose.appendChild(stopButton);
 
   const phases = ['Receive task', 'Understand objective', 'Inspect evidence', 'Plan safe action', 'Execute task', 'Verify and report'];
+  const conversation = JSON.parse(sessionStorage.getItem('amosclaud-agent-conversation') || '[]');
+
+  function saveConversation(role, content) {
+    conversation.push({ role, content: String(content).slice(0, 4000) });
+    if (conversation.length > 20) conversation.splice(0, conversation.length - 20);
+    sessionStorage.setItem('amosclaud-agent-conversation', JSON.stringify(conversation));
+  }
+
+  function personalizeGreeting() {
+    const user = document.getElementById('current-user');
+    const apply = () => {
+      const raw = String(user?.textContent || '').trim();
+      if (!raw || /loading|sign in/i.test(raw)) return;
+      const name = raw.split(/[\s@]/)[0];
+      const greeting = replies.querySelector('.agent-reply.muted');
+      if (greeting) greeting.textContent = `Welcome ${name}. I’m Amosclaud Autonomous. What can I do for you today?`;
+    };
+    apply();
+    if (user) new MutationObserver(apply).observe(user, { childList: true, subtree: true, characterData: true });
+  }
 
   function updateActivityView() {
     replies.classList.toggle('agent-replies-expanded', activityExpanded);
@@ -197,7 +217,8 @@
         mode, objective, branch: 'main',
         metadata: {
           branch: 'main', use_agent: false, apply_changes: mode === 'fix',
-          source: 'platform-autonomous-console', previous_objective: previousObjective,
+          source: 'platform-autonomous-chat', previous_objective: previousObjective,
+          conversation: conversation.slice(-12), autonomous_mode_selection: true,
         },
       }),
     });
@@ -209,6 +230,7 @@
     const mode = modeInput.value;
     if (!objective) { objectiveInput.focus(); return; }
     addMessage(objective, 'user');
+    saveConversation('user', objective);
     publish('agent-start', { objective, mode });
     const board = addPhaseBoard(mode, objective);
     objectiveInput.value = '';
@@ -221,9 +243,17 @@
         previousObjective = objective;
         sessionStorage.setItem('amosclaud-agent-previous-objective', previousObjective);
       }
-      if (!isConversation) data = await pollPipeline(data, board);
+      if (isConversation) {
+        board.remove();
+        addMessage(data.reply, 'agent');
+        saveConversation('assistant', data.reply);
+        setBusy(false, 'ready');
+        return;
+      }
+      data = await pollPipeline(data, board);
       phases.forEach((_, index) => setPhase(board, index, data.status === 'failed' && index === 5 ? 'failed' : 'complete', index === 4 ? 'Execution finished' : index === 5 ? (data.status === 'failed' ? 'Verification found a blocker' : 'Verified evidence recorded') : 'Completed'));
       renderResult(data);
+      saveConversation('assistant', data.reply || data.message || 'Task completed.');
       setBusy(false, data.status || 'ready');
     } catch (error) {
       setPhase(board, 5, 'failed', error.name === 'AbortError' ? 'Task stopped' : error.message);
@@ -236,8 +266,13 @@
   toggleActivityButton.addEventListener('click', () => { activityExpanded = !activityExpanded; updateActivityView(); });
   stopButton.addEventListener('click', () => controller?.abort());
   connectionButton?.addEventListener('click', checkConnections);
+  document.querySelectorAll('[data-agent-suggestion]').forEach(button => button.addEventListener('click', () => {
+    objectiveInput.value = button.dataset.agentSuggestion || '';
+    sendMessage();
+  }));
   runButton.addEventListener('click', event => { event.preventDefault(); event.stopImmediatePropagation(); sendMessage(); }, true);
   objectiveInput.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } });
   objectiveInput.addEventListener('input', () => { objectiveInput.style.height = 'auto'; objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight, 180)}px`; });
   updateActivityView();
+  personalizeGreeting();
 })();

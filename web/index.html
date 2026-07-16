@@ -57,13 +57,17 @@
             <div class="agent-header" aria-hidden="true"></div>
             <div class="agent-layout-visual">
               <div class="agent-controls-stack">
-                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">I am ready. Tell me the result you need and what must be true before I report success.</div></div>
+                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. What can I do for you today?</div></div>
                 <div class="agent-compose">
-                  <select id="agent-mode-input" aria-label="Autonomous mode">
-                    <option value="autonomous-check">Inspect</option><option value="build">Agent plan</option><option value="fix">Fix + verify</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option>
-                  </select>
-                  <textarea id="agent-objective-input" rows="3" placeholder="Example: Diagnose the failing server tests, apply the smallest safe fix, rerun verification, and report changed files and evidence."></textarea>
-                  <button id="btn-run-agent" class="btn-primary">Start agent task</button>
+                  <input id="agent-mode-input" type="hidden" value="build">
+                  <div class="agent-suggestions" aria-label="Suggested requests">
+                    <button type="button" data-agent-suggestion="Inspect my project and explain what needs attention.">Inspect</button>
+                    <button type="button" data-agent-suggestion="Fix the current problem and verify the result.">Fix + verify</button>
+                    <button type="button" data-agent-suggestion="Deploy the verified project safely.">Deploy</button>
+                    <button type="button" data-agent-suggestion="Monitor the project and report important changes.">Monitor</button>
+                  </div>
+                  <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud Autonomous…"></textarea>
+                  <button id="btn-run-agent" class="btn-primary">Send</button>
                 </div>
               </div>
               <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
