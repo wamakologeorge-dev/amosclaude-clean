@@ -27,6 +27,7 @@ from amoscloud_ai.api.routes import (
     academy,
     admin,
     agent,
+    agent_chain,
     agent_readiness,
     amo_runtime,
     amo_tokens,
@@ -64,9 +65,9 @@ from amoscloud_ai.api.routes import (
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
 from amoscloud_ai.core.workspace import WorkspaceEngine
+from amoscloud_ai.db_migrations import run_migrations
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
-from amoscloud_ai.db_migrations import run_migrations
 from amosclaud_metrics.integration import install_metrics
 
 
@@ -80,7 +81,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     storage.STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     WorkspaceEngine()
     log.info(
-        f"🚀 {settings.app_name} v{__version__} starting [{settings.environment}] on {settings.host}:{settings.port}"
+        f"🚀 {settings.app_name} v{__version__} starting "
+        f"[{settings.environment}] on {settings.host}:{settings.port}"
     )
     yield
     log.info("Shutting down Amosclaud AI server")
@@ -91,7 +93,10 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        description="Folder-first, self-hosted Amosclaud platform for local AI, repositories, projects, tasks, knowledge, storage, and automation.",
+        description=(
+            "Folder-first, self-hosted Amosclaud platform for local AI, "
+            "repositories, projects, tasks, knowledge, storage, and automation."
+        ),
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         lifespan=lifespan,
@@ -103,16 +108,28 @@ def create_app() -> FastAPI:
         allow_origins=settings.allowed_hosts,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Amosclaud-Owner-Key"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-API-Key",
+            "X-Amosclaud-Owner-Key",
+        ],
     )
 
     @app.exception_handler(Exception)
     async def unexpected_error(request: Request, exc: Exception):
-        log.exception("Unhandled request failure on %s %s", request.method, request.url.path)
+        log.exception(
+            "Unhandled request failure on %s %s",
+            request.method,
+            request.url.path,
+        )
         return JSONResponse(
             status_code=500,
             content={
-                "detail": "Amosclaud could not complete this request. The error was recorded in the server logs.",
+                "detail": (
+                    "Amosclaud could not complete this request. "
+                    "The error was recorded in the server logs."
+                ),
                 "error": "internal_server_error",
                 "path": request.url.path,
             },
@@ -122,7 +139,10 @@ def create_app() -> FastAPI:
     async def block_suspended_accounts(request: Request, call_next):
         token = request.cookies.get("amos_session")
         if token and admin.is_session_suspended(token):
-            response = JSONResponse({"detail": "This account is suspended"}, status_code=403)
+            response = JSONResponse(
+                {"detail": "This account is suspended"},
+                status_code=403,
+            )
             response.delete_cookie("amos_session", path="/")
             return response
         return await call_next(request)
@@ -137,6 +157,7 @@ def create_app() -> FastAPI:
     app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
+    app.include_router(agent_chain.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(agent_readiness.router, prefix="/api/v1")
     app.include_router(amo_runtime.router, prefix="/api/v1")
@@ -177,7 +198,10 @@ def create_app() -> FastAPI:
         return FileResponse(
             web_dir / "service-worker.js",
             media_type="application/javascript",
-            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+            headers={
+                "Service-Worker-Allowed": "/",
+                "Cache-Control": "no-cache",
+            },
         )
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
@@ -190,11 +214,17 @@ def create_app() -> FastAPI:
 
     @app.get("/.well-known/ai-plugin.json", include_in_schema=False)
     async def ai_plugin_manifest():
-        return FileResponse(web_dir / "ai-plugin.json", media_type="application/json")
+        return FileResponse(
+            web_dir / "ai-plugin.json",
+            media_type="application/json",
+        )
 
     @app.get("/openapi.yaml", include_in_schema=False)
     async def developer_openapi_contract():
-        return FileResponse(project_dir / "openapi.yaml", media_type="application/yaml")
+        return FileResponse(
+            project_dir / "openapi.yaml",
+            media_type="application/yaml",
+        )
 
     @app.get("/api-access", include_in_schema=False)
     async def api_access_page():
