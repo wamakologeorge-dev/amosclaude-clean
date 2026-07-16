@@ -96,7 +96,7 @@ def _connect() -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS auth_codes (
             email TEXT NOT NULL,
-            purpose TEXT NOT NULL CHECK(purpose IN ('register','reset')),
+            purpose TEXT NOT NULL CHECK(purpose IN ('register','login','reset')),
             code_hash TEXT NOT NULL,
             name TEXT,
             password_hash TEXT,
@@ -106,6 +106,31 @@ def _connect() -> sqlite3.Connection:
         );
         """
     )
+    auth_codes_schema = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='auth_codes'"
+    ).fetchone()
+    if auth_codes_schema and "'login'" not in str(auth_codes_schema["sql"] or ""):
+        # SQLite cannot alter a CHECK constraint in place. Preserve outstanding
+        # registration/reset codes while extending old installations for login.
+        db.executescript(
+            """
+            ALTER TABLE auth_codes RENAME TO auth_codes_legacy;
+            CREATE TABLE auth_codes (
+                email TEXT NOT NULL,
+                purpose TEXT NOT NULL CHECK(purpose IN ('register','login','reset')),
+                code_hash TEXT NOT NULL,
+                name TEXT,
+                password_hash TEXT,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(email, purpose)
+            );
+            INSERT INTO auth_codes(email,purpose,code_hash,name,password_hash,expires_at,created_at)
+            SELECT email,purpose,code_hash,name,password_hash,expires_at,created_at
+            FROM auth_codes_legacy;
+            DROP TABLE auth_codes_legacy;
+            """
+        )
     db.commit()
     return db
 

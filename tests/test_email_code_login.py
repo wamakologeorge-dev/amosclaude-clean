@@ -1,3 +1,5 @@
+import sqlite3
+
 from fastapi import Response
 
 from amoscloud_ai.api.routes import auth
@@ -63,3 +65,38 @@ def test_unknown_email_does_not_reveal_account_or_send_code(monkeypatch, tmp_pat
     result = auth.request_login_code(auth.EmailRequest(email="unknown@gmail.com"))
 
     assert "If the account exists" in result["message"]
+
+
+def test_existing_auth_code_table_is_migrated_without_losing_codes(monkeypatch, tmp_path):
+    database = tmp_path / "auth.db"
+    with sqlite3.connect(database) as db:
+        db.execute(
+            """CREATE TABLE auth_codes (
+                email TEXT NOT NULL,
+                purpose TEXT NOT NULL CHECK(purpose IN ('register','reset')),
+                code_hash TEXT NOT NULL,
+                name TEXT,
+                password_hash TEXT,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(email, purpose)
+            )"""
+        )
+        db.execute(
+            "INSERT INTO auth_codes VALUES (?,?,?,?,?,?,?)",
+            ("pending@gmail.com", "reset", "hash", None, None, "2099-01-01", "2026-01-01"),
+        )
+        db.commit()
+    monkeypatch.setattr(auth, "DB_PATH", database)
+
+    with auth._connect() as db:
+        preserved = db.execute(
+            "SELECT email,purpose FROM auth_codes WHERE email=?",
+            ("pending@gmail.com",),
+        ).fetchone()
+        db.execute(
+            "INSERT INTO auth_codes VALUES (?,?,?,?,?,?,?)",
+            ("owner@gmail.com", "login", "hash", None, None, "2099-01-01", "2026-01-01"),
+        )
+
+    assert tuple(preserved) == ("pending@gmail.com", "reset")
