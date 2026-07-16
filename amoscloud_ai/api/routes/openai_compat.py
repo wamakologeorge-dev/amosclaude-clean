@@ -58,8 +58,6 @@ def _authenticate(authorization: str | None) -> dict:
             db.commit()
             return dict(row)
 
-        # Autonomous website keys are deliberately accepted by the compatible
-        # gateway so one Amosclaud key can operate both the agent and model API.
         try:
             row = db.execute(
                 """SELECT k.id,k.user_id,w.balance,'autonomous' AS key_type
@@ -76,6 +74,33 @@ def _authenticate(authorization: str | None) -> dict:
         db.execute("UPDATE autonomous_api_keys SET last_used_at=? WHERE id=?", (used_at, row["id"]))
         db.commit()
         return dict(row)
+
+
+def _generate_reply(model: str, messages: list[dict]) -> str:
+    """Route named OpenAI models to OpenAI using the server-owned credential."""
+    if model.startswith("gpt-"):
+        upstream_key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not upstream_key:
+            raise RuntimeError("OpenAI upstream is not configured")
+        from openai import OpenAI
+
+        response = OpenAI(api_key=upstream_key).responses.create(
+            model=model,
+            input=messages,
+            store=False,
+        )
+        text = getattr(response, "output_text", "")
+        if not text:
+            raise RuntimeError("OpenAI upstream returned no text")
+        return text
+
+    system = "\n".join(message["content"] for message in messages if message["role"] == "system")
+    system = system or "You are Amosclaud, a professional engineering agent."
+    history = [message for message in messages if message["role"] != "system"]
+    result = provider.reply(history, system)
+    if result.status != "ready":
+        raise RuntimeError("Owner model runtime is unavailable")
+    return result.reply
 
 
 @router.get("/models")
@@ -115,13 +140,8 @@ def chat_completions(
             raise HTTPException(status_code=402, detail={"code": "agent_tokens_required", "purchase_url": "/plans"})
 
     messages = [message.model_dump() for message in body.messages]
-    system = "\n".join(message["content"] for message in messages if message["role"] == "system")
-    system = system or "You are Amosclaud, a professional engineering agent."
-    history = [message for message in messages if message["role"] != "system"]
     try:
-        result = provider.reply(history, system)
-        if result.status != "ready":
-            raise RuntimeError("Owner model runtime is unavailable")
+        reply = _generate_reply(body.model, messages)
     except Exception:
         with _connect() as db:
             credit_tokens(db, int(credential["user_id"]), cost, reason="agent_request_refund", reference=request_id)
@@ -135,7 +155,7 @@ def chat_completions(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": result.reply},
+                "message": {"role": "assistant", "content": reply},
                 "finish_reason": "stop",
             }
         ],
