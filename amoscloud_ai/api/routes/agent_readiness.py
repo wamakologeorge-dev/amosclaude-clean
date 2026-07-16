@@ -3,19 +3,33 @@ from __future__ import annotations
 import hashlib
 import secrets
 import sqlite3
+import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
+from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.model_services import readiness
+from amoscloud_ai.models import PipelineStatus
 
 router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
 
 
 class AutonomousKeyRequest(BaseModel):
     name: str = Field(default="Autonomous key", min_length=2, max_length=80)
+
+
+class ConnectorRunRequest(BaseModel):
+    objective: str = Field(..., min_length=1, max_length=12000)
+    mode: str = "autonomous-check"
+    branch: str = Field(default="main", pattern=r"^[A-Za-z0-9._/-]+$")
+    conversation_id: str | None = Field(default=None, max_length=128)
+    use_model: bool = False
+    apply_changes: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def _user(request: Request):
@@ -45,6 +59,35 @@ def _key_schema(db: sqlite3.Connection) -> None:
 
 def _hash_key(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _connector_key(authorization: str | None, x_api_key: str | None) -> str:
+    if x_api_key:
+        return x_api_key.strip()
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return ""
+
+
+def _connector_user(authorization: str | None, x_api_key: str | None) -> dict[str, Any]:
+    raw = _connector_key(authorization, x_api_key)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Provide an Amosclaud Autonomous API key")
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as db:
+        _key_schema(db)
+        row = db.execute(
+            """SELECT users.id,users.name,users.email,users.is_admin,users.provider,autonomous_api_keys.id AS key_id
+               FROM autonomous_api_keys
+               JOIN users ON users.id=autonomous_api_keys.user_id
+               WHERE autonomous_api_keys.key_hash=? AND autonomous_api_keys.revoked_at IS NULL""",
+            (_hash_key(raw),),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or revoked Amosclaud Autonomous API key")
+        db.execute("UPDATE autonomous_api_keys SET last_used_at=? WHERE id=?", (now, row["key_id"]))
+        db.commit()
+    return dict(row)
 
 
 @router.get("/readiness")
@@ -124,3 +167,52 @@ def revoke_autonomous_key(key_id: int, request: Request):
     if updated.rowcount != 1:
         raise HTTPException(status_code=404, detail="Active Autonomous key not found")
     return None
+
+
+@router.post("/connector/run", summary="Run Autonomous from Codex or another trusted connector")
+async def run_connector_task(
+    body: ConnectorRunRequest,
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict:
+    user = _connector_user(authorization, x_api_key)
+    mode = body.mode.strip().lower()
+    allowed = {"autonomous-check", "build", "fix", "deploy", "monitor"}
+    if mode not in allowed:
+        raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(allowed))}")
+
+    conversation_id = body.conversation_id or str(uuid.uuid4())
+    metadata = dict(body.metadata)
+    metadata.update({
+        "connector": "codex",
+        "source": "amosclaud-autonomous-codex-connector",
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "conversation_id": conversation_id,
+        "branch": body.branch,
+        "use_agent": bool(body.use_model),
+        "apply_changes": bool(body.apply_changes or mode == "fix"),
+    })
+
+    result = run_autonomous_server(mode, body.objective.strip(), metadata)
+    checks = [
+        {"name": item.name, "status": item.status, "summary": item.summary, "details": item.details}
+        for item in result.checks
+    ]
+    model_used = any(item.name == "agentic-cloud-core" or item.name.startswith("agent-") for item in result.checks)
+    return {
+        "accepted": True,
+        "run_id": str(uuid.uuid4()),
+        "conversation_id": conversation_id,
+        "user_id": user["id"],
+        "mode": mode,
+        "branch": body.branch,
+        "objective": body.objective.strip(),
+        "status": result.status,
+        "reply": result.reply,
+        "checks": checks,
+        "logs": result.logs,
+        "model_requested": body.use_model,
+        "model_used": model_used,
+        "rollback_recommended": mode == "deploy" and result.status == PipelineStatus.FAILED,
+    }
