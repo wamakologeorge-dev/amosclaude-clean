@@ -37,7 +37,13 @@
   }
   function fillList(container, items, emptyMessage, render) {
     container.innerHTML = '';
-    if (!items.length) { const empty = document.createElement('div'); empty.className = 'workbench-empty'; empty.textContent = emptyMessage; container.appendChild(empty); return; }
+    if (!items.length) {
+      const empty = document.createElement('div');
+      empty.className = 'workbench-empty';
+      empty.textContent = emptyMessage;
+      container.appendChild(empty);
+      return;
+    }
     items.forEach(item => container.appendChild(render(item)));
   }
   function listItem(left, right = '') {
@@ -64,6 +70,42 @@
     if (data.pipeline_id) links.unshift(`/pipelines/${encodeURIComponent(data.pipeline_id)}`);
     return links.slice(0, 20);
   }
+  function resultLabel(value) {
+    if (value.startsWith('/pipelines/')) return 'Open Amosclaud pipeline';
+    if (/github\.com\/.+\/pull\//i.test(value)) return 'Open GitHub pull request';
+    if (/github\.com\/.+\/issues\//i.test(value)) return 'Open GitHub issue';
+    if (/railway\.(app|com)/i.test(value)) return 'Open Railway deployment';
+    if (/fastapi\.tiangolo\.com/i.test(value)) return 'Official FastAPI reference';
+    if (value.startsWith('http')) return 'External reference';
+    return 'Open Amosclaud result';
+  }
+  function resultSummary(value) {
+    if (/fastapi\.tiangolo\.com\/advanced\/events/i.test(value)) {
+      return 'Reference for replacing deprecated startup events with FastAPI lifespan handlers. Amosclaud should apply and verify the code fix before marking the mission complete.';
+    }
+    if (value.startsWith('/pipelines/')) return 'Internal mission evidence, checks, logs, and final status.';
+    if (/github\.com\/.+\/pull\//i.test(value)) return 'External code review result created by Autonomous.';
+    if (/github\.com\/.+\/issues\//i.test(value)) return 'Issue reported for administrator and developer follow-up.';
+    return value.startsWith('http') ? 'Optional external destination. The current Amosclaud mission remains open in this page.' : 'Internal Amosclaud result.';
+  }
+  function resultCard(value) {
+    const row = document.createElement('div');
+    row.className = 'workbench-item workbench-result-card';
+    const body = document.createElement('div');
+    const title = document.createElement('strong');
+    const summary = document.createElement('p');
+    const link = document.createElement('a');
+    title.textContent = resultLabel(value);
+    summary.textContent = resultSummary(value);
+    link.className = 'workbench-result-link';
+    link.href = value;
+    link.textContent = value.startsWith('http') ? 'Open optional reference' : 'Open result';
+    link.target = value.startsWith('http') ? '_blank' : '_self';
+    link.rel = 'noopener noreferrer';
+    body.append(title, summary, link);
+    row.appendChild(body);
+    return row;
+  }
 
   root.querySelectorAll('.workbench-tab').forEach(button => button.addEventListener('click', () => {
     root.querySelectorAll('.workbench-tab').forEach(tab => tab.classList.toggle('active', tab === button));
@@ -77,7 +119,7 @@
     mission.textContent = detail.objective || 'Agent mission'; mode.textContent = detail.mode || 'inspect'; status.textContent = 'Running'; setProgress(8);
     fillList(files, [], 'Files will appear when Autonomous inspects or changes them.', listItem);
     fillList(checks, [], 'Verification checks will appear here.', listItem);
-    fillList(results, [], 'Result links will appear after creation or deployment.', listItem);
+    fillList(results, [], 'Result locations and optional references will appear here.', listItem);
     approvals.innerHTML = '<div class="workbench-empty">No approval is currently required.</div>';
     addEvent('Mission accepted', detail.objective || 'Instruction received', 'complete', '1');
   });
@@ -98,14 +140,11 @@
     const failed = String(data.status || '').toLowerCase() === 'failed'; status.textContent = failed ? 'Needs attention' : 'Verified'; setProgress(100);
     addEvent(failed ? 'Mission stopped with evidence' : 'Mission completed', data.reply || data.message || 'Result received', failed ? 'failed' : 'complete', failed ? '×' : '✓');
     const fileItems = extractFiles(data);
-    fillList(files, fileItems, 'No repository files were changed for this request.', item => listItem(item, fileItems.includes(item) ? 'observed' : ''));
+    fillList(files, fileItems, 'No repository files were changed for this request.', item => listItem(item, 'observed'));
     const checkItems = Array.isArray(data.checks) ? data.checks : [];
     fillList(checks, checkItems, 'No engineering checks were required for this assistant response.', item => listItem(item.name || 'check', `${item.status || 'unknown'} — ${item.summary || ''}`));
     const links = extractLinks(data);
-    fillList(results, links, 'No external result link was returned.', value => {
-      const row = document.createElement('div'); row.className = 'workbench-item';
-      const link = document.createElement('a'); link.className = 'workbench-result-link'; link.href = value; link.textContent = value; link.target = value.startsWith('http') ? '_blank' : '_self'; link.rel = 'noopener'; row.appendChild(link); return row;
-    });
+    fillList(results, links, 'No result location was returned.', resultCard);
   });
 
   window.addEventListener('amosclaud:agent-error', event => {
