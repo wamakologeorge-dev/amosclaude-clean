@@ -27,6 +27,7 @@ from amoscloud_ai.api.routes import (
     academy,
     admin,
     agent,
+    agent_buddies,
     agent_chain,
     agent_readiness,
     amo_runtime,
@@ -161,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent_chain.router, prefix="/api/v1")
     app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(agent_buddies.router, prefix="/api/v1")
     app.include_router(agent_readiness.router, prefix="/api/v1")
     app.include_router(amo_runtime.router, prefix="/api/v1")
     app.include_router(copilot.router, prefix="/api/v1")
