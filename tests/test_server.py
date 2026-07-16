@@ -107,6 +107,43 @@ def test_authenticated_user_can_run_autonomous_runtime(monkeypatch):
     assert data["logs"]
 
 
+def test_admin_session_answers_question_without_key_or_pipeline(monkeypatch):
+    payload = {
+        "mode": "autonomous-check",
+        "objective": "What can I build here",
+        "branch": "main",
+    }
+    admin = {"id": 1, "name": "Owner", "is_admin": 1}
+    monkeypatch.setattr(agent, "get_user_from_session", lambda _token: admin)
+
+    def reject_key_auth(_token):
+        raise AssertionError("A signed-in admin must not be asked for an API key")
+
+    monkeypatch.setattr(agent, "authenticate_autonomous_key", reject_key_auth)
+    monkeypatch.setattr(
+        agent,
+        "dispatch_task",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("A guidance question must not start a pipeline")
+        ),
+    )
+
+    resp = request(
+        "POST",
+        "/api/v1/agent/run",
+        json=payload,
+        cookies={"amos_session": "admin-session"},
+        headers={"Authorization": "Bearer should-not-be-used"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["pipeline_id"].startswith("conversation-")
+    assert data["checks"] == []
+    assert "web application" in data["reply"]
+
+
 def test_autonomous_runtime_rejects_unknown_mode():
     resp = request("POST", "/api/v1/agent/run", json={"mode": "chat"})
     assert resp.status_code == 422
