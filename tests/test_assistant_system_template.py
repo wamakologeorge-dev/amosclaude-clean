@@ -8,7 +8,7 @@ from src.agent.prompts import SYSTEM_PROMPT as AUTONOMOUS_SYSTEM_PROMPT
 def test_greeting_is_conversational_without_engineering_ceremony():
     reply = ASSISTANT_SYSTEM_TEMPLATE.greeting("George")
 
-    assert reply == "Hi George. What would you like to work on?"
+    assert reply == "Hi George. I’m here with you. What would you like us to create or work on today?"
     assert "Execution" not in reply
     assert "pipeline" not in reply.lower()
     assert "Agent is online" not in reply
@@ -17,10 +17,10 @@ def test_greeting_is_conversational_without_engineering_ceremony():
 def test_template_separates_conversation_from_execution():
     prompt = SYSTEM_PROMPT.lower()
 
-    assert "respond naturally to conversation" in prompt
-    assert "engineering runtime only when the user requests an action" in prompt
+    assert "talk with the user before searching for results or launching engineering work" in prompt
+    assert "summarize the agreed brief before execution" in prompt
     assert "never claim a file was changed" in prompt
-    assert "keep greetings conversational" in prompt
+    assert "act through the governed runtime" in prompt
 
 
 def test_autonomous_model_uses_shared_assistant_contract():
