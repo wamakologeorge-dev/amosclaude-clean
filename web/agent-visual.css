@@ -125,6 +125,9 @@
   z-index: 8;
 }
 .agent-compose textarea { resize: none; min-height: 112px; max-height: 180px; overflow-y: auto; }
+.agent-suggestions { grid-column: 1 / -1; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.agent-suggestions button { border: 1px solid #cbd5e1; border-radius: 999px; background: #fff; color: #334155; padding: 8px 12px; white-space: nowrap; font: inherit; cursor: pointer; }
+.agent-suggestions button:hover { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
 .btn-stop-agent { border:1px solid rgba(248,81,73,.55); background:rgba(248,81,73,.13); color:#ff9b96; border-radius:10px; padding:11px 14px; font-weight:800; cursor:pointer; }
 .btn-stop-agent:hover { background:rgba(248,81,73,.22); }
 

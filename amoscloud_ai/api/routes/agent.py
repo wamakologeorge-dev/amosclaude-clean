@@ -227,6 +227,55 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     return None
 
 
+def _conversation_messages(metadata: dict | None) -> list[str]:
+    messages: list[str] = []
+    for item in (metadata or {}).get("conversation", []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            content = str(item.get("content") or "").strip()
+            if content:
+                messages.append(content[:4000])
+    return messages[-12:]
+
+
+def _project_intake_reply(request: Request, objective: str, metadata: dict | None) -> str | None:
+    """Collect the minimum build brief before forwarding work to Autonomous."""
+
+    name = _display_name(request)
+    prefix = f"{name}, " if name else ""
+    messages = _conversation_messages(metadata)
+    if not messages or _normalise(messages[-1]) != _normalise(objective):
+        messages.append(objective)
+    combined = " ".join(messages).lower()
+    current = _normalise(objective)
+    website_requested = any(word in combined for word in ("website", "web app", "web platform"))
+    if not website_requested:
+        return None
+    generic_request = any(
+        phrase in current
+        for phrase in ("create a website", "build a website", "make a website", "learn how to create a website")
+    )
+    if len(messages) == 1 or generic_request:
+        return f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
+    if current in {"business", "a business", "it is about business", "the website is about business"}:
+        return f"What kind of business, {name or 'and who will use the platform'}?"
+    return None
+
+
+def _select_autonomous_mode(requested: str, objective: str, metadata: dict | None) -> str:
+    """Select the internal workflow while keeping the public interface conversational."""
+
+    context = " ".join([*_conversation_messages(metadata), objective]).lower()
+    if any(word in context for word in ("deploy", "release", "publish to production")):
+        return "deploy"
+    if any(word in context for word in ("monitor", "watch status", "keep watching")):
+        return "monitor"
+    if any(word in context for word in ("fix", "repair", "build", "create", "make")):
+        return "fix"
+    if any(word in context for word in ("inspect", "review", "diagnose", "check")):
+        return "autonomous-check"
+    return requested
+
+
 def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
     prepared = dict(metadata or {})
     prepared["requested_mode"] = mode
@@ -291,11 +340,8 @@ async def run_agent(
     run_id = str(uuid.uuid4())
     supplied_objective = (body.objective or "").strip()
     objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
-    conversational_reply = None if continued else _conversation_reply(
-        request,
-        mode,
-        objective,
-    )
+    intake_reply = None if continued else _project_intake_reply(request, objective, body.metadata)
+    conversational_reply = intake_reply or (None if continued else _conversation_reply(request, mode, objective))
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,
@@ -310,11 +356,17 @@ async def run_agent(
             logs=["Conversational response returned without engineering execution."],
         )
 
+    mode = _select_autonomous_mode(mode, objective, body.metadata)
+
     from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
     execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    conversation = _conversation_messages(body.metadata)
+    if conversation:
+        metadata["conversation_brief"] = conversation
+        metadata["autonomous_handoff"] = "background"
     metadata.setdefault("authenticated_user_id", int(user["id"]))
     metadata.setdefault(
         "authentication",
