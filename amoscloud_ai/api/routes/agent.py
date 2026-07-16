@@ -39,6 +39,13 @@ AGENT_DIRECTIVES = [
 ]
 ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
 GREETING_WORDS = {"hi", "hello", "hey", "hiya", "yo", "good morning", "good afternoon", "good evening"}
+GUIDANCE_PHRASES = {
+    "can you guide", "guide me", "help me", "how do i", "how can i", "how should i",
+    "what should", "what can go wrong", "explain", "show me a plan", "give me a plan",
+    "easier way", "right solution", "best solution", "what is", "why is", "why does",
+}
+ACTION_WORDS = {"build", "create", "fix", "change", "delete", "deploy", "commit", "merge", "run", "test"}
+EXECUTION_PHRASES = {"do it", "proceed", "apply the fix", "make the changes", "execute", "start building"}
 
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
@@ -62,6 +69,51 @@ def _display_name(request: Request) -> str:
     return first_name[:1].upper() + first_name[1:]
 
 
+def _is_guidance_request(message: str, mode: str) -> bool:
+    normalised = " ".join(message.lower().split())
+    if not normalised:
+        return False
+    explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
+    asks_for_guidance = "?" in message or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
+    # Inspect mode is conversational unless the user clearly orders execution.
+    if mode == "autonomous-check" and not explicitly_execute:
+        return asks_for_guidance or not any(word in normalised.split() for word in ACTION_WORDS)
+    return asks_for_guidance and not explicitly_execute
+
+
+def _guidance_reply(request: Request, objective: str) -> str:
+    name = _display_name(request)
+    message = objective.strip()
+    normalised = " ".join(message.lower().split())
+
+    if "website" in normalised:
+        return (
+            f"Hi {name}. Yes — I can guide you.\n\n"
+            "Plan:\n"
+            "1. Define the website purpose, users, and required pages.\n"
+            "2. Choose the simplest stack that fits the goal.\n"
+            "3. Create the page structure and mobile-first design.\n"
+            "4. Add authentication, database, or payments only when required.\n"
+            "5. Test accessibility, security, performance, and phone layout.\n"
+            "6. Deploy to a preview environment, verify it, then publish.\n\n"
+            "What can go wrong: unclear requirements, adding too many features too early, insecure secrets, broken mobile layout, and deploying without tests.\n\n"
+            "Recommended solution: begin with a small working version and expand after each verified milestone.\n\n"
+            "Easier way: tell me the website name, its purpose, the pages you need, and whether I may create files. I will turn that into a safe build plan."
+        )
+
+    return (
+        f"Hi {name}. I understand your question.\n\n"
+        "Plan:\n"
+        "1. Confirm the outcome you want.\n"
+        "2. Inspect only the evidence related to that outcome.\n"
+        "3. Explain the risks and possible failure points.\n"
+        "4. Recommend the safest correct solution.\n"
+        "5. Show an easier alternative when one exists.\n"
+        "6. Execute only when you clearly authorize the job, then verify and point you to the result.\n\n"
+        "No repository tests were started because this was a guidance question, not an engineering execution request."
+    )
+
+
 def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
     name = _display_name(request)
     message = objective.strip()
@@ -72,25 +124,24 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     if normalised in GREETING_WORDS:
         return (
             f"Hi {name}. Amosclaud Autonomous Agent is online. "
-            "I can inspect, plan, build, fix, verify, deploy, or monitor."
+            "I can answer questions, explain plans and risks, inspect, build, fix, verify, deploy, or monitor."
         )
+    if _is_guidance_request(message, mode):
+        return _guidance_reply(request, message)
     if normalised in {"build", "make", "create", "fix"}:
         return f"Hi {name}. What outcome should I produce, and what must be true before I report success?"
     return None
 
 
 def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
-    """Translate a user mode into a controlled engineering execution policy."""
     prepared = dict(metadata or {})
     prepared["requested_mode"] = mode
     prepared.setdefault("agent_workflow", True)
     prepared.setdefault("phases", ["understand", "inspect", "plan", "act", "verify", "report"])
-
     execution_mode = mode
     if mode in {"build", "fix"}:
         execution_mode = "build"
         prepared.setdefault("use_agent", True)
-        # Selecting Fix is explicit authorization to write inside the controlled workspace.
         prepared.setdefault("apply_changes", mode == "fix")
     return execution_mode, prepared
 
@@ -101,10 +152,7 @@ async def get_agent() -> AutonomousAgentProfile:
         name=AGENT_NAME,
         owner=AGENT_OWNER,
         role=AGENT_ROLE,
-        mission=(
-            f"{AGENT_NAME} turns an objective into a controlled plan, performs authorized "
-            f"repository or runtime actions, verifies the result, and reports evidence for {AGENT_HOME}."
-        ),
+        mission=(f"{AGENT_NAME} turns an objective into a controlled plan, performs authorized repository or runtime actions, verifies the result, and reports evidence for {AGENT_HOME}."),
         mode=AGENT_MODE,
         home=AGENT_HOME,
         pipeline=AGENT_PIPELINE,
@@ -126,7 +174,6 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
     objective = (body.objective or "").strip()
-
     conversational_reply = _conversation_reply(request, mode, objective)
     if conversational_reply:
         return AutonomousAgentRunResponse(
@@ -135,11 +182,11 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             mode=mode,
             objective=objective or "conversation",
             reply=conversational_reply,
-            pipeline_id=f"runtime-{run_id}",
+            pipeline_id=f"conversation-{run_id}",
             status=PipelineStatus.SUCCESS,
             started_at=started_at,
             checks=[],
-            logs=[conversational_reply],
+            logs=["Agent Assistant response delivered without starting engineering verification."],
         )
 
     from amoscloud_ai.api.routes.pipelines import _save
@@ -164,19 +211,12 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         "trigger": "autonomous",
         "branch": body.branch,
         "commit_sha": None,
-        "payload": {
-            "run_id": run_id,
-            "mode": execution_mode,
-            "requested_mode": mode,
-            "objective": objective,
-            "metadata": metadata,
-        },
+        "payload": {"run_id": run_id, "mode": execution_mode, "requested_mode": mode, "objective": objective, "metadata": metadata},
     }
     _save(pipeline, payload)
 
     try:
         from amoscloud_ai.worker import run_pipeline_task
-
         dispatch_task(run_pipeline_task, pipeline_id, payload)
         checks = []
         logs = [reply, "Agent phases: understand → inspect → plan → act → verify → report"]
@@ -194,10 +234,7 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].started_at = started_at
                 pipeline.jobs[0].finished_at = pipeline.finished_at
                 pipeline.jobs[0].logs.extend(result.logs)
-            checks = [
-                {"name": check.name, "status": check.status, "summary": check.summary, "details": check.details}
-                for check in result.checks
-            ]
+            checks = [{"name": check.name, "status": check.status, "summary": check.summary, "details": check.details} for check in result.checks]
             logs = result.logs
             _save(pipeline, payload)
         except Exception as inline_error:
