@@ -1,0 +1,16 @@
+{
+  "name": "AmoModel",
+  "version": "0.1.0",
+  "description": "Folder-native governed software runtime for Amosclaud platform services.",
+  "states": ["off", "starting", "ready", "busy", "degraded", "stopping", "failed"],
+  "capabilities": ["status", "power", "restart", "execute", "audit"],
+  "required_services": ["amosclaud-api"],
+  "startup_order": ["state-store", "service-graph", "execution-engine"],
+  "api_routes": [
+    "GET /api/v1/amomodel/status",
+    "POST /api/v1/amomodel/power/on",
+    "POST /api/v1/amomodel/power/off",
+    "POST /api/v1/amomodel/restart",
+    "POST /api/v1/amomodel/execute"
+  ]
+}
