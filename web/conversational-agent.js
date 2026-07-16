@@ -1,15 +1,14 @@
 (() => {
   const runButton = document.getElementById('btn-run-agent');
   const objectiveInput = document.getElementById('agent-objective-input');
-  const modeInput = document.getElementById('agent-mode-input');
   const replies = document.getElementById('agent-replies');
   const statusBadge = document.getElementById('agent-status');
-  if (!runButton || !objectiveInput || !modeInput || !replies) return;
+  if (!runButton || !objectiveInput || !replies) return;
 
-  const storageKey = 'amosclaud-conversational-agent';
+  const storageKey = 'amosclaud-conversational-agent-v2';
   const saved = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
   const conversation = Array.isArray(saved.conversation) ? saved.conversation : [];
-  let agreedBrief = String(saved.agreedBrief || '');
+  const intake = saved.intake && typeof saved.intake === 'object' ? saved.intake : {};
   let controller = null;
 
   const confirmationPhrases = new Set([
@@ -22,7 +21,10 @@
   }
 
   function saveState() {
-    sessionStorage.setItem(storageKey, JSON.stringify({ conversation: conversation.slice(-20), agreedBrief }));
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      conversation: conversation.slice(-20),
+      intake,
+    }));
   }
 
   function addMessage(text, role = 'agent', className = '') {
@@ -54,10 +56,70 @@
     saveState();
   }
 
+  function identifyIntent(text) {
+    const value = normalise(text);
+    if (/\b(deploy|release|publish)\b/.test(value)) return 'deploy';
+    if (/\b(monitor|watch|track)\b/.test(value)) return 'monitor';
+    if (/\b(fix|repair|broken|problem|error|bug)\b/.test(value)) return 'fix';
+    if (/\b(create|build|make|develop)\b/.test(value)) return 'create';
+    return intake.intent || 'create';
+  }
+
+  function recordAnswer(text) {
+    if (!intake.intent) {
+      intake.intent = identifyIntent(text);
+      intake.request = text;
+      return;
+    }
+    if (!intake.outcome) {
+      intake.outcome = text;
+      return;
+    }
+    if (!intake.users) {
+      intake.users = text;
+      return;
+    }
+    if (!intake.workflow) {
+      intake.workflow = text;
+      return;
+    }
+    if (!intake.success) intake.success = text;
+  }
+
+  function nextQuestion() {
+    if (!intake.outcome) {
+      return intake.intent === 'fix'
+        ? 'I understand. What exactly is going wrong, and what should happen instead?'
+        : intake.intent === 'deploy'
+          ? 'I understand. What project should be deployed, and where should it go?'
+          : intake.intent === 'monitor'
+            ? 'I understand. What system should I monitor, and what change should I report?'
+            : 'I understand. What exactly would you like me to create?';
+    }
+    if (!intake.users) return 'Who will use it or benefit from it?';
+    if (!intake.workflow) return 'What is the first important thing the user should be able to do?';
+    if (!intake.success) return 'What must be true before I can honestly report that the job is complete?';
+    return null;
+  }
+
+  function agreedBrief() {
+    return [
+      `Requested work: ${intake.request || intake.intent || 'engineering task'}`,
+      `Outcome: ${intake.outcome || ''}`,
+      `Users: ${intake.users || ''}`,
+      `First workflow: ${intake.workflow || ''}`,
+      `Success condition: ${intake.success || ''}`,
+    ].filter(line => !line.endsWith(': ')).join('\n');
+  }
+
+  function confirmationReply() {
+    return `Thank you. Here is the brief I understood:\n\n${agreedBrief()}\n\nReply “Proceed” when you want me to start the real job.`;
+  }
+
   async function readJson(response) {
     const raw = await response.text();
     let data = {};
-    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw || 'Invalid response' }; }
+    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw || 'Invalid server response' }; }
     if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
     return data;
   }
@@ -67,19 +129,42 @@
     for (let attempt = 0; attempt < 180; attempt += 1) {
       const status = String(latest.status || '').toLowerCase();
       if (['success', 'failed', 'cancelled'].includes(status)) return latest;
-      const messages = [
-        'I’m inspecting the project and understanding the safest next action…',
-        'I’m writing and applying the authorized changes now…',
-        'The job is running. I’m testing and verifying the result…',
-      ];
-      presence.textContent = messages[Math.min(Math.floor(attempt / 8), messages.length - 1)];
+      if (attempt < 8) presence.textContent = 'I’m inspecting the real project evidence now…';
+      else if (attempt < 20) presence.textContent = 'I’m executing the authorized job and recording progress…';
+      else presence.textContent = 'The job is still active. I’m testing and verifying the actual result…';
       await new Promise(resolve => setTimeout(resolve, 1000));
       const response = await fetch(`/api/v1/pipelines/${encodeURIComponent(initial.pipeline_id)}`, {
         credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
       });
       latest = await readJson(response);
     }
-    throw new Error('The job is still running. Its saved pipeline can be checked again shortly.');
+    throw new Error('The live job is still running. Its saved pipeline remains available for another status check.');
+  }
+
+  async function executeConfirmedJob(raw, presence) {
+    const response = await fetch('/api/v1/agent/run', {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: intake.intent === 'deploy' ? 'deploy' : intake.intent === 'monitor' ? 'monitor' : 'fix',
+        objective: raw,
+        branch: 'main',
+        metadata: {
+          branch: 'main',
+          conversation: conversation.slice(-12),
+          previous_objective: agreedBrief(),
+          conversation_first: true,
+          user_confirmed_execution: true,
+        },
+      }),
+    });
+    let data = await readJson(response);
+    if (!String(data.pipeline_id || '').startsWith('conversation-')) {
+      data = await pollPipeline(data, presence);
+    }
+    return data;
   }
 
   async function sendMessage() {
@@ -91,61 +176,47 @@
     objectiveInput.value = '';
     objectiveInput.style.height = '';
 
-    const confirmation = confirmationPhrases.has(normalise(raw));
-    if (!confirmation) agreedBrief = [...conversation.filter(item => item.role === 'user').map(item => item.content)].join(' → ');
-    saveState();
-
+    const confirmed = confirmationPhrases.has(normalise(raw)) && Boolean(intake.success);
     controller = new AbortController();
-    setStatus(confirmation ? 'executing' : 'writing', true);
+    setStatus(confirmed ? 'executing' : 'writing', true);
     const presence = addPresence(
-      confirmation
-        ? 'Thank you. I understand. I’m starting the job now…'
-        : 'I’m reading that carefully and preparing my next question…',
-      confirmation ? 'executing' : 'writing',
+      confirmed
+        ? 'Thank you. I’m starting the real job now…'
+        : 'I’m reading your answer carefully…',
+      confirmed ? 'executing' : 'writing',
     );
 
     try {
-      const objective = confirmation
-        ? raw
-        : `Help me discuss and clarify this request before any execution. Ask one calm follow-up question: ${raw}`;
-      const response = await fetch('/api/v1/agent/run', {
-        method: 'POST',
-        credentials: 'same-origin',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: confirmation ? 'fix' : 'autonomous-check',
-          objective,
-          branch: 'main',
-          metadata: {
-            branch: 'main',
-            conversation: conversation.slice(-12),
-            previous_objective: agreedBrief,
-            conversation_first: true,
-            user_confirmed_execution: confirmation,
-          },
-        }),
-      });
-      let data = await readJson(response);
-      const conversational = String(data.pipeline_id || '').startsWith('conversation-');
-      if (!conversational) data = await pollPipeline(data, presence);
+      if (!confirmed) {
+        recordAnswer(raw);
+        const question = nextQuestion();
+        presence.remove();
+        const reply = question || confirmationReply();
+        addMessage(reply, 'agent');
+        remember('assistant', reply);
+        setStatus('ready');
+        return;
+      }
 
+      const data = await executeConfirmedJob(raw, presence);
       presence.remove();
-      const reply = data.copilot_reply || data.reply || data.message || 'I finished the requested work.';
+      const reply = data.copilot_reply || data.reply || data.message;
+      if (!reply) throw new Error('The live runtime returned no result message.');
       addMessage(reply, 'agent');
       remember('assistant', reply);
-      setStatus(String(data.status || 'ready').toLowerCase() === 'failed' ? 'error' : 'ready');
+      setStatus(String(data.status || '').toLowerCase() === 'failed' ? 'error' : 'ready');
     } catch (error) {
       presence.remove();
       addMessage(
         error.name === 'AbortError'
-          ? 'I stopped the job. We can continue the conversation whenever you are ready.'
-          : `I’m sorry, I could not finish that yet: ${error.message}`,
+          ? 'I stopped the job. We can continue calmly from the same brief when you are ready.'
+          : `I’m sorry, the live job could not finish: ${error.message}`,
         'agent', 'agent-error',
       );
       setStatus(error.name === 'AbortError' ? 'ready' : 'error');
     } finally {
       controller = null;
+      saveState();
       objectiveInput.focus();
     }
   }
