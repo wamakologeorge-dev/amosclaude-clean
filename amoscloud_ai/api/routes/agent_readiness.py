@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import secrets
 import sqlite3
-import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,9 +10,8 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
-from amoscloud_ai.autonomous_server import run_autonomous_server
+from amoscloud_ai.autonomous_api_chain import AutonomousChainRequest, execute_autonomous_chain
 from amoscloud_ai.model_services import readiness
-from amoscloud_ai.models import PipelineStatus
 
 router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
 
@@ -98,15 +96,18 @@ def agent_readiness(request: Request) -> dict:
     result.update({
         "status": "ready" if result["ready"] else "needs_configuration",
         "agent": "Amosclaud Autonomous Cloud Agent",
+        "api_chain": "amosclaud-autonomous-v1",
         "architecture": [
+            "Authenticated user or connector key",
+            "Conversation and task identity",
             "Autonomous Core Orchestrator",
             "Agent 1 — Receive and understand",
             "Agent 2 — Perceive repository evidence",
-            "Agent 3 — Plan with the model",
+            "Agent 3 — Plan with the model when requested",
             "Agent 4 — Act when authorized",
             "Agent 5 — Verify and report",
-            "Five matching model-log-service engines",
-            "Verified output",
+            "Rollback recommendation for failed deployment",
+            "Verified terminal output",
         ],
     })
     return result
@@ -169,50 +170,28 @@ def revoke_autonomous_key(key_id: int, request: Request):
     return None
 
 
-@router.post("/connector/run", summary="Run Autonomous from Codex or another trusted connector")
+@router.post("/connector/run", summary="Run the complete Autonomous API chain from Codex or another trusted connector")
 async def run_connector_task(
     body: ConnectorRunRequest,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> dict:
     user = _connector_user(authorization, x_api_key)
-    mode = body.mode.strip().lower()
-    allowed = {"autonomous-check", "build", "fix", "deploy", "monitor"}
-    if mode not in allowed:
-        raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(allowed))}")
-
-    conversation_id = body.conversation_id or str(uuid.uuid4())
-    metadata = dict(body.metadata)
-    metadata.update({
-        "connector": "codex",
-        "source": "amosclaud-autonomous-codex-connector",
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "conversation_id": conversation_id,
-        "branch": body.branch,
-        "use_agent": bool(body.use_model),
-        "apply_changes": bool(body.apply_changes or mode == "fix"),
-    })
-
-    result = run_autonomous_server(mode, body.objective.strip(), metadata)
-    checks = [
-        {"name": item.name, "status": item.status, "summary": item.summary, "details": item.details}
-        for item in result.checks
-    ]
-    model_used = any(item.name == "agentic-cloud-core" or item.name.startswith("agent-") for item in result.checks)
-    return {
-        "accepted": True,
-        "run_id": str(uuid.uuid4()),
-        "conversation_id": conversation_id,
-        "user_id": user["id"],
-        "mode": mode,
-        "branch": body.branch,
-        "objective": body.objective.strip(),
-        "status": result.status,
-        "reply": result.reply,
-        "checks": checks,
-        "logs": result.logs,
-        "model_requested": body.use_model,
-        "model_used": model_used,
-        "rollback_recommended": mode == "deploy" and result.status == PipelineStatus.FAILED,
-    }
+    try:
+        result = execute_autonomous_chain(
+            AutonomousChainRequest(
+                user_id=user["id"],
+                user_name=user["name"],
+                objective=body.objective,
+                mode=body.mode,
+                branch=body.branch,
+                conversation_id=body.conversation_id,
+                source="amosclaud-autonomous-codex-connector",
+                use_model=body.use_model,
+                apply_changes=body.apply_changes,
+                metadata=body.metadata,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result.payload
