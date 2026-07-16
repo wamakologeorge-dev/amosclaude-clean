@@ -42,29 +42,29 @@
       <section class="autonomous-page-head">
         <div>
           <h1>Amosclaud Autonomous Cloud Agent</h1>
-          <p>Describe the outcome. The Autonomous Core Orchestrator receives it, coordinates five internal engines, and reports verified evidence.</p>
+          <p>Talk through your idea naturally. Amosclaud asks the next useful question, remembers the brief, and starts verified work after you confirm.</p>
         </div>
-        <span class="runtime-state">Controlled agent online</span>
+        <span class="runtime-state">Conversational agent online</span>
       </section>
 
       <section class="autonomous-grid">
         <article class="auto-card agent-workspace">
           <div class="auto-card-header">
-            <div><h2 id="agent-name">Amosclaud Autonomous Cloud Agent</h2><p id="agent-mission">Loading autonomous agent profile...</p></div>
-            <span id="agent-status" class="badge badge-pending">connecting</span>
+            <div><h2 id="agent-name">Amosclaud Autonomous Cloud Agent</h2><p id="agent-mission">A calm conversational agent that can plan, act, execute jobs, verify, and report.</p></div>
+            <span id="agent-status" class="badge badge-success">ready</span>
           </div>
           <section class="agent-section">
             <div class="agent-header" aria-hidden="true"></div>
             <div class="agent-layout-visual">
               <div class="agent-controls-stack">
-                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. What can I do for you today?</div></div>
+                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. Tell me what you would like to create, and I’ll ask one question at a time.</div></div>
                 <div class="agent-compose">
-                  <input id="agent-mode-input" type="hidden" value="build">
+                  <input id="agent-mode-input" type="hidden" value="autonomous-check">
                   <div class="agent-suggestions" aria-label="Suggested requests">
-                    <button type="button" data-agent-suggestion="Inspect my project and explain what needs attention.">Inspect</button>
-                    <button type="button" data-agent-suggestion="Fix the current problem and verify the result.">Fix + verify</button>
-                    <button type="button" data-agent-suggestion="Deploy the verified project safely.">Deploy</button>
-                    <button type="button" data-agent-suggestion="Monitor the project and report important changes.">Monitor</button>
+                    <button type="button" data-agent-suggestion="I want to create something new.">Create</button>
+                    <button type="button" data-agent-suggestion="I need help fixing a problem.">Fix</button>
+                    <button type="button" data-agent-suggestion="I want to deploy a finished project.">Deploy</button>
+                    <button type="button" data-agent-suggestion="I want you to monitor a project.">Monitor</button>
                   </div>
                   <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud Autonomous…"></textarea>
                   <button id="btn-run-agent" class="btn-primary">Send</button>
@@ -77,25 +77,23 @@
 
         <aside class="auto-sidebar">
           <section class="auto-card auto-summary">
-            <h3>Autonomous backend architecture</h3>
+            <h3>How Amosclaud works</h3>
             <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>Core</span><strong>Autonomous Core Orchestrator</strong></div>
-              <div class="auto-summary-item"><span>1</span><strong>Receive and understand</strong></div>
-              <div class="auto-summary-item"><span>2</span><strong>Perceive repository evidence</strong></div>
-              <div class="auto-summary-item"><span>3</span><strong>Plan with the model</strong></div>
-              <div class="auto-summary-item"><span>4</span><strong>Act when authorized</strong></div>
-              <div class="auto-summary-item"><span>5</span><strong>Verify and report</strong></div>
-              <div class="auto-summary-item"><span>Logs</span><strong>Five model-log-service engines</strong></div>
-              <div class="auto-summary-item"><span>Output</span><strong>Verified output</strong></div>
+              <div class="auto-summary-item"><span>1</span><strong>Listen and understand</strong></div>
+              <div class="auto-summary-item"><span>2</span><strong>Ask one useful question</strong></div>
+              <div class="auto-summary-item"><span>3</span><strong>Remember the agreed brief</strong></div>
+              <div class="auto-summary-item"><span>4</span><strong>Act after you confirm</strong></div>
+              <div class="auto-summary-item"><span>5</span><strong>Execute jobs and verify</strong></div>
+              <div class="auto-summary-item"><span>6</span><strong>Report exact results</strong></div>
             </div>
           </section>
           <section class="auto-card auto-summary">
             <h3>Operating policy</h3>
             <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>Agent plan</span><strong>No files written</strong></div>
-              <div class="auto-summary-item"><span>Fix + verify</span><strong>Authorized workspace changes</strong></div>
+              <div class="auto-summary-item"><span>Tone</span><strong>Kind, calm, and patient</strong></div>
+              <div class="auto-summary-item"><span>Conversation</span><strong>Follow up before execution</strong></div>
+              <div class="auto-summary-item"><span>Action</span><strong>Start after confirmation</strong></div>
               <div class="auto-summary-item"><span>Success</span><strong>Evidence required</strong></div>
-              <div class="auto-summary-item"><span>Memory</span><strong>Repository lessons</strong></div>
             </div>
           </section>
           <section class="auto-card auto-summary">
@@ -149,7 +147,7 @@
         <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
         <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
       </section>
-      <p class="autonomous-note">Fix mode may write only inside the controlled workspace. Amosclaud reports success only after verification tools confirm the result.</p>
+      <p class="autonomous-note">Amosclaud follows the conversation, acts after confirmation, and reports success only after verification tools confirm the result.</p>
       <section hidden><table id="pipelines-table"><tbody id="pipelines-body"><tr><td>Loading…</td></tr></tbody></table><table id="deployments-table"><tbody id="deployments-body"><tr><td>Loading…</td></tr></tbody></table></section>
     </main>
   </div>
@@ -162,7 +160,7 @@
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
   <script src="/static/live-autonomous-workbench.js"></script>
-  <script src="/static/agent-control.js"></script>
+  <script src="/static/conversational-agent.js"></script>
   <script src="/static/autonomous-services.js"></script>
   <script src="/static/sidebar.js"></script>
   <script src="/static/app-install.js"></script>
