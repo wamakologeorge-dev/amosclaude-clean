@@ -1,0 +1,5 @@
+# Optional dependencies for the Amosclaud model-server foundation.
+# This file is intentionally separate from the production web runtime.
+torch>=2.2,<3
+pytest>=8.1,<9
+flake8>=6,<8
