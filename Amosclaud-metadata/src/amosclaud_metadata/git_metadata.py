@@ -10,7 +10,7 @@ from .models import CommitRecord, RepositoryRecord
 
 
 class GitMetadataError(RuntimeError):
-    pass
+    """Raised when repository evidence cannot be collected safely."""
 
 
 @dataclass(frozen=True)
@@ -30,40 +30,63 @@ def _run(root: Path, *args: str) -> str:
         check=False,
     )
     if result.returncode:
-        raise GitMetadataError((result.stderr or result.stdout or "git command failed").strip())
+        detail = result.stderr or result.stdout or "git command failed"
+        raise GitMetadataError(detail.strip())
     return result.stdout.strip()
 
 
-def collect_git_snapshot(workspace: str | Path, *, objective: str, summary: str) -> GitSnapshot:
+def collect_git_snapshot(
+    workspace: str | Path,
+    *,
+    objective: str,
+    summary: str,
+) -> GitSnapshot:
+    """Collect repository and commit evidence without changing the workspace."""
     root = Path(workspace).expanduser().resolve()
     if not (root / ".git").exists():
         raise GitMetadataError(f"Git metadata is unavailable at {root}")
+
     sha = _run(root, "rev-parse", "HEAD")
     branch = _run(root, "rev-parse", "--abbrev-ref", "HEAD")
     default_branch = "main"
+
     try:
         symbolic = _run(root, "symbolic-ref", "refs/remotes/origin/HEAD")
         default_branch = symbolic.rsplit("/", 1)[-1]
     except GitMetadataError:
         pass
+
     remote_url = ""
     try:
         remote_url = _run(root, "remote", "get-url", "origin")
     except GitMetadataError:
         pass
+
     full_name = root.name
     if remote_url:
         cleaned = remote_url.removesuffix(".git").rstrip("/")
         full_name = cleaned.split(":")[-1].split("github.com/")[-1]
+
     changed = tuple(
         line[3:].strip()
         for line in _run(root, "status", "--short").splitlines()
         if len(line) > 3 and line[3:].strip()
     )
-    parents = tuple(_run(root, "show", "-s", "--format=%P", "HEAD").split())
-    files = tuple(
-        line for line in _run(root, "show", "--pretty=format:", "--name-only", "HEAD").splitlines() if line
+    parents = tuple(
+        _run(root, "show", "-s", "--format=%P", "HEAD").split()
     )
+    files = tuple(
+        line
+        for line in _run(
+            root,
+            "show",
+            "--pretty=format:",
+            "--name-only",
+            "HEAD",
+        ).splitlines()
+        if line
+    )
+
     repository = RepositoryRecord(
         full_name=full_name,
         default_branch=default_branch,
@@ -80,4 +103,8 @@ def collect_git_snapshot(workspace: str | Path, *, objective: str, summary: str)
         files_changed=files,
         parent_shas=parents,
     )
-    return GitSnapshot(repository=repository, commit=commit, dirty_files=changed)
+    return GitSnapshot(
+        repository=repository,
+        commit=commit,
+        dirty_files=changed,
+    )
