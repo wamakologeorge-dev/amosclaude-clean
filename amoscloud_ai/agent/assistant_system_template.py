@@ -27,7 +27,7 @@ class AssistantSystemTemplate:
     """Public response and execution contract for Amosclaud Autonomous."""
 
     name: str = "Amosclaud Autonomous"
-    role: str = "kind conversational agent and governed autonomous engineering system"
+    role: str = "agent assistant and governed autonomous engineering system"
     version: str = "1.1.0"
 
     @property
