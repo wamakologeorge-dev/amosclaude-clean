@@ -7,6 +7,8 @@ from typing import Any
 
 from .engineering_loop import AutonomousEngineeringLoop, LoopOutcome
 from .model import AutonomousModelGateway
+from .react_integration import AutonomousReactController
+from .react_loop import ReactOutcome
 from src.foundation import AgentsPracticeStation, IntelligentFoundation
 from src.services.code_analyzer import CodeAnalyzer
 from src.services.file_manager import SafeFileManager
@@ -22,7 +24,7 @@ class AutonomousTask:
 
 
 class AutonomousOrchestrator:
-    """One intelligent coordinator for UI, API, webhooks, jobs, agents, and lessons."""
+    """One coordinator for UI, API, webhooks, jobs, agents, and lessons."""
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
@@ -32,6 +34,7 @@ class AutonomousOrchestrator:
         self.runtime = RuntimeExecutor(self.workspace)
         self.foundation = IntelligentFoundation(self.workspace)
         self.practice_station = AgentsPracticeStation(self.workspace)
+        self.react = AutonomousReactController(self.workspace)
         self.engineering_loop = AutonomousEngineeringLoop(
             analyzer=self.analyzer,
             model=self.model,
@@ -40,7 +43,19 @@ class AutonomousOrchestrator:
             max_attempts=2,
         )
 
-    def run(self, task: AutonomousTask) -> LoopOutcome:
+    def run_react(self, task: AutonomousTask) -> ReactOutcome:
+        """Run Reason-Act-Observe-Verify beneath this same orchestrator."""
+        guidance_modes = {"answer", "guide", "learn", "teach"}
+        return self.react.run(
+            task.objective,
+            authorized_writes=task.authorized_writes,
+            execution_required=task.mode not in guidance_modes,
+        )
+
+    def run(self, task: AutonomousTask) -> LoopOutcome | ReactOutcome:
+        if task.mode in {"react", "answer", "guide", "learn", "teach"}:
+            return self.run_react(task)
+
         level = int(task.metadata.get("academy_level", 1))
         founder_verified = bool(task.metadata.get("founder_verified", False))
         context = self.foundation.prepare(
@@ -52,24 +67,40 @@ class AutonomousOrchestrator:
         outcome = self.engineering_loop.run(
             objective=task.objective,
             mode=task.mode,
-            authorized_writes=task.authorized_writes and "write" in context.allowed_actions,
+            authorized_writes=(
+                task.authorized_writes and "write" in context.allowed_actions
+            ),
         )
         practice = self.practice_station.practice(
             context.next_lesson["level"],
-            verifier=lambda: outcome.checks or [
-                {"name": "engineering-loop", "passed": outcome.status == "success", "summary": "Engineering loop completed truthfully."}
+            verifier=lambda: outcome.checks
+            or [
+                {
+                    "name": "engineering-loop",
+                    "passed": outcome.status == "success",
+                    "summary": "Engineering loop completed truthfully.",
+                }
             ],
             evidence=[event.message for event in outcome.events],
         )
         outcome.lessons.extend(
             [
-                f"Foundation confidence: {context.confidence}; risk: {context.risk}.",
-                f"Practice Station: {practice.lesson}; score {practice.score}; status {practice.status}.",
+                (
+                    f"Foundation confidence: {context.confidence}; "
+                    f"risk: {context.risk}."
+                ),
+                (
+                    f"Practice Station: {practice.lesson}; score "
+                    f"{practice.score}; status {practice.status}."
+                ),
             ]
         )
         self.foundation.memory.remember(
             "project",
-            f"Objective: {task.objective}; outcome: {outcome.status}; practice: {practice.status}",
+            (
+                f"Objective: {task.objective}; outcome: {outcome.status}; "
+                f"practice: {practice.status}"
+            ),
             evidence=" | ".join(outcome.lessons),
         )
         return outcome
