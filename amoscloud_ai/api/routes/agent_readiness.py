@@ -4,11 +4,13 @@ import hashlib
 import secrets
 import sqlite3
 from datetime import datetime, timezone
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
+from amoscloud_ai.autonomous_api_chain import AutonomousChainRequest, execute_autonomous_chain
 from amoscloud_ai.model_services import readiness
 
 router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
@@ -16,6 +18,16 @@ router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
 
 class AutonomousKeyRequest(BaseModel):
     name: str = Field(default="Autonomous key", min_length=2, max_length=80)
+
+
+class ConnectorRunRequest(BaseModel):
+    objective: str = Field(..., min_length=1, max_length=12000)
+    mode: str = "autonomous-check"
+    branch: str = Field(default="main", pattern=r"^[A-Za-z0-9._/-]+$")
+    conversation_id: str | None = Field(default=None, max_length=128)
+    use_model: bool = False
+    apply_changes: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def _user(request: Request):
@@ -47,6 +59,35 @@ def _hash_key(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _connector_key(authorization: str | None, x_api_key: str | None) -> str:
+    if x_api_key:
+        return x_api_key.strip()
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return ""
+
+
+def _connector_user(authorization: str | None, x_api_key: str | None) -> dict[str, Any]:
+    raw = _connector_key(authorization, x_api_key)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Provide an Amosclaud Autonomous API key")
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect() as db:
+        _key_schema(db)
+        row = db.execute(
+            """SELECT users.id,users.name,users.email,users.is_admin,users.provider,autonomous_api_keys.id AS key_id
+               FROM autonomous_api_keys
+               JOIN users ON users.id=autonomous_api_keys.user_id
+               WHERE autonomous_api_keys.key_hash=? AND autonomous_api_keys.revoked_at IS NULL""",
+            (_hash_key(raw),),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or revoked Amosclaud Autonomous API key")
+        db.execute("UPDATE autonomous_api_keys SET last_used_at=? WHERE id=?", (now, row["key_id"]))
+        db.commit()
+    return dict(row)
+
+
 @router.get("/readiness")
 def agent_readiness(request: Request) -> dict:
     """Truthful backend view used by the Autonomous Cloud Agent frontend."""
@@ -55,15 +96,18 @@ def agent_readiness(request: Request) -> dict:
     result.update({
         "status": "ready" if result["ready"] else "needs_configuration",
         "agent": "Amosclaud Autonomous Cloud Agent",
+        "api_chain": "amosclaud-autonomous-v1",
         "architecture": [
+            "Authenticated user or connector key",
+            "Conversation and task identity",
             "Autonomous Core Orchestrator",
             "Agent 1 — Receive and understand",
             "Agent 2 — Perceive repository evidence",
-            "Agent 3 — Plan with the model",
+            "Agent 3 — Plan with the model when requested",
             "Agent 4 — Act when authorized",
             "Agent 5 — Verify and report",
-            "Five matching model-log-service engines",
-            "Verified output",
+            "Rollback recommendation for failed deployment",
+            "Verified terminal output",
         ],
     })
     return result
@@ -124,3 +168,30 @@ def revoke_autonomous_key(key_id: int, request: Request):
     if updated.rowcount != 1:
         raise HTTPException(status_code=404, detail="Active Autonomous key not found")
     return None
+
+
+@router.post("/connector/run", summary="Run the complete Autonomous API chain from Codex or another trusted connector")
+async def run_connector_task(
+    body: ConnectorRunRequest,
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict:
+    user = _connector_user(authorization, x_api_key)
+    try:
+        result = execute_autonomous_chain(
+            AutonomousChainRequest(
+                user_id=user["id"],
+                user_name=user["name"],
+                objective=body.objective,
+                mode=body.mode,
+                branch=body.branch,
+                conversation_id=body.conversation_id,
+                source="amosclaud-autonomous-codex-connector",
+                use_model=body.use_model,
+                apply_changes=body.apply_changes,
+                metadata=body.metadata,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return result.payload

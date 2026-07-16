@@ -51,15 +51,18 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
     root = repo_root()
     metadata = dict(metadata or {})
 
-    # Build, review, monitor, and test operations must remain available even when
-    # the planning model station is offline. Only an explicitly authorized fix
-    # requires the five-engine model-guided write path.
-    use_agent = mode == "fix"
+    # The API chain can request model-assisted reasoning for any supported mode.
+    # File writes remain separately controlled by mode/apply_changes inside the
+    # agentic engine, so requesting the model never silently authorizes writes.
+    use_agent = bool(metadata.get("use_agent", False)) or mode == "fix"
     checks: list[CheckResult] = []
     logs = [
         f"Amosclaud Autonomous Cloud Agent: repository access confirmed at {root}",
         f"Mode: {mode}",
         f"Objective: {objective}",
+        f"API chain: {metadata.get('api_chain', 'direct-runtime')}",
+        f"Conversation: {metadata.get('conversation_id', 'not-supplied')}",
+        f"User: {metadata.get('user_id', 'session-user')}",
         f"Executor: {'five-engine agentic core' if use_agent else 'deterministic runtime'}",
     ]
 
@@ -71,6 +74,15 @@ def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str
                 "build-runtime",
                 "passed",
                 "Deterministic build inspection is running without requiring the model station.",
+            )
+        )
+    elif mode == "deploy":
+        checks.append(
+            CheckResult(
+                "deployment-preflight",
+                "passed",
+                "Deployment request entered the verified Autonomous API chain.",
+                ["A failed deployment result will return rollback_recommended=true to the caller."],
             )
         )
 
@@ -108,8 +120,8 @@ def _run_agentic_cloud_core(root: Path, objective: str, mode: str, metadata: dic
             CheckResult(
                 "agentic-cloud-core",
                 "failed",
-                "The authorized fix engine stopped safely before writing files.",
-                [detail, "Configure a ready Amosclaud model station before running Fix mode."],
+                "The requested model-assisted engine stopped safely before writing files.",
+                [detail, "Configure a ready Amosclaud model station or retry with use_model=false."],
             )
         ]
 
@@ -183,7 +195,9 @@ def _conflict_marker_check(root: Path) -> CheckResult:
 def _python_compile_check(root: Path) -> CheckResult:
     files = [
         "amoscloud_ai/api/routes/agent.py",
+        "amoscloud_ai/api/routes/agent_readiness.py",
         "amoscloud_ai/agentic_cloud_engine.py",
+        "amoscloud_ai/autonomous_api_chain.py",
         "amoscloud_ai/autonomous_server.py",
         "amoscloud_ai/main.py",
         "amoscloud_ai/models.py",

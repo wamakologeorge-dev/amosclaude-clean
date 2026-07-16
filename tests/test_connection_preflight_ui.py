@@ -12,5 +12,8 @@ def test_workspace_exposes_autonomous_runtime_health_controls():
     assert "Check Autonomous and server" in html
     assert "/health" in script
     assert "/api/v1/agent" in script
-    assert "Amosclaud Autonomous Runtime" in script
-    assert "Server healthy" in script
+    assert "/api/v1/pipelines/" in script
+    assert "Autonomous execution console" in script
+    assert "Task received" in script
+    assert "Task is executing" in script
+    assert "Verified evidence recorded" in script
