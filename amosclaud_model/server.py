@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 import uuid
 
@@ -34,10 +35,28 @@ class TrainingRequest(BaseModel):
     operation: str = Field(default="train", pattern="^(train|evaluate)$")
 
 
-def _authorize(authorization: str | None = Header(default=None)) -> None:
-    expected = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
-    if expected and authorization != f"Bearer {expected}":
-        raise HTTPException(status_code=401, detail="Invalid model service credential")
+def _authorize(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    expected = [
+        value
+        for value in (
+            os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip(),
+            os.getenv("AMOSCLAUD_API_KEY", "").strip(),
+        )
+        if value
+    ]
+    if not expected:
+        return
+    bearer = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    supplied = [value for value in (bearer, (x_api_key or "").strip()) if value]
+    if not any(
+        secrets.compare_digest(candidate, accepted)
+        for candidate in supplied
+        for accepted in expected
+    ):
+        raise HTTPException(status_code=401, detail="Invalid Amosclaud model credential")
 
 
 def create_app() -> FastAPI:
@@ -54,7 +73,11 @@ def create_app() -> FastAPI:
             "status": "ready" if model.checkpoint_path.exists() else "needs_training",
             "model": model.config.name,
             "checkpoint": model.checkpoint_path.exists(),
-            "key_required": bool(os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()),
+            "key_required": bool(
+                os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
+                or os.getenv("AMOSCLAUD_API_KEY", "").strip()
+            ),
+            "amosclaud_api_key_supported": True,
         }
 
     @app.get("/v1/models", dependencies=[Depends(_authorize)])

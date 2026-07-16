@@ -45,7 +45,7 @@ for attempt in $(seq 1 60); do
   if curl --fail --silent --show-error \
     --max-time 330 \
     -H "Authorization: Bearer ${AMOSCLAUD_MODEL_TOKEN}" \
-    "http://127.0.0.1:${AMOSCLAUD_MODEL_PORT}/health" \
+    "http://127.0.0.1:${AMOSCLAUD_MODEL_PORT}/ready" \
     | python -c 'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("ready") is True else 1)' \
     2>/dev/null; then
     echo "SUCCESS: Amosclaud model station is ready at http://127.0.0.1:${AMOSCLAUD_MODEL_PORT}"
