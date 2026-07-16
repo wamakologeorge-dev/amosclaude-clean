@@ -1,0 +1,31 @@
+name: Amosclaud Agent SDK Wheel
+
+on:
+  pull_request:
+    paths:
+      - "amosclaud_agent_sdk/**"
+      - "scripts/build_wheel.py"
+      - "pyproject.toml"
+      - ".github/workflows/agent-sdk-wheel.yml"
+  workflow_dispatch:
+
+jobs:
+  verify-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build twine
+      - name: Build wheel without any external installer
+        run: python scripts/build_wheel.py --skip-sdist --clean
+      - name: Verify bundled command
+        run: |
+          python -m pip install --force-reinstall dist/*.whl
+          amosclaud-agent --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amosclaud-agent-sdk-wheel-${{ github.run_id }}
+          path: dist/*.whl
+          if-no-files-found: error
