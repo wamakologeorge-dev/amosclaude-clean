@@ -48,10 +48,13 @@ def _broker_status() -> dict[str, object]:
 
 @router.get("/ready", summary="Autonomous service readiness")
 async def readiness() -> dict[str, object]:
-    """Return component readiness without exposing keys, hosts, or raw errors.
+    """Return safe component readiness.
 
-    Provider configuration and verified runtime readiness are intentionally
-    separate. A URL or key being present does not prove that inference works.
+    ``ready`` means a model-network station has recently reported ready.
+    ``configured_unverified`` means a provider is configured but has not been
+    proven by this lightweight endpoint. ``degraded`` means no provider path is
+    configured. Use a real task or the protected provider probe for end-to-end
+    inference verification.
     """
     provider_state = provider.status()
     broker_state = _broker_status()
