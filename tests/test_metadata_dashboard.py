@@ -52,5 +52,9 @@ def test_metadata_loader_reports_invalid_json(
 
 
 def test_metadata_api_is_registered_through_agent_chain() -> None:
-    paths = {route.path for route in app.routes}
+    paths = {
+        path
+        for route in app.routes
+        if (path := getattr(route, "path", None)) is not None
+    }
     assert "/api/v1/agent-chain/metadata/summary" in paths
