@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/static/chat-scroll.css" />
   <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
   <link rel="stylesheet" href="/static/agent-console.css" />
+  <link rel="stylesheet" href="/static/live-autonomous-workbench.css" />
 </head>
 <body>
   <div id="app">
@@ -106,6 +107,37 @@
         </aside>
       </section>
 
+      <section id="live-autonomous-workbench" class="autonomous-workbench" aria-labelledby="workbench-title">
+        <header class="workbench-head">
+          <div><h2 id="workbench-title">Live Autonomous Workbench</h2><p>Watch the mission, repository activity, verification, approvals, and result locations without exposing private reasoning.</p></div>
+          <span class="workbench-live" data-workbench-status>Ready</span>
+        </header>
+        <div class="workbench-grid">
+          <section class="workbench-panel">
+            <h3>Mission timeline</h3>
+            <div class="mission-meta">
+              <div><small>Mission</small><strong data-workbench-mission>Waiting for instruction</strong></div>
+              <div><small>Mode</small><strong data-workbench-mode>—</strong></div>
+              <div><small>Runtime</small><strong data-workbench-runtime>00:00</strong></div>
+            </div>
+            <div class="mission-progress" aria-label="Mission progress"><span data-workbench-progress></span></div>
+            <div class="workbench-timeline" data-workbench-timeline><div class="workbench-empty">Start an Agent task to watch each verified step here.</div></div>
+          </section>
+          <section class="workbench-panel">
+            <div class="workbench-tabs" role="tablist">
+              <button class="workbench-tab active" data-workbench-tab="files" type="button">Files</button>
+              <button class="workbench-tab" data-workbench-tab="checks" type="button">Tests</button>
+              <button class="workbench-tab" data-workbench-tab="results" type="button">Results</button>
+              <button class="workbench-tab" data-workbench-tab="approvals" type="button">Approvals</button>
+            </div>
+            <div class="workbench-view active" data-workbench-view="files"><div class="workbench-list" data-workbench-files><div class="workbench-empty">No files observed yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="checks"><div class="workbench-list" data-workbench-checks><div class="workbench-empty">No verification checks yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="results"><div class="workbench-list" data-workbench-results><div class="workbench-empty">No result locations yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="approvals"><div class="workbench-list" data-workbench-approvals><div class="workbench-empty">No approval is currently required.</div></div></div>
+          </section>
+        </div>
+      </section>
+
       <section class="status-strip">
         <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
         <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
@@ -124,6 +156,7 @@
 
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
+  <script src="/static/live-autonomous-workbench.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/autonomous-services.js"></script>
   <script src="/static/sidebar.js"></script>
