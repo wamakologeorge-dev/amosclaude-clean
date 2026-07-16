@@ -20,7 +20,7 @@
 
   const activityToolbar = document.createElement('div');
   activityToolbar.className = 'agent-activity-toolbar';
-  activityToolbar.innerHTML = '<strong>Agent console</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
+  activityToolbar.innerHTML = '<strong>Autonomous execution console</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
   controls.insertBefore(activityToolbar, replies);
 
   const toggleActivityButton = activityToolbar.querySelector('#btn-toggle-agent-activity');
@@ -32,7 +32,7 @@
   stopButton.hidden = true;
   compose.appendChild(stopButton);
 
-  const phases = ['Understand objective', 'Inspect evidence', 'Plan safe action', 'Act when authorized', 'Verify result', 'Report evidence'];
+  const phases = ['Receive task', 'Understand objective', 'Inspect evidence', 'Plan safe action', 'Execute task', 'Verify and report'];
 
   function updateActivityView() {
     replies.classList.toggle('agent-replies-expanded', activityExpanded);
@@ -57,14 +57,14 @@
   function addPhaseBoard(mode, objective) {
     const board = document.createElement('section');
     board.className = 'agent-run-card';
-    board.innerHTML = `<div class="agent-run-heading"><strong>Task started</strong><span>${new Date().toLocaleTimeString()}</span></div><div class="agent-run-objective"></div><ol class="agent-phase-list"></ol>`;
+    board.innerHTML = `<div class="agent-run-heading"><strong>Task received</strong><span>${new Date().toLocaleTimeString()}</span></div><div class="agent-run-objective"></div><ol class="agent-phase-list"></ol>`;
     board.querySelector('.agent-run-objective').textContent = objective;
     const list = board.querySelector('.agent-phase-list');
     phases.forEach((phase, index) => {
       const item = document.createElement('li');
       item.dataset.phase = String(index);
       item.className = index === 0 ? 'active' : '';
-      item.innerHTML = `<span>${index + 1}</span><strong>${phase}</strong><small>${index === 3 && mode !== 'fix' ? 'No file writes authorized' : 'Waiting'}</small>`;
+      item.innerHTML = `<span>${index + 1}</span><strong>${phase}</strong><small>${index === 4 && mode !== 'fix' ? 'Execution without file-write permission' : 'Waiting'}</small>`;
       list.appendChild(item);
     });
     replies.appendChild(board);
@@ -80,12 +80,26 @@
     publish('agent-phase', { index, phase: phases[index], state, note });
   }
 
-  function renderResult(data, board) {
-    phases.forEach((_, index) => setPhase(board, index, 'complete', index === 3 ? (data.mode === 'fix' ? 'Authorized action completed' : 'No write action required') : 'Completed'));
+  function flattenPipeline(pipeline, original) {
+    const jobs = Array.isArray(pipeline.jobs) ? pipeline.jobs : [];
+    const logs = jobs.flatMap(job => Array.isArray(job.logs) ? job.logs : []);
+    return {
+      ...original,
+      status: pipeline.status,
+      reply: pipeline.copilot_reply || pipeline.message || original.reply,
+      message: pipeline.message,
+      logs,
+      checks: original.checks || [],
+      pipeline_id: pipeline.id || original.pipeline_id,
+    };
+  }
+
+  function renderResult(data) {
+    const failed = String(data.status || '').toLowerCase() === 'failed';
     const result = document.createElement('section');
-    result.className = `agent-evidence-card ${String(data.status || '').toLowerCase() === 'failed' ? 'failed' : 'success'}`;
+    result.className = `agent-evidence-card ${failed ? 'failed' : 'success'}`;
     const checks = Array.isArray(data.checks) ? data.checks : [];
-    result.innerHTML = `<div class="agent-evidence-heading"><strong>${data.status === 'failed' ? 'Needs attention' : 'Verified result'}</strong><span>${data.status || 'complete'}</span></div><p class="agent-result-copy"></p><div class="agent-check-grid"></div><details><summary>Technical evidence</summary><pre></pre></details>`;
+    result.innerHTML = `<div class="agent-evidence-heading"><strong>${failed ? 'Execution needs attention' : 'Execution completed'}</strong><span>${data.status || 'complete'}</span></div><p class="agent-result-copy"></p><div class="agent-check-grid"></div><details open><summary>Execution evidence</summary><pre></pre></details>`;
     result.querySelector('.agent-result-copy').textContent = data.reply || data.message || 'Task completed.';
     const grid = result.querySelector('.agent-check-grid');
     checks.forEach(check => {
@@ -130,10 +144,38 @@
     return data;
   }
 
+  function delay(ms) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      controller?.signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Stopped', 'AbortError')); }, { once: true });
+    });
+  }
+
+  async function pollPipeline(initial, board) {
+    if (!initial.pipeline_id || String(initial.pipeline_id).startsWith('conversation-')) return initial;
+    let latest = initial;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (['success', 'failed', 'cancelled'].includes(String(latest.status || '').toLowerCase())) return latest;
+      setBusy(true, latest.status === 'pending' ? 'received' : 'executing');
+      setPhase(board, 0, 'complete', 'Task accepted and persisted');
+      setPhase(board, 1, 'complete', 'Objective understood');
+      setPhase(board, 2, latest.status === 'pending' ? 'active' : 'complete', latest.status === 'pending' ? 'Waiting for execution worker' : 'Repository and runtime inspected');
+      setPhase(board, 3, latest.status === 'running' ? 'complete' : 'active', latest.status === 'running' ? 'Execution plan selected' : 'Preparing execution');
+      setPhase(board, 4, latest.status === 'running' ? 'active' : '', latest.status === 'running' ? 'Task is executing' : 'Waiting');
+      await delay(1000);
+      const response = await fetch(`/api/v1/pipelines/${encodeURIComponent(initial.pipeline_id)}`, {
+        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+      });
+      const pipeline = await readResponse(response);
+      latest = flattenPipeline(pipeline, initial);
+    }
+    throw new Error('The task is still running after two minutes. Its pipeline remains available in activity history.');
+  }
+
   async function checkConnections() {
     if (!connectionButton || !connectionStatus) return;
     connectionButton.disabled = true;
-    connectionStatus.textContent = 'Checking agent, server, and model runtime…';
+    connectionStatus.textContent = 'Checking Autonomous, server, and execution runtime…';
     try {
       const [healthResponse, profileResponse] = await Promise.all([
         fetch('/health', { credentials: 'same-origin', cache: 'no-store' }),
@@ -148,15 +190,14 @@
   }
 
   async function sendAutonomous(mode, objective) {
-    const agentMode = mode === 'build' || mode === 'fix';
     const response = await fetch('/api/v1/agent/run', {
       method: 'POST', signal: controller.signal, credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode, objective, branch: 'main',
         metadata: {
-          branch: 'main', use_agent: agentMode, apply_changes: mode === 'fix',
-          source: 'platform-agent-console', previous_objective: previousObjective,
+          branch: 'main', use_agent: false, apply_changes: mode === 'fix',
+          source: 'platform-autonomous-console', previous_objective: previousObjective,
         },
       }),
     });
@@ -172,26 +213,21 @@
     const board = addPhaseBoard(mode, objective);
     objectiveInput.value = '';
     controller = new AbortController();
-    setBusy(true, 'working');
-    setPhase(board, 0, 'complete', 'Objective accepted');
-    setPhase(board, 1, 'active', 'Reading repository and runtime evidence');
+    setBusy(true, 'receiving');
     try {
-      const data = await sendAutonomous(mode, objective);
+      let data = await sendAutonomous(mode, objective);
       const isConversation = String(data.pipeline_id || '').startsWith('conversation-');
       if (isConversation && objective.length > 2) {
         previousObjective = objective;
         sessionStorage.setItem('amosclaud-agent-previous-objective', previousObjective);
       }
-      setPhase(board, 1, 'complete', isConversation ? 'Conversation context understood' : 'Evidence inspected');
-      setPhase(board, 2, 'complete', isConversation ? 'Guidance plan completed' : (mode === 'autonomous-check' ? 'Inspection plan completed' : 'Safe plan prepared'));
-      setPhase(board, 3, 'complete', isConversation ? 'No write action required' : (mode === 'fix' ? 'Authorized changes processed' : 'Execution processed without write authorization'));
-      setPhase(board, 4, data.status === 'failed' ? 'failed' : 'complete', data.status === 'failed' ? 'Verification found a blocker' : 'Verification passed');
-      setPhase(board, 5, 'complete', 'Evidence reported');
-      renderResult(data, board);
+      if (!isConversation) data = await pollPipeline(data, board);
+      phases.forEach((_, index) => setPhase(board, index, data.status === 'failed' && index === 5 ? 'failed' : 'complete', index === 4 ? 'Execution finished' : index === 5 ? (data.status === 'failed' ? 'Verification found a blocker' : 'Verified evidence recorded') : 'Completed'));
+      renderResult(data);
       setBusy(false, data.status || 'ready');
     } catch (error) {
-      setPhase(board, 4, 'failed', error.name === 'AbortError' ? 'Task stopped' : error.message);
-      addMessage(error.name === 'AbortError' ? 'The agent task was stopped.' : `Amosclaud could not finish this request: ${error.message}`, 'agent', 'agent-error');
+      setPhase(board, 5, 'failed', error.name === 'AbortError' ? 'Task stopped' : error.message);
+      addMessage(error.name === 'AbortError' ? 'The autonomous task was stopped.' : `Amosclaud could not finish this request: ${error.message}`, 'agent', 'agent-error');
       publish('agent-error', { message: error.name === 'AbortError' ? 'Task stopped by user' : error.message });
       setBusy(false, error.name === 'AbortError' ? 'stopped' : 'error');
     } finally { controller = null; objectiveInput.focus(); }
