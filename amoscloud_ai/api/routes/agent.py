@@ -268,6 +268,13 @@ def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
     return execution_mode, prepared
 
 
+def _has_passing_engineering_evidence(checks: list[dict]) -> bool:
+    """Require at least one check and reject any failed or ambiguous check."""
+    if not checks:
+        return False
+    return all(str(check.get("status", "")).lower() in {"pass", "passed", "success"} for check in checks)
+
+
 @router.get(
     "",
     response_model=AutonomousAgentProfile,
@@ -333,7 +340,7 @@ async def run_agent(
             started_at=started_at,
             checks=[],
             logs=[
-                "Agent Assistant response delivered without engineering verification."
+                "Guidance response delivered. Engineering verification is not applicable because no code, file, deployment, or system change was claimed."
             ],
         )
 
@@ -417,6 +424,18 @@ async def run_agent(
                 for check in result.checks
             ]
             logs = result.logs
+            if pipeline.status == PipelineStatus.SUCCESS and not _has_passing_engineering_evidence(checks):
+                pipeline.status = PipelineStatus.FAILED
+                reply = (
+                    f"{AGENT_NAME}: work ran for {objective}, but engineering verification "
+                    "did not produce complete passing evidence. The result is not verified."
+                )
+                pipeline.message = reply
+                pipeline.copilot_reply = reply
+                logs = [*logs, "Engineering completion blocked: passing verification evidence is required."]
+                if pipeline.jobs:
+                    pipeline.jobs[0].status = PipelineStatus.FAILED
+                    pipeline.jobs[0].logs.append(logs[-1])
             _save(pipeline, payload)
         except Exception as inline_error:
             log.exception("Autonomous agent inline task failed")
