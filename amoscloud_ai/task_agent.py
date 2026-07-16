@@ -1,11 +1,10 @@
 """Plan-first task controller for Amosclaud autonomous engineering work.
 
-This module gives the autonomous runtime a clear agent lifecycle:
-receive the task, form a bounded plan, execute inside the selected workspace,
-verify the result, and report evidence. The deterministic runtime remains the
-fallback when the model provider is unavailable.
+This module gives the autonomous runtime a clear agent lifecycle: receive the
+task, inspect context, plan, execute inside the selected workspace, verify the
+result, and report evidence. The deterministic runtime remains available when
+the model provider is unavailable.
 """
-
 from __future__ import annotations
 
 import uuid
@@ -14,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from amoscloud_ai.engineering_agent import EngineeringAgentError, EngineeringRun, run_engineering_agent
+from amoscloud_ai.logger import log
 
 
 @dataclass
@@ -62,6 +62,19 @@ def _step_log(step: TaskStep) -> str:
     return f"Plan step {step.number}: {step.title} [{step.status}]{suffix}"
 
 
+def _safe_failure(exc: Exception) -> tuple[str, str]:
+    """Return user-safe failure text while preserving full details in server logs."""
+    name = type(exc).__name__
+    lowered = str(exc).lower()
+    if "model runtime" in lowered or "provider" in lowered or "endpoint" in lowered:
+        return "provider_unavailable", "No approved model runtime answered the planning request."
+    if "workspace" in lowered or "path" in lowered or "folder" in lowered:
+        return "workspace_rejected", "The requested workspace did not pass repository safety checks."
+    if "structured" in lowered or "json" in lowered or "change plan" in lowered:
+        return "invalid_plan", "The model response did not produce a valid bounded implementation plan."
+    return name.lower(), "The task agent stopped safely before making further changes."
+
+
 def run_task_agent(
     repository_root: Path,
     objective: str,
@@ -92,48 +105,44 @@ def run_task_agent(
             workspace_path=workspace_path,
             apply_changes=apply_changes,
         )
-    except EngineeringAgentError as exc:
-        _mark(plan, 2, "failed", str(exc))
-        for number in range(3, 7):
-            _mark(plan, number, "blocked", "Stopped safely before further work.")
-        logs.extend(_step_log(step) for step in plan[1:])
-        return TaskAgentRun(
-            run_id=run_id,
-            objective=objective,
-            status="blocked",
-            summary="The task agent stopped safely before completing the task.",
-            applied=False,
-            plan=plan,
-            evidence=[f"EngineeringAgentError: {exc}"],
-            logs=logs,
-        )
     except Exception as exc:
-        detail = f"{type(exc).__name__}: {exc}"
-        _mark(plan, 2, "failed", detail)
+        log.exception("Task agent %s stopped during planning or execution", run_id)
+        category, safe_detail = _safe_failure(exc)
+        _mark(plan, 2, "failed", safe_detail)
         for number in range(3, 7):
             _mark(plan, number, "blocked", "Stopped safely before further work.")
         logs.extend(_step_log(step) for step in plan[1:])
         return TaskAgentRun(
             run_id=run_id,
             objective=objective,
-            status="failed",
-            summary="The task agent failed safely while preparing the task.",
+            status="blocked" if isinstance(exc, EngineeringAgentError) else "failed",
+            summary=safe_detail,
             applied=False,
             plan=plan,
-            evidence=[detail],
+            evidence=[f"Failure category: {category}", "Full technical details were recorded in server logs."],
             logs=logs,
         )
 
     _mark(plan, 2, "completed", "Repository context and relevant memory were inspected.")
     _mark(plan, 3, "completed", engineering.summary)
     if apply_changes:
-        _mark(plan, 4, "completed" if engineering.applied else "failed", f"{len(engineering.changes)} file change(s) processed.")
+        _mark(
+            plan,
+            4,
+            "completed" if engineering.applied else "failed",
+            f"{len(engineering.changes)} file change(s) processed.",
+        )
     else:
         _mark(plan, 4, "completed", f"{len(engineering.changes)} change(s) planned; no files written.")
 
     failed_checks = [check for check in engineering.checks if not check.get("passed", False)]
     if engineering.checks:
-        _mark(plan, 5, "failed" if failed_checks else "completed", f"{len(engineering.checks) - len(failed_checks)} passed; {len(failed_checks)} failed.")
+        _mark(
+            plan,
+            5,
+            "failed" if failed_checks else "completed",
+            f"{len(engineering.checks) - len(failed_checks)} passed; {len(failed_checks)} failed.",
+        )
     else:
         _mark(plan, 5, "completed", "No applicable verification command was required.")
 
@@ -144,7 +153,11 @@ def run_task_agent(
         {"path": change.path, "status": change.status, "bytes_written": change.bytes_written}
         for change in engineering.changes
     ]
-    evidence = [f"Engineering run: {engineering.run_id}", f"Workspace: {engineering.workspace}", *engineering.evidence]
+    evidence = [
+        f"Engineering run: {engineering.run_id}",
+        f"Workspace: {engineering.workspace}",
+        *engineering.evidence,
+    ]
     logs.extend(_step_log(step) for step in plan[1:])
     logs.extend(f"Change: {item['status']} {item['path']}" for item in changes)
     logs.extend(
