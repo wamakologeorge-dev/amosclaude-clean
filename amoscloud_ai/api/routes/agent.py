@@ -62,6 +62,19 @@ GUIDANCE_PHRASES = {
     "why is",
     "why does",
 }
+QUESTION_PREFIXES = (
+    "what ",
+    "why ",
+    "how ",
+    "where ",
+    "when ",
+    "who ",
+    "which ",
+    "can i ",
+    "could i ",
+    "should i ",
+    "would i ",
+)
 ACTION_WORDS = {
     "build",
     "create",
@@ -172,8 +185,10 @@ def _is_guidance_request(message: str, mode: str) -> bool:
     if not normalised:
         return False
     explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
-    asks_for_guidance = "?" in message or any(
-        phrase in normalised for phrase in GUIDANCE_PHRASES
+    asks_for_guidance = (
+        "?" in message
+        or normalised.startswith(QUESTION_PREFIXES)
+        or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
     )
     if mode == "autonomous-check" and not explicitly_execute:
         has_action = any(word in normalised.split() for word in ACTION_WORDS)
@@ -193,6 +208,19 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     if normalised in GREETING_WORDS:
         return ASSISTANT_SYSTEM_TEMPLATE.greeting(name)
     if _is_guidance_request(message, mode):
+        if any(
+            phrase in normalised
+            for phrase in ("what can i build", "what can we build", "what can be built")
+        ):
+            return (
+                "You can build a complete software workflow here: a web application, "
+                "an authenticated API, an Amosclaud agent tool, a self-hosted service, "
+                "a repository automation, or a tested deployment package.\n\n"
+                "Choose one concrete outcome and tell me its users, first workflow, and "
+                "success condition. When you select Build or Fix, I will inspect the "
+                "repository, make the authorized changes, run verification, and report "
+                "the exact files and results."
+            )
         return ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
     if normalised in {"build", "make", "create", "fix"}:
         return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
