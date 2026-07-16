@@ -12,6 +12,7 @@
   const controls = replies.parentElement;
   let controller = null;
   let activityExpanded = true;
+  let previousObjective = sessionStorage.getItem('amosclaud-agent-previous-objective') || '';
 
   function publish(name, detail = {}) {
     window.dispatchEvent(new CustomEvent(`amosclaud:${name}`, { detail }));
@@ -153,7 +154,10 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode, objective, branch: 'main',
-        metadata: { branch: 'main', use_agent: agentMode, apply_changes: mode === 'fix', source: 'platform-agent-console' },
+        metadata: {
+          branch: 'main', use_agent: agentMode, apply_changes: mode === 'fix',
+          source: 'platform-agent-console', previous_objective: previousObjective,
+        },
       }),
     });
     return readResponse(response);
@@ -173,9 +177,14 @@
     setPhase(board, 1, 'active', 'Reading repository and runtime evidence');
     try {
       const data = await sendAutonomous(mode, objective);
-      setPhase(board, 1, 'complete', 'Evidence inspected');
-      setPhase(board, 2, 'complete', mode === 'autonomous-check' ? 'Inspection plan completed' : 'Safe plan prepared');
-      setPhase(board, 3, 'complete', mode === 'fix' ? 'Authorized changes processed' : 'No write authorization used');
+      const isConversation = String(data.pipeline_id || '').startsWith('conversation-');
+      if (isConversation && objective.length > 2) {
+        previousObjective = objective;
+        sessionStorage.setItem('amosclaud-agent-previous-objective', previousObjective);
+      }
+      setPhase(board, 1, 'complete', isConversation ? 'Conversation context understood' : 'Evidence inspected');
+      setPhase(board, 2, 'complete', isConversation ? 'Guidance plan completed' : (mode === 'autonomous-check' ? 'Inspection plan completed' : 'Safe plan prepared'));
+      setPhase(board, 3, 'complete', isConversation ? 'No write action required' : (mode === 'fix' ? 'Authorized changes processed' : 'Execution processed without write authorization'));
       setPhase(board, 4, data.status === 'failed' ? 'failed' : 'complete', data.status === 'failed' ? 'Verification found a blocker' : 'Verification passed');
       setPhase(board, 5, 'complete', 'Evidence reported');
       renderResult(data, board);

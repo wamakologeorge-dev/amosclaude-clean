@@ -44,8 +44,18 @@ GUIDANCE_PHRASES = {
     "what should", "what can go wrong", "explain", "show me a plan", "give me a plan",
     "easier way", "right solution", "best solution", "what is", "why is", "why does",
 }
-ACTION_WORDS = {"build", "create", "fix", "change", "delete", "deploy", "commit", "merge", "run", "test"}
-EXECUTION_PHRASES = {"do it", "proceed", "apply the fix", "make the changes", "execute", "start building"}
+ACTION_WORDS = {
+    "build", "create", "fix", "change", "delete", "deploy", "commit", "merge",
+    "run", "test", "verify", "inspect", "monitor", "review", "publish",
+}
+EXECUTION_PHRASES = {
+    "do it", "proceed", "apply the fix", "make the changes", "execute", "start building",
+    "start to build", "now start to build", "start the build", "build it", "begin building",
+}
+FOLLOW_UP_EXECUTION = {
+    "do it", "proceed", "start", "start now", "build it", "fix it", "deploy it",
+    "now start to build", "start to build", "start building", "make it", "continue",
+}
 
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
@@ -69,13 +79,27 @@ def _display_name(request: Request) -> str:
     return first_name[:1].upper() + first_name[1:]
 
 
+def _normalise(value: str) -> str:
+    return " ".join((value or "").lower().rstrip(".!?").split())
+
+
+def _resolve_follow_up(objective: str, metadata: dict | None) -> tuple[str, bool]:
+    """Attach a short execution follow-up to the previous conversational objective."""
+    current = objective.strip()
+    normalised = _normalise(current)
+    prepared = dict(metadata or {})
+    previous = str(prepared.get("previous_objective") or "").strip()
+    if previous and (normalised in FOLLOW_UP_EXECUTION or any(phrase == normalised for phrase in EXECUTION_PHRASES)):
+        return f"Build the previously discussed outcome: {previous}", True
+    return current, False
+
+
 def _is_guidance_request(message: str, mode: str) -> bool:
     normalised = " ".join(message.lower().split())
     if not normalised:
         return False
     explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
     asks_for_guidance = "?" in message or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
-    # Inspect mode is conversational unless the user clearly orders execution.
     if mode == "autonomous-check" and not explicitly_execute:
         return asks_for_guidance or not any(word in normalised.split() for word in ACTION_WORDS)
     return asks_for_guidance and not explicitly_execute
@@ -86,19 +110,20 @@ def _guidance_reply(request: Request, objective: str) -> str:
     message = objective.strip()
     normalised = " ".join(message.lower().split())
 
-    if "website" in normalised:
+    if "website" in normalised or "platform" in normalised:
+        subject = "platform" if "platform" in normalised else "website"
         return (
             f"Hi {name}. Yes — I can guide you.\n\n"
             "Plan:\n"
-            "1. Define the website purpose, users, and required pages.\n"
-            "2. Choose the simplest stack that fits the goal.\n"
-            "3. Create the page structure and mobile-first design.\n"
-            "4. Add authentication, database, or payments only when required.\n"
-            "5. Test accessibility, security, performance, and phone layout.\n"
+            f"1. Define the {subject} purpose, users, and first successful workflow.\n"
+            "2. Choose the simplest architecture that fits the goal.\n"
+            "3. Design the mobile-first interface, API contracts, database, and permissions.\n"
+            "4. Build one complete vertical feature before adding more systems.\n"
+            "5. Test security, accessibility, performance, recovery, and deployment.\n"
             "6. Deploy to a preview environment, verify it, then publish.\n\n"
-            "What can go wrong: unclear requirements, adding too many features too early, insecure secrets, broken mobile layout, and deploying without tests.\n\n"
+            "What can go wrong: unclear requirements, too many early features, insecure secrets, broken permissions, lost data, and deploying without verification.\n\n"
             "Recommended solution: begin with a small working version and expand after each verified milestone.\n\n"
-            "Easier way: tell me the website name, its purpose, the pages you need, and whether I may create files. I will turn that into a safe build plan."
+            "Easier way: describe the platform name, purpose, first users, required pages, and whether I may create files. Then say ‘start to build’ and I will carry this objective into the engineering run."
         )
 
     return (
@@ -117,7 +142,7 @@ def _guidance_reply(request: Request, objective: str) -> str:
 def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
     name = _display_name(request)
     message = objective.strip()
-    normalised = " ".join(message.lower().rstrip(".!?").split())
+    normalised = _normalise(message)
 
     if not message and mode in {"build", "fix"}:
         return f"Hi {name}. Describe the result you want, the repository or folder, and whether I may apply changes."
@@ -173,8 +198,9 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
-    objective = (body.objective or "").strip()
-    conversational_reply = _conversation_reply(request, mode, objective)
+    supplied_objective = (body.objective or "").strip()
+    objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
+    conversational_reply = None if continued else _conversation_reply(request, mode, objective)
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,
@@ -194,6 +220,9 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
     execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    if continued:
+        metadata["conversation_continuation"] = True
+        metadata["original_follow_up"] = supplied_objective
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
     pipeline = PipelineResponse(
         id=pipeline_id,
