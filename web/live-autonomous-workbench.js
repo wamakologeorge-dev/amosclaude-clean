@@ -52,7 +52,7 @@
       const matches = String(line).match(/(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+/g);
       return matches || [];
     });
-    return [...new Set([...direct, ...fromLogs])].slice(0, 50);
+    return [...new Set([...direct, ...fromLogs])].filter(value => !value.startsWith('http')).slice(0, 50);
   }
   function extractLinks(data) {
     const links = [];
@@ -63,6 +63,47 @@
     [...new Set(values)].forEach(value => links.push(String(value)));
     if (data.pipeline_id) links.unshift(`/pipelines/${encodeURIComponent(data.pipeline_id)}`);
     return links.slice(0, 20);
+  }
+  function resultItem(value) {
+    const row = document.createElement('div'); row.className = 'workbench-item';
+    const title = document.createElement('strong');
+    const note = document.createElement('span');
+    const link = document.createElement('a');
+    link.className = 'workbench-result-link'; link.href = value; link.rel = 'noopener';
+    if (/fastapi\.tiangolo\.com\/advanced\/events/i.test(value)) {
+      title.textContent = 'FastAPI lifespan migration';
+      note.textContent = 'Amosclaud found a deprecated startup event. The safe fix is to move startup work into the application lifespan handler.';
+      link.textContent = 'Open optional official documentation'; link.target = '_blank';
+    } else if (/^https?:\/\//i.test(value)) {
+      title.textContent = 'External result'; note.textContent = 'Verified evidence hosted outside Amosclaud.';
+      link.textContent = 'Open external result'; link.target = '_blank';
+    } else {
+      title.textContent = value.startsWith('/pipelines/') ? 'Amosclaud pipeline evidence' : 'Amosclaud result';
+      note.textContent = value; link.textContent = 'Open inside Amosclaud'; link.target = '_self';
+    }
+    row.append(title, note, link); return row;
+  }
+  async function createDoctorIssue(data) {
+    const failedChecks = (Array.isArray(data.checks) ? data.checks : []).filter(item => String(item.status).toLowerCase() === 'failed');
+    if (!failedChecks.length) return;
+    try {
+      const response = await fetch('/api/v1/doctor/issues', {
+        method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          source: 'autonomous-workbench', severity: 'error', auto_start: true,
+          title: `Autonomous mission needs attention: ${mission.textContent || 'mission'}`,
+          endpoint: '/api/v1/agent/run', error_type: 'verification_failure',
+          safe_detail: failedChecks.map(item => `${item.name}: ${item.summary || 'failed'}`).join('; ').slice(0, 1800),
+          evidence: {pipeline_id: data.pipeline_id || '', mode: mode.textContent || '', failed_checks: failedChecks}
+        })
+      });
+      if (!response.ok) throw new Error('Administrator authorization is required');
+      const issue = await response.json();
+      addEvent('Doctor Medical issue created', `Issue ${issue.issue_id} is diagnosing the failure in baby steps.`, 'complete', 'D');
+      results.prepend(resultItem(`/api/v1/doctor/issues/${encodeURIComponent(issue.issue_id)}`));
+    } catch (error) {
+      addEvent('Admin report pending', error.message || 'Doctor Medical could not create the issue.', 'failed', '!');
+    }
   }
 
   root.querySelectorAll('.workbench-tab').forEach(button => button.addEventListener('click', () => {
@@ -77,7 +118,7 @@
     mission.textContent = detail.objective || 'Agent mission'; mode.textContent = detail.mode || 'inspect'; status.textContent = 'Running'; setProgress(8);
     fillList(files, [], 'Files will appear when Autonomous inspects or changes them.', listItem);
     fillList(checks, [], 'Verification checks will appear here.', listItem);
-    fillList(results, [], 'Result links will appear after creation or deployment.', listItem);
+    fillList(results, [], 'Result evidence will appear after creation or deployment.', listItem);
     approvals.innerHTML = '<div class="workbench-empty">No approval is currently required.</div>';
     addEvent('Mission accepted', detail.objective || 'Instruction received', 'complete', '1');
   });
@@ -92,20 +133,20 @@
     }
   });
 
-  window.addEventListener('amosclaud:agent-result', event => {
+  window.addEventListener('amosclaud:agent-result', async event => {
     const data = event.detail || {};
     clearInterval(timer); setRuntime();
     const failed = String(data.status || '').toLowerCase() === 'failed'; status.textContent = failed ? 'Needs attention' : 'Verified'; setProgress(100);
     addEvent(failed ? 'Mission stopped with evidence' : 'Mission completed', data.reply || data.message || 'Result received', failed ? 'failed' : 'complete', failed ? '×' : '✓');
     const fileItems = extractFiles(data);
-    fillList(files, fileItems, 'No repository files were changed for this request.', item => listItem(item, fileItems.includes(item) ? 'observed' : ''));
+    fillList(files, fileItems, 'No repository files were changed for this request.', item => listItem(item, 'observed'));
     const checkItems = Array.isArray(data.checks) ? data.checks : [];
     fillList(checks, checkItems, 'No engineering checks were required for this assistant response.', item => listItem(item.name || 'check', `${item.status || 'unknown'} — ${item.summary || ''}`));
-    const links = extractLinks(data);
-    fillList(results, links, 'No external result link was returned.', value => {
-      const row = document.createElement('div'); row.className = 'workbench-item';
-      const link = document.createElement('a'); link.className = 'workbench-result-link'; link.href = value; link.textContent = value; link.target = value.startsWith('http') ? '_blank' : '_self'; link.rel = 'noopener'; row.appendChild(link); return row;
-    });
+    fillList(results, extractLinks(data), 'No result link was returned.', resultItem);
+    if (failed) {
+      addEvent('Self-healing handoff', 'Autonomous is organizing the failure and reporting it to Doctor Medical.', 'active', '+');
+      await createDoctorIssue(data);
+    }
   });
 
   window.addEventListener('amosclaud:agent-error', event => {
