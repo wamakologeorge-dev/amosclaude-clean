@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from amosclaud_model import __version__
 from amosclaud_model.config import model_root
+from amosclaud_model.metadata import runtime_model_metadata
 from amosclaud_model.model import FolderLanguageModel, tokenize
 from amosclaud_model.service_log import ModelServiceLog
 from amosclaud_model.training_service import TrainingService, audit_dataset_licenses
@@ -86,6 +87,14 @@ def create_app() -> FastAPI:
             "object": "list",
             "data": [{"id": model.config.name, "object": "model", "owned_by": "amosclaud"}],
         }
+
+    @app.get("/v1/model_metadata", dependencies=[Depends(_authorize)])
+    def model_metadata() -> dict:
+        return runtime_model_metadata(
+            root,
+            runtime="folder-native",
+            ready=model.checkpoint_path.exists(),
+        )
 
     @app.post("/v1/chat/completions", dependencies=[Depends(_authorize)])
     def complete(body: CompletionRequest) -> dict:

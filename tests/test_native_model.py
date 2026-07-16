@@ -117,6 +117,12 @@ def test_native_model_accepts_amosclaud_api_key(tmp_path, monkeypatch):
             client.get("/v1/models", headers={"X-API-Key": "amos_native_test_key"}).status_code
             == 200
         )
+        metadata = client.get(
+            "/v1/model_metadata", headers={"X-API-Key": "amos_native_test_key"}
+        )
+        assert metadata.status_code == 200
+        assert metadata.json()["authentication"][0] == "amosclaud-api-key"
+        assert metadata.json()["runtime"]["engine"] == "folder-native"
 
 
 def test_versioned_checkpoints_evaluate_promote_and_rollback(tmp_path):

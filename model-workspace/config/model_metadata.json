@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "model_id": "amosclaud-folder-v1",
+  "display_name": "Amosclaud Folder Model",
+  "version": "1.0.0",
+  "owner": "amosclaud",
+  "model_family": "folder-native-autoregressive-language-model",
+  "description": "A project-owned, self-hosted language model built and operated from an Amosclaud folder workspace.",
+  "artifact_format": "amosclaud-folder-checkpoint-v1",
+  "capabilities": [
+    "text-generation",
+    "chat-completion",
+    "local-inference",
+    "folder-based-training"
+  ],
+  "interfaces": [
+    "openai-compatible-chat-completions",
+    "amosclaud-native-model-api"
+  ],
+  "authentication": [
+    "amosclaud-api-key",
+    "amosclaud-model-token"
+  ],
+  "generation": {
+    "context_window": 4096,
+    "max_output_tokens": 512,
+    "default_temperature": 0.35
+  },
+  "training": {
+    "method": "folder-dataset-ingestion",
+    "license_audit_required": true,
+    "continuous_learning": false
+  },
+  "data_policy": {
+    "stores_api_keys": false,
+    "stores_raw_prompts_in_metadata": false,
+    "training_requires_explicit_dataset_import": true
+  },
+  "status": "development"
+}
