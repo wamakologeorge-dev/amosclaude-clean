@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mapping Bundles · Amosclaud</title>
+  <link rel="stylesheet" href="/static/mapping-bundles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">AMOSCLAUD DATA SYSTEM</p>
+      <h1>Mapping Bundles</h1>
+      <p class="subtitle">Build, inspect, download, and manage verified <strong>Amosclaud.bytes</strong> packages.</p>
+    </div>
+    <nav><a href="/cloud/agent">Agent</a><a href="/repositories">Repositories</a></nav>
+  </header>
+
+  <main>
+    <section class="metrics" aria-label="Bundle metrics">
+      <article><span>Bundles</span><strong id="bundle-count">0</strong></article>
+      <article><span>Total storage</span><strong id="total-bytes">0 B</strong></article>
+      <article><span>Mappings</span><strong id="mapping-count">0</strong></article>
+      <article><span>Container</span><strong>Amosclaud.bytes</strong></article>
+    </section>
+
+    <section class="workspace">
+      <article class="panel creator">
+        <div class="panel-head"><div><p class="eyebrow">CREATE PACKAGE</p><h2>New byte bundle</h2></div></div>
+        <form id="bundle-form">
+          <div class="row"><label>Name<input id="name" required placeholder="model-routing"></label><label>Version<input id="version" required value="1.0.0"></label></div>
+          <label>Mappings JSON<textarea id="mappings" rows="11" spellcheck="false">{
+  "gpt-4.1-mini": {
+    "provider": "openai",
+    "route": "/v1/chat/completions"
+  }
+}</textarea></label>
+          <label>Metadata JSON<textarea id="metadata" rows="5" spellcheck="false">{
+  "purpose": "Amosclaud model routing"
+}</textarea></label>
+          <div class="form-actions"><button type="submit">Create Amosclaud.bytes</button><span id="form-message" role="status"></span></div>
+        </form>
+      </article>
+
+      <article class="panel inventory">
+        <div class="panel-head">
+          <div><p class="eyebrow">LIVE INVENTORY</p><h2>Bundle library</h2></div>
+          <input id="search" class="search" placeholder="Search bundles">
+        </div>
+        <div id="storage-bars" class="storage-bars" aria-label="Bundle byte sizes"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Bundle</th><th>Version</th><th>Mappings</th><th>Bytes</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="bundle-rows"></tbody>
+          </table>
+        </div>
+        <div id="empty" class="empty" hidden>No mapping bundles yet. Create the first Amosclaud.bytes package.</div>
+      </article>
+    </section>
+
+    <dialog id="inspect-dialog">
+      <div class="dialog-head"><h2>Bundle manifest</h2><button id="close-dialog" aria-label="Close">×</button></div>
+      <pre id="manifest"></pre>
+    </dialog>
+  </main>
+  <script src="/static/mapping-bundles.js" defer></script>
+</body>
+</html>
