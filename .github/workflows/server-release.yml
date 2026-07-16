@@ -39,6 +39,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           VERSION="${RELEASE_TAG#server-v}"
+          VERSION="${VERSION//\//-}"
           ROOT="Amosclaud-Agent-Server-${VERSION}"
           mkdir -p "release/${ROOT}"
           git archive HEAD | tar -x -C "release/${ROOT}"
@@ -61,7 +62,7 @@ jobs:
       - name: Upload build evidence
         uses: actions/upload-artifact@v4
         with:
-          name: amosclaud-agent-server-${{ github.ref_name }}
+          name: amosclaud-agent-server-${{ github.run_id }}
           path: |
             release/*.zip
             release/*.tar.gz

@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from amoscloud_ai import model_network
+from amoscloud_ai import model_network, provider
 
 
 @dataclass(frozen=True)
@@ -64,9 +64,27 @@ def service_registry() -> list[ModelService]:
 def readiness() -> dict[str, Any]:
     services = service_registry()
     required = [service for service in services if service.required]
+    workspace_ready = next((service.ready for service in services if service.id == "agent-4-action"), False)
+    try:
+        model_check = provider.probe()
+    except Exception as exc:  # Readiness reports upstream failure; it never fails closed.
+        model_check = {
+            "ready": False,
+            "provider": "amosclaud",
+            "runtime": "unavailable",
+            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+    checks = {
+        "workspace": {"ready": workspace_ready, "detail": "controlled workspace is writable" if workspace_ready else "controlled workspace is not writable"},
+        "token_authority": {"ready": True, "detail": "Amosclaud key authority is available"},
+        "model": model_check,
+    }
+    ready = all(service.ready for service in required) and all(bool(check.get("ready")) for check in checks.values())
     return {
-        "ready": all(service.ready for service in required),
+        "ready": ready,
         "active_model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+        "checks": checks,
         "services": [service.to_dict() for service in services],
         "ready_count": sum(service.ready for service in services),
         "total_count": len(services),

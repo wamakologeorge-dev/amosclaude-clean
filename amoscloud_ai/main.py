@@ -43,13 +43,19 @@ from amoscloud_ai.api.routes import (
     core,
     deployments,
     downloads,
+    doctor_medical,
+    doctor_travel,
     feed,
     first_party_chat,
     github_repositories,
     github_travel,
     health,
     local_workspace,
+    mapping_bundles,
+    model_server_folder,
+    metadata_dashboard,
     organizations,
+    openai_compat,
     passkey_signup,
     pipelines,
     provider_api,
@@ -64,10 +70,12 @@ from amoscloud_ai.api.routes import (
     wifi,
     webhooks,
     workspaces,
+    control_bus_dashboard,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.config import settings
 from amoscloud_ai.core.workspace import WorkspaceEngine
+from amoscloud_ai.server.cb import router as amosclaud_cb_router
 from amoscloud_ai.db_migrations import run_migrations
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
@@ -151,6 +159,15 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     app.include_router(health.router)
+    # Mount service routers directly on the application. New FastAPI releases
+    # preserve nested APIRouters as wrapper entries, which made these endpoints
+    # invisible to route discovery and prevented agent tools from executing.
+    app.include_router(model_server_folder.router, prefix="/api/v1")
+    app.include_router(openai_compat.router)
+    app.include_router(mapping_bundles.api_router, prefix="/api/v1")
+    app.include_router(mapping_bundles.dashboard_router)
+    app.include_router(control_bus_dashboard.router)
+    app.include_router(amosclaud_cb_router, prefix="/api/v1")
     app.include_router(first_party_chat.router)
     app.include_router(chat.router, include_in_schema=False)
     app.include_router(auth.router, prefix="/api/v1")
@@ -162,6 +179,7 @@ def create_app() -> FastAPI:
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent_chain.router, prefix="/api/v1")
+    app.include_router(metadata_dashboard.router, prefix="/api/v1/agent-chain")
     app.include_router(agent.router, prefix="/api/v1")
     app.include_router(agent_buddies.router, prefix="/api/v1")
     app.include_router(agent_readiness.router, prefix="/api/v1")
@@ -189,6 +207,8 @@ def create_app() -> FastAPI:
     app.include_router(feed.router, prefix="/api/v1")
     app.include_router(amos_mail.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(doctor_medical.router, prefix="/api/v1")
+    app.include_router(doctor_travel.router, prefix="/api/v1")
     app.include_router(core.router, prefix="/api/v1")
     app.include_router(academy.router, prefix="/api/v1")
     app.include_router(amo_tokens.router, prefix="/api/v1")

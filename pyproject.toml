@@ -33,6 +33,7 @@ Documentation = "https://amosclaud.com/docs"
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"
 amosclaud-runner = "amoscloud_ai.runner_client:main"
+amosclaud-agent = "amosclaud_agent_sdk.cli:main"
 amosclaud-memory = "amoscloud_ai.virtual_memory:main"
 amosclaud-agent-memory = "amoscloud_ai.agent_memory:main"
 amosclaud-autonomous-setup = "amoscloud_ai.agent.bootstrap:main"
@@ -47,6 +48,7 @@ amosclaud-tamper-server = "Amosclaud.api.path.byte.server.router.folder.cb.chapt
 include = [
   "Amosclaud*",
   "amoscloud_ai*",
+  "amosclaud_agent_sdk*",
   "amosclaud_language*",
   "amosclaud_model*",
   "amosclaud_metrics*",

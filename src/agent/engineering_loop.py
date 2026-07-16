@@ -86,7 +86,11 @@ class AutonomousEngineeringLoop:
         if mode == "fix" and not authorized_writes:
             blocker = "Fix mode requires explicit write authorization"
             record(LoopPhase.PLAN, "blocked", blocker)
-            return self._finish(started, objective, criteria, [], changed, checks, events, lessons, blocker)
+            outcome = self._finish(
+                started, objective, criteria, [], changed, checks, events, lessons, blocker
+            )
+            outcome.status = "blocked"
+            return outcome
 
         plan = self._plan(objective, evidence, mode)
         record(LoopPhase.PLAN, "passed", "Created a bounded engineering plan.", plan)
