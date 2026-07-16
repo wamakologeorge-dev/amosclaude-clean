@@ -19,6 +19,8 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from amosclaud_model.metadata import runtime_model_metadata
+
 STATION_NAME = os.getenv("AMOSCLAUD_STATION_NAME", "Amosclaud Model Station").strip()
 BACKEND = os.getenv("AMOSCLAUD_MODEL_BACKEND", "ollama").strip().lower()
 UPSTREAM_URL = (
@@ -317,6 +319,17 @@ def models(
             }
         ],
     }
+
+
+@app.get("/v1/model_metadata")
+def model_metadata(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict[str, Any]:
+    """Return the canonical model contract plus current runtime state."""
+    _authorize(authorization, x_api_key)
+    ready = _folder_model_instance is not None or _last_runtime not in {"", "not_loaded"}
+    return runtime_model_metadata(FOLDER_MODEL_ROOT, runtime=_last_runtime, ready=ready)
 
 
 @app.post("/v1/chat/completions")

@@ -3,7 +3,8 @@
 This deployment runs three cooperating services:
 
 1. **Ollama** hosts the model checkpoint.
-2. **Model Station** exposes fast `/health`, protected `/ready`, `/v1/models`, and
+2. **Model Station** exposes fast `/health`, protected `/ready`, `/v1/models`,
+   `/v1/model_metadata`, and
    OpenAI-compatible `/v1/chat/completions`.
 3. **Station Runner** sends heartbeats, advertises `model.inference`, claims encrypted cloud requests, calls the local model, and returns the result.
 

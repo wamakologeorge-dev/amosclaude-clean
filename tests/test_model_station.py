@@ -48,6 +48,12 @@ def test_amosclaud_api_key_is_accepted(monkeypatch):
         client.get("/ready", headers={"Authorization": "Bearer amos_test_key"}).status_code == 200
     )
     assert client.get("/v1/models", headers={"X-API-Key": "amos_test_key"}).status_code == 200
+    metadata = client.get(
+        "/v1/model_metadata", headers={"Authorization": "Bearer amos_test_key"}
+    )
+    assert metadata.status_code == 200
+    assert metadata.json()["model_id"] == "amosclaud-folder-v1"
+    assert metadata.json()["data_policy"]["stores_api_keys"] is False
 
 
 def test_owned_folder_model_is_created_when_upstream_is_missing(monkeypatch, tmp_path):
