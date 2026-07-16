@@ -38,12 +38,12 @@ class KVCache:
             if self.value is None:
                 raise ValueError("KV cache key exists without a value tensor")
             same_prefix = (
-                self.key.shape[: self.sequence_dim]
-                == new_key.shape[: self.sequence_dim]
+                self.key.shape[:self.sequence_dim]
+                == new_key.shape[:self.sequence_dim]
             )
             same_suffix = (
-                self.key.shape[self.sequence_dim + 1 :]
-                == new_key.shape[self.sequence_dim + 1 :]
+                self.key.shape[self.sequence_dim + 1:]
+                == new_key.shape[self.sequence_dim + 1:]
             )
             if not (same_prefix and same_suffix):
                 raise ValueError(
