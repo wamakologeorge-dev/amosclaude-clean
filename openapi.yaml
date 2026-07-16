@@ -8,6 +8,54 @@ servers:
 security:
   - bearerApiKey: []
 paths:
+  /agent/buddies/health:
+    get:
+      operationId: checkAgentBuddiesServer
+      summary: Check the Amosclaud Agent Buddies API server
+      security: []
+      responses:
+        '200': {description: Buddies status service is alive}
+  /agent/buddies/status:
+    get:
+      operationId: getAgentBuddiesStatus
+      summary: Return heartbeat-derived status for every owned agent buddy
+      responses:
+        '200': {description: Truthful buddy presence, workload, and team readiness}
+        '401': {description: Sign-in or Amosclaud Autonomous API key required}
+  /agent/buddies/status/respond:
+    get:
+      operationId: respondAgentBuddiesStatus
+      summary: Return a compact monitoring response for the buddy team
+      responses:
+        '200': {description: Compact responding and online-buddy counts}
+  /agent/buddies/{buddy_id}/heartbeat:
+    post:
+      operationId: heartbeatAgentBuddy
+      summary: Register or refresh an authenticated agent buddy
+      parameters:
+        - in: path
+          name: buddy_id
+          required: true
+          schema: {type: string, pattern: '^[a-z0-9][a-z0-9._-]{1,63}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name: {type: string}
+                role: {type: string}
+                status: {enum: [idle, working, blocked, draining]}
+                capabilities: {type: array, items: {type: string}}
+                active_tasks: {type: integer, minimum: 0}
+                capacity: {type: integer, minimum: 1}
+                version: {type: string}
+                detail: {type: string}
+      responses:
+        '200': {description: Current derived status for this buddy}
+        '401': {description: Invalid Amosclaud Autonomous API key}
   /bundles/health:
     get:
       operationId: checkBundlesApiHost
