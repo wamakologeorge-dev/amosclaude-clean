@@ -55,6 +55,11 @@ include = [
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
+[tool.setuptools.package-data]
+Amosclaud = [
+  "server.cb/api.cb/rest.cb/next.cb/cmood.cb/remote.cb/meta-package.cb/autonomous.cb/command.cb/bumps.cb/byte.cb/pages.cb/router.cb/graphics.cb/agent.cb/word.cb/global.cb/.com.cb/path.cb/engine.cb/github.cb/yml.cb/ci.cb/meter.cb/matrix.cb/3d.cb/localhost.cb/programming.bytes.system.cb/*",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
