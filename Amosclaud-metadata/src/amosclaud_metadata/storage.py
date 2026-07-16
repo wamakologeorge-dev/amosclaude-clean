@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import threading
 from typing import Any
+import uuid
 
 from .models import MetadataEnvelope
 from .validation import validate_envelope
@@ -15,7 +16,7 @@ from .validation import validate_envelope
 class JsonMetadataStore:
     """Persist one immutable JSON document for every metadata record.
 
-    Every path is resolved below a designated root. Writes go through a
+    Every path is resolved below a designated root. Writes use a process-unique
     temporary file, are flushed to disk, and are atomically moved into place.
     Existing record IDs are never overwritten.
     """
@@ -56,23 +57,33 @@ class JsonMetadataStore:
                     f"{envelope.record_id}"
                 )
 
-            temporary = destination.with_suffix(destination.suffix + ".tmp")
+            temporary = destination.with_name(
+                f".{destination.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+            )
             payload = json.dumps(
                 envelope.to_dict(),
                 indent=2,
                 sort_keys=True,
                 ensure_ascii=False,
             ) + "\n"
+            created_temporary = False
 
             try:
                 with temporary.open("x", encoding="utf-8") as handle:
+                    created_temporary = True
                     handle.write(payload)
                     handle.flush()
                     os.fsync(handle.fileno())
+
+                if destination.exists():
+                    raise FileExistsError(
+                        "metadata record already exists: "
+                        f"{envelope.record_id}"
+                    )
                 os.replace(temporary, destination)
-            except Exception:
-                temporary.unlink(missing_ok=True)
-                raise
+            finally:
+                if created_temporary:
+                    temporary.unlink(missing_ok=True)
 
         return destination
 
