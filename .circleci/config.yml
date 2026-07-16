@@ -36,7 +36,11 @@ jobs:
           name: Focused platform tests
           command: |
             . .venv/bin/activate
-            pytest -q tests/test_metadata_dashboard.py tests/test_tampered_data_server.py
+            pytest -q \
+              tests/test_server.py \
+              tests/test_assistant_system_template.py \
+              tests/test_metadata_dashboard.py \
+              tests/test_amosclaud_tamper_server.py
 
 workflows:
   verify-main:
