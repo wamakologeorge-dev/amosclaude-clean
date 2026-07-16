@@ -1,15 +1,19 @@
-"""Mapping-bundles API used by the Amosclaud dashboard."""
+"""Mapping-bundles API and dashboard routes."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.mapping_bundles import MappingBundleStore
 
-router = APIRouter(prefix="/mapping-bundles", tags=["mapping-bundles"])
+api_router = APIRouter(prefix="/mapping-bundles", tags=["mapping-bundles"])
+dashboard_router = APIRouter(tags=["mapping-bundles-dashboard"])
 store = MappingBundleStore()
+WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 
 
 class BundleCreate(BaseModel):
@@ -26,7 +30,14 @@ def _require_user(request: Request) -> dict:
     return dict(user)
 
 
-@router.get("")
+@dashboard_router.get("/mapping-bundles", include_in_schema=False)
+def mapping_bundles_dashboard(request: Request):
+    if not get_user_from_session(request.cookies.get("amos_session")):
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(WEB_DIR / "mapping-bundles.html")
+
+
+@api_router.get("")
 def list_bundles(request: Request) -> dict:
     _require_user(request)
     bundles = store.list()
@@ -41,7 +52,7 @@ def list_bundles(request: Request) -> dict:
     }
 
 
-@router.post("", status_code=201)
+@api_router.post("", status_code=201)
 def create_bundle(body: BundleCreate, request: Request) -> dict:
     user = _require_user(request)
     metadata = dict(body.metadata)
@@ -58,7 +69,7 @@ def create_bundle(body: BundleCreate, request: Request) -> dict:
     return record.as_dict()
 
 
-@router.get("/{filename}")
+@api_router.get("/{filename}")
 def inspect_bundle(filename: str, request: Request) -> dict:
     _require_user(request)
     try:
@@ -69,23 +80,23 @@ def inspect_bundle(filename: str, request: Request) -> dict:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.get("/{filename}/download")
+@api_router.get("/{filename}/download")
 def download_bundle(filename: str, request: Request) -> FileResponse:
     _require_user(request)
     path = store.root / filename
     if not path.is_file() or path.name != filename:
         raise HTTPException(status_code=404, detail="Bundle not found")
-    return FileResponse(
-        path,
-        filename=path.name,
-        media_type="application/vnd.amosclaud.bytes",
-    )
+    return FileResponse(path, filename=path.name, media_type="application/vnd.amosclaud.bytes")
 
 
-@router.delete("/{filename}", status_code=204)
+@api_router.delete("/{filename}", status_code=204)
 def delete_bundle(filename: str, request: Request) -> None:
     _require_user(request)
     try:
         store.delete(filename)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Bundle not found") from exc
+
+
+# Backward-compatible name for code that imports `router`.
+router = api_router
