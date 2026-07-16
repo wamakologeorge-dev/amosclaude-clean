@@ -13,6 +13,10 @@
   let controller = null;
   let activityExpanded = true;
 
+  function publish(name, detail = {}) {
+    window.dispatchEvent(new CustomEvent(`amosclaud:${name}`, { detail }));
+  }
+
   const activityToolbar = document.createElement('div');
   activityToolbar.className = 'agent-activity-toolbar';
   activityToolbar.innerHTML = '<strong>Agent console</strong><button id="btn-toggle-agent-activity" class="btn-agent-activity" type="button" aria-expanded="true">Hide activity</button>';
@@ -72,6 +76,7 @@
     if (!item) return;
     item.className = state;
     item.querySelector('small').textContent = note;
+    publish('agent-phase', { index, phase: phases[index], state, note });
   }
 
   function renderResult(data, board) {
@@ -94,6 +99,7 @@
     result.querySelector('pre').textContent = (Array.isArray(data.logs) ? data.logs : []).join('\n') || 'No additional logs returned.';
     replies.appendChild(result);
     updateActivityView();
+    publish('agent-result', data);
   }
 
   function statusClass(label, busy) {
@@ -158,6 +164,7 @@
     const mode = modeInput.value;
     if (!objective) { objectiveInput.focus(); return; }
     addMessage(objective, 'user');
+    publish('agent-start', { objective, mode });
     const board = addPhaseBoard(mode, objective);
     objectiveInput.value = '';
     controller = new AbortController();
@@ -176,6 +183,7 @@
     } catch (error) {
       setPhase(board, 4, 'failed', error.name === 'AbortError' ? 'Task stopped' : error.message);
       addMessage(error.name === 'AbortError' ? 'The agent task was stopped.' : `Amosclaud could not finish this request: ${error.message}`, 'agent', 'agent-error');
+      publish('agent-error', { message: error.name === 'AbortError' ? 'Task stopped by user' : error.message });
       setBusy(false, error.name === 'AbortError' ? 'stopped' : 'error');
     } finally { controller = null; objectiveInput.focus(); }
   }
