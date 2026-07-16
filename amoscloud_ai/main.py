@@ -35,6 +35,7 @@ from amoscloud_ai.api.routes import (
     amos_secure_code,
     auth,
     billing,
+    bundles_api_host,
     chat,
     community,
     copilot,
@@ -153,6 +154,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(auth.router, include_in_schema=False)
     app.include_router(billing.router, prefix="/api/v1")
+    app.include_router(bundles_api_host.router, prefix="/api/v1")
     app.include_router(provider_api.router, prefix="/api/v1")
     app.include_router(account.router, prefix="/api/v1")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
@@ -290,6 +292,15 @@ def create_app() -> FastAPI:
         if not bool(user["is_admin"]):
             return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "wifi.html")
+
+    @app.get("/admin/bundles", include_in_schema=False)
+    async def bundles_api_docs_page(request: Request):
+        user = get_user_from_session(request.cookies.get("amos_session"))
+        if not user:
+            return RedirectResponse("/login", status_code=302)
+        if not bool(user["is_admin"]):
+            return RedirectResponse("/cloud/agent", status_code=302)
+        return FileResponse(web_dir / "bundles-api-docs.html")
 
     @app.get("/mail", include_in_schema=False)
     async def mail_page(request: Request):
