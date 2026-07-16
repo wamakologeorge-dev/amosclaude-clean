@@ -64,7 +64,12 @@ def _load_records(limit: int = 200) -> tuple[list[dict[str, Any]], list[str]]:
 
     records: list[dict[str, Any]] = []
     invalid: list[str] = []
-    for path in sorted(root.rglob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+    paths = sorted(
+        root.rglob("*.json"),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    )
+    for path in paths:
         if len(records) >= limit:
             break
         try:
@@ -74,7 +79,8 @@ def _load_records(limit: int = 200) -> tuple[list[dict[str, Any]], list[str]]:
             elif isinstance(raw, list):
                 for index, item in enumerate(raw):
                     if isinstance(item, dict):
-                        records.append(_safe_summary(item, path.with_name(f"{path.stem}-{index}.json")))
+                        item_path = path.with_name(f"{path.stem}-{index}.json")
+                        records.append(_safe_summary(item, item_path))
                         if len(records) >= limit:
                             break
         except (OSError, json.JSONDecodeError, ValueError):
