@@ -14,6 +14,7 @@
     'proceed', 'start', 'start now', 'do it', 'build it', 'fix it', 'make it',
     'deploy it', 'continue', 'go ahead', 'yes proceed', 'yes start', 'execute',
   ]);
+  const shortAffirmations = new Set(['yes', 'yes please', 'okay', 'ok', 'sure']);
 
   function publish(name, detail = {}) {
     window.dispatchEvent(new CustomEvent(`amosclaud:${name}`, { detail }));
@@ -54,6 +55,21 @@
     conversation.push({ role, content: String(content).slice(0, 4000) });
     if (conversation.length > 20) conversation.splice(0, conversation.length - 20);
     saveState();
+  }
+
+  function lastAssistantMessage() {
+    return [...conversation].reverse().find(item => item.role === 'assistant')?.content || '';
+  }
+
+  function isExecutionConfirmation(text) {
+    const value = normalise(text);
+    if (confirmationPhrases.has(value)) return true;
+    if (!shortAffirmations.has(value)) return false;
+    return /\b(edit|change|fix|build|create|deploy|execute|start|apply|repository|verify)\b/i.test(lastAssistantMessage());
+  }
+
+  function executionObjective(text, confirmed) {
+    return confirmed && shortAffirmations.has(normalise(text)) ? 'proceed' : text;
   }
 
   function identifyIntent(text) {
@@ -129,7 +145,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode,
-        objective: raw,
+        objective: executionObjective(raw, confirmed),
         branch: 'main',
         metadata: {
           branch: 'main',
@@ -154,7 +170,7 @@
     objectiveInput.value = '';
     objectiveInput.style.height = '';
 
-    const confirmed = confirmationPhrases.has(normalise(raw));
+    const confirmed = isExecutionConfirmation(raw);
     controller = new AbortController();
     setStatus(confirmed ? 'executing' : 'writing', true);
     const presence = addPresence(
