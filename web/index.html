@@ -1,13 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-amosclaud-head="true">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0d1117" />
-  <meta name="application-name" content="Amosclaud" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <title>Amosclaud Autonomous</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
@@ -17,60 +13,40 @@
   <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
 </head>
 <body class="single-autonomous-page">
-  <div id="app">
-    <header class="single-topbar">
-      <a class="single-brand" href="/">Amosclaud</a>
-      <nav class="single-nav" aria-label="Primary navigation">
-        <a class="active" href="/">Autonomous</a>
-        <a href="/repositories">Repositories</a>
-        <a href="/bundles">Results</a>
-      </nav>
-      <div class="single-account"><span id="current-user" class="user-pill">Loading…</span><button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button></div>
-    </header>
-
-    <main class="single-autonomous-shell">
-      <section class="single-heading">
-        <span id="agent-status" class="single-status">ready</span>
-        <h1>What can Autonomous do for you?</h1>
-        <p>Ask anything. Autonomous can talk with you, use selected repository or result context, and execute one confirmed job at a time.</p>
-      </section>
-
-      <section class="single-agent-card" aria-label="Amosclaud Autonomous">
-        <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
-          <div class="agent-reply muted">Welcome, George. I’m Amosclaud Autonomous. Ask anything or type @ to add context.</div>
+  <main class="single-autonomous-shell">
+    <section class="single-agent-card" aria-label="Amosclaud Autonomous">
+      <header class="single-agent-head">
+        <div>
+          <strong>Amosclaud Autonomous</strong>
+          <span id="agent-status">ready</span>
         </div>
+      </header>
 
-        <div class="single-composer-wrap">
-          <div id="autonomous-context-chips" class="autonomous-context-chips" aria-live="polite"></div>
-          <div id="autonomous-context-menu" class="autonomous-context-menu" hidden>
-            <div class="context-menu-head"><strong>Add context</strong><button id="close-context-menu" type="button" aria-label="Close">×</button></div>
-            <div id="autonomous-context-results" class="autonomous-context-results"><span>Loading real repositories and results…</span></div>
-          </div>
-          <textarea id="agent-objective-input" rows="3" placeholder="Ask anything or type @ to add context"></textarea>
-          <input id="agent-mode-input" type="hidden" value="autonomous-check" />
-          <div class="single-composer-actions">
-            <button id="open-context-menu" class="context-button" type="button" aria-label="Add context">@</button>
-            <span>Autonomous</span>
-            <button id="btn-run-agent" class="single-send" type="button" aria-label="Send">➤</button>
-          </div>
-        </div>
-      </section>
+      <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
+        <div class="agent-reply muted">Welcome, George. Ask anything.</div>
+      </div>
 
-      <section class="single-shortcuts" aria-label="Suggested requests">
-        <button type="button" data-agent-suggestion="Create a source bundle from @repository and show the verified result.">Create</button>
-        <button type="button" data-agent-suggestion="Inspect @repository and explain what needs attention.">Inspect</button>
-        <button type="button" data-agent-suggestion="Fix the confirmed problem in @repository and verify it.">Fix + verify</button>
-        <button type="button" data-agent-suggestion="Show my latest verified results.">Results</button>
-      </section>
-    </main>
-  </div>
+      <div class="single-composer">
+        <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+        <input id="agent-mode-input" type="hidden" value="autonomous-check" />
+      </div>
+    </section>
+  </main>
+
+  <nav class="single-dock" aria-label="Amosclaud dock">
+    <a class="active" href="/" aria-label="Autonomous">Auto</a>
+    <a href="/repositories" aria-label="Repositories">Repository</a>
+    <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+    <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
+    <a href="/" aria-label="Home">Home</a>
+  </nav>
 
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
-  <script src="/static/autonomous-context.js"></script>
   <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
+  <script src="/static/single-autonomous-dock.js"></script>
   <script src="/static/app-install.js"></script>
 </body>
 </html>
