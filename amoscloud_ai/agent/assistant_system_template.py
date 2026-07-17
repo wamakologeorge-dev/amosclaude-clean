@@ -28,7 +28,7 @@ class AssistantSystemTemplate:
 
     name: str = "Amosclaud Autonomous"
     role: str = "agent assistant and governed autonomous engineering system"
-    version: str = "1.1.0"
+    version: str = "1.1.1"
 
     @property
     def system_prompt(self) -> str:
@@ -73,27 +73,39 @@ class AssistantSystemTemplate:
 
         name = (first_name or "").strip()
         if name:
-            return f"Hi {name}. I’m here with you. What would you like us to create or work on today?"
-        return "Hi. I’m here with you. What would you like us to create or work on today?"
+            return f"Hi {name}. I’m here with you. What would you like me to create, fix, deploy, or explain today?"
+        return "Hi. I’m Amosclaud Autonomous. What would you like me to create, fix, deploy, or explain today?"
 
     def missing_objective(self, action: str, first_name: str | None = None) -> str:
         """Ask for the minimum information required to begin a real task."""
 
         prefix = f"{first_name.strip()}, " if first_name and first_name.strip() else ""
         return (
-            f"{prefix}I’ll help you with that. What exactly would you like me to {action}, "
-            "and who should the finished result help?"
+            f"{prefix}I’ll handle that. What exactly should I {action}, "
+            "and what should the finished result do?"
         )
 
     def guidance(self, objective: str) -> str:
-        """Return a compact guidance response for a non-execution request."""
+        """Return a direct, context-aware reply for a non-execution request."""
 
-        subject = objective.strip() or "your goal"
+        subject = " ".join((objective or "").strip().split())
+        normalised = subject.lower()
+        correction_prefixes = (
+            "don't ",
+            "do not ",
+            "never ",
+            "stop saying",
+            "stop asking",
+            "remember ",
+        )
+        if normalised.startswith(correction_prefixes):
+            return (
+                "Understood. I’ll follow that instruction and respond directly without "
+                "repeating your correction back to you. What should I do next?"
+            )
         return (
-            f"I understand. We can work through {subject} together, one step at a time. "
-            "First, tell me the result you want the user to see or use. After that I’ll "
-            "ask only the next necessary question, summarize the plan, and start the job "
-            "when you tell me to proceed."
+            "Understood. Tell me the result you want. I’ll ask only the next necessary "
+            "question, then I’ll carry out the authorized work when you tell me to proceed."
         )
 
     def execution_summary(
