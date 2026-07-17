@@ -1,8 +1,9 @@
 """Canonical Amosclaud OS kernel.
 
 This module is the single composition root for Autonomous execution. UI routes,
-APIs, background jobs, Mini Autonomous, model services, and future OS layers
-must call this kernel instead of constructing independent brains.
+APIs, background jobs, Mini Autonomous, model services, documents, repository
+operations, and future OS layers must call this kernel instead of constructing
+independent brains.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from time import monotonic
 from typing import Any
 
 from src.agent.actions import AutonomousOrchestrator, AutonomousTask
+from src.amosclaud_os.intelligence import AutonomousConnectorHub, ModelEngine
 
 
 @dataclass(frozen=True)
@@ -21,7 +23,7 @@ class SystemIdentity:
     driver: str = "Amosclaud Autonomous"
     architecture: str = "single-autonomous-kernel"
     authority: str = "founder-governed"
-    version: str = "3.0.0"
+    version: str = "3.1.0"
 
 
 class AutonomousKernel:
@@ -32,6 +34,8 @@ class AutonomousKernel:
         self.identity = SystemIdentity()
         self._lock = RLock()
         self._orchestrator = AutonomousOrchestrator(self.workspace)
+        self.model_engine = ModelEngine()
+        self.connectors = AutonomousConnectorHub(self.workspace)
         self._started = monotonic()
         self._missions = 0
 
@@ -44,6 +48,7 @@ class AutonomousKernel:
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Execute one governed mission through the canonical Autonomous brain."""
+        model_route = self.model_engine.route(objective)
         task = AutonomousTask(
             objective=objective,
             mode=mode,
@@ -52,13 +57,47 @@ class AutonomousKernel:
                 "system": self.identity.product,
                 "driver": self.identity.driver,
                 "architecture": self.identity.architecture,
+                "model_route": model_route,
                 **dict(metadata or {}),
             },
         )
         with self._lock:
             self._missions += 1
             outcome = self._orchestrator.run(task).to_dict()
+        outcome["model_route"] = model_route
+        outcome["available_capabilities"] = self.connectors.capabilities()
         return self._stamp(outcome)
+
+    def model_respond(
+        self,
+        *,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Use the model as one capability of the same Autonomous kernel."""
+        with self._lock:
+            result = self.model_engine.respond(prompt, context=context).to_dict()
+        return self._stamp(result)
+
+    def read_document(self, relative_path: str) -> dict[str, Any]:
+        with self._lock:
+            result = self.connectors.read_document(relative_path)
+        return self._stamp(result)
+
+    def write_document(
+        self,
+        relative_path: str,
+        content: str,
+        *,
+        authorized_writes: bool = False,
+    ) -> dict[str, Any]:
+        with self._lock:
+            result = self.connectors.write_document(
+                relative_path,
+                content,
+                authorized=authorized_writes,
+            )
+        return self._stamp(result)
 
     def assist(
         self,
@@ -112,6 +151,9 @@ class AutonomousKernel:
             "missions_started": self._missions,
             "uptime_seconds": round(monotonic() - self._started, 3),
             "single_source": "src.amosclaud_os.kernel.AutonomousKernel",
+            "model": self.model_engine.configuration(),
+            "capabilities": self.connectors.capabilities(),
+            "jobs": self.connectors.jobs(),
             "entry_points": [
                 "assistant",
                 "engineering-loop",
@@ -119,6 +161,13 @@ class AutonomousKernel:
                 "agent-operations",
                 "mission-control",
                 "model-router",
+                "model-response",
+                "documents",
+                "read-write",
+                "clone-fork-remote",
+                "server-connector",
+                "jobs-command-panel",
+                "ci-results",
                 "recovery-doctor",
                 "learning-academy",
             ],
