@@ -92,7 +92,7 @@ _EXPLAIN = ("explain", "what does", "what is", "why does", "walk me through")
 _TEACH = ("teach me", "guide me", "show me how", "learn how", "step by step")
 _EXAMPLE = ("show me code", "show an example", "give me an example", "sample code", "code example")
 _INSPECT = ("inspect", "review", "diagnose", "check the code", "find the problem")
-_CHANGE = ("build", "create", "fix", "change", "update", "refactor", "implement", "add", "remove", "delete")
+_CHANGE = ("build", "create", "write", "fix", "change", "update", "refactor", "implement", "add", "remove", "delete")
 _DEPLOY = ("deploy", "release", "publish to production")
 _MONITOR = ("monitor", "watch status", "keep watching")
 _TEST = ("run tests", "run the tests", "test the project", "verify the code")
@@ -134,8 +134,11 @@ def analyze_message(message: str, *, previous_objective: str | None = None) -> C
             clarification_question="What would you like me to help you accomplish?",
         )
 
-    explicit_execute = _contains(text, _EXECUTE)
     explicit_no_execute = _contains(text, _NO_EXECUTE)
+    execution_text = text
+    for phrase in _NO_EXECUTE:
+        execution_text = execution_text.replace(phrase, " ")
+    explicit_execute = _contains(execution_text, _EXECUTE)
     explanation = _contains(text, _EXPLAIN) or _contains(text, _TEACH)
     example = _contains(text, _EXAMPLE)
     deploy = _contains(text, _DEPLOY)
