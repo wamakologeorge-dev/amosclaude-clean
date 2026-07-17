@@ -416,6 +416,15 @@ def load_environment(project_id: str) -> dict[str, str]:
     return result
 
 
+def resolve_within(base: Path, *parts: str) -> Path:
+    candidate = (base.joinpath(*parts)).resolve()
+    try:
+        candidate.relative_to(base.resolve())
+    except ValueError as exc:
+        raise HTTPException(400, "Path escapes allowed directory") from exc
+    return candidate
+
+
 @app.post("/api/projects/{project_id}/runs", status_code=202)
 async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
     """
@@ -425,6 +434,11 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
     Dramatiq, or a server-station runner instead of executing inside the API
     process.
     """
+    try:
+        uuid.UUID(project_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid project id") from exc
+
     with connect() as db:
         project = db.execute(
             "SELECT * FROM projects WHERE id = ?", (project_id,)
@@ -448,10 +462,8 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
             (run_id, project_id, payload.objective, started_at, str(log_path)),
         )
 
-    workspace = (PROJECTS_DIR / project_id / project["root_path"]).resolve()
-    project_root = (PROJECTS_DIR / project_id).resolve()
-    if project_root not in workspace.parents and workspace != project_root:
-        raise HTTPException(400, "Root path escapes the project workspace")
+    project_root = resolve_within(PROJECTS_DIR, project_id)
+    workspace = resolve_within(project_root, project["root_path"])
     workspace.mkdir(parents=True, exist_ok=True)
 
     commands = [
@@ -489,12 +501,14 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
 
     output_path = project["output_path"].strip()
     if output_path:
-        output = (workspace / output_path).resolve()
-        if workspace not in output.parents and output != workspace:
+        try:
+            output = resolve_within(workspace, output_path)
+        except HTTPException:
             status = "failed"
             with log_path.open("a", encoding="utf-8") as log:
                 log.write("\nOutput path escapes workspace.\n")
-        elif output.exists():
+            output = None
+        if output is not None and output.exists():
             manifest = run_dir / "artifact-manifest.json"
             manifest.write_text(
                 json.dumps(
