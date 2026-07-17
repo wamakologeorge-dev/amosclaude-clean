@@ -10,6 +10,20 @@
     }
   }
 
+  function activateRepositoryShortcuts() {
+    const repositoryId = localStorage.getItem('amosclaud-last-repository-id');
+    const repositoryName = localStorage.getItem('amosclaud-last-repository-name');
+    if (!repositoryId) return;
+    document.querySelectorAll('a[href="/repositories"]').forEach(link => {
+      link.href = `/workspace/${encodeURIComponent(repositoryId)}`;
+      if (link.classList.contains('notebook-action')) link.textContent = 'My repository';
+      const strong = link.querySelector('strong');
+      const description = link.querySelector('span');
+      if (strong) strong.textContent = 'Open repository';
+      if (description) description.textContent = repositoryName || 'Continue your last repository';
+    });
+  }
+
   function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
@@ -51,6 +65,7 @@
     document.getElementById('install-amosclaud-app')?.remove();
   });
 
+  activateRepositoryShortcuts();
   registerServiceWorker();
   createInstallButton();
 })();

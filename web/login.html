@@ -34,7 +34,7 @@
       <p id="auth-subtitle" class="muted">Use your fingerprint, device security, or Amosclaud mail and password.</p>
 
       <button id="passkey-login-button" class="primary-button" type="button">Use fingerprint to sign in</button>
-      <div id="password-login-divider" class="hint" style="text-align:center;margin:18px 0 10px">or use your Amosclaud mail and password</div>
+      <div id="password-login-divider" class="hint" style="text-align:center;margin:18px 0 10px">or use your email address</div>
 
       <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">Full name<input id="name" name="name" autocomplete="name" minlength="2" /></label>
@@ -43,12 +43,14 @@
           <div class="address-input"><input id="username" name="amos-username" autocomplete="nickname" minlength="3" maxlength="32" /><span>@amosclaud.com</span></div>
         </label>
         <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+        <label id="email-code-field" class="hidden">Six-digit sign-in code<input id="email-code" name="email-code" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" pattern="[0-9]{6}" /></label>
         <p id="password-hint" class="hint hidden">Enter the password for this username. Amosclaud signs in when it exists and creates it only when it does not.</p>
         <section id="device-note" class="device-note hidden">
           <strong>Private device check</strong>
           <span>A new passkey is requested only when this account does not already exist. Your fingerprint, face, or PIN never goes to Amosclaud.</span>
         </section>
         <button id="submit-button" class="primary-button" type="submit">Sign in with password</button>
+        <button id="email-code-button" class="primary-button" type="button">Email me a sign-in code</button>
       </form>
 
       <p id="message" class="message" role="alert" aria-live="polite"></p>

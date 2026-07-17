@@ -6,6 +6,7 @@
   <title>Repository · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/workspace.css" />
+  <link rel="stylesheet" href="/static/workspace-chat.css" />
 </head>
 <body>
   <header class="ws-topbar">
@@ -81,8 +82,8 @@
     <section class="ws-panel" data-panel="autonomous">
       <div class="ws-section-head">
         <div>
-          <h2>Autonomous assistance</h2>
-          <p>Optional help only. Manual editing, commits, branches, and merges remain under your control.</p>
+          <h2>Autonomous</h2>
+          <p>Command the repository agent and receive live replies and verified results.</p>
         </div>
       </div>
       <div class="ws-autonomous-grid">
@@ -94,9 +95,17 @@
           <button id="ws-deploy" type="button">Ask Autonomous to prepare deployment</button>
         </section>
         <section class="ws-card ws-output-card">
-          <h3>Autonomous result</h3>
-          <div id="ws-run-state" class="ws-run-state" aria-live="polite">Idle</div>
-          <pre id="ws-output">Autonomous is idle. Select an optional operation to begin.</pre>
+          <div class="ws-chat-heading">
+            <h3>Autonomous chat</h3>
+            <div id="ws-run-state" class="ws-run-state" aria-live="polite">Ready</div>
+          </div>
+          <div id="ws-output" class="ws-chat-messages" aria-live="polite">
+            <div class="ws-chat-message agent">I am ready to work on this repository. Tell me what to build, fix, test, review, or deploy.</div>
+          </div>
+          <div class="ws-chat-compose">
+            <textarea id="ws-chat-input" rows="3" placeholder="Command Autonomous…"></textarea>
+            <button id="ws-chat-send" type="button">Send</button>
+          </div>
         </section>
       </div>
     </section>

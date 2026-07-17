@@ -4,12 +4,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from amoscloud_ai.agent_chain import MODE_SKILLS, agent_power_chain
-from amoscloud_ai.api.routes import metadata_dashboard
 from amoscloud_ai.api.routes.agent import run_agent
 from amoscloud_ai.models import AutonomousAgentRunRequest, AutonomousAgentRunResponse
 
 router = APIRouter(prefix="/agent-chain", tags=["agent-power-chain"])
-router.include_router(metadata_dashboard.router)
 
 
 @router.get("")
