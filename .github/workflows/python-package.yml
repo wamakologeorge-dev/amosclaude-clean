@@ -1,5 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# This workflow installs Python dependencies, runs tests, and captures failures.
 
 name: Python package
 
@@ -9,32 +8,71 @@ on:
   pull_request:
     branches: [ "main" ]
 
-jobs:
-  build:
+permissions:
+  contents: read
+  pull-requests: write
 
+jobs:
+  agent-status:
+    runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
+  build:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      run: |
-        pytest
+      - uses: actions/checkout@v7
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest pytest-cov
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Lint with flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Test with pytest
+        id: pytest
+        shell: bash
+        run: |
+          set +e
+          pytest tests/ -v > pytest-${{ matrix.python-version }}.log 2>&1
+          status=$?
+          cat pytest-${{ matrix.python-version }}.log
+          exit "$status"
+      - name: Upload backend test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-${{ matrix.python-version }}-diagnostics
+          path: pytest-${{ matrix.python-version }}.log
+          if-no-files-found: error
+      - name: Report backend test failure
+        if: failure() && github.event_name == 'pull_request' && matrix.python-version == '3.12'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo '### Backend tests failed'
+            echo
+            echo '```text'
+            tail -n 120 pytest-${{ matrix.python-version }}.log
+            echo '```'
+          } > pytest-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file pytest-comment.md

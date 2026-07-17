@@ -1,0 +1,147 @@
+name: 🚀 Amosclaud AI - CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  agent-status:
+    runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality & Linting
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black isort flake8
+
+      - run: black --check . || true
+      - run: isort --check-only . || true
+      - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
+
+  test:
+    runs-on: ubuntu-latest
+    name: Tests & Coverage
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: test-secret-key
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - run: |
+          pytest tests/ -v --cov=amoscloud_ai --cov-report=xml --cov-report=term-missing
+
+      - uses: codecov/codecov-action@v7
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    name: 🚀 Server Smoke Test
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      SECRET_KEY: test-secret-key
+      LOG_LEVEL: INFO
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx
+
+      - name: Start Amoscloud AI server
+        run: |
+          python -m amoscloud_ai.main &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          echo "Server started with PID $SERVER_PID"
+
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Server is up!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 2s..."
+            sleep 2
+          done
+          echo "❌ Server did not become ready after 15 attempts"
+          exit 1
+
+      - name: Verify health endpoint returns 200 OK
+        run: |
+          RESPONSE=$(curl -s http://localhost:8000/health)
+          echo "Health response: $RESPONSE"
+          echo "$RESPONSE" | python -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          assert d['status'] == 'ok', f'Expected ok, got {d}'
+          print('✅ Health check passed!')
+          "
+
+      - name: Run pytest against live server
+        run: |
+          pytest tests/ -v --tb=short
+
+      - name: Kill server
+        if: always()
+        run: |
+          kill "$SERVER_PID" || true
+
+  security:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - run: pip install bandit safety
+      - run: bandit -r src/ -f json -o bandit-report.json || true
+      - run: safety check --json || true

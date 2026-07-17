@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="application-name" content="Amosclaud" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Amosclaud" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Amosclaud Autonomous Cloud Agent</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/agent-visual.css" />
+  <link rel="stylesheet" href="/static/sidebar.css" />
+  <link rel="stylesheet" href="/static/notebook-dashboard.css" />
+  <link rel="stylesheet" href="/static/chat-scroll.css" />
+  <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
+  <link rel="stylesheet" href="/static/agent-console.css" />
+  <link rel="stylesheet" href="/static/live-autonomous-workbench.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="topbar-left"><h1>Amosclaud</h1><span class="version-badge">v1.0.1</span></div>
+      <div class="topbar-right">
+        <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
+        <span id="refresh-timer" class="refresh-label">Refresh in <span id="countdown">10</span>s</span>
+        <a class="notebook-action" href="/repositories">Repositories</a>
+        <a class="notebook-action" href="/community">Community</a>
+        <a class="notebook-action" href="/mail">Mail</a>
+        <a class="notebook-action" href="/admin" data-admin-only hidden>Admin</a>
+        <span id="current-user" class="user-pill">Loading user…</span>
+        <button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main class="autonomous-shell">
+      <section class="autonomous-page-head">
+        <div>
+          <h1>Amosclaud Autonomous Cloud Agent</h1>
+          <p>Describe the outcome. The Autonomous Core Orchestrator receives it, coordinates five internal engines, and reports verified evidence.</p>
+        </div>
+        <span class="runtime-state">Controlled agent online</span>
+      </section>
+
+      <section class="autonomous-grid">
+        <article class="auto-card agent-workspace">
+          <div class="auto-card-header">
+            <div><h2 id="agent-name">Amosclaud Autonomous Cloud Agent</h2><p id="agent-mission">Loading autonomous agent profile...</p></div>
+            <span id="agent-status" class="badge badge-pending">connecting</span>
+          </div>
+          <section class="agent-section">
+            <div class="agent-header" aria-hidden="true"></div>
+            <div class="agent-layout-visual">
+              <div class="agent-controls-stack">
+                <div id="agent-replies" class="agent-replies" aria-live="polite"><div class="agent-reply muted">I am ready. Tell me the result you need and what must be true before I report success.</div></div>
+                <div class="agent-compose">
+                  <select id="agent-mode-input" aria-label="Autonomous mode">
+                    <option value="autonomous-check">Inspect</option><option value="build">Agent plan</option><option value="fix">Fix + verify</option><option value="deploy">Deploy</option><option value="monitor">Monitor</option>
+                  </select>
+                  <textarea id="agent-objective-input" rows="3" placeholder="Example: Diagnose the failing server tests, apply the smallest safe fix, rerun verification, and report changed files and evidence."></textarea>
+                  <button id="btn-run-agent" class="btn-primary">Start agent task</button>
+                </div>
+              </div>
+              <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
+            </div>
+          </section>
+        </article>
+
+        <aside class="auto-sidebar">
+          <section class="auto-card auto-summary">
+            <h3>Autonomous backend architecture</h3>
+            <div class="auto-summary-list">
+              <div class="auto-summary-item"><span>Core</span><strong>Autonomous Core Orchestrator</strong></div>
+              <div class="auto-summary-item"><span>1</span><strong>Receive and understand</strong></div>
+              <div class="auto-summary-item"><span>2</span><strong>Perceive repository evidence</strong></div>
+              <div class="auto-summary-item"><span>3</span><strong>Plan with the model</strong></div>
+              <div class="auto-summary-item"><span>4</span><strong>Act when authorized</strong></div>
+              <div class="auto-summary-item"><span>5</span><strong>Verify and report</strong></div>
+              <div class="auto-summary-item"><span>Logs</span><strong>Five model-log-service engines</strong></div>
+              <div class="auto-summary-item"><span>Output</span><strong>Verified output</strong></div>
+            </div>
+          </section>
+          <section class="auto-card auto-summary">
+            <h3>Operating policy</h3>
+            <div class="auto-summary-list">
+              <div class="auto-summary-item"><span>Agent plan</span><strong>No files written</strong></div>
+              <div class="auto-summary-item"><span>Fix + verify</span><strong>Authorized workspace changes</strong></div>
+              <div class="auto-summary-item"><span>Success</span><strong>Evidence required</strong></div>
+              <div class="auto-summary-item"><span>Memory</span><strong>Repository lessons</strong></div>
+            </div>
+          </section>
+          <section class="auto-card auto-summary">
+            <h3>Quick actions</h3>
+            <div class="quick-actions">
+              <button id="btn-trigger-pipeline" class="studio-tool"><strong>Build</strong><span>Run the pipeline manually</span></button>
+              <a class="studio-tool" href="/repositories"><strong>Repositories</strong><span>Inspect source and branches</span></a>
+              <button id="btn-start-deployment" class="studio-tool"><strong>Deploy</strong><span>Start a controlled release</span></button>
+              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Health</strong><span>Check runtime connectivity</span></button>
+            </div>
+            <div id="agent-connection-status" class="studio-summary" aria-live="polite">Runtime health has not been checked yet.</div>
+          </section>
+        </aside>
+      </section>
+
+      <section id="live-autonomous-workbench" class="autonomous-workbench" aria-labelledby="workbench-title">
+        <header class="workbench-head">
+          <div><h2 id="workbench-title">Live Autonomous Workbench</h2><p>Watch the mission, repository activity, verification, approvals, and result locations without exposing private reasoning.</p></div>
+          <span class="workbench-live" data-workbench-status>Ready</span>
+        </header>
+        <div class="workbench-grid">
+          <section class="workbench-panel">
+            <h3>Mission timeline</h3>
+            <div class="mission-meta">
+              <div><small>Mission</small><strong data-workbench-mission>Waiting for instruction</strong></div>
+              <div><small>Mode</small><strong data-workbench-mode>—</strong></div>
+              <div><small>Runtime</small><strong data-workbench-runtime>00:00</strong></div>
+            </div>
+            <div class="mission-progress" aria-label="Mission progress"><span data-workbench-progress></span></div>
+            <div class="workbench-timeline" data-workbench-timeline><div class="workbench-empty">Start an Agent task to watch each verified step here.</div></div>
+          </section>
+          <section class="workbench-panel">
+            <div class="workbench-tabs" role="tablist">
+              <button class="workbench-tab active" data-workbench-tab="files" type="button">Files</button>
+              <button class="workbench-tab" data-workbench-tab="checks" type="button">Tests</button>
+              <button class="workbench-tab" data-workbench-tab="results" type="button">Results</button>
+              <button class="workbench-tab" data-workbench-tab="approvals" type="button">Approvals</button>
+            </div>
+            <div class="workbench-view active" data-workbench-view="files"><div class="workbench-list" data-workbench-files><div class="workbench-empty">No files observed yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="checks"><div class="workbench-list" data-workbench-checks><div class="workbench-empty">No verification checks yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="results"><div class="workbench-list" data-workbench-results><div class="workbench-empty">No result locations yet.</div></div></div>
+            <div class="workbench-view" data-workbench-view="approvals"><div class="workbench-list" data-workbench-approvals><div class="workbench-empty">No approval is currently required.</div></div></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="status-strip">
+        <div class="stat-card"><span class="stat-value" id="stat-pipelines">—</span><span class="stat-label">Pipelines</span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-deployments">—</span><span class="stat-label">Deployments</span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-health">—</span><span class="stat-label">Health</span><span id="health-icon" hidden></span></div>
+        <div class="stat-card"><span class="stat-value" id="stat-uptime">—</span><span class="stat-label">Uptime</span></div>
+      </section>
+      <p class="autonomous-note">Fix mode may write only inside the controlled workspace. Amosclaud reports success only after verification tools confirm the result.</p>
+      <section hidden><table id="pipelines-table"><tbody id="pipelines-body"><tr><td>Loading…</td></tr></tbody></table><table id="deployments-table"><tbody id="deployments-body"><tr><td>Loading…</td></tr></tbody></table></section>
+    </main>
+  </div>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+  <div id="modal-pipeline" class="modal hidden"><h3>Trigger Pipeline</h3><label>Pipeline name<input id="pipeline-name-input" type="text" /></label><label>Branch<input id="pipeline-branch-input" type="text" value="main" /></label><div class="modal-actions"><button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button><button id="btn-confirm-pipeline" class="btn-primary">Trigger</button></div></div>
+  <div id="modal-deployment" class="modal hidden"><h3>Start Deployment</h3><label>Deployment name<input id="deployment-name-input" type="text" /></label><label>Environment<select id="deployment-env-input"><option value="production">production</option><option value="staging">staging</option><option value="development">development</option></select></label><div class="modal-actions"><button id="btn-cancel-deployment" class="btn-ghost">Cancel</button><button id="btn-confirm-deployment" class="btn-accent">Deploy</button></div></div>
+  <div id="toast-container" aria-live="assertive"></div>
+
+  <script src="/static/app.js"></script>
+  <script src="/static/account.js"></script>
+  <script src="/static/live-autonomous-workbench.js"></script>
+  <script src="/static/agent-control.js"></script>
+  <script src="/static/autonomous-services.js"></script>
+  <script src="/static/sidebar.js"></script>
+  <script src="/static/app-install.js"></script>
+</body>
+</html>

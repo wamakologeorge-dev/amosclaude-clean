@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Amosclaud-AI</string>
+    <string name="tagline">Intelligent CI/CD &amp; DevOps Assistant</string>
+
+    <string name="title_ai_chat">AI Assistant</string>
+    <string name="title_browser">Web Browser</string>
+    <string name="title_settings">Settings</string>
+
+    <string name="desc_ai_chat">Chat with your CI/CD automation AI</string>
+    <string name="desc_browser">Browse the web inside the app</string>
+    <string name="desc_settings">Configure backend API and preferences</string>
+
+    <string name="hint_message">Ask Amosclaud-AI anything…</string>
+    <string name="hint_url">Enter URL or search…</string>
+    <string name="hint_api_url">http://your-server:8000</string>
+    <string name="hint_delete_email">Type your account email</string>
+    <string name="hint_delete_password">Enter password</string>
+
+    <string name="label_api_url">Backend API URL</string>
+    <string name="label_delete_account">Delete account</string>
+    <string name="delete_account_warning">Permanently deletes your account, active sessions, repositories, and stored files. This cannot be undone.</string>
+
+    <string name="btn_save">Save</string>
+    <string name="btn_test_connection">Test Connection</string>
+    <string name="btn_delete_account">Delete account permanently</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_confirm_delete">Delete</string>
+    <string name="go">Go</string>
+
+    <string name="cd_send">Send message</string>
+    <string name="cd_back">Go back</string>
+    <string name="cd_forward">Go forward</string>
+    <string name="cd_refresh">Refresh</string>
+    <string name="cd_home">Home</string>
+
+    <string name="status_testing">Testing connection…</string>
+    <string name="status_connected">✅ Connected successfully!</string>
+    <string name="status_failed">❌ Connection failed</string>
+    <string name="status_error">❌ Error: %s</string>
+
+    <string name="settings_saved">Settings saved</string>
+    <string name="error_url_required">URL is required</string>
+    <string name="error_delete_email_required">Enter your account email exactly</string>
+    <string name="account_deleted">Your Amosclaud account was deleted</string>
+    <string name="delete_account_title">Delete Amosclaud account?</string>
+</resources>

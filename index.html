@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Amosclaud Local Launcher</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, Arial, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #070b14; color: #f8fafc; }
+    main { width: min(92vw, 680px); padding: 32px; border: 1px solid #263244; border-radius: 18px; background: #0f172a; box-shadow: 0 22px 60px rgba(0,0,0,.35); }
+    h1 { margin: 0 0 8px; font-size: clamp(2rem, 7vw, 3.25rem); }
+    p { color: #cbd5e1; line-height: 1.6; }
+    .status { margin: 22px 0; padding: 16px; border-radius: 12px; background: #111c31; border: 1px solid #2b3a55; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    button, a { appearance: none; border: 0; border-radius: 10px; padding: 12px 18px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    button { background: #22c55e; color: #04130a; }
+    a { background: #1e293b; color: #e2e8f0; }
+    code { color: #93c5fd; }
+    small { display: block; margin-top: 18px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Amosclaud</h1>
+    <p>This is the manual Chrome entry point included in the GitHub ZIP download.</p>
+    <div class="status" id="status">Checking the local Amosclaud server…</div>
+    <div class="actions">
+      <button id="open" type="button">Open Amosclaud</button>
+      <a href="SELF_HOSTING.md">Read setup guide</a>
+    </div>
+    <small>The full platform runs through <code>http://localhost:8000</code>. Chrome restricts authentication, APIs, and service workers when a complex app is opened directly with <code>file://</code>.</small>
+  </main>
+  <script>
+    const localUrl = 'http://localhost:8000';
+    const status = document.getElementById('status');
+    const openButton = document.getElementById('open');
+
+    async function checkServer() {
+      try {
+        const response = await fetch(`${localUrl}/health`, { cache: 'no-store', mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        status.textContent = 'Amosclaud is running. Opening the dashboard…';
+        setTimeout(() => location.replace(localUrl), 350);
+      } catch (error) {
+        status.innerHTML = 'Amosclaud is not running yet. Double-click <code>start-amosclaud.bat</code>, wait for startup, then press Open Amosclaud.';
+      }
+    }
+
+    openButton.addEventListener('click', () => {
+      window.location.href = localUrl;
+    });
+
+    checkServer();
+  </script>
+</body>
+</html>

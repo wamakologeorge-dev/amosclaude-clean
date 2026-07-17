@@ -1,0 +1,32 @@
+AMOSCLAUD SERVER-TESTS 1
+
+# Amosclaud's own focused production checks.
+FOCUS health-is-alive
+CALL GET /health
+EXPECT STATUS 200
+EXPECT JSON status = "ok"
+END
+
+FOCUS login-page-belongs-to-amosclaud
+CALL GET /login
+EXPECT STATUS 200
+EXPECT TEXT CONTAINS Amosclaud
+END
+
+FOCUS root-protects-user-session
+CALL GET /
+EXPECT STATUS 302
+EXPECT HEADER location = /login
+END
+
+FOCUS autonomous-runtime-profile
+CALL GET /api/v1/agent
+EXPECT STATUS 200
+EXPECT JSON name = "Amosclaud Autonomous Runtime"
+EXPECT JSON mode = "autonomous"
+END
+
+FOCUS model-server-folder-status-contract
+CALL GET /api/v1/model-server-folder/status
+EXPECT STATUS 200
+END

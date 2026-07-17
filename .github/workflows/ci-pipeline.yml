@@ -1,94 +1,61 @@
-name: 🚀 Amoscloud AI - CI Pipeline
+name: AmosCloud Continuous Integration and Deployment
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  schedule:
-    - cron: '0 2 * * *'
+    branches:
+      - '**' # Triggers on all branches, including amosclaud-setting-v*
+  workflow_dispatch:
 
 jobs:
-  code-quality:
+  validate-and-deploy:
     runs-on: ubuntu-latest
-    name: Code Quality & Linting
-    
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Checkout Repository Code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      - run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: black --check . || true
-      - run: isort --check-only . || true
-      - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
 
-  test:
-    runs-on: ubuntu-latest
-    name: Tests & Coverage
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: amoscloud_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - run: |
+      - name: Install Dependencies
+        run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/amoscloud_test
-          REDIS_URL: redis://localhost:6379/0
-      
-      - uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-  security:
-    runs-on: ubuntu-latest
-    name: Security Scanning
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - run: pip install bandit safety
-      - run: bandit -r src/ -f json -o bandit-report.json || true
-      - run: safety check --json || true
+      # 🔒 Step 1: Run Guardrail and Boundary Validation
+      - name: Run Guardrail and Boundary Validation
+        run: |
+          echo "Executing compile-time guardrail assertions..."
+          python main.py --test-guardrails
+
+      # 🚀 Step 2: Deploy ONLY if guardrails pass 100%
+      - name: Deploy to Amoscloud AI Platform
+        if: success()
+        env:
+          AMOSCLOUD_API_TOKEN: ${{ secrets.AMOSCLOUD_API_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QUIQ_API_KEY: ${{ secrets.QUIQ_API_KEY }}
+        run: |
+          python main.py --deploy
+
+      # 🚨 Step 3: Trigger Automated Alert if guardrails fail
+      - name: Auto-Create Security Issue on Failure
+        if: failure() # 👈 Executed only if a code test fails or blocks an exploit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Built-in GitHub token, no configuration needed
+        run: |
+          echo "Guardrail breach detected! Generating automatic incident log..."
+          gh issue create \
+            --title "🚨 SECURITY BREACH: Architectural Guardrail Violation" \
+            --body "### Incident Details
+            - **Triggered By**: @${{ github.actor }}
+            - **Branch**: \`${{ github.ref_name }}\`
+            - **Commit SHA**: ${{ github.sha }}
+            - **Status**: Deployment to \`amosclaud.com\` blocked.
+            
+            **Action Required**: Check the latest GitHub Actions runner logs immediately. A file has attempted to cross an allowed boundary layout or an AI endpoint leaked restricted data." \
+            --label "bug" \
+            --label "security"

@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.idea/
+.vscode/
+
+# Environment and secret files
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.workspace.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and runtime data
+*.db
+*.sqlite
+*.sqlite3
+data/*
+!data/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
