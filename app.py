@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -445,6 +446,9 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
         ).fetchone()
     if not project:
         raise HTTPException(404, "Project not found")
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project_id):
+        raise HTTPException(400, "Invalid project id")
 
     run_id = str(uuid.uuid4())
     run_dir = ARTIFACTS_DIR / run_id
