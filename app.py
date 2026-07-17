@@ -376,10 +376,10 @@ async def verify_domain(project_id: str) -> dict[str, Any]:
             b"".join(answer.strings).decode()
             for answer in answers
         }
-    except Exception as exc:
+    except Exception:
         return {
             "verified": False,
-            "message": f"DNS verification is not ready: {exc}",
+            "message": "DNS verification is not ready. Please try again later.",
         }
 
     verified = row["domain_token"] in values
