@@ -26,6 +26,11 @@
   <nav class="ws-tabs" aria-label="Repository navigation"><button class="ws-tab active" data-tab="code" type="button">Code</button><button class="ws-tab" data-tab="commits" type="button">Commits</button></nav>
 
   <main class="ws-main">
+    <section id="ws-not-found" class="ws-editor-empty" hidden>
+      <strong>Repository not found</strong>
+      <span>This repository does not exist, was deleted, or your account does not have access.</span>
+      <a class="btn-primary" href="/repositories">Back to repositories</a>
+    </section>
     <section class="ws-panel active" data-panel="code">
       <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" /><button id="ws-new-folder" type="button">New folder</button><button id="ws-new-file" type="button">New file</button></div></div>
       <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
@@ -39,5 +44,24 @@
 
   <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
   <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script>
+    (() => {
+      const status = document.getElementById('ws-status');
+      const notFound = document.getElementById('ws-not-found');
+      const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file');
+      const panels = document.querySelectorAll('.ws-panel');
+      const tabs = document.querySelector('.ws-tabs');
+      const showNotFound = () => {
+        if (!/repository not found/i.test(status?.textContent || '')) return;
+        document.getElementById('ws-repo-meta').textContent = 'Unavailable';
+        controls.forEach(control => { control.disabled = true; });
+        panels.forEach(panel => { panel.hidden = true; });
+        if (tabs) tabs.hidden = true;
+        if (notFound) notFound.hidden = false;
+      };
+      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true });
+      showNotFound();
+    })();
+  </script>
 </body>
 </html>
