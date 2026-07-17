@@ -527,6 +527,11 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
 
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str) -> dict[str, Any]:
+    try:
+        uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid run id")
+
     with connect() as db:
         run = db.execute(
             "SELECT * FROM runs WHERE id = ?", (run_id,)
@@ -542,7 +547,10 @@ async def get_run(run_id: str) -> dict[str, Any]:
         else ""
     )
     result["log_url"] = f"/artifacts/{run_id}/run.log"
-    manifest = ARTIFACTS_DIR / run_id / "artifact-manifest.json"
+    artifacts_root = ARTIFACTS_DIR.resolve()
+    manifest = (ARTIFACTS_DIR / run_id / "artifact-manifest.json").resolve()
+    if artifacts_root not in manifest.parents:
+        raise HTTPException(400, "Invalid run id")
     result["artifact_manifest_url"] = (
         f"/artifacts/{run_id}/artifact-manifest.json"
         if manifest.exists()
