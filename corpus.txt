@@ -1,0 +1,95 @@
+The server starts by loading its configuration from the environment.
+A well designed function does one thing and does it clearly.
+Every request that reaches the model passes through a tokenizer first.
+The tokenizer splits text into smaller pieces so the model can process them.
+A language model predicts the next token by looking at the tokens before it.
+Training a model means adjusting its internal weights using example data.
+An n gram model looks at the last few tokens to predict the next one.
+Bigram models look at pairs of words while trigram models look at triples.
+When a model has not seen a particular sequence before it falls back to shorter context.
+This is called backoff and it helps the model avoid getting stuck.
+The temperature parameter controls how random the output feels.
+A low temperature makes the model pick the most likely next word almost every time.
+A high temperature makes the model explore less likely words more often.
+Top p sampling restricts the choices to the most probable set of tokens.
+A good API design keeps the request and response shapes small and predictable.
+The health endpoint should return quickly and never block on heavy work.
+Loading a model can take time so it usually happens once when the server starts.
+Once the model is loaded the server keeps it in memory for every request.
+A request handler should validate its input before doing any real work.
+Errors should be reported clearly with a useful status code and message.
+Logging helps developers understand what happened when something goes wrong.
+Unit tests check that a small piece of code behaves the way you expect.
+Integration tests check that different pieces of the system work together.
+A function that generates text usually starts from a prompt provided by the caller.
+The prompt gives the model context about what kind of text to produce.
+Each generated token depends on the tokens that came before it in the sequence.
+The model repeats this process one token at a time until it reaches a limit.
+A stopping condition tells the model when to stop generating more text.
+Some servers stream tokens back to the client as soon as they are produced.
+Other servers wait until the entire response is ready before sending it.
+A REST API usually exposes endpoints using standard HTTP methods like GET and POST.
+The GET method is typically used to read data without changing anything.
+The POST method is typically used to send data that creates or triggers something.
+A client sends a request and the server sends back a response.
+The response often includes a status code that tells the client what happened.
+A status code in the two hundreds usually means the request succeeded.
+A status code in the four hundreds usually means the client made a mistake.
+A status code in the five hundreds usually means the server made a mistake.
+Configuration values are often read from environment variables so they can change without editing code.
+A default value is used when no configuration is provided.
+Developers often keep a small example configuration file in the repository.
+This example file shows what settings are available without exposing real secrets.
+A Dockerfile describes how to build a container image for an application.
+The container image bundles the application together with everything it needs to run.
+Once built the image can run the same way on almost any machine.
+A README file explains how to set up and use a project.
+Good documentation saves time for anyone who joins the project later.
+Code comments explain why something is done a certain way, not just what it does.
+Refactoring means changing the structure of code without changing what it does.
+A clean function usually has a clear name that describes its purpose.
+Naming things well is one of the most useful habits a developer can build.
+When debugging it helps to reproduce the problem in the smallest possible example.
+Once the problem is isolated it becomes much easier to understand and fix.
+Version control keeps a history of every change made to a project.
+Commits should be small and focused so the history stays easy to read.
+A pull request lets other developers review changes before they are merged.
+Code review often catches mistakes that the original author did not notice.
+Automated tests can run every time new code is submitted to catch regressions early.
+A regression is when something that used to work stops working after a change.
+Continuous integration runs tests automatically whenever code changes are pushed.
+Continuous deployment automatically releases new versions once they pass all checks.
+A cache stores results so they do not need to be computed again.
+Caching can make a system much faster but it can also introduce stale data.
+A database stores data so it can be retrieved later even after a restart.
+An index makes it faster to search through a database at the cost of extra storage.
+A queue lets tasks wait in line until a worker is ready to process them.
+Workers pull tasks off a queue and process them one at a time or in parallel.
+Concurrency means multiple tasks make progress during the same period of time.
+Parallelism means multiple tasks actually run at the exact same moment on different processors.
+A race condition happens when the outcome depends on the timing of uncontrolled events.
+Locks are used to make sure only one process touches shared data at a time.
+An API contract describes what inputs a service expects and what outputs it produces.
+Backwards compatibility means new versions of an API still work with old clients.
+A breaking change forces clients to update their code before they can keep working.
+Semantic versioning uses numbers to signal how big a change is between releases.
+A major version bump usually means something broke and needs attention.
+A minor version bump usually means a new feature was added safely.
+A patch version bump usually means a small bug was fixed.
+Monitoring tools watch a running system and alert people when something looks wrong.
+A metric is a number that is tracked over time to understand system behavior.
+Latency measures how long it takes for a request to get a response.
+Throughput measures how many requests a system can handle in a given period of time.
+A bottleneck is the part of a system that limits how fast the whole system can go.
+Profiling a program shows which parts of the code take the most time to run.
+Optimizing code too early can waste effort on parts that were never actually slow.
+It is usually better to measure first and then optimize the parts that matter.
+A model server accepts a prompt and returns generated text as its response.
+The quality of generated text depends heavily on the data the model was trained on.
+A small model trained on a narrow dataset will only be good at narrow tasks.
+A larger and more diverse dataset usually helps a model generalize to more situations.
+Even a simple statistical model can produce surprisingly coherent short phrases.
+As the amount of training text grows the generated text tends to sound more natural.
+Building software is often about making many small decisions that add up over time.
+Every choice involves a tradeoff between simplicity, speed, and flexibility.
+Simple systems are usually easier to understand, debug, and extend later on.
