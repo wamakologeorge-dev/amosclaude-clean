@@ -1,0 +1,304 @@
+<section class="shell">
+  <header>
+    <div>
+      <p class="eyebrow">AMOSCLAUD AUTONOMOUS</p>
+      <h1>Workflow Results Dashboard</h1>
+      <p>Turn agent work into visible builds, logs, artifacts, previews, domains, and verified configuration.</p>
+    </div>
+    <button id="newProjectButton" type="button">New project</button>
+  </header>
+
+  <div class="metrics">
+    <article><span>Projects</span><strong id="projectCount">0</strong></article>
+    <article><span>Latest run</span><strong id="latestStatus">—</strong></article>
+    <article><span>Domain</span><strong id="domainStatus">Not set</strong></article>
+  </div>
+
+  <nav id="projectTabs" aria-label="Projects"></nav>
+
+  <main id="emptyState">
+    <h2>Create your first workflow project</h2>
+    <p>Add a project, configure its command and path, save variables securely, then run the agent workflow and inspect the real output.</p>
+  </main>
+
+  <main id="projectView" hidden>
+    <section class="grid">
+      <article class="panel">
+        <h2>Project settings</h2>
+        <label>Name<input id="name" /></label>
+        <label>Repository URL<input id="repositoryUrl" placeholder="https://github.com/owner/repo" /></label>
+        <label>Root path<input id="rootPath" placeholder="." /></label>
+        <label>Build command<input id="buildCommand" placeholder="npm run build" /></label>
+        <label>Start or verify command<input id="startCommand" placeholder="pytest -q" /></label>
+        <label>Output path<input id="outputPath" placeholder="dist or public/index.html" /></label>
+        <button id="saveProjectButton" type="button">Save settings</button>
+      </article>
+
+      <article class="panel">
+        <h2>Variables and secrets</h2>
+        <div class="row">
+          <label>Variable name<input id="variableName" placeholder="API_KEY" /></label>
+          <label>Value<input id="variableValue" type="password" placeholder="Secret value" /></label>
+        </div>
+        <label class="check"><input id="isSecret" type="checkbox" checked /> Hide this value after saving</label>
+        <button id="saveVariableButton" type="button">Add variable</button>
+        <div id="variables"></div>
+      </article>
+
+      <article class="panel">
+        <h2>Custom domain</h2>
+        <label>Domain<input id="domain" placeholder="app.example.com" /></label>
+        <div class="actions">
+          <button id="setDomainButton" type="button">Set domain</button>
+          <button id="verifyDomainButton" class="secondary" type="button">Verify DNS</button>
+        </div>
+        <pre id="dnsInstructions">No domain configured.</pre>
+      </article>
+
+      <article class="panel">
+        <h2>Run agent result</h2>
+        <label>Objective<textarea id="objective" rows="3">Build, test, and return verified evidence.</textarea></label>
+        <button id="runButton" type="button">Run workflow</button>
+        <div id="runStatus" class="status">No run started.</div>
+      </article>
+    </section>
+
+    <section class="panel result">
+      <div class="resultHead">
+        <h2>Result viewer</h2>
+        <div class="actions">
+          <a id="openLogs" class="button secondary disabled" target="_blank">Open logs</a>
+          <a id="openArtifact" class="button secondary disabled" target="_blank">Open artifact</a>
+        </div>
+      </div>
+      <pre id="logs">Agent logs and evidence will appear here.</pre>
+    </section>
+  </main>
+
+  <dialog id="projectDialog">
+    <h2>New project</h2>
+    <label>Project name<input id="newProjectName" placeholder="My website" /></label>
+    <div class="actions">
+      <button id="cancelProjectButton" class="secondary" type="button">Cancel</button>
+      <button id="createProjectButton" type="button">Create</button>
+    </div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+</section>
+
+<style>
+:root{color-scheme:light dark;font-family:Inter,system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#0d1320;color:#ecf2ff}
+.shell{max-width:1180px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:24px}
+h1{margin:.2rem 0;font-size:clamp(1.8rem,4vw,3rem)}
+h2{font-size:1.05rem;margin:0 0 16px}
+p{color:#aab7ce}
+.eyebrow{color:#69a1ff;font-weight:700;letter-spacing:.12em;font-size:.75rem}
+button,.button{background:#2d70e8;color:white;border:0;border-radius:10px;padding:11px 16px;font:inherit;font-weight:650;cursor:pointer;text-decoration:none;display:inline-block}
+.secondary{background:#1b2638;border:1px solid #35435a}
+.disabled{pointer-events:none;opacity:.45}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.metrics article,.panel{background:#121b2b;border:1px solid #2b3850;border-radius:16px;padding:18px}
+.metrics span{display:block;color:#91a0b8;font-size:.82rem}
+.metrics strong{font-size:1.4rem}
+nav{display:flex;gap:8px;overflow:auto;margin-bottom:18px}
+nav button{white-space:nowrap;background:#162238}
+nav button.active{background:#2d70e8}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+label{display:block;color:#aebad0;font-size:.85rem;margin-bottom:12px}
+input,textarea{width:100%;margin-top:6px;background:#0b1320;color:#f1f5ff;border:1px solid #34435c;border-radius:9px;padding:11px;font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:8px}
+.check input{width:auto;margin:0}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+pre{background:#090f19;border:1px solid #29364b;border-radius:10px;padding:14px;white-space:pre-wrap;overflow-wrap:anywhere;min-height:70px}
+.result{margin-top:16px}
+.resultHead{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.status{margin-top:14px;padding:12px;border-radius:9px;background:#0b1320}
+.variable{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #29364b}
+dialog{background:#121b2b;color:white;border:1px solid #34435c;border-radius:14px;min-width:min(420px,90vw)}
+dialog::backdrop{background:#0009}
+#toast{position:fixed;right:20px;bottom:20px;background:#edf4ff;color:#07101f;padding:12px 16px;border-radius:10px;opacity:0;transition:.2s;pointer-events:none}
+#toast.show{opacity:1}
+@media(max-width:760px){.grid,.metrics,.row{grid-template-columns:1fr}header{align-items:flex-start;flex-direction:column}.shell{padding:14px}}
+</style>
+
+<script>
+let projects = [];
+let current = null;
+const $ = id => document.getElementById(id);
+const toast = message => {
+  $("toast").textContent = message;
+  $("toast").classList.add("show");
+  setTimeout(() => $("toast").classList.remove("show"), 2200);
+};
+async function api(url, options = {}) {
+  const response = await fetch(url, {
+    headers: {"Content-Type":"application/json", ...(options.headers || {})},
+    ...options
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Request failed: ${response.status}`);
+  }
+  if (response.status === 204) return null;
+  return response.json();
+}
+async function loadProjects(selectId) {
+  projects = await api("/api/projects");
+  $("projectCount").textContent = projects.length;
+  renderTabs();
+  const target = selectId || current?.id || projects[0]?.id;
+  if (target) await selectProject(target);
+  else {
+    $("emptyState").hidden = false;
+    $("projectView").hidden = true;
+  }
+}
+function renderTabs() {
+  $("projectTabs").innerHTML = "";
+  projects.forEach(project => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = project.name;
+    if (current?.id === project.id) button.classList.add("active");
+    button.addEventListener("click", () => selectProject(project.id));
+    $("projectTabs").append(button);
+  });
+}
+async function selectProject(id) {
+  current = await api(`/api/projects/${id}`);
+  $("emptyState").hidden = true;
+  $("projectView").hidden = false;
+  for (const [field, key] of [
+    ["name","name"],["repositoryUrl","repository_url"],["rootPath","root_path"],
+    ["buildCommand","build_command"],["startCommand","start_command"],
+    ["outputPath","output_path"],["domain","domain"]
+  ]) $(field).value = current[key] || "";
+  $("domainStatus").textContent = current.domain_verified ? "Verified" : (current.domain ? "Pending" : "Not set");
+  $("latestStatus").textContent = current.runs[0]?.status || "—";
+  renderVariables();
+  renderDomain();
+  if (current.runs[0]) await showRun(current.runs[0].id);
+  renderTabs();
+}
+function renderVariables() {
+  $("variables").innerHTML = "";
+  current.variables.forEach(variable => {
+    const row = document.createElement("div");
+    row.className = "variable";
+    const text = document.createElement("span");
+    text.textContent = `${variable.name} = ${variable.value}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", async () => {
+      await api(`/api/projects/${current.id}/variables/${encodeURIComponent(variable.name)}`, {method:"DELETE"});
+      await selectProject(current.id);
+    });
+    row.append(text, remove);
+    $("variables").append(row);
+  });
+}
+function renderDomain(record) {
+  if (record) {
+    $("dnsInstructions").textContent = `Create this DNS record:\nType: ${record.type}\nName: ${record.name}\nValue: ${record.value}`;
+  } else if (current.domain) {
+    $("dnsInstructions").textContent = `Domain: ${current.domain}\nStatus: ${current.domain_verified ? "Verified" : "Waiting for DNS verification"}`;
+  } else $("dnsInstructions").textContent = "No domain configured.";
+}
+async function showRun(id) {
+  const run = await api(`/api/runs/${id}`);
+  $("runStatus").textContent = `${run.status} · exit code ${run.exit_code ?? "—"}`;
+  $("logs").textContent = run.logs || "No logs were returned.";
+  $("openLogs").href = run.log_url;
+  $("openLogs").classList.remove("disabled");
+  if (run.artifact_manifest_url) {
+    $("openArtifact").href = run.artifact_manifest_url;
+    $("openArtifact").classList.remove("disabled");
+  } else $("openArtifact").classList.add("disabled");
+}
+$("newProjectButton").addEventListener("click", () => $("projectDialog").showModal());
+$("cancelProjectButton").addEventListener("click", () => $("projectDialog").close());
+$("createProjectButton").addEventListener("click", async () => {
+  try {
+    const project = await api("/api/projects", {
+      method:"POST",
+      body:JSON.stringify({name:$("newProjectName").value})
+    });
+    $("projectDialog").close();
+    $("newProjectName").value = "";
+    await loadProjects(project.id);
+    toast("Project created");
+  } catch (error) { toast(error.message); }
+});
+$("saveProjectButton").addEventListener("click", async () => {
+  try {
+    await api(`/api/projects/${current.id}`, {
+      method:"PATCH",
+      body:JSON.stringify({
+        name:$("name").value,
+        repository_url:$("repositoryUrl").value,
+        root_path:$("rootPath").value,
+        build_command:$("buildCommand").value,
+        start_command:$("startCommand").value,
+        output_path:$("outputPath").value
+      })
+    });
+    await loadProjects(current.id);
+    toast("Settings saved");
+  } catch (error) { toast(error.message); }
+});
+$("saveVariableButton").addEventListener("click", async () => {
+  try {
+    const name = $("variableName").value.trim();
+    await api(`/api/projects/${current.id}/variables/${encodeURIComponent(name)}`, {
+      method:"PUT",
+      body:JSON.stringify({
+        name,
+        value:$("variableValue").value,
+        is_secret:$("isSecret").checked
+      })
+    });
+    $("variableName").value = "";
+    $("variableValue").value = "";
+    await selectProject(current.id);
+    toast("Variable saved securely");
+  } catch (error) { toast(error.message); }
+});
+$("setDomainButton").addEventListener("click", async () => {
+  try {
+    const result = await api(`/api/projects/${current.id}/domain`, {
+      method:"POST",
+      body:JSON.stringify({domain:$("domain").value})
+    });
+    renderDomain(result.dns_record);
+    await selectProject(current.id);
+    toast("Domain verification record created");
+  } catch (error) { toast(error.message); }
+});
+$("verifyDomainButton").addEventListener("click", async () => {
+  try {
+    const result = await api(`/api/projects/${current.id}/domain/verify`, {method:"POST"});
+    await selectProject(current.id);
+    toast(result.message);
+  } catch (error) { toast(error.message); }
+});
+$("runButton").addEventListener("click", async () => {
+  try {
+    $("runStatus").textContent = "Running…";
+    const run = await api(`/api/projects/${current.id}/runs`, {
+      method:"POST",
+      body:JSON.stringify({objective:$("objective").value})
+    });
+    await selectProject(current.id);
+    await showRun(run.id);
+    toast(`Workflow ${run.status}`);
+  } catch (error) { toast(error.message); }
+});
+loadProjects().catch(error => toast(error.message));
+</script>
