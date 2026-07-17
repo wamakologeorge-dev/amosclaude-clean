@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from amoscloud_ai import model_network, provider
+from amoscloud_ai import provider
 
 
 @dataclass(frozen=True)
@@ -28,24 +28,32 @@ def _module(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-def service_registry() -> list[ModelService]:
-    network = model_network.network_status()
-    direct_model_url = os.getenv("AMOSCLAUD_MODEL_URL", "").strip()
-    model_ready = bool(network.get("ready")) or bool(direct_model_url)
-    if network.get("ready"):
-        model_detail = f"{network.get('ready_stations', 0)} model station(s) ready"
-    elif direct_model_url:
-        model_detail = "direct Amosclaud model endpoint configured"
-    else:
-        model_detail = network.get("detail") or "no model station or direct model endpoint is configured"
+def _model_probe() -> dict[str, Any]:
+    try:
+        result = provider.probe()
+    except Exception as exc:
+        return {
+            "ready": False,
+            "provider": "amosclaud",
+            "runtime": "unavailable",
+            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+    return dict(result)
+
+
+def service_registry(model_check: dict[str, Any] | None = None) -> list[ModelService]:
+    model_check = model_check or _model_probe()
+    model_ready = bool(model_check.get("ready"))
+    model_detail = str(model_check.get("detail") or "model probe did not return detail")
 
     data_root = Path(os.getenv("AMOSCLAUD_DATA_DIR", "data"))
     writable = True
     try:
         data_root.mkdir(parents=True, exist_ok=True)
-        probe = data_root / ".amosclaud-service-probe"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink(missing_ok=True)
+        probe_path = data_root / ".amosclaud-service-probe"
+        probe_path.write_text("ok", encoding="utf-8")
+        probe_path.unlink(missing_ok=True)
     except OSError:
         writable = False
 
@@ -62,19 +70,10 @@ def service_registry() -> list[ModelService]:
 
 
 def readiness() -> dict[str, Any]:
-    services = service_registry()
+    model_check = _model_probe()
+    services = service_registry(model_check)
     required = [service for service in services if service.required]
     workspace_ready = next((service.ready for service in services if service.id == "agent-4-action"), False)
-    try:
-        model_check = provider.probe()
-    except Exception as exc:  # Readiness reports upstream failure; it never fails closed.
-        model_check = {
-            "ready": False,
-            "provider": "amosclaud",
-            "runtime": "unavailable",
-            "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
-            "detail": f"{type(exc).__name__}: {exc}",
-        }
     checks = {
         "workspace": {"ready": workspace_ready, "detail": "controlled workspace is writable" if workspace_ready else "controlled workspace is not writable"},
         "token_authority": {"ready": True, "detail": "Amosclaud key authority is available"},
