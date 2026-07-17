@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Amosclaud" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Amosclaud Autonomous</title>
+  <title>Amosclaud</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
@@ -25,13 +25,11 @@
 <body>
   <div id="app">
     <header id="topbar">
-      <div class="topbar-left"><h1>Amosclaud</h1><span class="version-badge">one identity</span></div>
+      <div class="topbar-left"><h1>Amosclaud</h1></div>
       <div class="topbar-right">
-        <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
-        <a class="notebook-action" href="/">Autonomous</a>
+        <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Status not checked</span>
+        <a class="notebook-action" href="/">Chat</a>
         <a class="notebook-action" href="/repositories">Repository</a>
-        <a class="notebook-action" href="/bundles">Results</a>
-        <a class="notebook-action" href="/admin" data-admin-only hidden>Admin</a>
         <span id="current-user" class="user-pill">Loading user…</span>
         <button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button>
       </div>
@@ -40,36 +38,30 @@
     <main class="autonomous-shell">
       <section class="autonomous-page-head">
         <div>
-          <h1>Amosclaud Autonomous</h1>
-          <p>One identity follows you between Autonomous, Repository, and Results. The same Autonomous reads instructions, preserves the chat brief, executes authorized jobs, and reports verified proof.</p>
+          <h1>Amosclaud</h1>
+          <p>This page shows only responses and operations returned by the running Amosclaud server. A capability is not available unless the server confirms it.</p>
         </div>
-        <span class="runtime-state">Autonomous online</span>
+        <span class="runtime-state">Not verified</span>
       </section>
 
       <section class="autonomous-grid">
         <article class="auto-card agent-workspace">
           <div class="auto-card-header">
             <div>
-              <h2 id="agent-name">Amosclaud Autonomous</h2>
-              <p id="agent-mission">One Autonomous that understands, plans, creates, fixes, tests, deploys, learns safely, verifies, and reports real results.</p>
+              <h2 id="agent-name">Chat</h2>
+              <p id="agent-mission">Ask Amosclaud. It must report what it can do, what is unavailable, and what requires configuration.</p>
             </div>
-            <span id="agent-status" class="badge badge-success">ready</span>
+            <span id="agent-status" class="badge badge-default">not checked</span>
           </div>
           <section class="agent-section">
             <div class="agent-layout-visual">
               <div class="agent-controls-stack">
                 <div id="agent-replies" class="agent-replies" aria-live="polite">
-                  <div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. What would you like me to create, inspect, fix, test, or deploy?</div>
+                  <div class="agent-reply muted">What can I help you check in Amosclaud?</div>
                 </div>
                 <div class="agent-compose">
                   <input id="agent-mode-input" type="hidden" value="autonomous-check" />
-                  <div class="agent-suggestions" aria-label="Suggested requests">
-                    <button type="button" data-agent-suggestion="Create a source bundle from this workspace and show the verified result.">Create</button>
-                    <button type="button" data-agent-suggestion="Inspect and fix my repository, then verify the result.">Fix</button>
-                    <button type="button" data-agent-suggestion="Run tests and show exact evidence.">Test</button>
-                    <button type="button" data-agent-suggestion="Create a deployment bundle and ask me for the entrypoint.">Deploy</button>
-                  </div>
-                  <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud Autonomous…"></textarea>
+                  <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud…"></textarea>
                   <button id="btn-run-agent" class="btn-primary">Send</button>
                 </div>
               </div>
@@ -80,31 +72,22 @@
 
         <aside class="auto-sidebar">
           <section class="auto-card auto-summary">
-            <h3>Jobs</h3>
-            <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>1</span><strong>Read full repository instructions</strong></div>
-              <div class="auto-summary-item"><span>2</span><strong>Preserve chat instructions across pages</strong></div>
-              <div class="auto-summary-item"><span>3</span><strong>Confirm repository-owner permission</strong></div>
-              <div class="auto-summary-item"><span>4</span><strong>Create source, runtime, connector, deployment, or extension bundles</strong></div>
-              <div class="auto-summary-item"><span>5</span><strong>Show evidence and work proof</strong></div>
-              <div class="auto-summary-item"><span>6</span><strong>Show final location and usage</strong></div>
-              <div class="auto-summary-item"><span>7</span><strong>Test learning before activation</strong></div>
-            </div>
-          </section>
-          <section class="auto-card auto-summary">
-            <h3>Product areas</h3>
+            <h3>Available surfaces</h3>
             <div class="quick-actions">
-              <a class="studio-tool" href="/"><strong>Autonomous</strong><span>Ask, plan, and execute jobs</span></a>
-              <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Inspect source without creating another assistant</span></a>
-              <a class="studio-tool" href="/bundles"><strong>Results</strong><span>Open evidence, proof, files, and final outputs</span></a>
-              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Runtime health</strong><span>Check Autonomous and server</span></button>
+              <a class="studio-tool" href="/"><strong>Chat</strong><span>Uses the server response; no result is invented in the browser.</span></a>
+              <a class="studio-tool" href="/repositories"><strong>Repository</strong><span>Lists and edits repositories through authenticated repository routes.</span></a>
+              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Check server</strong><span>Run the existing server and agent checks before showing availability.</span></button>
             </div>
             <div id="agent-connection-status" class="studio-summary" aria-live="polite"></div>
+          </section>
+          <section class="auto-card auto-summary">
+            <h3>Truth rule</h3>
+            <p>Missing configuration, unavailable dependencies, failed checks, and unsupported actions must be shown as they are. Amosclaud must not replace them with a success message.</p>
           </section>
         </aside>
       </section>
 
-      <p class="autonomous-note">Amosclaud Autonomous can create files, repositories, and all five real bundle types; inspect and fix code; run tests; execute approved jobs; deploy work; and return the real result with exact evidence.</p>
+      <p class="autonomous-note">No service, result, deployment, model, or health state is promised on this page until the running backend returns evidence for it.</p>
     </main>
   </div>
 
