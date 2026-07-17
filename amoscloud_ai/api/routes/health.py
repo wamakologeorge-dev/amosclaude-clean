@@ -5,14 +5,14 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 
 from amoscloud_ai import provider
+from amoscloud_ai.api.routes import bundle_pages, bundles, codex_system_bundle
 from amoscloud_ai.config import settings
 from amoscloud_ai.models import HealthResponse
 
 router = APIRouter(tags=["health"])
-
-from amoscloud_ai.api.routes import bundle_pages, bundles
 router.include_router(bundles.router, prefix="/api/v1")
 router.include_router(bundle_pages.router)
+router.include_router(codex_system_bundle.router, prefix="/api/v1")
 
 
 @router.get("/health", response_model=HealthResponse, summary="Service liveness check")
