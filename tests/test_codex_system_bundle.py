@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 from amoscloud_ai.codex_system_bundle import (
     BUNDLE_NAME,
     codex_system_manifest,
@@ -33,9 +35,10 @@ def test_codex_system_bundle_round_trip(tmp_path: Path):
     assert manifest["mappings"]["agent_loop"]["stages"][-1] == "remember"
 
 
-def test_codex_system_bundle_routes_are_registered():
-    paths = {route.path for route in create_app().routes}
+def test_codex_system_bundle_routes_require_authentication():
+    client = TestClient(create_app())
 
-    assert "/api/v1/codex/system-bundle/preview" in paths
-    assert "/api/v1/codex/system-bundle" in paths
-    assert "/api/v1/codex/system-bundle/download" in paths
+    assert client.get("/api/v1/codex/system-bundle/preview").status_code == 401
+    assert client.post("/api/v1/codex/system-bundle").status_code == 401
+    assert client.get("/api/v1/codex/system-bundle").status_code == 401
+    assert client.get("/api/v1/codex/system-bundle/download").status_code == 401
