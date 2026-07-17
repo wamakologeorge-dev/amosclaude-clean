@@ -43,9 +43,18 @@ jobs:
           pip install flake8 pytest pytest-cov
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Lint with flake8
+        id: flake8
+        shell: bash
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          set +e
+          strict_log="flake8-strict-${{ matrix.python-version }}.log"
+          report_log="flake8-report-${{ matrix.python-version }}.log"
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics >"$strict_log" 2>&1
+          status=$?
+          cat "$strict_log"
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics >"$report_log" 2>&1
+          cat "$report_log"
+          exit "$status"
       - name: Test with pytest
         id: pytest
         shell: bash
@@ -55,24 +64,36 @@ jobs:
           status=$?
           cat pytest-${{ matrix.python-version }}.log
           exit "$status"
-      - name: Upload backend test diagnostics
+      - name: Upload Python diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: pytest-${{ matrix.python-version }}-diagnostics
-          path: pytest-${{ matrix.python-version }}.log
-          if-no-files-found: error
-      - name: Report backend test failure
+          name: python-${{ matrix.python-version }}-diagnostics
+          path: |
+            flake8-strict-${{ matrix.python-version }}.log
+            flake8-report-${{ matrix.python-version }}.log
+            pytest-${{ matrix.python-version }}.log
+          if-no-files-found: warn
+      - name: Report Python failure
         if: failure() && github.event_name == 'pull_request' && matrix.python-version == '3.12'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           {
-            echo '### Backend tests failed'
+            echo '### Python verification failed'
             echo
-            echo '```text'
-            tail -n 120 pytest-${{ matrix.python-version }}.log
-            echo '```'
-          } > pytest-comment.md
-          gh pr comment "${{ github.event.pull_request.number }}" --body-file pytest-comment.md
+            if [ -s flake8-strict-${{ matrix.python-version }}.log ]; then
+              echo '#### Strict flake8'
+              echo '```text'
+              tail -n 120 flake8-strict-${{ matrix.python-version }}.log
+              echo '```'
+            fi
+            if [ -s pytest-${{ matrix.python-version }}.log ]; then
+              echo '#### Pytest'
+              echo '```text'
+              tail -n 120 pytest-${{ matrix.python-version }}.log
+              echo '```'
+            fi
+          } > python-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file python-comment.md

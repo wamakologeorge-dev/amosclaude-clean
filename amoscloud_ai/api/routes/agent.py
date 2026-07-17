@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 
+from amoscloud_ai.agent.assistant_system_template import ASSISTANT_SYSTEM_TEMPLATE
 from amoscloud_ai.api.routes.auth import get_user_from_session
+from amoscloud_ai.api.routes.autonomous_keys import authenticate_autonomous_key
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
@@ -20,69 +22,290 @@ from amoscloud_ai.models import (
 )
 from amoscloud_ai.task_dispatch import dispatch_task
 
-router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
+router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous Server"
+AGENT_NAME = "Amosclaud Autonomous Agent"
 AGENT_OWNER = "Amosclaud"
-AGENT_ROLE = "autonomous build, deployment, and monitoring server"
+AGENT_ROLE = ASSISTANT_SYSTEM_TEMPLATE.role
 AGENT_HOME = "amosclaud.com"
 AGENT_PIPELINE = "Amosclaud autonomous pipeline"
-AGENT_MODE = "autonomous"
+AGENT_MODE = "agent"
 AGENT_SCOPE = [AGENT_HOME, AGENT_PIPELINE]
-AGENT_DIRECTIVES = [
-    "Continuously check Amosclaud-owned application health.",
-    "Run builds and tests through the Amosclaud pipeline.",
-    "Deploy or prepare deployments when the configured pipeline allows it.",
-    "Report run state through the server API and dashboard.",
-]
-ALLOWED_MODES = {"autonomous-check", "build", "deploy", "monitor"}
-GREETING_WORDS = {"hi", "hello", "hey", "hiya", "yo", "good morning", "good afternoon", "good evening"}
+AGENT_DIRECTIVES = list(ASSISTANT_SYSTEM_TEMPLATE.principles)
+ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
+GREETING_WORDS = {
+    "hi",
+    "hello",
+    "hey",
+    "hiya",
+    "yo",
+    "good morning",
+    "good afternoon",
+    "good evening",
+}
+GUIDANCE_PHRASES = {
+    "can you guide",
+    "guide me",
+    "help me",
+    "how do i",
+    "how can i",
+    "how should i",
+    "what should",
+    "what can go wrong",
+    "explain",
+    "show me a plan",
+    "give me a plan",
+    "easier way",
+    "right solution",
+    "best solution",
+    "what is",
+    "why is",
+    "why does",
+}
+QUESTION_PREFIXES = (
+    "what ",
+    "why ",
+    "how ",
+    "where ",
+    "when ",
+    "who ",
+    "which ",
+    "can i ",
+    "could i ",
+    "should i ",
+    "would i ",
+)
+ACTION_WORDS = {
+    "build",
+    "create",
+    "fix",
+    "change",
+    "delete",
+    "deploy",
+    "commit",
+    "merge",
+    "run",
+    "test",
+    "verify",
+    "inspect",
+    "monitor",
+    "review",
+    "publish",
+}
+EXECUTION_PHRASES = {
+    "do it",
+    "proceed",
+    "apply the fix",
+    "make the changes",
+    "execute",
+    "start building",
+    "start to build",
+    "now start to build",
+    "start the build",
+    "build it",
+    "begin building",
+}
+FOLLOW_UP_EXECUTION = EXECUTION_PHRASES | {
+    "start",
+    "start now",
+    "fix it",
+    "deploy it",
+    "make it",
+    "continue",
+}
+
+
+def _bearer_token(request: Request) -> str | None:
+    authorization = request.headers.get("authorization", "").strip()
+    scheme, separator, value = authorization.partition(" ")
+    if separator and scheme.lower() == "bearer" and value.strip():
+        return value.strip()
+    return None
+
+
+def _authenticated_user(request: Request):
+    user = get_user_from_session(request.cookies.get("amos_session"))
+    if user:
+        return user
+    return authenticate_autonomous_key(_bearer_token(request))
 
 
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
     if status == PipelineStatus.PENDING:
-        return f"{AGENT_NAME}: autonomous {mode} run queued for {objective}."
+        return f"Queued {mode} task: {objective}"
     if status == PipelineStatus.RUNNING:
-        return f"{AGENT_NAME}: autonomous {mode} run is active for {objective}."
+        return f"Working on {objective}: inspecting evidence, acting, and verifying."
     if status == PipelineStatus.SUCCESS:
-        return f"{AGENT_NAME}: autonomous {mode} run completed for {objective}."
+        return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+            objective=objective,
+            status="success",
+            evidence=(f"The {mode} runtime completed with verified evidence.",),
+        )
     if status == PipelineStatus.FAILED:
-        return f"{AGENT_NAME}: autonomous {mode} run failed for {objective}."
-    return f"{AGENT_NAME}: autonomous {mode} run was cancelled for {objective}."
+        return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+            objective=objective,
+            status="blocked",
+            evidence=("The runtime reported a blocking failure.",),
+            next_action="Review the failing check and apply the smallest safe repair.",
+        )
+    return ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+        objective=objective,
+        status="cancelled",
+    )
 
 
 def _display_name(request: Request) -> str:
-    user = get_user_from_session(request.cookies.get("amos_session"))
+    user = _authenticated_user(request)
     if not user:
-        return "there"
-    raw_name = (user["name"] or "there").strip()
-    first_name = raw_name.split()[0] if raw_name else "there"
-    return first_name[:1].upper() + first_name[1:]
+        return ""
+    raw_name = str(user["name"] or "").strip()
+    first_name = raw_name.split()[0] if raw_name else ""
+    return first_name[:1].upper() + first_name[1:] if first_name else ""
+
+
+def _normalise(value: str) -> str:
+    return " ".join((value or "").lower().rstrip(".!?").split())
+
+
+def _resolve_follow_up(objective: str, metadata: dict | None) -> tuple[str, bool]:
+    """Attach a short execution follow-up to the prior conversational objective."""
+
+    current = objective.strip()
+    normalised = _normalise(current)
+    prepared = dict(metadata or {})
+    previous = str(prepared.get("previous_objective") or "").strip()
+    is_execution = normalised in FOLLOW_UP_EXECUTION
+    if previous and is_execution:
+        return f"Build the previously discussed outcome: {previous}", True
+    return current, False
+
+
+def _is_guidance_request(message: str, mode: str) -> bool:
+    normalised = " ".join(message.lower().split())
+    if not normalised:
+        return False
+    explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
+    asks_for_guidance = (
+        "?" in message
+        or normalised.startswith(QUESTION_PREFIXES)
+        or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
+    )
+    if mode == "autonomous-check" and not explicitly_execute:
+        has_action = any(word in normalised.split() for word in ACTION_WORDS)
+        return asks_for_guidance or not has_action
+    return asks_for_guidance and not explicitly_execute
 
 
 def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
+    """Return a natural answer only when no engineering execution is required."""
+
     name = _display_name(request)
     message = objective.strip()
-    normalised = " ".join(message.lower().rstrip(".!?").split())
+    normalised = _normalise(message)
 
-    if not message and mode == "build":
-        return f"Hi {name}. What do you want to create today?"
+    if not message and mode in {"build", "fix"}:
+        return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(mode, name)
     if normalised in GREETING_WORDS:
-        return f"Hi {name}. What do you want to create today?"
-    if normalised in {"build", "make", "create"}:
-        return f"Hi {name}. What do you want to create today?"
+        return ASSISTANT_SYSTEM_TEMPLATE.greeting(name)
+    if _is_guidance_request(message, mode):
+        if any(
+            phrase in normalised
+            for phrase in ("what can i build", "what can we build", "what can be built")
+        ):
+            return (
+                "You can build a complete software workflow here: a web application, "
+                "an authenticated API, an Amosclaud agent tool, a self-hosted service, "
+                "a repository automation, or a tested deployment package.\n\n"
+                "Choose one concrete outcome and tell me its users, first workflow, and "
+                "success condition. When you select Build or Fix, I will inspect the "
+                "repository, make the authorized changes, run verification, and report "
+                "the exact files and results."
+            )
+        return ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
+    if normalised in {"build", "make", "create", "fix"}:
+        return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
     return None
 
 
-@router.get("", response_model=AutonomousAgentProfile, summary="Get autonomous server profile")
+def _conversation_messages(metadata: dict | None) -> list[str]:
+    messages: list[str] = []
+    for item in (metadata or {}).get("conversation", []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            content = str(item.get("content") or "").strip()
+            if content:
+                messages.append(content[:4000])
+    return messages[-12:]
+
+
+def _project_intake_reply(request: Request, objective: str, metadata: dict | None) -> str | None:
+    """Collect the minimum build brief before forwarding work to Autonomous."""
+
+    name = _display_name(request)
+    prefix = f"{name}, " if name else ""
+    messages = _conversation_messages(metadata)
+    if not messages or _normalise(messages[-1]) != _normalise(objective):
+        messages.append(objective)
+    combined = " ".join(messages).lower()
+    current = _normalise(objective)
+    website_requested = any(word in combined for word in ("website", "web app", "web platform"))
+    if not website_requested:
+        return None
+    generic_request = any(
+        phrase in current
+        for phrase in ("create a website", "build a website", "make a website", "learn how to create a website")
+    )
+    if len(messages) == 1 or generic_request:
+        return f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
+    if current in {"business", "a business", "it is about business", "the website is about business"}:
+        return f"What kind of business, {name or 'and who will use the platform'}?"
+    return None
+
+
+def _select_autonomous_mode(requested: str, objective: str, metadata: dict | None) -> str:
+    """Select the internal workflow while keeping the public interface conversational."""
+
+    context = " ".join([*_conversation_messages(metadata), objective]).lower()
+    if any(word in context for word in ("deploy", "release", "publish to production")):
+        return "deploy"
+    if any(word in context for word in ("monitor", "watch status", "keep watching")):
+        return "monitor"
+    if any(word in context for word in ("fix", "repair", "build", "create", "make")):
+        return "fix"
+    if any(word in context for word in ("inspect", "review", "diagnose", "check")):
+        return "autonomous-check"
+    return requested
+
+
+def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
+    prepared = dict(metadata or {})
+    prepared["requested_mode"] = mode
+    prepared.setdefault("agent_workflow", True)
+    prepared.setdefault(
+        "phases",
+        ["understand", "inspect", "plan", "act", "verify", "report"],
+    )
+    prepared.setdefault("assistant_template_version", ASSISTANT_SYSTEM_TEMPLATE.version)
+    execution_mode = mode
+    if mode in {"build", "fix"}:
+        execution_mode = "build"
+        prepared.setdefault("use_agent", True)
+        prepared.setdefault("apply_changes", mode == "fix")
+    return execution_mode, prepared
+
+
+@router.get(
+    "",
+    response_model=AutonomousAgentProfile,
+    summary="Get autonomous agent profile",
+)
 async def get_agent() -> AutonomousAgentProfile:
     return AutonomousAgentProfile(
         name=AGENT_NAME,
         owner=AGENT_OWNER,
         role=AGENT_ROLE,
         mission=(
-            f"{AGENT_NAME} runs Amosclaud-owned checks, builds, deployments, "
-            f"and monitoring for {AGENT_HOME}."
+            "Answer naturally when the user is talking, and use the governed "
+            "Autonomous pipeline when the user requests engineering work."
         ),
         mode=AGENT_MODE,
         home=AGENT_HOME,
@@ -92,17 +315,33 @@ async def get_agent() -> AutonomousAgentProfile:
     )
 
 
-@router.post("/run", response_model=AutonomousAgentRunResponse, summary="Start an autonomous server run")
-async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> AutonomousAgentRunResponse:
+@router.post(
+    "/run",
+    response_model=AutonomousAgentRunResponse,
+    summary="Start an autonomous agent task",
+)
+async def run_agent(
+    body: AutonomousAgentRunRequest,
+    request: Request,
+) -> AutonomousAgentRunResponse:
     mode = body.mode.strip().lower()
     if mode not in ALLOWED_MODES:
-        raise HTTPException(status_code=422, detail=f"Mode must be one of: {', '.join(sorted(ALLOWED_MODES))}")
+        choices = ", ".join(sorted(ALLOWED_MODES))
+        raise HTTPException(status_code=422, detail=f"Mode must be one of: {choices}")
+
+    user = _authenticated_user(request)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in or provide a valid Amosclaud Autonomous bearer key",
+        )
 
     started_at = datetime.now(timezone.utc)
     run_id = str(uuid.uuid4())
-    objective = (body.objective or "").strip()
-
-    conversational_reply = _conversation_reply(request, mode, objective)
+    supplied_objective = (body.objective or "").strip()
+    objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
+    intake_reply = None if continued else _project_intake_reply(request, objective, body.metadata)
+    conversational_reply = intake_reply or (None if continued else _conversation_reply(request, mode, objective))
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,
@@ -110,17 +349,33 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
             mode=mode,
             objective=objective or "conversation",
             reply=conversational_reply,
-            pipeline_id=f"chat-{run_id}",
+            pipeline_id=f"conversation-{run_id}",
             status=PipelineStatus.SUCCESS,
             started_at=started_at,
             checks=[],
-            logs=[conversational_reply],
+            logs=["Conversational response returned without engineering execution."],
         )
+
+    mode = _select_autonomous_mode(mode, objective, body.metadata)
 
     from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
+    execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    conversation = _conversation_messages(body.metadata)
+    if conversation:
+        metadata["conversation_brief"] = conversation
+        metadata["autonomous_handoff"] = "background"
+    metadata.setdefault("authenticated_user_id", int(user["id"]))
+    metadata.setdefault(
+        "authentication",
+        "autonomous-key" if _bearer_token(request) else "session",
+    )
+    if continued:
+        metadata["conversation_continuation"] = True
+        metadata["original_follow_up"] = supplied_objective
+
     reply = _agent_reply(PipelineStatus.PENDING, mode, objective)
     pipeline = PipelineResponse(
         id=pipeline_id,
@@ -132,7 +387,14 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         copilot_reply=reply,
         copilot_role=AGENT_ROLE,
         delegation_target=AGENT_PIPELINE,
-        jobs=[PipelineJob(id="autonomous-run", name="Autonomous Run", status=PipelineStatus.PENDING, logs=[reply])],
+        jobs=[
+            PipelineJob(
+                id="autonomous-run",
+                name="Agent Task",
+                status=PipelineStatus.PENDING,
+                logs=[reply],
+            )
+        ],
     )
     payload = {
         "trigger": "autonomous",
@@ -140,9 +402,10 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
         "commit_sha": None,
         "payload": {
             "run_id": run_id,
-            "mode": mode,
+            "mode": execution_mode,
+            "requested_mode": mode,
             "objective": objective,
-            "metadata": body.metadata,
+            "metadata": metadata,
         },
     }
     _save(pipeline, payload)
@@ -152,11 +415,17 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
 
         dispatch_task(run_pipeline_task, pipeline_id, payload)
         checks = []
-        logs = [reply]
+        logs = [
+            reply,
+            "Agent phases: understand → inspect → plan → act → verify → report",
+        ]
     except Exception as dispatch_error:
-        log.warning("Background worker unavailable; running autonomous server inline: %s", dispatch_error)
+        log.warning(
+            "Background worker unavailable; running autonomous agent inline: %s",
+            dispatch_error,
+        )
         try:
-            result = run_autonomous_server(mode, objective, body.metadata)
+            result = run_autonomous_server(execution_mode, objective, metadata)
             pipeline.status = result.status
             pipeline.finished_at = datetime.now(timezone.utc)
             reply = result.reply
@@ -168,23 +437,35 @@ async def run_agent(body: AutonomousAgentRunRequest, request: Request) -> Autono
                 pipeline.jobs[0].finished_at = pipeline.finished_at
                 pipeline.jobs[0].logs.extend(result.logs)
             checks = [
-                {"name": check.name, "status": check.status, "summary": check.summary, "details": check.details}
+                {
+                    "name": check.name,
+                    "status": check.status,
+                    "summary": check.summary,
+                    "details": check.details,
+                }
                 for check in result.checks
             ]
             logs = result.logs
             _save(pipeline, payload)
         except Exception as inline_error:
-            log.exception("Autonomous server inline run failed")
+            log.exception("Autonomous agent inline task failed")
             pipeline.status = PipelineStatus.FAILED
             pipeline.finished_at = datetime.now(timezone.utc)
-            reply = f"{AGENT_NAME}: autonomous {mode} run failed safely for {objective}."
+            reply = ASSISTANT_SYSTEM_TEMPLATE.execution_summary(
+                objective=objective,
+                status="failed",
+                evidence=(f"Runtime error: {type(inline_error).__name__}",),
+                next_action="Review the server log and repair the first verified root cause.",
+            )
             pipeline.message = reply
             pipeline.copilot_reply = reply
             if pipeline.jobs:
                 pipeline.jobs[0].status = PipelineStatus.FAILED
                 pipeline.jobs[0].started_at = started_at
                 pipeline.jobs[0].finished_at = pipeline.finished_at
-                pipeline.jobs[0].logs.append(f"Runtime error: {type(inline_error).__name__}: {inline_error}")
+                pipeline.jobs[0].logs.append(
+                    f"Runtime error: {type(inline_error).__name__}: {inline_error}"
+                )
             checks = []
             logs = [reply, f"Runtime error: {type(inline_error).__name__}"]
             _save(pipeline, payload, str(inline_error))

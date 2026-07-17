@@ -5,7 +5,10 @@ from datetime import datetime, timedelta
 from typing import Dict
 import time
 
-from .config import settings
+try:
+    from .config import settings
+except ImportError:  # Docker starts the gateway as top-level `main:app`.
+    from config import settings
 
 # --- Authentication Dependency ---
 async def get_current_user(authorization: str = Header(...)):

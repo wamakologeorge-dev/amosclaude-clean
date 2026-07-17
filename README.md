@@ -1,8 +1,111 @@
+<p align="center">
+  <img src="web/amosclaud-agent-server-banner.png" alt="Amosclaud Agent Server" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/wamakologeorge-dev/amosclaude-clean/releases"><img alt="Release" src="https://img.shields.io/github/v/release/wamakologeorge-dev/amosclaude-clean?include_prereleases&style=for-the-badge"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-7586ff?style=for-the-badge">
+  <img alt="Self-hosted" src="https://img.shields.io/badge/Deployment-Self--hosted-55d6a3?style=for-the-badge">
+  <img alt="Platforms" src="https://img.shields.io/badge/Package-Windows%20%7C%20Linux%20%7C%20macOS-111827?style=for-the-badge">
+</p>
+
+<p align="center">
+  <strong>Portable agent provider · Engineering workspace · Repository server · Build platform</strong>
+</p>
+
 # Amosclaud
 
 Amosclaud is a self-hosted development platform with native accounts, `@amosclaud.com` mailboxes, repository hosting, source workspaces, storage, organizations, community tools, CI/CD pipelines, deployments, and an autonomous development agent.
 
 Current version: **1.0.1**
+
+## Install the server package
+
+GitHub server releases are app-style archives with one top-level `Amosclaud` folder, not a deeply nested repository checkout. Download the ZIP on Windows or the tarball on Linux/macOS, extract it, and run the installer once:
+
+- Windows: right-click `install-amosclaud.ps1`, then run it with PowerShell.
+- Linux/macOS: run `./install-amosclaud.sh` from a terminal.
+
+The installer creates private local configuration, starts restartable Docker services, and can pair the computer with the Amosclaud Task Router using a one-time private-runner credential. Paired runners connect outbound to `amosclaud.com`; downloads never execute silently and the service does not open an inbound remote-control port.
+
+A `server-v*` tag builds `Amosclaud-Server.zip`, `Amosclaud-Server.tar.gz`, and `SHA256SUMS.txt` through `.github/workflows/server-release.yml`.
+
+The downloaded package is an automated workspace with this stable layout:
+
+```text
+Amosclaud/
+├── app/                 # managed application internals
+├── config/              # configuration templates
+├── data/                # durable application data
+├── logs/                # local operational logs
+├── workspace/projects/  # developer-controlled projects
+├── PACKAGE_MANIFEST.json
+└── amosclaud-workspace.*
+```
+
+Use `amosclaud-workspace doctor`, `start`, `stop`, `status`, or `logs` instead of navigating through application source folders. The installer creates missing workspace directories automatically and preserves the existing `AmosclaudWorkspace` location for source-based installations.
+
+### Build and dependency management
+
+- `pyproject.toml` defines the installable Amosclaud package, console commands, and build backend.
+- `requirements.txt` declares supported runtime dependencies.
+- `requirements-dev.txt` declares reproducible test, lint, security, and release tooling.
+- `Makefile` provides short Unix developer commands.
+- `python scripts/workspace_task.py <task>` provides the same core automation on Windows, Linux, and macOS.
+
+```bash
+make setup
+make build
+make test
+make quality
+make package
+```
+
+On Windows, the equivalent complete build is:
+
+```powershell
+python scripts/workspace_task.py setup
+python scripts/workspace_task.py package
+```
+
+`.github/workflows/workspace-ci.yml` moves the same validation into GitHub Actions. Every pull request and protected branch update runs the complete test suite on Python 3.11 and 3.12, validates workspace automation, performs a security scan, builds the installable distribution, and stores the resulting wheel and source archive as workflow artifacts.
+
+## Five-minute API quickstart
+
+Create an Amosclaud customer key from `/api-access`, purchase prepaid agent credits, and submit work:
+
+```bash
+curl https://amosclaud.com/api/v1/tasks \
+  -H "Authorization: Bearer $AMOSCLAUD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Review my project and return evidence","mode":"review","execution_target":"cloud"}'
+```
+
+External tools can discover the public contract at `/.well-known/ai-plugin.json` and `/openapi.yaml`. A dependency-light Python client and runnable example live in `packages/sdk-python` and `examples/request_verified_work.py`.
+
+### Amosclaud Memory Guard
+
+`amosclaud-memory status` reports physical RAM, existing swap/pagefile capacity, and a bounded server recommendation. It never changes the host by default. Linux administrators can apply the recommendation with `sudo amosclaud-memory apply --yes`; Windows packages include `install-virtual-memory.ps1`, which requires both `-Apply` and an elevated Administrator terminal. macOS swap remains under automatic operating-system control.
+
+### Progressive agent memory
+
+The engineering agent maintains durable searchable learning under `.amosclaud/memory/`.
+Every completed run recalls relevant earlier lessons, records its verified outcome, and updates
+a daily learning summary. Memory grows with available storage instead of being loaded entirely
+into RAM. Inspect it with `amosclaud-agent-memory stats`, `recent`, `recall`, or `consolidate`.
+Set `AMOSCLAUD_AGENT_MEMORY_HOME` when the memory should live on a separate persistent volume.
+
+### Self-hosted model network
+
+The website control plane does not need a permanent inbound connection to a model computer.
+Paired Server Stations advertise `model.inference` only when their local model health check is
+ready. The control plane encrypts each short-lived request, an authorized owner station claims it
+over its outbound connection, and the prompt and response ciphertext are cleared after delivery.
+
+Configure the control plane with `AMOSCLAUD_NETWORK_OWNER_USER_ID` and a stable
+`AMOSCLAUD_MASTER_KEY`. On the paired station, configure its station credential plus the local
+`AMOSCLAUD_MODEL_URL` and matching `AMOSCLAUD_MODEL_TOKEN`, then run `amosclaud-runner`. The old
+fixed model URL remains a fallback for a single-machine installation.
 
 ## Sign in from any device
 
@@ -205,12 +308,47 @@ Recommended production variables:
 AUTH_DB_PATH=/data/auth.db
 AUTH_COOKIE_SECURE=true
 AUTH_SESSION_DAYS=7
+AMOSCLAUD_MASTER_KEY=replace-with-a-stable-random-secret
+REDIS_URL=redis://redis:6379/0
 AMOS_MAIL_DOMAIN=amosclaud.com
 PASSKEY_RP_ID=amosclaud.com
 PASSKEY_ORIGIN=https://amosclaud.com
 PASSKEY_RP_NAME=Amosclaud
 PASSKEY_SETUP_MINUTES=10
 ```
+
+`AMOSCLAUD_MASTER_KEY` encrypts developer webhook secrets and must remain stable.
+`REDIS_URL` provides shared authentication limits when more than one API process is running.
+On startup, Amosclaud applies checksum-protected database migrations automatically.
+
+## Signed developer webhooks
+
+Signed webhooks notify external developer systems when routed work finishes. After signing in,
+create a webhook with `POST /api/v1/webhooks` and subscribe to `task.completed`, `task.failed`,
+or `task.cancelled`. The response shows the `whsec_...` signing secret once.
+
+Every delivery includes `X-Amosclaud-Event`, `X-Amosclaud-Event-Id`,
+`X-Amosclaud-Timestamp`, and `X-Amosclaud-Signature`. Verify the signature by calculating
+HMAC-SHA256 over `<timestamp>.<raw request body>` with the webhook secret and compare it to
+the `v1=...` header using a constant-time comparison. Production webhook URLs must use HTTPS.
+
+## Server Stations
+
+A Server Station is a self-hosted computer that securely claims Amosclaud tasks. Create and
+manage stations through `/api/v1/server-stations`. Registration and token rotation return a
+credential once; only its hash is retained. Stations report their version, capabilities, and
+system profile through the heartbeat endpoint. The control API marks stale stations offline,
+shows queued/running/completed/failed work totals, and lets the owner revoke a station without
+deleting its audit history. Revoking a station releases its unstarted assigned work so another
+station can claim it.
+
+## Metrics Server and SSY
+
+The dedicated metrics service runs on `127.0.0.1:9090` with Docker Compose. It exports
+Prometheus metrics at `/metrics`, a JSON operational view at `/v1/summary`, and the Amosclaud
+System Service Yard at `/v1/ssy`. SSY combines API, native-model, database, task, station,
+webhook, memory, disk, load, and uptime health without exposing user content or credentials.
+Set a stable `AMOSCLAUD_METRICS_TOKEN` in production.
 
 The persistent `/data` volume is required so user accounts, passkeys, sessions, mail, and other SQLite-backed records survive restarts and deployments.
 

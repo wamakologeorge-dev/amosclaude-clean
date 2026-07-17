@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+import httpx
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
-from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task_status, queue_task
+from amoscloud_ai.api.routes.pr_tasks import _require_owner_key, get_task_status, list_recent_tasks, queue_task
 from amoscloud_ai.models import RepositoryTaskRequest, RepositoryTaskResponse
 
 router = APIRouter(prefix="/agent/github", tags=["github-agent-travel"])
@@ -38,6 +39,19 @@ class GitHubTravelResponse(BaseModel):
     status_url: str
 
 
+class ConnectionCheck(BaseModel):
+    configured: bool
+    reachable: bool
+    detail: str
+
+
+class GitHubTravelPreflightResponse(BaseModel):
+    ready: bool
+    repository: str
+    github: ConnectionCheck
+    model: ConnectionCheck
+
+
 def _authorise(request: Request, owner_key: Optional[str]) -> None:
     """Allow a signed-in administrator or a valid owner key."""
     if owner_key:
@@ -62,6 +76,78 @@ def _validate_repository(repository: str) -> str:
             ),
         )
     return value
+
+
+async def _check_github(repository: str) -> ConnectionCheck:
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if not token:
+        return ConnectionCheck(configured=False, reachable=False, detail="GITHUB_TOKEN is not configured.")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(f"https://api.github.com/repos/{repository}", headers=headers)
+        if response.status_code == 200:
+            permissions = response.json().get("permissions") or {}
+            can_push = bool(permissions.get("push") or permissions.get("admin") or permissions.get("maintain"))
+            detail = "Repository is reachable with push access." if can_push else "Repository is reachable, but push access was not confirmed."
+            return ConnectionCheck(configured=True, reachable=can_push, detail=detail)
+        if response.status_code in {401, 403}:
+            return ConnectionCheck(configured=True, reachable=False, detail="GitHub rejected the configured token or its repository permissions.")
+        if response.status_code == 404:
+            return ConnectionCheck(configured=True, reachable=False, detail="Configured repository was not found or is not accessible to the token.")
+        return ConnectionCheck(configured=True, reachable=False, detail=f"GitHub returned HTTP {response.status_code}.")
+    except httpx.HTTPError:
+        return ConnectionCheck(configured=True, reachable=False, detail="GitHub could not be reached from the Amosclaud service.")
+
+
+async def _check_model() -> ConnectionCheck:
+    model_url = os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
+    if not model_url:
+        return ConnectionCheck(configured=False, reachable=False, detail="AMOSCLAUD_MODEL_URL is not configured.")
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(f"{model_url}/api/tags")
+        if response.status_code == 200:
+            models = response.json().get("models") or []
+            detail = f"Model service is reachable with {len(models)} installed model(s)."
+            return ConnectionCheck(configured=True, reachable=True, detail=detail)
+        return ConnectionCheck(configured=True, reachable=False, detail=f"Model service returned HTTP {response.status_code}.")
+    except (httpx.HTTPError, ValueError):
+        return ConnectionCheck(configured=True, reachable=False, detail="Model service could not be reached or returned an invalid response.")
+
+
+@router.get("/preflight", response_model=GitHubTravelPreflightResponse)
+async def github_travel_preflight(
+    request: Request,
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
+) -> GitHubTravelPreflightResponse:
+    """Verify production GitHub and model connectivity without exposing credentials."""
+    _authorise(request, x_amosclaud_owner_key)
+    github = await _check_github(DEFAULT_REPOSITORY)
+    model = await _check_model()
+    return GitHubTravelPreflightResponse(
+        ready=github.reachable and model.reachable,
+        repository=DEFAULT_REPOSITORY,
+        github=github,
+        model=model,
+    )
+
+
+@router.get("/history", response_model=list[RepositoryTaskResponse])
+async def github_travel_history(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    x_amosclaud_owner_key: Optional[str] = Header(default=None),
+) -> list[RepositoryTaskResponse]:
+    """Return recent persisted GitHub travel and repository-agent task results."""
+    _authorise(request, x_amosclaud_owner_key)
+    return list_recent_tasks(limit)
 
 
 @router.post("/travel", response_model=GitHubTravelResponse, status_code=202)

@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 from collections import defaultdict, deque
 from threading import Lock
 
+import redis
+from redis.exceptions import RedisError
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from amoscloud_ai.core.access import AccessMode, AccessPolicy
+
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """Apply security headers, request limits, origin checks, and basic abuse protection."""
+    """Apply network policy, security headers, request limits, origin checks, and abuse protection."""
 
     _lock = Lock()
     _attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -21,19 +27,53 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
-        self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "900"))
-        self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "20"))
+        # Keep brute-force protection without trapping a real user for 15 minutes.
+        # The v2 Redis namespace also releases stale locks created by the old flow,
+        # which submitted multiple login probes during one account action.
+        self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "300"))
+        self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "30"))
+        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v2"
+        self.redis_url = os.getenv("REDIS_URL", "").strip()
+        self.production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
+        self.redis = (
+            redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None
+        )
+        self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self.trust_container_gateway = os.getenv(
+            "AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         configured = os.getenv(
             "TRUSTED_ORIGINS",
             "https://amosclaud.com,https://www.amosclaud.com,http://localhost,http://localhost:8000",
         )
-        self.trusted_origins = {item.strip().rstrip("/") for item in configured.split(",") if item.strip()}
+        self.trusted_origins = {
+            item.strip().rstrip("/") for item in configured.split(",") if item.strip()
+        }
 
-    @staticmethod
-    def _client_key(request: Request) -> str:
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        host = forwarded or (request.client.host if request.client else "unknown")
-        return f"{host}:{request.url.path}"
+    def _client_host(self, request: Request) -> str:
+        if self.trust_proxy_headers:
+            forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+            if forwarded:
+                return forwarded
+        return request.client.host if request.client else "unknown"
+
+    def _network_allowed(self, policy: AccessPolicy, host: str) -> bool:
+        if policy.allows_client(host):
+            return True
+        if policy.mode is not AccessMode.LOCAL or not self.trust_container_gateway:
+            return False
+        try:
+            return ipaddress.ip_address(host).is_private
+        except ValueError:
+            return False
+
+    def _client_key(self, request: Request) -> str:
+        return f"{self._client_host(request)}:{request.url.path}"
 
     def _rate_limited(self, request: Request) -> bool:
         sensitive = {
@@ -51,6 +91,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
         cutoff = now - self.auth_window_seconds
         key = self._client_key(request)
+        if self.redis:
+            redis_key = f"amosclaud:rate:auth:{self.auth_rate_namespace}:{key}"
+            try:
+                count = self.redis.incr(redis_key)
+                if count == 1:
+                    self.redis.expire(redis_key, self.auth_window_seconds)
+                return count > self.auth_max_attempts
+            except RedisError:
+                if self.production:
+                    return True
         with self._lock:
             bucket = self._attempts[key]
             while bucket and bucket[0] < cutoff:
@@ -61,6 +111,21 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return False
 
     async def dispatch(self, request: Request, call_next):
+        try:
+            policy = AccessPolicy.from_environment()
+        except ValueError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=503)
+
+        client_host = self._client_host(request)
+        if not self._network_allowed(policy, client_host):
+            return JSONResponse(
+                {
+                    "detail": "This Amosclaud installation does not allow access from this network.",
+                    "access_mode": policy.mode.value,
+                },
+                status_code=403,
+            )
+
         content_length = request.headers.get("content-length")
         if content_length:
             try:
@@ -85,7 +150,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+        )
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; "
@@ -93,7 +160,12 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             "frame-ancestors 'none'; form-action 'self'",
         )
         if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
-            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-        if request.url.path.startswith("/api/") or request.url.path in {"/login", "/admin"}:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        if request.url.path.startswith(("/api/", "/auth")) or request.url.path in {
+            "/login",
+            "/admin",
+        }:
             response.headers.setdefault("Cache-Control", "no-store")
         return response

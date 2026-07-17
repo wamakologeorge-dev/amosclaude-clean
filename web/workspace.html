@@ -3,48 +3,115 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Repository workspace · Amosclaud</title>
+  <title>Repository · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/workspace.css" />
+  <link rel="stylesheet" href="/static/workspace-chat.css" />
 </head>
 <body>
   <header class="ws-topbar">
-    <a href="/repositories" class="ws-brand">A</a>
-    <div><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
-    <select id="ws-branch"></select>
-    <button id="ws-new-branch" type="button">New branch</button>
-    <a href="/" class="ws-agent-link">Agent</a>
+    <a href="/repositories" class="ws-brand" aria-label="Repositories">A</a>
+    <div class="ws-repo-identity">
+      <strong id="ws-repo-name">Repository</strong>
+      <span id="ws-repo-meta">Loading…</span>
+    </div>
+    <div class="ws-branch-controls">
+      <select id="ws-branch" aria-label="Branch"></select>
+      <button id="ws-new-branch" type="button">New branch</button>
+    </div>
   </header>
 
-  <main class="ws-layout">
-    <aside class="ws-files">
-      <div class="ws-files-head"><strong>Files</strong><button id="ws-new-file" type="button">＋</button></div>
-      <div id="ws-tree" class="ws-tree">Loading files…</div>
-    </aside>
+  <nav class="ws-tabs" aria-label="Repository navigation">
+    <button class="ws-tab active" data-tab="code" type="button">Code</button>
+    <button class="ws-tab" data-tab="commits" type="button">Commits</button>
+    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous <span>optional</span></button>
+  </nav>
 
-    <section class="ws-editor-pane">
-      <div class="ws-editor-toolbar">
-        <span id="ws-current-file">Select a file</span>
-        <div>
-          <button id="ws-rename" type="button" disabled>Rename</button>
-          <button id="ws-delete" type="button" disabled>Delete</button>
-          <button id="ws-save" type="button" disabled>Commit changes</button>
+  <main class="ws-main">
+    <section class="ws-panel active" data-panel="code">
+      <div class="ws-code-toolbar">
+        <div id="ws-breadcrumbs" class="ws-breadcrumbs"></div>
+        <div class="ws-code-actions">
+          <input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" />
+          <button id="ws-new-folder" type="button">New folder</button>
+          <button id="ws-new-file" type="button">New file</button>
         </div>
       </div>
-      <textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file from the left."></textarea>
-      <div class="ws-commit-bar">
-        <input id="ws-commit-message" type="text" value="Update source file" placeholder="Commit message" />
-        <span id="ws-status">Ready</span>
+
+      <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
+
+      <div class="ws-code-grid">
+        <section class="ws-browser" aria-label="Repository files">
+          <div class="ws-browser-head">
+            <strong>Name</strong><span>Size</span>
+          </div>
+          <div id="ws-tree" class="ws-tree">Loading files…</div>
+        </section>
+
+        <section class="ws-editor-pane">
+          <div class="ws-editor-empty" id="ws-editor-empty">
+            <strong>Select a file to view or edit</strong>
+            <span>Folders are clickable. Changes are committed manually to the selected branch.</span>
+          </div>
+          <div id="ws-editor-shell" hidden>
+            <div class="ws-editor-toolbar">
+              <span id="ws-current-file">Select a file</span>
+              <div>
+                <button id="ws-rename" type="button" disabled>Rename or move</button>
+                <button id="ws-delete" type="button" disabled>Delete</button>
+              </div>
+            </div>
+            <textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea>
+            <div class="ws-commit-box">
+              <label for="ws-commit-message">Commit message</label>
+              <input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" />
+              <button id="ws-save" type="button" disabled>Commit changes</button>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 
-    <aside class="ws-tools">
-      <section><h3>Source tools</h3><button id="ws-build" type="button">Build</button><button id="ws-test" type="button">Run tests</button><button id="ws-review" type="button">Review</button><button id="ws-deploy" type="button">Deploy</button></section>
-      <section><h3>Recent commits</h3><div id="ws-commits">Loading…</div></section>
-      <section><h3>Output</h3><pre id="ws-output">Select a tool to begin.</pre></section>
-    </aside>
+    <section class="ws-panel" data-panel="commits">
+      <div class="ws-section-head">
+        <div><h2>Commit history</h2><p>Manual changes made on the selected branch.</p></div>
+      </div>
+      <div id="ws-commits" class="ws-commit-list">Loading…</div>
+    </section>
+
+    <section class="ws-panel" data-panel="autonomous">
+      <div class="ws-section-head">
+        <div>
+          <h2>Autonomous</h2>
+          <p>Command the repository agent and receive live replies and verified results.</p>
+        </div>
+      </div>
+      <div class="ws-autonomous-grid">
+        <section class="ws-card">
+          <h3>Repository operations</h3>
+          <button id="ws-build" type="button">Ask Autonomous to build</button>
+          <button id="ws-test" type="button">Ask Autonomous to run tests</button>
+          <button id="ws-review" type="button">Ask Autonomous to review</button>
+          <button id="ws-deploy" type="button">Ask Autonomous to prepare deployment</button>
+        </section>
+        <section class="ws-card ws-output-card">
+          <div class="ws-chat-heading">
+            <h3>Autonomous chat</h3>
+            <div id="ws-run-state" class="ws-run-state" aria-live="polite">Ready</div>
+          </div>
+          <div id="ws-output" class="ws-chat-messages" aria-live="polite">
+            <div class="ws-chat-message agent">I am ready to work on this repository. Tell me what to build, fix, test, review, or deploy.</div>
+          </div>
+          <div class="ws-chat-compose">
+            <textarea id="ws-chat-input" rows="3" placeholder="Command Autonomous…"></textarea>
+            <button id="ws-chat-send" type="button">Send</button>
+          </div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <script src="/static/workspace.js"></script>
+  <script src="/static/workspace-enhancements.js"></script>
 </body>
 </html>

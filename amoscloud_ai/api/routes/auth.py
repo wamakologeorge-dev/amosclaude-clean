@@ -51,6 +51,11 @@ class EmailRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=254)
 
 
+class EmailCodeLoginRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=254)
+    code: str = Field(..., min_length=6, max_length=6)
+
+
 class PasswordResetRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=254)
     password: str = Field(..., min_length=10, max_length=200)
@@ -91,7 +96,7 @@ def _connect() -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS auth_codes (
             email TEXT NOT NULL,
-            purpose TEXT NOT NULL CHECK(purpose IN ('register','reset')),
+            purpose TEXT NOT NULL CHECK(purpose IN ('register','login','reset')),
             code_hash TEXT NOT NULL,
             name TEXT,
             password_hash TEXT,
@@ -101,6 +106,31 @@ def _connect() -> sqlite3.Connection:
         );
         """
     )
+    auth_codes_schema = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='auth_codes'"
+    ).fetchone()
+    if auth_codes_schema and "'login'" not in str(auth_codes_schema["sql"] or ""):
+        # SQLite cannot alter a CHECK constraint in place. Preserve outstanding
+        # registration/reset codes while extending old installations for login.
+        db.executescript(
+            """
+            ALTER TABLE auth_codes RENAME TO auth_codes_legacy;
+            CREATE TABLE auth_codes (
+                email TEXT NOT NULL,
+                purpose TEXT NOT NULL CHECK(purpose IN ('register','login','reset')),
+                code_hash TEXT NOT NULL,
+                name TEXT,
+                password_hash TEXT,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(email, purpose)
+            );
+            INSERT INTO auth_codes(email,purpose,code_hash,name,password_hash,expires_at,created_at)
+            SELECT email,purpose,code_hash,name,password_hash,expires_at,created_at
+            FROM auth_codes_legacy;
+            DROP TABLE auth_codes_legacy;
+            """
+        )
     db.commit()
     return db
 
@@ -188,8 +218,12 @@ def _send_code(email: str, code: str, purpose: str) -> None:
     password = os.getenv("SMTP_PASSWORD")
     use_tls = os.getenv("SMTP_TLS", "true").lower() == "true"
 
-    subject = "Verify your Amosclaud account" if purpose == "register" else "Reset your Amosclaud password"
-    action = "complete your Amosclaud signup" if purpose == "register" else "reset your Amosclaud password"
+    messages = {
+        "register": ("Verify your Amosclaud account", "complete your Amosclaud signup"),
+        "login": ("Your Amosclaud sign-in code", "sign in to Amosclaud"),
+        "reset": ("Reset your Amosclaud password", "reset your Amosclaud password"),
+    }
+    subject, action = messages.get(purpose, ("Your Amosclaud verification code", "continue in Amosclaud"))
     message = EmailMessage()
     message["From"] = sender
     message["To"] = email
@@ -270,6 +304,34 @@ def login(body: LoginRequest, response: Response) -> UserResponse:
     return _user_response(user)
 
 
+@router.post("/login/request-code", status_code=202)
+def request_login_code(body: EmailRequest) -> dict:
+    """Send a passwordless code without revealing whether an account exists."""
+
+    email = _normalise_email(body.email)
+    with _connect() as db:
+        user = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+        if user:
+            _create_code(db, email, "login")
+    return {"message": "If the account exists, Amosclaud sent a sign-in code"}
+
+
+@router.post("/login/verify-code", response_model=UserResponse)
+def verify_login_code(body: EmailCodeLoginRequest, response: Response) -> UserResponse:
+    email = _normalise_email(body.email)
+    with _connect() as db:
+        user = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+        if not user:
+            raise HTTPException(status_code=400, detail="Invalid or expired sign-in code")
+        try:
+            _consume_code(db, email, "login", body.code)
+        except HTTPException as error:
+            raise HTTPException(status_code=400, detail="Invalid or expired sign-in code") from error
+        token = _create_session(db, user["id"])
+    _set_session_cookie(response, token)
+    return _user_response(user)
+
+
 @router.post("/password/forgot", status_code=202)
 def forgot_password(body: EmailRequest) -> dict:
     email = _normalise_email(body.email)
@@ -280,8 +342,8 @@ def forgot_password(body: EmailRequest) -> dict:
     return {"message": "If the account exists, Amosclaud sent a reset code"}
 
 
-@router.post("/password/reset", status_code=204)
-def reset_password(body: PasswordResetRequest) -> None:
+@router.post("/password/reset", status_code=204, response_class=Response)
+def reset_password(body: PasswordResetRequest) -> Response:
     email = _normalise_email(body.email)
     with _connect() as db:
         user = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
@@ -291,6 +353,7 @@ def reset_password(body: PasswordResetRequest) -> None:
         db.execute("UPDATE users SET password_hash=?,provider='password' WHERE id=?", (_hash_password(body.password), user["id"]))
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -301,7 +364,7 @@ def me(amos_session: str | None = Cookie(default=None)) -> UserResponse:
     return _user_response(user)
 
 
-@router.post("/logout", status_code=204)
+@router.post("/logout", status_code=204, response_class=Response)
 def logout(response: Response, amos_session: str | None = Cookie(default=None)) -> Response:
     if amos_session:
         with _connect() as db:
