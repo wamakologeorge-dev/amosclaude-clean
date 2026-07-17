@@ -23,11 +23,14 @@ class SystemIdentity:
     driver: str = "Amosclaud Autonomous"
     architecture: str = "one-autonomous-agent"
     authority: str = "founder-governed"
-    version: str = "4.0.0"
+    version: str = "4.1.0"
 
 
 class AutonomousKernel:
     """The single Amosclaud Autonomous agent and backend composition root."""
+
+    PRODUCT_AREAS = ("autonomous", "repository", "results")
+    WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
     def __init__(self, workspace: Path | str = ".") -> None:
         self.workspace = Path(workspace).resolve()
@@ -47,7 +50,31 @@ class AutonomousKernel:
         authorized_writes: bool = False,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Run one task through the same Autonomous and return truthful results."""
+        """Run one governed task through the same Autonomous."""
+        objective = objective.strip()
+        mode = mode.strip().lower() or "plan"
+        if not objective:
+            return self._stamp(
+                {
+                    "status": "failed",
+                    "failed": True,
+                    "error": "empty_objective",
+                    "evidence": [],
+                }
+            )
+        if mode in self.WRITE_MODES and not authorized_writes:
+            return self._stamp(
+                {
+                    "status": "blocked",
+                    "failed": False,
+                    "error": "write_not_authorized",
+                    "evidence": [
+                        "The requested capability can make repository or deployment changes.",
+                        "Explicit write authorization is required before execution.",
+                    ],
+                }
+            )
+
         model_route = self.model_engine.route(objective)
         task = AutonomousTask(
             objective=objective,
@@ -77,36 +104,55 @@ class AutonomousKernel:
         repository: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Public three-part contract: Autonomous, Repository, and Results."""
+        """Return the public Autonomous, Repository, and Results contract."""
         raw = self.execute(
             objective=objective,
             mode=mode,
             authorized_writes=authorized_writes,
             metadata={"repository": repository, **dict(metadata or {})},
         )
-        failed = bool(raw.get("failed")) or raw.get("status") in {"failed", "error"}
+        status = self._result_status(raw)
         return {
             "autonomous": {
                 "name": self.identity.driver,
                 "identity": "one-agent",
                 "mission_number": raw.get("mission_number"),
+                "capability": mode,
             },
             "repository": {
                 "name": repository,
                 "workspace": str(self.workspace),
+                "writes_authorized": authorized_writes,
             },
             "results": {
-                "status": "failed" if failed else raw.get("status", "completed"),
-                "failed": failed,
+                "status": status,
+                "failed": status == "failed",
+                "blocked": status == "blocked",
                 "error": raw.get("error"),
-                "evidence": raw.get("evidence", []),
-                "artifacts": raw.get("artifacts", []),
-                "logs": raw.get("logs", []),
+                "evidence": list(raw.get("evidence") or []),
+                "artifacts": list(raw.get("artifacts") or []),
+                "logs": list(raw.get("logs") or []),
                 "tests": raw.get("tests"),
                 "deployment": raw.get("deployment"),
-                "raw": raw,
+                "source": raw.get("source"),
             },
         }
+
+    @staticmethod
+    def _result_status(raw: dict[str, Any]) -> str:
+        """Normalize runtime output without turning plans or blockers into success."""
+        status = str(raw.get("status") or "").strip().lower()
+        if raw.get("failed") is True or status in {"error", "failed"}:
+            return "failed"
+        if raw.get("error") or status in {"blocked", "denied", "waiting"}:
+            return "blocked"
+        if status in {"completed", "deployed", "passed", "success", "succeeded"}:
+            return "completed"
+        if status in {"planned", "planning", "ready"}:
+            return "planned"
+        if status in {"running", "verifying"}:
+            return status
+        return "completed" if raw.get("evidence") else "planned"
 
     def model_respond(
         self,
@@ -194,8 +240,9 @@ class AutonomousKernel:
             "model": self.model_engine.configuration(),
             "capabilities": self.connectors.capabilities(),
             "jobs": self.connectors.jobs(),
-            "product_areas": ["autonomous", "repository", "results"],
+            "product_areas": list(self.PRODUCT_AREAS),
             "public_agents": [self.identity.driver],
+            "write_modes": sorted(self.WRITE_MODES),
         }
 
 
