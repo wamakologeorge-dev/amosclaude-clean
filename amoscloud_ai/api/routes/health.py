@@ -21,6 +21,9 @@ router = APIRouter(tags=["health"])
 router.include_router(bundles.router, prefix="/api/v1")
 router.include_router(bundle_pages.router)
 
+from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import router as byte_metadata_router
+router.include_router(byte_metadata_router, prefix="/api/v1")
+
 
 @router.get("/health", response_model=HealthResponse, summary="Service liveness check")
 async def health() -> HealthResponse:
