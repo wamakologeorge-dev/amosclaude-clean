@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/static/chat-scroll.css" />
   <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
   <link rel="stylesheet" href="/static/conversational-agent.css" />
+  <link rel="stylesheet" href="/static/autonomous-result-cards.css" />
 </head>
 <body>
   <div id="app">
@@ -63,10 +64,10 @@
                 <div class="agent-compose">
                   <input id="agent-mode-input" type="hidden" value="autonomous-check" />
                   <div class="agent-suggestions" aria-label="Suggested requests">
-                    <button type="button" data-agent-suggestion="Create or build a repository from start to finish.">Create</button>
+                    <button type="button" data-agent-suggestion="Create a source bundle from this workspace and show the verified result.">Create</button>
                     <button type="button" data-agent-suggestion="Inspect and fix my repository, then verify the result.">Fix</button>
                     <button type="button" data-agent-suggestion="Run tests and show exact evidence.">Test</button>
-                    <button type="button" data-agent-suggestion="Deploy the approved repository and verify the live result.">Deploy</button>
+                    <button type="button" data-agent-suggestion="Create a deployment bundle and ask me for the entrypoint.">Deploy</button>
                   </div>
                   <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud Autonomous…"></textarea>
                   <button id="btn-run-agent" class="btn-primary">Send</button>
@@ -84,7 +85,7 @@
               <div class="auto-summary-item"><span>1</span><strong>Read full repository instructions</strong></div>
               <div class="auto-summary-item"><span>2</span><strong>Preserve chat instructions across pages</strong></div>
               <div class="auto-summary-item"><span>3</span><strong>Confirm repository-owner permission</strong></div>
-              <div class="auto-summary-item"><span>4</span><strong>Create, build, fix, test, or deploy</strong></div>
+              <div class="auto-summary-item"><span>4</span><strong>Create source, runtime, connector, deployment, or extension bundles</strong></div>
               <div class="auto-summary-item"><span>5</span><strong>Show evidence and work proof</strong></div>
               <div class="auto-summary-item"><span>6</span><strong>Show final location and usage</strong></div>
               <div class="auto-summary-item"><span>7</span><strong>Test learning before activation</strong></div>
@@ -103,13 +104,14 @@
         </aside>
       </section>
 
-      <p class="autonomous-note">Amosclaud Autonomous can create files and repositories, inspect and fix code, run tests, execute approved jobs, deploy work, track useful learning data, test learning before activation, and return the real result with exact evidence.</p>
+      <p class="autonomous-note">Amosclaud Autonomous can create files, repositories, and all five real bundle types; inspect and fix code; run tests; execute approved jobs; deploy work; and return the real result with exact evidence.</p>
     </main>
   </div>
 
   <div id="toast-container" aria-live="assertive"></div>
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
+  <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
   <script src="/static/autonomous-services.js"></script>
   <script src="/static/sidebar.js"></script>
