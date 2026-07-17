@@ -8,8 +8,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-python-{{ checksum "requirements.txt" }}
-            - v1-python-
+            - v2-python-{{ checksum "requirements.txt" }}
+            - v2-python-
       - run:
           name: Install dependencies
           command: |
@@ -19,28 +19,28 @@ jobs:
             pip install -r requirements.txt
             pip install pytest flake8
       - save_cache:
-          key: v1-python-{{ checksum "requirements.txt" }}
+          key: v2-python-{{ checksum "requirements.txt" }}
           paths:
             - .venv
       - run:
           name: Compile Python sources
           command: |
             . .venv/bin/activate
-            python -m compileall -q amoscloud_ai Amosclaud src tests
+            python -m compileall -q amoscloud_ai src tests
       - run:
           name: Strict syntax and import lint
           command: |
             . .venv/bin/activate
-            flake8 amoscloud_ai Amosclaud src tests --count --select=E9,F63,F7,F82 --show-source --statistics
+            flake8 amoscloud_ai src tests --count --select=E9,F63,F7,F82 --show-source --statistics
       - run:
           name: Focused platform tests
           command: |
             . .venv/bin/activate
             pytest -q \
               tests/test_server.py \
-              tests/test_assistant_system_template.py \
-              tests/test_metadata_dashboard.py \
-              tests/test_amosclaud_tamper_server.py
+              tests/test_agent_guidance.py \
+              tests/test_autonomous_integrated_intelligence.py \
+              tests/test_four_head_surfaces.py
 
 workflows:
   verify-main:
