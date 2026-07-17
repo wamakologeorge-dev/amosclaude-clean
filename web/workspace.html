@@ -23,7 +23,7 @@
   <nav class="ws-tabs" aria-label="Repository navigation">
     <button class="ws-tab active" data-tab="code" type="button">Code</button>
     <button class="ws-tab" data-tab="commits" type="button">Commits</button>
-    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous <span>optional</span></button>
+    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous</button>
   </nav>
 
   <main class="ws-main">
@@ -79,26 +79,47 @@
     </section>
 
     <section class="ws-panel" data-panel="autonomous">
-      <div class="ws-section-head">
-        <div>
-          <h2>Autonomous assistance</h2>
-          <p>Optional help only. Manual editing, commits, branches, and merges remain under your control.</p>
+      <section class="ws-autonomous-system" aria-label="Autonomous repository operator">
+        <header class="ws-autonomous-head">
+          <div>
+            <span class="ws-machine-label">Repository operating system</span>
+            <h2>Amosclaud Autonomous</h2>
+            <p>Command one agent to inspect, build, fix, test, review, or prepare deployment. It operates on the selected repository and branch, then returns verified evidence here.</p>
+          </div>
+          <div id="ws-run-state" class="ws-run-state" aria-live="polite">Ready</div>
+        </header>
+
+        <div id="ws-agent-thread" class="ws-agent-thread" aria-live="polite">
+          <article class="ws-agent-message ws-agent-message-system">
+            <strong>Autonomous online.</strong>
+            <p>Tell me what to do in this repository. I will ask only when a required detail or authorization is missing.</p>
+          </article>
         </div>
-      </div>
-      <div class="ws-autonomous-grid">
-        <section class="ws-card">
-          <h3>Repository operations</h3>
-          <button id="ws-build" type="button">Ask Autonomous to build</button>
-          <button id="ws-test" type="button">Ask Autonomous to run tests</button>
-          <button id="ws-review" type="button">Ask Autonomous to review</button>
-          <button id="ws-deploy" type="button">Ask Autonomous to prepare deployment</button>
+
+        <form id="ws-agent-command-form" class="ws-agent-command">
+          <label for="ws-agent-command">Command Autonomous</label>
+          <textarea id="ws-agent-command" rows="4" placeholder="Example: inspect the failing Python check, fix the cause, run the tests, and show me the verified result"></textarea>
+          <div class="ws-agent-command-actions">
+            <span id="ws-agent-target">Selected target: loading…</span>
+            <button id="ws-agent-run" type="submit">Run command</button>
+          </div>
+        </form>
+
+        <section class="ws-agent-result" aria-label="Autonomous result">
+          <div class="ws-agent-result-title">
+            <h3>Verified result</h3>
+            <span>Live operation output and evidence</span>
+          </div>
+          <pre id="ws-output">No command has run yet.</pre>
         </section>
-        <section class="ws-card ws-output-card">
-          <h3>Autonomous result</h3>
-          <div id="ws-run-state" class="ws-run-state" aria-live="polite">Idle</div>
-          <pre id="ws-output">Autonomous is idle. Select an optional operation to begin.</pre>
-        </section>
-      </div>
+
+        <div hidden aria-hidden="true">
+          <button id="ws-build" type="button">Build</button>
+          <button id="ws-test" type="button">Tests</button>
+          <button id="ws-review" type="button">Review</button>
+          <button id="ws-deploy" type="button">Deployment</button>
+        </div>
+      </section>
     </section>
   </main>
 
