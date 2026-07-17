@@ -1,9 +1,9 @@
-"""Canonical Amosclaud OS kernel.
+"""Canonical Amosclaud Autonomous backend.
 
-This module is the single composition root for Autonomous execution. UI routes,
-APIs, background jobs, Mini Autonomous, model services, documents, repository
-operations, and future OS layers must call this kernel instead of constructing
-independent brains.
+The product exposes exactly three concepts: Autonomous, Repository, and Results.
+All model, repair, deployment, CI, document, and repository capabilities are
+private abilities of this one Autonomous instance. No backend route or response
+should present them as separate agents.
 """
 from __future__ import annotations
 
@@ -19,15 +19,15 @@ from src.amosclaud_os.intelligence import AutonomousConnectorHub, ModelEngine
 
 @dataclass(frozen=True)
 class SystemIdentity:
-    product: str = "Amosclaud OS"
+    product: str = "Amosclaud"
     driver: str = "Amosclaud Autonomous"
-    architecture: str = "single-autonomous-kernel"
+    architecture: str = "one-autonomous-agent"
     authority: str = "founder-governed"
-    version: str = "3.1.0"
+    version: str = "4.0.0"
 
 
 class AutonomousKernel:
-    """The one head driver for all Amosclaud operating-system capabilities."""
+    """The single Amosclaud Autonomous agent and backend composition root."""
 
     def __init__(self, workspace: Path | str = ".") -> None:
         self.workspace = Path(workspace).resolve()
@@ -47,7 +47,7 @@ class AutonomousKernel:
         authorized_writes: bool = False,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Execute one governed mission through the canonical Autonomous brain."""
+        """Run one task through the same Autonomous and return truthful results."""
         model_route = self.model_engine.route(objective)
         task = AutonomousTask(
             objective=objective,
@@ -68,18 +68,59 @@ class AutonomousKernel:
         outcome["available_capabilities"] = self.connectors.capabilities()
         return self._stamp(outcome)
 
+    def run(
+        self,
+        *,
+        objective: str,
+        mode: str = "plan",
+        authorized_writes: bool = False,
+        repository: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Public three-part contract: Autonomous, Repository, and Results."""
+        raw = self.execute(
+            objective=objective,
+            mode=mode,
+            authorized_writes=authorized_writes,
+            metadata={"repository": repository, **dict(metadata or {})},
+        )
+        failed = bool(raw.get("failed")) or raw.get("status") in {"failed", "error"}
+        return {
+            "autonomous": {
+                "name": self.identity.driver,
+                "identity": "one-agent",
+                "mission_number": raw.get("mission_number"),
+            },
+            "repository": {
+                "name": repository,
+                "workspace": str(self.workspace),
+            },
+            "results": {
+                "status": "failed" if failed else raw.get("status", "completed"),
+                "failed": failed,
+                "error": raw.get("error"),
+                "evidence": raw.get("evidence", []),
+                "artifacts": raw.get("artifacts", []),
+                "logs": raw.get("logs", []),
+                "tests": raw.get("tests"),
+                "deployment": raw.get("deployment"),
+                "raw": raw,
+            },
+        }
+
     def model_respond(
         self,
         *,
         prompt: str,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Use the model as one capability of the same Autonomous kernel."""
+        """Use model inference as an internal ability of Autonomous."""
         with self._lock:
             result = self.model_engine.respond(prompt, context=context).to_dict()
         return self._stamp(result)
 
     def read_document(self, relative_path: str) -> dict[str, Any]:
+        """Read a repository document through the same Autonomous."""
         with self._lock:
             result = self.connectors.read_document(relative_path)
         return self._stamp(result)
@@ -91,6 +132,7 @@ class AutonomousKernel:
         *,
         authorized_writes: bool = False,
     ) -> dict[str, Any]:
+        """Write a repository document only after explicit authorization."""
         with self._lock:
             result = self.connectors.write_document(
                 relative_path,
@@ -108,7 +150,7 @@ class AutonomousKernel:
         execute: bool = False,
         authorized_writes: bool = False,
     ) -> dict[str, Any]:
-        """Answer or execute through the official Amosclaud Agent Assistant."""
+        """Continue the same Autonomous conversation; never create another identity."""
         from src.agent.cloud_agent import chat_with_autonomous
 
         with self._lock:
@@ -123,20 +165,18 @@ class AutonomousKernel:
         return self._stamp(result)
 
     def repair(self, *, issue: str, authorized_writes: bool = False) -> dict[str, Any]:
-        """Send a bounded repair mission to Mini Autonomous through the same kernel."""
-        from src.agent.mini_autonomous import run_mini_autonomous
-
-        with self._lock:
-            self._missions += 1
-            result = run_mini_autonomous(
-                issue,
-                workspace=str(self.workspace),
-                authorized_writes=authorized_writes,
-            )
-        return self._stamp(result)
+        """Compatibility entry point for the same Autonomous fixing a problem."""
+        return self.execute(
+            objective=issue,
+            mode="fix",
+            authorized_writes=authorized_writes,
+            metadata={"requested_capability": "repair"},
+        )
 
     def _stamp(self, result: dict[str, Any]) -> dict[str, Any]:
         stamped = dict(result)
+        stamped["agent"] = self.identity.driver
+        stamped["agent_identity"] = "one-agent"
         stamped["system_identity"] = asdict(self.identity)
         stamped["mission_number"] = self._missions
         stamped["workspace"] = str(self.workspace)
@@ -154,23 +194,8 @@ class AutonomousKernel:
             "model": self.model_engine.configuration(),
             "capabilities": self.connectors.capabilities(),
             "jobs": self.connectors.jobs(),
-            "entry_points": [
-                "assistant",
-                "engineering-loop",
-                "mini-autonomous",
-                "agent-operations",
-                "mission-control",
-                "model-router",
-                "model-response",
-                "documents",
-                "read-write",
-                "clone-fork-remote",
-                "server-connector",
-                "jobs-command-panel",
-                "ci-results",
-                "recovery-doctor",
-                "learning-academy",
-            ],
+            "product_areas": ["autonomous", "repository", "results"],
+            "public_agents": [self.identity.driver],
         }
 
 
@@ -179,7 +204,7 @@ _KERNELS_LOCK = RLock()
 
 
 def get_autonomous_kernel(workspace: Path | str = ".") -> AutonomousKernel:
-    """Return one process-wide kernel per resolved workspace."""
+    """Return one process-wide Autonomous instance per resolved workspace."""
     key = str(Path(workspace).resolve())
     with _KERNELS_LOCK:
         kernel = _KERNELS.get(key)
