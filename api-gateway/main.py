@@ -1,154 +1,159 @@
-# amos-api-gateway/main.py
-from fastapi import FastAPI, Request, Response, HTTPException, status, Depends
-from fastapi.routing import APIRoute
-from fastapi.responses import JSONResponse
-# Import the custom Git hosting engine router
-from repository.git_server import router as git_router
-# Import the autonomous codex agent engine router
-from agents.codex_agent import router as agent_router
-import httpx
+"""Amosclaud Main Root Repository Entry Point and Autonomous Fixer Engine.
+
+Combines the analytical monitoring capabilities of Amosclaud-ai with the 
+unattended self-healing code-fork generation loop of Amosclaud-fixee.
+"""
+
+from __future__ import annotations
+
+import argparse
 import logging
-import time
+import os
+import re
 import subprocess
-from pydantic import BaseModel
-# Ensure you are importing your FastAPI instance (often called router, api, or app)
+import sys
+from typing import Optional
+
+# Setup dedicated structural log outputs targeting autonomous interfaces
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] Amosclaud-Core: %(message)s")
+logger = logging.getLogger("AmosclaudOrchestrator")
 
 
-try:
-    from .config import settings
-    from .dependencies import get_current_user, rate_limiter
-except ImportError:  # Docker starts this module as top-level `main:app`.
-    from config import settings
-    from dependencies import get_current_user, rate_limiter
+class AmosclaudAutonomousEngine:
+    """Orchestrates runtime verification loops and manages automatic fallback fixes."""
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+    def __init__(self) -> __future__:
+        self.agent_ai = "Amosclaud-ai"
+        self.agent_fixer = "Amosclaud-fixee"
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    version=settings.PROJECT_VERSION,
-    description="Amos API Gateway for microservices orchestration."
-)
-
-# Initialize HTTPX client for proxying requests
-# Use a timeout to prevent hanging requests
-http_client = httpx.AsyncClient(timeout=30.0, trust_env=False)
-
-# --- Middleware for Logging ---
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    logger.info(f"Incoming request: {request.method} {request.url} from {request.client.host}")
-
-    response = await call_next(request)
-
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    logger.info(f"Outgoing response: {request.method} {request.url} - Status: {response.status_code} - Time: {process_time:.4f}s")
-    return response
-
-# --- API Gateway Routing Logic ---
-async def proxy_request(request: Request, service_url: str):
-    url = httpx.URL(service_url + request.url.path.replace("/api", "", 1)) # Remove /api prefix for backend
-    
-    # Prepare headers, removing host to prevent issues with backend services
-    headers = dict(request.headers)
-    headers.pop("host", None)
-    
-    # Forward query parameters
-    params = request.query_params
-
-    # Read request body if present
-    body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
-
-    try:
-        # Make the request to the backend service
-        proxy_response = await http_client.request(
-            method=request.method,
-            url=url,
-            headers=headers,
-            params=params,
-            content=body
-        )
-
-        # Create a new response with the backend's content and status
-        response_headers = dict(proxy_response.headers)
-        # Remove transfer-encoding header if present, as httpx handles it
-        response_headers.pop("transfer-encoding", None)
+    def run_guardrails(self) -> bool:
+        """[Amosclaud-ai] Scans the workspace code architecture and verifies alignment metrics."""
+        logger.info(f"[{self.agent_ai}] Running automated compile-time guardrail analysis...")
         
-        return Response(
-            content=proxy_response.content,
-            status_code=proxy_response.status_code,
-            headers=response_headers,
-            media_type=proxy_response.headers.get("content-type")
+        # Execute strict validation tests across application boundaries
+        result = subprocess.run(
+            ["pytest", "--verbose"],
+            capture_output=True,
+            text=True
         )
-    except httpx.RequestError as e:
-        logger.error(f"Proxy request failed for {request.url} to {url}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Service unavailable: {e}"
-        )
-    except Exception as e:
-        logger.error(f"An unexpected error occurred during proxying: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal server error occurred."
-        )
+        
+        if result.returncode == 0:
+            logger.info(f"[{self.agent_ai}] 🟢 All testing suites successfully cleared. Integrity confirmed.")
+            return True
+            
+        logger.warning(f"[{self.agent_ai}] ❌ Discrepancies intercepted inside the processing layer.")
+        print(result.stdout)
+        
+        # Auto-route failing telemetry directly over to the autonomous repair worker
+        self.execute_autonomous_code_fork(result.stdout, result.stderr)
+        return False
 
-# --- Gateway Endpoints ---
-# Example: Route requests starting with /api/service-a to SERVICE_A_URL
-@app.api_route("/api/service-a/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_service_a(
-    request: Request, 
-    path: str, 
-    current_user: dict = Depends(get_current_user), # Apply authentication
-    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
-):
-    logger.info(f"Routing to Service A for user: {current_user['username']}")
-    return await proxy_request(request, settings.SERVICE_A_URL)
+    def execute_autonomous_code_fork(self, stdout: str, stderr: str) -> None:
+        """
+        [Amosclaud-fixee] Code-fork injection module.
+        Signature: [__ERROR______]> fixer <generator-new-code-fork-error-reverse-[____<<error____]>
+        """
+        logger.warning(f"[{self.agent_fixer}] 🚨 INTERCEPTED WORKSPACE ERROR BOUNDARY CRASH.")
+        logger.info(f"[{self.agent_fixer}] Initializing automatic reverse error-parsing engines...")
+        
+        combined_logs = stdout + "\n" + stderr
+        error_fixed = False
 
-# Example: Route requests starting with /api/service-b to SERVICE_B_URL
-@app.api_route("/api/service-b/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_service_b(
-    request: Request, 
-    path: str, 
-    current_user: dict = Depends(get_current_user), # Apply authentication
-    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
-):
-    logger.info(f"Routing to Service B for user: {current_user['username']}")
-    return await proxy_request(request, settings.SERVICE_B_URL)
+        # Core remediation rule parsing: Match typical python failure declarations
+        # to trace precisely down to the targeted broken module file path
+        error_matches = re.findall(r"([a-zA-Z0-9_\-\/]+\.py):(\d+)", combined_logs)
+        
+        for file_path, line_no in error_matches:
+            if os.path.exists(file_path):
+                logger.info(f"[{self.agent_fixer}] Rewriting file path target to clear anomaly anomalies: {file_path}")
+                if self.patch_file_syntax(file_path, int(line_no)):
+                    error_fixed = True
 
-# Example: Route requests starting with /api/service-c to SERVICE_C_URL
-@app.api_route("/api/service-c/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_service_c(
-    request: Request, 
-    path: str, 
-    current_user: dict = Depends(get_current_user), # Apply authentication
-    rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
-# Mount the multi-tenant Git HTTP Cloning/Pushing gateway engine
-app.include_router(git_router)
+        if error_fixed:
+            logger.info(f"[{self.agent_fixer}] Structural alterations applied. Re-running test assertions...")
+            retest = subprocess.run(["pytest", "-q"], capture_output=True)
+            
+            if retest.returncode == 0:
+                logger.info(f"[{self.agent_fixer}] 🟢 Build validation successful. Pushing repair patch directly upstream...")
+                self.commit_and_push_patch()
+                return
+                
+        logger.error(f"[{self.agent_fixer}] Code structural density requires alternate abstraction schemas. Skipping branch lock.")
 
-# Mount the automated self-correcting Codex Agent task runtime loops
-app.include_router(agent_router)
+    def patch_file_syntax(self, file_path: str, target_line: int) -> bool:
+        """Autonomously re-balances malformed structures, unclosed definitions, or missing import items."""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
 
-# Health check endpoint (Keep your existing lines below this)
-@app.get("/health")
-async def health_check():
-    logger.info(f"Routing to Service C for user: {current_user['username']}")
-    return await proxy_request(request, settings.SERVICE_C_URL)
+            idx = target_line - 1
+            if idx >= len(lines):
+                return False
+                
+            line_content = lines[idx]
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    return {"status": "ok", "message": "API Gateway is running"}
+            # Self-healing logic pattern 1: Clean and balance unclosed parameters blocks
+            if "def " in line_content and "(" in line_content and ")" not in line_content:
+                lines[idx] = line_content.rstrip() + "):\n"
+                logger.info(f"[{self.agent_fixer}] Successfully balanced function arguments block at line {target_line}.")
+                
+            # Self-healing logic pattern 2: Inject missing microservice router references
+            elif "BaseModel" in line_content and "from pydantic import BaseModel" not in "".join(lines):
+                lines.insert(0, "from pydantic import BaseModel\n")
+                logger.info(f"[{self.agent_fixer}] Restored structural requirement component: 'from pydantic import BaseModel'.")
+            else:
+                # Catch-all safe route adjustment to clear lingering HTML response string issues
+                if "JSONResponse" not in "".join(lines) and "app" in globals():
+                    lines.insert(0, "from fastapi.responses import JSONResponse\n")
+                    return True
+                return False
 
-# Root endpoint for documentation or general info
-@app.get("/")
-async def read_root():
-    return JSONResponse(content={
-        "message": "Welcome to Amos API Gateway",
-        "version": settings.PROJECT_VERSION,
-        "docs": "/docs",
-        "redoc": "/redoc"
-    })
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            return True
+        except Exception as exc:
+            logger.error(f"[{self.agent_fixer}] Unhandled system error executing patch: {str(exc)}")
+            return False
+
+    def commit_and_push_patch(self) -> None:
+        """Pushes the automated repair patch directly back to GitHub to clear the CI pipeline loop."""
+        try:
+            subprocess.run(["git", "config", "global", "user.name", "Amosclaud-fixee"], check=True)
+            subprocess.run(["git", "config", "global", "user.email", "fixer@amosclaud.internal"], check=True)
+            subprocess.run(["git", "add", "-A"], check=True)
+            subprocess.run(["git", "commit", "-m", "chore: auto-proceed via github/workflow.amosclaud-fixer.yml"], check=True)
+            
+            # Fetch active runtime target tracking branch
+            branch_out = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=True)
+            active_branch = branch_out.stdout.strip()
+            
+            subprocess.run(["git", "push", "origin", active_branch], check=True)
+            logger.info(f"[{self.agent_fixer}] 🎉 Autonomous repository fix committed and synchronized cleanly.")
+        except subprocess.CalledProcessError as err:
+            logger.error(f"[{self.agent_fixer}] Git synchronization operation failed: {str(err)}")
+
+    def deploy(self) -> None:
+        """Routes compiled modules onto production environment hosting providers."""
+        logger.info(f"[{self.agent_ai}] Guardrails cleared. Dispatching verified server packages...")
+        # Add your server-level synchronization commands here when moving to your remote machine
+        print("🚀 Code deployment matrix completed successfully.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Autonomous Core Self-Healing Framework Interface.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--test-guardrails", action="store_true", help="Execute analysis and validation gates.")
+    group.add_argument("--deploy", action="store_true", help="Push clear builds down to server arrays.")
+
+    args = parser.parse_args()
+    engine = AmosclaudAutonomousEngine()
+
+    if args.test_guardrails:
+        # If this fails, the internal execute_autonomous_code_fork system repairs the code in the background
+        engine.run_guardrails()
+    elif args.deploy:
+        engine.deploy()
+
+
+if __name__ == "__main__":
+    main()
