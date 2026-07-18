@@ -7,6 +7,7 @@ from amoscloud_ai.codex_system_bundle import (
 )
 from amoscloud_ai.main import create_app
 from amoscloud_ai.mapping_bundles import MappingBundleStore
+from amoscloud_ai.route_discovery import route_paths
 
 
 def test_codex_system_manifest_has_safe_runtime_contract():
@@ -34,7 +35,7 @@ def test_codex_system_bundle_round_trip(tmp_path: Path):
 
 
 def test_codex_system_bundle_routes_are_registered():
-    paths = {route.path for route in create_app().routes}
+    paths = route_paths(create_app().routes)
 
     assert "/api/v1/codex/system-bundle/preview" in paths
     assert "/api/v1/codex/system-bundle" in paths
