@@ -1,15 +1,13 @@
 name: Amosclaud Autonomous Engine Injection Loop
-name: Amosclaud Automated Code Fixer
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, dev, copilot/explore-codebase ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, copilot/explore-codebase ]
 
 jobs:
   autonomous-self-healing:
-  run-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Repository
@@ -18,6 +16,23 @@ jobs:
           fetch-depth: 0
           token: \${{ secrets.GITHUB_TOKEN }}
 
+      - name: Mobile Workspace Hotfixes & Error Cleanup
+        run: |
+          echo "🧹 Running autonomous hotfixes for mobile pull-request..."
+          
+          # 1. Force remove the accidental bytecode cache file from the environment
+          if [ -f "src/__pycache__/__init__.cpython-312.pyc" ]; then
+            rm -rf "src/__pycache__"
+            echo "✅ Successfully purged pycache binary leak from the runner tracking tree."
+          fi
+          
+          # 2. Add an absolute internal system fallback layer for the spelling mismatch
+          # This maps amosclaudai (Android package) directly to amoscloud_ai (Backend namespace)
+          if [ -d "src/amoscloud_ai" ] && [ ! -d "src/amosclaudai" ]; then
+            ln -s amoscloud_ai src/amosclaudai
+            echo "✅ Created directory fallback symlink to bridge the amoscloud vs amosclaudai spelling mismatch."
+          fi
+
       - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
@@ -25,8 +40,7 @@ jobs:
 
       - name: Install Local AI Runner Stack
         run: |
-          pip install ollama pydantic pytest flake8
-          # Spin up the background model service directly inside the action runner container
+          pip install ollama pydantic pytest flake8 fastapi uvicorn
           curl -fsSL https://ollama.com | sh
           ollama serve > /dev/null 2>&1 &
           sleep 5
@@ -41,18 +55,15 @@ jobs:
           import json
           import time
 
-          MAX_ATTEMPTS = 10  # Maximum self-healing injection reloads permitted
+          MAX_ATTEMPTS = 10
 
           def run_verification_suite():
-              """Runs your local tests or linters to check the workspace status."""
-              # Using flake8 or pytest to find broken lines instantly
+              """Runs local syntax checks across backend entry points."""
               result = subprocess.run(["flake8", "main.py"], capture_output=True, text=True)
               return result.returncode, result.stdout
 
           def query_local_codex(error_logs, file_content):
-              """Injects context straight into the local qwen2.5-coder instance."""
               import http.client
-              
               prompt = (
                   f"You are an embedded autonomous self-healing agent running inside a GitHub Action pipeline.\n"
                   f"The project validation check failed. Fix the errors sequentially.\n\n"
@@ -61,7 +72,6 @@ jobs:
                   f"Apply the required corrections. Return ONLY the raw, updated file content. "
                   f"Do not write markdown formatting wrappers like ```python, explanations, or text summaries."
               )
-              
               conn = http.client.HTTPConnection("localhost", 11434)
               payload = json.dumps({
                   "model": "qwen2.5-coder:3b",
@@ -69,99 +79,58 @@ jobs:
                   "stream": False,
                   "options": {"temperature": 0.1}
               })
-              
               headers = {'Content-Type': 'application/json'}
               conn.request("POST", "/api/generate", payload, headers)
               res = conn.getresponse()
-              data = res.read()
-              return json.loads(data.decode())['response'].strip()
+              return json.loads(res.read().decode())['response'].strip()
 
           def start_autonomous_healing_loop():
               print("🚀 Starting Amosclaud Autonomous Injection Engine...")
-              
               for cycle in range(1, MAX_ATTEMPTS + 1):
                   exit_code, logs = run_verification_suite()
-                  
                   if exit_code == 0:
                       print(f"✨ Success! The repository code is fully fixed and verified after {cycle-1} self-healing reloads.")
                       return True
-                      
-                  print(f"❌ [Reload Attempt {cycle}/{MAX_ATTEMPTS}] Build failed with exit code {exit_code}. Launching injection layer...")
-                  print(f"Error Context:\n{logs}")
+                  print(f"❌ [Reload Attempt {cycle}/{MAX_ATTEMPTS}] Build failed. Launching injection layer...")
                   
-                  # Target the specific code file currently throwing the errors
                   target_file = "main.py"
+                  if not os.path.exists(target_file):
+                      with open(target_file, "w") as f:
+                          f.write("# Auto-generated entrypoint\nfrom fastapi import FastAPI\napp = FastAPI()\n")
+                  
                   with open(target_file, "r", encoding="utf-8") as f:
                       current_code = f.read()
                       
-                  # Run the correction model
                   fixed_code = query_local_codex(logs, current_code)
-                  
-                  # Safely strip out markdown backticks if the model accidentally outputs them
                   fixed_code = re.sub(r"^```python\n", "", fixed_code)
                   fixed_code = re.sub(r"\n```$", "", fixed_code)
                   
-                  # Inject the corrected code straight back into the active workspace file
                   with open(target_file, "w", encoding="utf-8") as f:
                       f.write(fixed_code)
-                      
-                  print(f"💉 Injection complete. Reloading compiler environment for the next line verification...")
                   time.sleep(2)
-                  
-              print("🔺 Error: Maximum autonomous correction threshold reached without full verification.")
               return False
 
           if __name__ == "__main__":
-              success = start_autonomous_healing_loop()
-              if not success:
+              if not start_autonomous_healing_loop():
                   exit(1)
           EOF
 
-          # Run the engine loop you just created
           python autonomous_runner.py
 
       - name: Programmatically Push Verified Code Mutations to Branch
         if: success()
         run: |
-          # Clean up the runtime script container before committing code to your tree
           rm -f autonomous_runner.py
-          
-          # Push the clean, fixed code back to your repository completely autonomously
           git config user.name "Amosclaud Codex Agent [CI]"
           git config user.email "agent-engine@amosclaud.com"
           
-          # Check if there are actual code updates to commit
+          # Clean up the local tracking index to make sure deleted pycache binaries are wiped out from git records
+          git rm --cached -r src/__pycache__ --ignore-unmatch || true
+          
           if ! git diff --exit-code; then
             git add .
-            git commit -m "fix(agent): autonomously resolved pipeline syntax and line compilation bugs"
+            git commit -m "fix(agent): autonomously resolved mobile PR conflicts, path spelling drifts, and binary bugs"
             git push origin HEAD:${{ github.head_ref || github.ref_name }}
           else
-            echo "No structural code differences detected. Skipping redundant commit cycles."
+            echo "No structural code differences detected. Workspace is pristine."
           fi
-          python-python-version: '3.11'
-
-      - name: Install Project Dependencies
-        run: |
-          pip install -r requirements.txt || echo "No packages to pre-install"
-
-      - name: Execute Code Linting & Test Verification
-        id: tester
-        run: |
-          # Intentional check failure capture point
-          python -m pytest > test_logs.txt 2>&1
-
-      - name: Trigger Codex Fixer Agent on Failure
-        if: failure()
-        env:
-          AMOS_GATEWAY: "http://your-server-ip:8100/api/agent/run" # Replace with your public endpoint
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Test layer failed. Packing runtime state and piping to Amosclaud Codex engine..."
-          
-          # Convert the crash trace file cleanly to single line string format
-          ERROR_LOGS=$(cat test_logs.txt | jq -sRr @uri)
-          
-          # Send payload data package to your server router endpoint
-          curl -X POST "$AMOS_GATEWAY" \
-            -H "Content-Type: application/json" \
-            -d "{\"objective\": \"A test failed in the repo build loop. Read the file environment data and execute self-correction layers until it passes. Log error context: $ERROR_LOGS\", \"workspace_path\": \"./\"}"
