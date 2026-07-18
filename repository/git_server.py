@@ -12,7 +12,16 @@ REPOS_ROOT = Path("/var/www/amosclaud/repositories")
 def get_repo_absolute_path(username: str, repo_name: str) -> Path:
     """Helper to cleanly extract the bare repository file track path."""
     clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
-    return REPOS_ROOT / username / clean_name
+
+    base_root = REPOS_ROOT.resolve(strict=False)
+    candidate_path = (base_root / username / clean_name).resolve(strict=False)
+
+    try:
+        candidate_path.relative_to(base_root)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid repository path.")
+
+    return candidate_path
 
 @router.get("/{username}/{repo_name}/info/refs")
 async def git_info_refs(username: str, repo_name: str, service: str, request: Request):
