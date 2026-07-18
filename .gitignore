@@ -23,23 +23,9 @@ htmlcov/
 .idea/
 .vscode/
 
-# Environment and secret files
+# Environment files
 .env
-.env.*
-!.env.example
-!.env.production.example
-!.env.workspace.example
-*.pem
-*.key
-*.p12
-*.pfx
-
-# Local databases and runtime data
-*.db
-*.sqlite
-*.sqlite3
-data/*
-!data/.gitkeep
+.env.local
 
 # OS
 .DS_Store

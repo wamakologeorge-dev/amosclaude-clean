@@ -171,6 +171,7 @@ def create_app(static_folder: str = "web") -> Flask:
                     run["status"] = status
                 if logs:
                     run["logs"] += logs + "\n"
+"
                 break
         return jsonify({"success": True})
 

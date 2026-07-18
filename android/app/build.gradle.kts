@@ -16,8 +16,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Production API URL (can still be overridden at runtime in Settings)
-        buildConfigField("String", "DEFAULT_API_URL", "\"https://web-production-d94ca.up.railway.app\"")
+        // Default API URL (can be overridden at runtime in Settings)
+        buildConfigField("String", "DEFAULT_API_URL", "\"http://10.0.2.2:8000\"")
     }
 
     buildTypes {
