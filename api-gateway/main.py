@@ -5,6 +5,10 @@ from fastapi.responses import JSONResponse
 import httpx
 import logging
 import time
+import subprocess
+from pydantic import BaseModel
+# Ensure you are importing your FastAPI instance (often called router, api, or app)
+
 
 try:
     from .config import settings
