@@ -22,6 +22,7 @@
       <nav>
         <button class="drawer-link active" data-target="content"><span class="drawer-icon">💬</span>Agent Chat</button>
         <a class="drawer-link" href="/repositories"><span class="drawer-icon">📁</span>Repositories</a>
+        <a class="drawer-link" href="/bundles"><span class="drawer-icon">📦</span>Bundles</a>
         <button class="drawer-link" data-target="pipelines-table"><span class="drawer-icon">🔁</span>Pipelines</button>
         <button class="drawer-link" data-target="deployments-table"><span class="drawer-icon">🚀</span>Deployments</button>
         <a class="drawer-link" href="/admin/wifi"><span class="drawer-icon">📶</span>Wi-Fi Management</a>

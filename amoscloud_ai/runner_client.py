@@ -25,7 +25,8 @@ def _configuration() -> tuple[str, str, str, Path, float]:
     workspace_raw = os.getenv("AMOSCLAUD_RUNNER_WORKSPACE", "").strip()
     if not runner_id or not runner_token or not workspace_raw:
         raise RunnerConfigurationError(
-            "AMOSCLAUD_RUNNER_ID, AMOSCLAUD_RUNNER_TOKEN, and AMOSCLAUD_RUNNER_WORKSPACE are required"
+            "AMOSCLAUD_RUNNER_ID, AMOSCLAUD_RUNNER_TOKEN, and "
+            "AMOSCLAUD_RUNNER_WORKSPACE are required"
         )
     workspace = Path(workspace_raw).expanduser().resolve()
     if not workspace.is_dir():
@@ -44,7 +45,7 @@ def _heartbeat(client: httpx.Client, api_url: str, runner_id: str, token: str) -
     capabilities = ["ask", "build", "test", "review", "monitor"]
     if model_url:
         try:
-            health = client.get(f"{model_url}/health", headers=_model_headers(), timeout=10)
+            health = client.get(f"{model_url}/ready", headers=_model_headers(), timeout=30)
             health.raise_for_status()
             health_payload = health.json()
             model_status = {
@@ -75,7 +76,9 @@ def _heartbeat(client: httpx.Client, api_url: str, runner_id: str, token: str) -
 
 def _model_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
-    token = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
+    token = (
+        os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip() or os.getenv("AMOSCLAUD_API_KEY", "").strip()
+    )
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers

@@ -1,10 +1,6 @@
-"""
-AIAssistant — Amosclaud-AI powered code generation, review, and suggestions.
+"""AI-assisted code generation, review, documentation, and test creation."""
 
-Provides high-level AI helpers that integrate with the existing Amosclaud-AI
-infrastructure (code analysis, contingency handling) and expose a simple
-interface for generating, reviewing, documenting, and refactoring code.
-"""
+from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
@@ -13,14 +9,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.ai.agent_contingency import AIAgentContingency
 from src.core.code_analyzer import CodeAnalyzer
-from src.ai.agent_contingency import AIAgentContingency, ContingencyLevel
 
 logger = logging.getLogger(__name__)
 
 
 class SuggestionType(Enum):
     """Category of an AI suggestion."""
+
     CODE_GENERATION = "code_generation"
     CODE_REVIEW = "code_review"
     REFACTORING = "refactoring"
@@ -33,7 +30,8 @@ class SuggestionType(Enum):
 
 @dataclass
 class AISuggestion:
-    """A single suggestion produced by the AI assistant."""
+    """A single suggestion produced by the assistant."""
+
     suggestion_type: SuggestionType
     title: str
     description: str
@@ -57,7 +55,8 @@ class AISuggestion:
 
 @dataclass
 class ReviewResult:
-    """Result of an AI code review."""
+    """Result of a code review."""
+
     file_path: str
     suggestions: List[AISuggestion]
     overall_score: float
@@ -67,40 +66,13 @@ class ReviewResult:
     @property
     def has_issues(self) -> bool:
         return any(
-            s.suggestion_type in (SuggestionType.BUG_FIX, SuggestionType.SECURITY)
-            for s in self.suggestions
+            item.suggestion_type in (SuggestionType.BUG_FIX, SuggestionType.SECURITY)
+            for item in self.suggestions
         )
 
 
 class AIAssistant:
-    """
-    Amosclaud-AI assistant for developer productivity.
-
-    Wraps the existing :class:`~src.core.code_analyzer.CodeAnalyzer` and
-    :class:`~src.ai.agent_contingency.AIAgentContingency` components and
-    provides high-level methods for common AI-assisted developer tasks.
-
-    Usage::
-
-        assistant = AIAssistant()
-
-        # Review a file
-        review = assistant.review_file("src/app.py")
-        for suggestion in review.suggestions:
-            print(suggestion.title)
-
-        # Generate a new function
-        snippet = assistant.generate_function(
-            name="calculate_total",
-            description="Sum a list of floats and return the result.",
-            language="python",
-        )
-        print(snippet)
-
-        # Generate tests for a file
-        tests = assistant.generate_tests("src/app.py")
-        print(tests)
-    """
+    """Developer assistant that produces executable starter code and evidence."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         self._config = config or {}
@@ -110,40 +82,31 @@ class AIAssistant:
         )
         self._history: List[Dict[str, Any]] = []
 
-    # ------------------------------------------------------------------
-    # Code review
-    # ------------------------------------------------------------------
-
     def review_file(self, file_path: str) -> ReviewResult:
-        """Analyse *file_path* and return AI-powered suggestions."""
+        """Analyse a file and return concrete review suggestions."""
         logger.info("Reviewing file: %s", file_path)
         analysis = self._analyzer.analyze_file(file_path)
         suggestions = self._generate_review_suggestions(file_path, analysis)
-        score = self._calculate_quality_score(analysis, suggestions)
-        summary = self._build_review_summary(analysis, suggestions)
-
+        score = self._calculate_quality_score(suggestions)
         result = ReviewResult(
             file_path=file_path,
             suggestions=suggestions,
             overall_score=score,
-            summary=summary,
+            summary=self._build_review_summary(analysis, suggestions),
         )
         self._history.append({"type": "review", "file": file_path, "score": score})
-        logger.info("Review complete — score %.1f/10, %d suggestion(s)", score, len(suggestions))
         return result
 
     def review_directory(self, dir_path: str) -> List[ReviewResult]:
-        """Review every Python file inside *dir_path*."""
+        """Review every Python file below a directory."""
         path = Path(dir_path)
-        results: List[ReviewResult] = []
-        for py_file in path.rglob("*.py"):
-            results.append(self.review_file(str(py_file)))
-        logger.info("Directory review complete — %d file(s) reviewed", len(results))
+        if not path.is_dir():
+            raise ValueError(f"Directory does not exist: {dir_path}")
+        results = [self.review_file(str(item)) for item in sorted(path.rglob("*.py"))]
+        self._history.append(
+            {"type": "review_directory", "directory": dir_path, "files": len(results)}
+        )
         return results
-
-    # ------------------------------------------------------------------
-    # Code generation
-    # ------------------------------------------------------------------
 
     def generate_function(
         self,
@@ -153,24 +116,23 @@ class AIAssistant:
         params: Optional[List[Dict[str, str]]] = None,
         return_type: str = "None",
     ) -> str:
-        """
-        Generate a function stub based on *description*.
-
-        Returns a formatted code snippet string.
-        """
-        logger.info("Generating function: %s (%s)", name, language)
+        """Generate a syntactically complete function with a safe default result."""
+        self._validate_identifier(name)
         params = params or []
-
-        if language == "python":
+        normalized = language.lower()
+        if normalized == "python":
             snippet = self._generate_python_function(name, description, params, return_type)
-        elif language in ("javascript", "typescript"):
-            snippet = self._generate_js_function(name, description, params, return_type, language)
-        elif language == "go":
+        elif normalized in {"javascript", "typescript"}:
+            snippet = self._generate_js_function(
+                name, description, params, return_type, normalized
+            )
+        elif normalized == "go":
             snippet = self._generate_go_function(name, description, params, return_type)
         else:
-            snippet = f"// Generated function: {name}\n// {description}\nfunction {name}() {{}}"
-
-        self._history.append({"type": "generate_function", "name": name, "language": language})
+            raise ValueError(f"Unsupported language: {language}")
+        self._history.append(
+            {"type": "generate_function", "name": name, "language": normalized}
+        )
         return snippet
 
     def generate_class(
@@ -180,199 +142,194 @@ class AIAssistant:
         methods: Optional[List[str]] = None,
         language: str = "python",
     ) -> str:
-        """Generate a class stub with optional method stubs."""
-        logger.info("Generating class: %s (%s)", name, language)
-        methods = methods or []
-
-        if language == "python":
-            snippet = self._generate_python_class(name, description, methods)
+        """Generate a complete class whose methods return safe default values."""
+        self._validate_identifier(name)
+        method_names = methods or []
+        for method in method_names:
+            self._validate_identifier(method)
+        normalized = language.lower()
+        if normalized == "python":
+            snippet = self._generate_python_class(name, description, method_names)
+        elif normalized in {"javascript", "typescript"}:
+            body = "\n".join(
+                f"  {method}() {{ return null; }}" for method in method_names
+            )
+            snippet = f"/** {description} */\nclass {name} {{\n{body}\n}}\n"
         else:
-            snippet = f"// Generated class: {name}\n// {description}\nclass {name} {{}}"
-
-        self._history.append({"type": "generate_class", "name": name, "language": language})
+            raise ValueError(f"Unsupported class language: {language}")
+        self._history.append(
+            {"type": "generate_class", "name": name, "language": normalized}
+        )
         return snippet
 
-    def generate_tests(
-        self,
-        file_path: str,
-        framework: str = "pytest",
-    ) -> str:
-        """Generate unit tests for the code in *file_path*."""
-        logger.info("Generating tests for: %s (%s)", file_path, framework)
+    def generate_tests(self, file_path: str, framework: str = "pytest") -> str:
+        """Generate executable discovery tests for functions and classes in a module."""
+        if framework != "pytest":
+            raise ValueError(f"Unsupported test framework: {framework}")
+        path = Path(file_path)
+        if not path.is_file():
+            raise ValueError(f"Source file does not exist: {file_path}")
         analysis = self._analyzer.analyze_file(file_path)
-        module_name = Path(file_path).stem
-        functions = analysis.get("functions", [])
-        classes = analysis.get("classes", [])
-
-        if framework == "pytest":
-            snippet = self._generate_pytest_suite(module_name, functions, classes)
-        else:
-            snippet = f"# Tests for {module_name}\n# Framework: {framework}\n"
-
+        snippet = self._generate_pytest_suite(
+            path.stem,
+            list(analysis.get("functions", [])),
+            list(analysis.get("classes", [])),
+        )
         self._history.append({"type": "generate_tests", "file": file_path})
         return snippet
 
-    # ------------------------------------------------------------------
-    # Documentation generation
-    # ------------------------------------------------------------------
-
     def generate_docs(self, file_path: str) -> str:
-        """Generate Markdown documentation for a Python module."""
-        logger.info("Generating docs for: %s", file_path)
+        """Generate Markdown documentation from static analysis evidence."""
+        path = Path(file_path)
+        if not path.is_file():
+            raise ValueError(f"Source file does not exist: {file_path}")
         analysis = self._analyzer.analyze_file(file_path)
-        module_name = Path(file_path).stem
         lines = [
-            f"# `{module_name}`\n",
-            f"*Auto-generated by Amosclaud-AI*\n",
+            f"# `{path.stem}`\n",
+            "*Generated by Amosclaud-AI from repository source analysis.*\n",
             f"**Complexity score:** {analysis.get('complexity', 'N/A')}\n",
         ]
-
-        if analysis.get("classes"):
+        functions = analysis.get("functions", [])
+        classes = analysis.get("classes", [])
+        imports = analysis.get("imports", [])
+        if classes:
             lines.append("## Classes\n")
-            for cls in analysis["classes"]:
-                lines.append(f"### `{cls}`\n")
-
-        if analysis.get("functions"):
-            lines.append("## Functions\n")
-            for fn in analysis["functions"]:
-                lines.append(f"### `{fn}()`\n")
-
-        if analysis.get("imports"):
-            lines.append("## Imports\n")
-            for imp in analysis["imports"]:
-                lines.append(f"- `{imp}`\n")
-
+            lines.extend(f"- `{item}`" for item in classes)
+        if functions:
+            lines.append("\n## Functions\n")
+            lines.extend(f"- `{item}()`" for item in functions)
+        if imports:
+            lines.append("\n## Imports\n")
+            lines.extend(f"- `{item}`" for item in imports)
         self._history.append({"type": "generate_docs", "file": file_path})
-        return "\n".join(lines)
-
-    # ------------------------------------------------------------------
-    # Refactoring suggestions
-    # ------------------------------------------------------------------
+        return "\n".join(lines) + "\n"
 
     def suggest_refactoring(self, file_path: str) -> List[AISuggestion]:
-        """Return refactoring suggestions for *file_path*."""
+        """Return evidence-based refactoring suggestions."""
         analysis = self._analyzer.analyze_file(file_path)
         suggestions: List[AISuggestion] = []
         complexity = analysis.get("complexity", 1)
-
-        if complexity > 10:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.REFACTORING,
-                title="High cyclomatic complexity",
-                description=(
-                    f"The module has a complexity score of {complexity}. "
-                    "Consider extracting logic into smaller, focused functions."
-                ),
-                file_path=file_path,
-                confidence=0.9,
-            ))
-
         functions = analysis.get("functions", [])
+        if complexity > 10:
+            suggestions.append(
+                AISuggestion(
+                    suggestion_type=SuggestionType.REFACTORING,
+                    title="High cyclomatic complexity",
+                    description=(
+                        f"The module has a complexity score of {complexity}. "
+                        "Extract focused functions and verify each path with tests."
+                    ),
+                    file_path=file_path,
+                    confidence=0.9,
+                )
+            )
         if len(functions) > 20:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.REFACTORING,
-                title="Consider splitting the module",
-                description=(
-                    f"This module defines {len(functions)} functions. "
-                    "Splitting into sub-modules improves maintainability."
-                ),
-                file_path=file_path,
-                confidence=0.8,
-            ))
-
+            suggestions.append(
+                AISuggestion(
+                    suggestion_type=SuggestionType.REFACTORING,
+                    title="Split the module",
+                    description=f"The module defines {len(functions)} functions.",
+                    file_path=file_path,
+                    confidence=0.8,
+                )
+            )
         self._history.append({"type": "refactor", "file": file_path})
         return suggestions
 
     def get_history(self) -> List[Dict[str, Any]]:
-        """Return the list of AI operations performed in this session."""
+        """Return operations performed in this process."""
         return list(self._history)
 
-    # ------------------------------------------------------------------
-    # Internal helpers — review
-    # ------------------------------------------------------------------
+    @staticmethod
+    def _validate_identifier(name: str) -> None:
+        if not name or not name.isidentifier():
+            raise ValueError(f"Invalid identifier: {name!r}")
 
     def _generate_review_suggestions(
         self, file_path: str, analysis: Dict[str, Any]
     ) -> List[AISuggestion]:
-        suggestions: List[AISuggestion] = []
         if not analysis:
-            return suggestions
-
+            return []
+        suggestions: List[AISuggestion] = []
         complexity = analysis.get("complexity", 1)
         lines = analysis.get("lines", 0)
         functions = analysis.get("functions", [])
-
         if complexity > 15:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.REFACTORING,
-                title="Reduce cyclomatic complexity",
-                description=f"Complexity score {complexity} exceeds the recommended maximum of 15.",
-                file_path=file_path,
-                confidence=0.95,
-            ))
-
+            suggestions.append(
+                AISuggestion(
+                    suggestion_type=SuggestionType.REFACTORING,
+                    title="Reduce cyclomatic complexity",
+                    description=f"Complexity {complexity} exceeds the recommended maximum of 15.",
+                    file_path=file_path,
+                    confidence=0.95,
+                )
+            )
         if lines > 500:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.REFACTORING,
-                title="Large file detected",
-                description=f"File has {lines} lines. Consider splitting into smaller modules.",
-                file_path=file_path,
-                confidence=0.8,
-            ))
-
+            suggestions.append(
+                AISuggestion(
+                    suggestion_type=SuggestionType.REFACTORING,
+                    title="Large file detected",
+                    description=f"File has {lines} lines; split it into cohesive modules.",
+                    file_path=file_path,
+                    confidence=0.8,
+                )
+            )
         if not functions:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.CODE_REVIEW,
-                title="No functions detected",
-                description="The module contains no top-level functions. Consider adding structure.",
-                file_path=file_path,
-                confidence=0.7,
-            ))
-
-        if len(functions) > 0 and complexity / len(functions) < 1.2:
-            suggestions.append(AISuggestion(
-                suggestion_type=SuggestionType.DOCUMENTATION,
-                title="Add docstrings",
-                description="Functions appear to lack docstrings. Document public interfaces.",
-                file_path=file_path,
-                confidence=0.75,
-            ))
-
+            suggestions.append(
+                AISuggestion(
+                    suggestion_type=SuggestionType.CODE_REVIEW,
+                    title="No top-level functions detected",
+                    description="Confirm that module-level statements are intentional.",
+                    file_path=file_path,
+                    confidence=0.7,
+                )
+            )
         return suggestions
 
-    def _calculate_quality_score(
-        self, analysis: Dict[str, Any], suggestions: List[AISuggestion]
-    ) -> float:
+    @staticmethod
+    def _calculate_quality_score(suggestions: List[AISuggestion]) -> float:
         score = 10.0
+        penalties = {
+            SuggestionType.BUG_FIX: 2.0,
+            SuggestionType.SECURITY: 3.0,
+            SuggestionType.REFACTORING: 1.0,
+        }
         for suggestion in suggestions:
-            if suggestion.suggestion_type == SuggestionType.BUG_FIX:
-                score -= 2.0 * suggestion.confidence
-            elif suggestion.suggestion_type == SuggestionType.SECURITY:
-                score -= 3.0 * suggestion.confidence
-            elif suggestion.suggestion_type == SuggestionType.REFACTORING:
-                score -= 1.0 * suggestion.confidence
-            else:
-                score -= 0.5 * suggestion.confidence
+            score -= penalties.get(suggestion.suggestion_type, 0.5) * suggestion.confidence
         return max(0.0, round(score, 1))
 
+    @staticmethod
     def _build_review_summary(
-        self, analysis: Dict[str, Any], suggestions: List[AISuggestion]
+        analysis: Dict[str, Any], suggestions: List[AISuggestion]
     ) -> str:
         if not analysis:
             return "Unable to analyse file."
-        lines = analysis.get("lines", 0)
-        funcs = len(analysis.get("functions", []))
-        classes = len(analysis.get("classes", []))
-        complexity = analysis.get("complexity", 0)
-        issues = len(suggestions)
         return (
-            f"Analysed {lines} lines, {funcs} function(s), {classes} class(es). "
-            f"Complexity: {complexity}. Found {issues} suggestion(s)."
+            f"Analysed {analysis.get('lines', 0)} lines, "
+            f"{len(analysis.get('functions', []))} function(s), "
+            f"{len(analysis.get('classes', []))} class(es). "
+            f"Complexity: {analysis.get('complexity', 0)}. "
+            f"Found {len(suggestions)} suggestion(s)."
         )
 
-    # ------------------------------------------------------------------
-    # Internal helpers — generation
-    # ------------------------------------------------------------------
+    @staticmethod
+    def _python_default(return_type: str) -> str:
+        normalized = return_type.strip().lower().replace(" ", "")
+        if normalized in {"none", "nonetype", "optional", "any"} or "optional[" in normalized:
+            return "None"
+        if normalized in {"bool", "boolean"}:
+            return "False"
+        if normalized in {"int", "integer"}:
+            return "0"
+        if normalized in {"float", "double"}:
+            return "0.0"
+        if normalized in {"str", "string"}:
+            return '""'
+        if normalized.startswith(("list", "sequence", "tuple", "set")):
+            return "[]"
+        if normalized.startswith(("dict", "mapping")):
+            return "{}"
+        return "None"
 
     def _generate_python_function(
         self,
@@ -382,13 +339,28 @@ class AIAssistant:
         return_type: str,
     ) -> str:
         param_str = ", ".join(
-            f"{p.get('name', 'arg')}: {p.get('type', 'Any')}" for p in params
-        ) or ""
+            f"{item.get('name', 'arg')}: {item.get('type', 'Any')}" for item in params
+        )
         return (
             f"def {name}({param_str}) -> {return_type}:\n"
             f'    """{description}"""\n'
-            f"    raise NotImplementedError\n"
+            f"    return {self._python_default(return_type)}\n"
         )
+
+    @staticmethod
+    def _js_default(return_type: str) -> str:
+        normalized = return_type.strip().lower()
+        if normalized in {"boolean", "bool"}:
+            return "false"
+        if normalized in {"number", "int", "integer", "float"}:
+            return "0"
+        if normalized in {"string", "str"}:
+            return "''"
+        if "[]" in normalized or normalized.startswith("array"):
+            return "[]"
+        if normalized.startswith(("object", "record", "map")):
+            return "{}"
+        return "null"
 
     def _generate_js_function(
         self,
@@ -398,14 +370,36 @@ class AIAssistant:
         return_type: str,
         language: str,
     ) -> str:
-        param_str = ", ".join(p.get("name", "arg") for p in params)
+        rendered = []
+        for item in params:
+            param_name = item.get("name", "arg")
+            rendered.append(
+                f"{param_name}: {item.get('type', 'unknown')}"
+                if language == "typescript"
+                else param_name
+            )
         type_annotation = f": {return_type}" if language == "typescript" else ""
         return (
-            f"/**\n * {description}\n */\n"
-            f"function {name}({param_str}){type_annotation} {{\n"
-            f"  throw new Error('Not implemented');\n"
-            f"}}\n"
+            f"/** {description} */\n"
+            f"function {name}({', '.join(rendered)}){type_annotation} {{\n"
+            f"  return {self._js_default(return_type)};\n"
+            "}\n"
         )
+
+    @staticmethod
+    def _go_default(return_type: str) -> str:
+        normalized = return_type.strip()
+        if normalized in {"", "void"}:
+            return ""
+        if normalized == "bool":
+            return "false"
+        if normalized.startswith(("int", "uint", "float", "complex")):
+            return "0"
+        if normalized == "string":
+            return '""'
+        if normalized.startswith(("[]", "map[", "*", "chan ", "func(", "interface{")):
+            return "nil"
+        return f"*new({normalized})"
 
     def _generate_go_function(
         self,
@@ -414,58 +408,77 @@ class AIAssistant:
         params: List[Dict[str, str]],
         return_type: str,
     ) -> str:
-        param_str = ", ".join(
-            f"{p.get('name', 'arg')} {p.get('type', 'interface{{}}')}".replace("{{}}", "{}") for p in params
+        rendered = ", ".join(
+            f"{item.get('name', 'arg')} {item.get('type', 'interface{}')}" for item in params
         )
-        capitalized = name[0].upper() + name[1:]
+        exported = name[0].upper() + name[1:]
+        default = self._go_default(return_type)
+        return_line = f"\treturn {default}\n" if default else ""
         return (
-            f"// {capitalized} — {description}\n"
-            f"func {capitalized}({param_str}) {return_type} {{\n"
-            f"\tpanic(\"not implemented\")\n"
-            f"}}\n"
+            f"// {exported} {description}\n"
+            f"func {exported}({rendered}) {return_type} {{\n"
+            f"{return_line}"
+            "}\n"
         )
 
     def _generate_python_class(
-        self,
-        name: str,
-        description: str,
-        methods: List[str],
-    ) -> str:
-        method_stubs = ""
-        for m in methods:
-            method_stubs += (
-                f"\n    def {m}(self):\n"
-                f'        """TODO: implement {m}."""\n'
-                f"        raise NotImplementedError\n"
-            )
-        return (
-            f"class {name}:\n"
-            f'    """{description}"""\n\n'
-            f"    def __init__(self) -> None:\n"
-            f"        pass\n"
-            f"{method_stubs}"
-        )
-
-    def _generate_pytest_suite(
-        self,
-        module_name: str,
-        functions: List[str],
-        classes: List[str],
+        self, name: str, description: str, methods: List[str]
     ) -> str:
         lines = [
-            f'"""Auto-generated tests for {module_name} (Amosclaud-AI)."""\n',
-            f"import pytest",
-            f"from {module_name} import *\n",
+            f"class {name}:",
+            f'    """{description}"""',
+            "",
+            "    def __init__(self) -> None:",
+            "        self.created_at = None",
         ]
-        for fn in functions:
-            lines.append(f"\ndef test_{fn}():")
-            lines.append(f'    """Test {fn}."""')
-            lines.append(f"    # TODO: implement test for {fn}")
-            lines.append(f"    pass\n")
-        for cls in classes:
-            lines.append(f"\nclass Test{cls}:")
-            lines.append(f'    """Tests for {cls}."""\n')
-            lines.append(f"    def test_instantiation(self):")
-            lines.append(f"        obj = {cls}()")
-            lines.append(f"        assert obj is not None\n")
+        for method in methods:
+            lines.extend(
+                [
+                    "",
+                    f"    def {method}(self):",
+                    f'        """Execute {method} with a safe default result."""',
+                    "        return None",
+                ]
+            )
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _generate_pytest_suite(
+        module_name: str, functions: List[str], classes: List[str]
+    ) -> str:
+        lines = [
+            f'"""Generated discovery tests for {module_name}."""',
+            "",
+            "import inspect",
+            f"import {module_name} as module_under_test",
+            "",
+        ]
+        for function_name in functions:
+            lines.extend(
+                [
+                    f"def test_{function_name}_is_callable():",
+                    f"    target = getattr(module_under_test, {function_name!r})",
+                    "    assert callable(target)",
+                    "    assert inspect.isfunction(target)",
+                    "",
+                ]
+            )
+        for class_name in classes:
+            test_name = class_name.lower()
+            lines.extend(
+                [
+                    f"def test_{test_name}_is_class():",
+                    f"    target = getattr(module_under_test, {class_name!r})",
+                    "    assert inspect.isclass(target)",
+                    "",
+                ]
+            )
+        if not functions and not classes:
+            lines.extend(
+                [
+                    "def test_module_imports():",
+                    "    assert module_under_test is not None",
+                    "",
+                ]
+            )
         return "\n".join(lines)

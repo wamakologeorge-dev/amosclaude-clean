@@ -2,107 +2,66 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Repository · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/workspace.css" />
 </head>
 <body>
   <header class="ws-topbar">
-    <a href="/repositories" class="ws-brand" aria-label="Repositories">A</a>
-    <div class="ws-repo-identity">
-      <strong id="ws-repo-name">Repository</strong>
-      <span id="ws-repo-meta">Loading…</span>
-    </div>
-    <div class="ws-branch-controls">
-      <select id="ws-branch" aria-label="Branch"></select>
-      <button id="ws-new-branch" type="button">New branch</button>
-    </div>
+    <button id="account-menu-button" class="ws-menu-button" type="button" aria-label="Open profile and settings" aria-expanded="false">☰</button>
+    <a href="/repositories" class="ws-brand" aria-label="Back to repositories">A</a>
+    <div class="ws-repo-identity"><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
+    <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch"></select><button id="ws-new-branch" type="button">New branch</button></div>
   </header>
 
-  <nav class="ws-tabs" aria-label="Repository navigation">
-    <button class="ws-tab active" data-tab="code" type="button">Code</button>
-    <button class="ws-tab" data-tab="commits" type="button">Commits</button>
-    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous <span>optional</span></button>
-  </nav>
+  <div id="account-drawer-backdrop" class="ws-account-backdrop" hidden></div>
+  <aside id="account-drawer" class="ws-account-drawer" hidden aria-label="Profile and settings">
+    <section class="ws-account-profile"><div class="ws-profile-avatar" data-profile-avatar>A</div><div><strong data-profile-name>Loading profile…</strong><span data-profile-email></span><span data-profile-role></span></div></section>
+    <nav><a href="/">Home</a><a class="active" href="/repositories">Repositories</a><a href="/feed">Public results</a><a href="/api/v1/github/connect">Connect GitHub</a></nav>
+    <section class="ws-settings-summary"><h2>Repository settings</h2><div><strong>Visibility and access</strong><span>Shown from the repository’s real backend record.</span></div><div><strong>Branches and commits</strong><span>Changes are committed manually to the selected branch.</span></div><div><strong>Pull requests and issues</strong><span>Unavailable here until verified repository routes are connected.</span></div><div><strong>Autonomous execution</strong><span>Not shown in Repository because real execution is not connected.</span></div></section>
+    <button data-account-logout class="ws-drawer-signout" type="button">Sign out</button>
+  </aside>
+
+  <nav class="ws-tabs" aria-label="Repository navigation"><button class="ws-tab active" data-tab="code" type="button">Code</button><button class="ws-tab" data-tab="commits" type="button">Commits</button></nav>
 
   <main class="ws-main">
+    <section id="ws-not-found" class="ws-editor-empty" hidden>
+      <strong>Repository not found</strong>
+      <span>This repository does not exist, was deleted, or your account does not have access.</span>
+      <a class="btn-primary" href="/repositories">Back to repositories</a>
+    </section>
     <section class="ws-panel active" data-panel="code">
-      <div class="ws-code-toolbar">
-        <div id="ws-breadcrumbs" class="ws-breadcrumbs"></div>
-        <div class="ws-code-actions">
-          <input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" />
-          <button id="ws-new-folder" type="button">New folder</button>
-          <button id="ws-new-file" type="button">New file</button>
-        </div>
-      </div>
-
+      <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" /><button id="ws-new-folder" type="button">New folder</button><button id="ws-new-file" type="button">New file</button></div></div>
       <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
-
       <div class="ws-code-grid">
-        <section class="ws-browser" aria-label="Repository files">
-          <div class="ws-browser-head">
-            <strong>Name</strong><span>Size</span>
-          </div>
-          <div id="ws-tree" class="ws-tree">Loading files…</div>
-        </section>
-
-        <section class="ws-editor-pane">
-          <div class="ws-editor-empty" id="ws-editor-empty">
-            <strong>Select a file to view or edit</strong>
-            <span>Folders are clickable. Changes are committed manually to the selected branch.</span>
-          </div>
-          <div id="ws-editor-shell" hidden>
-            <div class="ws-editor-toolbar">
-              <span id="ws-current-file">Select a file</span>
-              <div>
-                <button id="ws-rename" type="button" disabled>Rename or move</button>
-                <button id="ws-delete" type="button" disabled>Delete</button>
-              </div>
-            </div>
-            <textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea>
-            <div class="ws-commit-box">
-              <label for="ws-commit-message">Commit message</label>
-              <input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" />
-              <button id="ws-save" type="button" disabled>Commit changes</button>
-            </div>
-          </div>
-        </section>
+        <section class="ws-browser" aria-label="Repository files"><div class="ws-browser-head"><strong>Name</strong><span>Size</span></div><div id="ws-tree" class="ws-tree">Loading files…</div></section>
+        <section class="ws-editor-pane"><div class="ws-editor-empty" id="ws-editor-empty"><strong>Select a file to view or edit</strong><span>Folders are clickable. Changes are committed manually to the selected branch.</span></div><div id="ws-editor-shell" hidden><div class="ws-editor-toolbar"><span id="ws-current-file">Select a file</span><div><button id="ws-rename" type="button" disabled>Rename or move</button><button id="ws-delete" type="button" disabled>Delete</button></div></div><textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea><div class="ws-commit-box"><label for="ws-commit-message">Commit message</label><input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" /><button id="ws-save" type="button" disabled>Commit changes</button></div></div></section>
       </div>
     </section>
-
-    <section class="ws-panel" data-panel="commits">
-      <div class="ws-section-head">
-        <div><h2>Commit history</h2><p>Manual changes made on the selected branch.</p></div>
-      </div>
-      <div id="ws-commits" class="ws-commit-list">Loading…</div>
-    </section>
-
-    <section class="ws-panel" data-panel="autonomous">
-      <div class="ws-section-head">
-        <div>
-          <h2>Autonomous assistance</h2>
-          <p>Optional help only. Manual editing, commits, branches, and merges remain under your control.</p>
-        </div>
-      </div>
-      <div class="ws-autonomous-grid">
-        <section class="ws-card">
-          <h3>Repository operations</h3>
-          <button id="ws-build" type="button">Ask Autonomous to build</button>
-          <button id="ws-test" type="button">Ask Autonomous to run tests</button>
-          <button id="ws-review" type="button">Ask Autonomous to review</button>
-          <button id="ws-deploy" type="button">Ask Autonomous to prepare deployment</button>
-        </section>
-        <section class="ws-card ws-output-card">
-          <h3>Autonomous result</h3>
-          <div id="ws-run-state" class="ws-run-state" aria-live="polite">Idle</div>
-          <pre id="ws-output">Autonomous is idle. Select an optional operation to begin.</pre>
-        </section>
-      </div>
-    </section>
+    <section class="ws-panel" data-panel="commits"><div class="ws-section-head"><div><h2>Commit history</h2><p>Real commits recorded on the selected branch.</p></div></div><div id="ws-commits" class="ws-commit-list">Loading…</div></section>
   </main>
 
-  <script src="/static/workspace.js"></script>
-  <script src="/static/workspace-enhancements.js"></script>
+  <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
+  <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script>
+    (() => {
+      const status = document.getElementById('ws-status');
+      const notFound = document.getElementById('ws-not-found');
+      const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file');
+      const panels = document.querySelectorAll('.ws-panel');
+      const tabs = document.querySelector('.ws-tabs');
+      const showNotFound = () => {
+        if (!/repository not found/i.test(status?.textContent || '')) return;
+        document.getElementById('ws-repo-meta').textContent = 'Unavailable';
+        controls.forEach(control => { control.disabled = true; });
+        panels.forEach(panel => { panel.hidden = true; });
+        if (tabs) tabs.hidden = true;
+        if (notFound) notFound.hidden = false;
+      };
+      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true });
+      showNotFound();
+    })();
+  </script>
 </body>
 </html>
