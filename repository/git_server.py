@@ -67,8 +67,9 @@ async def git_info_refs(username: str, repo_name: str, service: str, request: Re
         subprocess.run(["git", "init", "--bare"], cwd=repo_path, check=True)
 
     # Invoke Git backend service binary stream to scan references
-    cmd = ["git", service, "--stateless-rpc", "--advertise-refs", str(repo_path)]
-    result = subprocess.run(cmd, capture_output=True, check=True)
+    # Use validated repo_path as cwd and a constant repo argument to avoid passing user-derived paths in argv.
+    cmd = ["git", service, "--stateless-rpc", "--advertise-refs", "."]
+    result = subprocess.run(cmd, cwd=repo_path, capture_output=True, check=True)
 
     # Construct strict smart-http standard protocol headers
     service_banner = f"# service={service}\n".encode('utf-8')
@@ -96,9 +97,11 @@ async def git_service_rpc(username: str, repo_name: str, service: str, request: 
     # Read incoming binary payload from git client push/pull execution stream
     body_payload = await request.body()
 
-    # Create a server-side subshell connection directly to git data processors
+    # Create a server-side subprocess connection directly to git data processors
+    # Use validated repo_path as cwd and a constant repo argument to avoid passing user-derived paths in argv.
     process = subprocess.Popen(
-        ["git", service, "--stateless-rpc", str(repo_path)],
+        ["git", service, "--stateless-rpc", "."],
+        cwd=repo_path,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
