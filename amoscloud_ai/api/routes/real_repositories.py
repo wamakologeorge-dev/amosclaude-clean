@@ -31,7 +31,7 @@ from amoscloud_ai.api.routes.repository_templates import (
     initialize_repository_template,
 )
 
-router = APIRouter(tags=["real-repositories"])
+router = APIRouter(prefix="/repositories", tags=["real-repositories"])
 
 
 class RealRepositoryCreate(BaseModel):
