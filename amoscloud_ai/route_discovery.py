@@ -5,39 +5,50 @@ from collections.abc import Iterable
 from typing import Any
 
 
-def route_paths(routes: Iterable[Any]) -> set[str]:
-    """Return paths from direct routes and nested FastAPI router wrappers.
+def _join(prefix: str, path: str) -> str:
+    if not prefix:
+        return path or ""
+    if not path:
+        return prefix
+    return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
 
-    FastAPI releases may represent ``include_router`` entries as wrapper objects
-    that expose the nested router through ``router`` rather than ``routes``.
-    Traverse both shapes so route verification reflects the actual application
-    graph instead of depending on one framework-internal representation.
+
+def route_paths(routes: Iterable[Any]) -> set[str]:
+    """Return complete paths from direct and nested FastAPI/Starlette routes.
+
+    Newer FastAPI versions may preserve included routers as wrapper routes. Their
+    child paths are relative to the wrapper path, so route verification must carry
+    the parent prefix while traversing nested ``routes``, ``router``, and ``app``
+    objects.
     """
     discovered: set[str] = set()
-    pending = list(routes)
-    seen: set[int] = set()
+    pending: list[tuple[Any, str]] = [(route, "") for route in routes]
+    seen: set[tuple[int, str]] = set()
+
     while pending:
-        route = pending.pop()
-        identity = id(route)
-        if identity in seen:
+        route, prefix = pending.pop()
+        marker = (id(route), prefix)
+        if marker in seen:
             continue
-        seen.add(identity)
+        seen.add(marker)
 
-        path = getattr(route, "path", None)
-        if isinstance(path, str):
-            discovered.add(path)
+        path = getattr(route, "path", "")
+        full_path = _join(prefix, path) if isinstance(path, str) else prefix
+        if full_path:
+            discovered.add(full_path)
 
-        nested = getattr(route, "routes", None)
-        if nested:
-            pending.extend(nested)
+        children = getattr(route, "routes", None)
+        if children:
+            pending.extend((child, full_path) for child in children)
 
         nested_router = getattr(route, "router", None)
         router_routes = getattr(nested_router, "routes", None)
         if router_routes:
-            pending.extend(router_routes)
+            pending.extend((child, full_path) for child in router_routes)
 
         nested_app = getattr(route, "app", None)
         app_routes = getattr(nested_app, "routes", None)
         if app_routes:
-            pending.extend(app_routes)
+            pending.extend((child, full_path) for child in app_routes)
+
     return discovered
