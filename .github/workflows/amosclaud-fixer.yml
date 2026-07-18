@@ -1,0 +1,47 @@
+name: Amosclaud Automated Code Fixer
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
+        with:
+          python-python-version: '3.11'
+
+      - name: Install Project Dependencies
+        run: |
+          pip install -r requirements.txt || echo "No packages to pre-install"
+
+      - name: Execute Code Linting & Test Verification
+        id: tester
+        run: |
+          # Intentional check failure capture point
+          python -m pytest > test_logs.txt 2>&1
+
+      - name: Trigger Codex Fixer Agent on Failure
+        if: failure()
+        env:
+          AMOS_GATEWAY: "http://your-server-ip:8100/api/agent/run" # Replace with your public endpoint
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Test layer failed. Packing runtime state and piping to Amosclaud Codex engine..."
+          
+          # Convert the crash trace file cleanly to single line string format
+          ERROR_LOGS=$(cat test_logs.txt | jq -sRr @uri)
+          
+          # Send payload data package to your server router endpoint
+          curl -X POST "$AMOS_GATEWAY" \
+            -H "Content-Type: application/json" \
+            -d "{\"objective\": \"A test failed in the repo build loop. Read the file environment data and execute self-correction layers until it passes. Log error context: $ERROR_LOGS\", \"workspace_path\": \"./\"}"
