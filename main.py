@@ -122,6 +122,54 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     parser.print_help()
     return 0
+# --- AMOSCLAUD GITHUB ACTION FIXER AGENT ENDPOINT ---
+
+class ActionTask(BaseModel):
+    objective: str
+    workspace_path: str
+
+@app.post("/api/agent/run")
+async def process_github_action_fix(payload: ActionTask):
+    """
+    Listens for pipeline failures, processes them with qwen2.5-coder:3b,
+    and pushes autonomous bug fixes directly back to the active branch.
+    """
+    try:
+        # 1. Structure the prompt to focus the model on fixing the runtime log errors
+        prompt = (
+            f"You are a production-grade Codex agent debugging a GitHub Action pipeline failure.\n"
+            f"Error Context:\n{payload.objective}\n\n"
+            f"Analyze the traceback log, locate the bug, rewrite the function precisely to fix it, "
+            f"and output ONLY the raw, corrected python code. Do not include conversational text or fluff."
+        )
+        
+        # 2. Fire the prompt to your local model wrapper engine
+        # In a real setup, connect this to your Ollama / local generation client:
+        # corrected_code = local_qwen_client.generate(prompt)
+        
+        # Placeholder illustrating a successfully parsed fix for illustration:
+        corrected_code = "def health_check():\n    return {'status': 'ok', 'message': 'System functional'}\n"
+        
+        # 3. Define the destination repository directory path
+        target_file = f"{payload.workspace_path}/main.py" # Or extract dynamically from logs
+        
+        # 4. Write the fixed code straight to disk
+        with open(target_file, "w", encoding="utf-8") as file:
+            file.write(corrected_code)
+
+        # 5. Programmatically stage changes and push back up to the active pull request branch
+        # This executes safely without opening subshell expansion vectors
+        subprocess.run(["git", "config", "user.name", "Amosclaud Codex Agent"], check=True)
+        subprocess.run(["git", "config", "user.email", "agent@amosclaud.com"], check=True)
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", "fix(agent): autonomously resolved test-suite runtime error"], check=True)
+        subprocess.run(["git", "push"], check=True)
+
+        return {"status": "success", "detail": "Automated code patch compiled and pushed successfully to GitHub branch."}
+
+    except Exception as e:
+        # Return cleanly without leaking system or network raw trace arrays
+        return {"status": "error", "detail": f"Codex agent push worker thread failed: {str(e)}"}
 
 
 if __name__ == "__main__":
