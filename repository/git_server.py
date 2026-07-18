@@ -43,9 +43,9 @@ def get_repo_absolute_path(username: str, repo_name: str) -> Path:
     base_root = REPOS_ROOT.resolve(strict=False)
     candidate_path = (base_root / safe_username / safe_repo_name).resolve(strict=False)
 
-    try:
-        candidate_path.relative_to(base_root)
-    except ValueError:
+    base_root_str = str(base_root)
+    candidate_path_str = str(candidate_path)
+    if os.path.commonpath([base_root_str, candidate_path_str]) != base_root_str:
         raise HTTPException(status_code=400, detail="Invalid repository path.")
 
     return candidate_path
@@ -63,7 +63,7 @@ async def git_info_refs(username: str, repo_name: str, service: str, request: Re
     
     # Auto-initialize a real bare repo if the user workspace hasn't provisioned it yet
     if not repo_path.exists():
-        os.makedirs(repo_path, exist_ok=True)
+        repo_path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "--bare"], cwd=repo_path, check=True)
 
     # Invoke Git backend service binary stream to scan references
