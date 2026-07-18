@@ -7,10 +7,6 @@ on:
   workflow_dispatch:
 
 # Grants write access so Amosclaud-fixee can automatically repair and push broken files
-      - '**' # Triggers tracking dynamically across all repository branches
-  workflow_dispatch:
-
-# Grants write access to contents so the reporting bot can push markdown files directly back
 permissions:
   contents: write
 
@@ -26,7 +22,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-      - name: Configure Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
