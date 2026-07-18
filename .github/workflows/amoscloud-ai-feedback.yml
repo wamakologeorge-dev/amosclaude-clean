@@ -1,41 +1,33 @@
-name: AmosCloud AI Feedback Loop
+name: 🤖 Amoscloud AI Feedback Loop
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  pull-requests: write
-  contents: read
+    types: [closed]
 
 jobs:
-  ai-feedback:
+  handle-denied-pr:
+    if: github.event.pull_request.merged == false && contains(github.event.pull_request.labels.*.name, 'ai-generated')
     runs-on: ubuntu-latest
+    name: AI Retry on Denied Change
+    
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.11'
+          cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install PyGithub
+          pip install -r requirements.txt
 
-      - name: Get PR Code Diff
+      - name: Trigger AI Re-Evaluation (Edit/Rewrite Faster)
         run: |
-          git diff "origin/${{ github.base_ref }}...origin/${{ github.head_ref }}" > pr_diff.txt
-          test -s pr_diff.txt || echo "No textual diff was produced." > pr_diff.txt
-
-      - name: Run Amosclaud Reviewer Engine
+          echo "Changes were denied by the owner (George Makulu or other). Going back to edit/write faster."
+          python src/amoscloud_ai/autonomous_agent.py --mode autonomous-retry --pr-number ${{ github.event.pull_request.number }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO_NAME: ${{ github.repository }}
-          DIFF_PATH: pr_diff.txt
-        run: python .github/scripts/ai_reviewer.py

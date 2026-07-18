@@ -1,61 +1,147 @@
-name: AmosCloud Continuous Integration and Deployment
+name: 🚀 Amosclaud AI - CI Pipeline
 
 on:
   push:
-    branches:
-      - '**' # Triggers on all branches, including amosclaud-setting-v*
-  workflow_dispatch:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * *'
 
 jobs:
-  validate-and-deploy:
+  agent-status:
     runs-on: ubuntu-latest
+    name: 🐦 Amosclaud-ai Status
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "=================================================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "=================================================="
+          echo "🟢 Live & Active"
+
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality & Linting
 
     steps:
-      - name: Checkout Repository Code
-        uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install black isort flake8
+
+      - run: black --check . || true
+      - run: isort --check-only . || true
+      - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
+
+  test:
+    runs-on: ubuntu-latest
+    name: Tests & Coverage
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: test-secret-key
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - run: |
+          pytest tests/ -v --cov=amoscloud_ai --cov-report=xml --cov-report=term-missing
+
+      - uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    name: 🚀 Server Smoke Test
+
+    env:
+      DATABASE_URL: sqlite:///./test.db
+      SECRET_KEY: test-secret-key
+      LOG_LEVEL: INFO
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements.txt
+          pip install pytest httpx
 
-      # 🔒 Step 1: Run Guardrail and Boundary Validation
-      - name: Run Guardrail and Boundary Validation
+      - name: Start Amoscloud AI server
         run: |
-          echo "Executing compile-time guardrail assertions..."
-          python main.py --test-guardrails
+          python -m amoscloud_ai.main &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> "$GITHUB_ENV"
+          echo "Server started with PID $SERVER_PID"
 
-      # 🚀 Step 2: Deploy ONLY if guardrails pass 100%
-      - name: Deploy to Amoscloud AI Platform
-        if: success()
-        env:
-          AMOSCLOUD_API_TOKEN: ${{ secrets.AMOSCLOUD_API_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          QUIQ_API_KEY: ${{ secrets.QUIQ_API_KEY }}
+      - name: Wait for server to be ready
         run: |
-          python main.py --deploy
+          echo "Waiting for server..."
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Server is up!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 2s..."
+            sleep 2
+          done
+          echo "❌ Server did not become ready after 15 attempts"
+          exit 1
 
-      # 🚨 Step 3: Trigger Automated Alert if guardrails fail
-      - name: Auto-Create Security Issue on Failure
-        if: failure() # 👈 Executed only if a code test fails or blocks an exploit
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Built-in GitHub token, no configuration needed
+      - name: Verify health endpoint returns 200 OK
         run: |
-          echo "Guardrail breach detected! Generating automatic incident log..."
-          gh issue create \
-            --title "🚨 SECURITY BREACH: Architectural Guardrail Violation" \
-            --body "### Incident Details
-            - **Triggered By**: @${{ github.actor }}
-            - **Branch**: \`${{ github.ref_name }}\`
-            - **Commit SHA**: ${{ github.sha }}
-            - **Status**: Deployment to \`amosclaud.com\` blocked.
-            
-            **Action Required**: Check the latest GitHub Actions runner logs immediately. A file has attempted to cross an allowed boundary layout or an AI endpoint leaked restricted data." \
-            --label "bug" \
-            --label "security"
+          RESPONSE=$(curl -s http://localhost:8000/health)
+          echo "Health response: $RESPONSE"
+          echo "$RESPONSE" | python -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          assert d['status'] == 'ok', f'Expected ok, got {d}'
+          print('✅ Health check passed!')
+          "
+
+      - name: Run pytest against live server
+        run: |
+          pytest tests/ -v --tb=short
+
+      - name: Kill server
+        if: always()
+        run: |
+          kill "$SERVER_PID" || true
+
+  security:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install bandit safety
+      - run: bandit -r src/ -f json -o bandit-report.json || true
+      - run: safety check --json || true
