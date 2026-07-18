@@ -14,20 +14,28 @@ def validate_safe_input(text: str) -> bool:
     """
     return bool(re.match(r"^[a-zA-Z0-9\-_]+$", text))
 
+def sanitize_path_component(value: str, field_name: str) -> str:
+    """
+    Normalize and validate a single path segment derived from user input.
+    Returns a canonical safe segment or raises HTTPException.
+    """
+    normalized = value.strip()
+    if not normalized or not validate_safe_input(normalized):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}.")
+    return normalized
+
 def build_safe_repo_path(username: str, repo_name: str) -> Path:
     """
     Build a repository path and ensure it remains inside REPOS_ROOT
     after canonical resolution.
     """
-    if not validate_safe_input(username):
-        raise HTTPException(status_code=400, detail="Invalid repository owner.")
+    safe_username = sanitize_path_component(username, "repository owner")
 
     repo_stem = repo_name[:-4] if repo_name.endswith(".git") else repo_name
-    if not validate_safe_input(repo_stem):
-        raise HTTPException(status_code=400, detail="Invalid repository name.")
+    safe_repo_stem = sanitize_path_component(repo_stem, "repository name")
 
-    clean_name = f"{repo_stem}.git"
-    user_component = Path(username)
+    clean_name = f"{safe_repo_stem}.git"
+    user_component = Path(safe_username)
     repo_component = Path(clean_name)
 
     if user_component.is_absolute() or repo_component.is_absolute():
