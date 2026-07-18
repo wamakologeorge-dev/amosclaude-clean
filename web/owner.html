@@ -2,12 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Owner Identity · Amosclaud</title>
-  <link rel="stylesheet" href="/static/styles.css">
   <style>
-    *{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;background:#08101d;color:#eef4ff;font-family:system-ui,sans-serif}.wrap{width:100%;max-width:900px;margin:auto;padding:22px}.card{width:100%;min-width:0;background:#101925;border:1px solid #2b3748;border-radius:24px;padding:24px;margin:18px 0;overflow:hidden}.card h1,.card h2,.card p,.card label{overflow-wrap:anywhere}.status{display:inline-block;max-width:100%;padding:9px 14px;border-radius:999px;background:#302d1c;color:#ffd76a;overflow-wrap:anywhere}.status.ok{background:#173a2a;color:#7df0a5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:100%}.metric{min-width:0;background:#0b1420;border:1px solid #334154;border-radius:18px;padding:18px}.metric span{display:block;color:#9eabc0;margin-bottom:8px}.metric strong{display:block;font-size:1.15rem;overflow-wrap:anywhere}input{display:block;width:100%;min-width:0;padding:15px;border-radius:14px;border:1px solid #40506a;background:#07111d;color:#fff;font-size:1rem}button,a.button{display:inline-flex;align-items:center;justify-content:center;max-width:100%;border:0;border-radius:14px;padding:13px 17px;font-weight:750;background:#2673ea;color:#fff;text-decoration:none;margin-top:12px;cursor:pointer;touch-action:manipulation;text-align:center;white-space:normal}button:disabled{opacity:.6;cursor:wait}.muted{color:#9eabc0}.notice{width:100%;padding:16px;border-radius:16px;background:#172335;border:1px solid #334154;white-space:pre-wrap;overflow-wrap:anywhere}.danger{color:#ff9ca4}.claim-form{display:grid;gap:14px;width:100%}.confirmation-help{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.fill-button{background:#1b2a40;font-size:.95rem;margin-top:0}.claim-button{width:100%;min-height:56px;font-size:1.05rem}.success{color:#7df0a5}.actions{display:flex;gap:12px;flex-wrap:wrap}.auto-card{border-color:#275f46;background:#10251e}
-    @media(max-width:640px){.wrap{padding:10px}.card{padding:18px;border-radius:20px;margin:12px 0}.grid{grid-template-columns:minmax(0,1fr)}.confirmation-help{display:block}.fill-button,.claim-button,.actions .button{width:100%;margin-top:10px}.claim-button{position:relative;z-index:2}.actions{display:grid;grid-template-columns:1fr}}
+    :root{color-scheme:dark;--bg:#08101d;--card:#101925;--panel:#0b1420;--line:#334154;--text:#eef4ff;--muted:#9eabc0;--blue:#2673ea;--green:#7df0a5;--red:#ff9ca4;--yellow:#ffd76a}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;max-width:100%;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    body{font-size:16px;line-height:1.5}
+    .wrap{width:min(100%,900px);margin:0 auto;padding:16px}
+    .card{display:block;width:100%;min-width:0;margin:0 0 16px;padding:22px;background:var(--card);border:1px solid #2b3748;border-radius:22px;overflow:hidden}
+    h1,h2,p,label,strong,span,div{min-width:0;overflow-wrap:break-word;word-break:normal}
+    h1{margin:4px 0 10px;font-size:clamp(1.8rem,7vw,2.6rem);line-height:1.15}
+    h2{margin:0 0 14px;font-size:clamp(1.35rem,5vw,1.8rem);line-height:1.2}
+    p{margin:8px 0}
+    .muted{color:var(--muted)}
+    .status{display:inline-flex;width:auto;max-width:100%;padding:9px 14px;border-radius:999px;background:#302d1c;color:var(--yellow);font-weight:700}
+    .status.ok{background:#173a2a;color:var(--green)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;width:100%}
+    .metric{display:block;min-width:0;padding:17px;background:var(--panel);border:1px solid var(--line);border-radius:18px}
+    .metric span{display:block;margin-bottom:7px;color:var(--muted)}
+    .metric strong{display:block;font-size:1.1rem}
+    .notice{display:block;width:100%;padding:16px;background:#172335;border:1px solid var(--line);border-radius:16px;white-space:pre-wrap}
+    .auto-card{border-color:#275f46;background:#10251e}
+    .success{color:var(--green)}.danger{color:var(--red)}
+    .claim-form{display:grid;gap:14px;width:100%}
+    .confirmation-help,.actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    input{display:block;width:100%;min-width:0;padding:15px;border:1px solid #40506a;border-radius:14px;background:#07111d;color:#fff;font:inherit}
+    button,a.button{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:48px;padding:13px 17px;border:0;border-radius:14px;background:var(--blue);color:#fff;text-decoration:none;font:inherit;font-weight:750;text-align:center;white-space:normal;cursor:pointer}
+    button:disabled{opacity:.6;cursor:wait}.fill-button{background:#1b2a40}.claim-button{width:100%;min-height:56px}
+    [hidden]{display:none!important}
+    @media(max-width:640px){.wrap{padding:10px}.card{padding:18px;border-radius:19px}.grid{grid-template-columns:1fr}.confirmation-help,.actions{display:grid;grid-template-columns:1fr}.fill-button,.actions .button{width:100%}}
   </style>
 </head>
 <body>
@@ -15,7 +39,7 @@
   <section class="card">
     <p class="muted">AMOSCLAUD PLATFORM IDENTITY</p>
     <h1>Owner Recognition Center</h1>
-    <p>When the platform has no registered owner, Amosclaud automatically recognizes the first signed-in administrator as the creator and persistent owner.</p>
+    <p>When the platform has no registered owner, Amosclaud recognizes the first signed-in administrator as the creator and persistent owner.</p>
     <span class="status" id="badge">Checking identity…</span>
   </section>
 
@@ -31,7 +55,7 @@
 
   <section class="card" id="claim-card" hidden>
     <h2>Manual recovery</h2>
-    <p class="muted">This fallback does not change your password, passkeys, sessions or user content. It only creates one protected owner mapping to your existing user ID.</p>
+    <p class="muted">This fallback only creates one protected owner mapping to your existing account.</p>
     <form id="claim-form" class="claim-form">
       <div class="confirmation-help">
         <label for="confirmation">Enter the exact confirmation phrase:</label>
@@ -44,9 +68,9 @@
   </section>
 
   <section class="card">
-    <h2>Autonomous recognition test</h2>
+    <h2>Recognition result</h2>
     <div class="notice" id="result">Waiting for identity check.</div>
-    <div class="actions">
+    <div class="actions" style="margin-top:12px">
       <a class="button" href="/admin">Open Administrator Dashboard</a>
       <a class="button" href="/cloud/agent">Open Autonomous Agent</a>
     </div>
@@ -55,8 +79,38 @@
 <script>
 const OWNER_PHRASE='MAKE ME AMOSCLAUD OWNER';
 let automaticClaimStarted=false;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function request(path,options={}){const r=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json'},...options});if(r.status===401){location.href='/login';throw new Error('Sign in required')}let body={};try{body=await r.json()}catch(_){}if(!r.ok)throw new Error(body.detail||`HTTP ${r.status}`);return body}
+const esc=v=>String(v??'Not available').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function request(path,options={}){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const response=await fetch(path,{credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},signal:controller.signal,...options});
+    if(response.redirected&&response.url.includes('/login')){location.href='/login';throw new Error('Sign in required')}
+    const type=response.headers.get('content-type')||'';
+    const body=type.includes('application/json')?await response.json():{};
+    if(response.status===401){location.href='/login';throw new Error('Sign in required')}
+    if(!response.ok)throw new Error(body.detail||`Owner service returned HTTP ${response.status}`);
+    if(!type.includes('application/json'))throw new Error('Owner service returned an unexpected response');
+    return body;
+  }catch(error){
+    if(error.name==='AbortError')throw new Error('Owner service timed out. Retry after the server is available.');
+    throw error;
+  }finally{clearTimeout(timer)}
+}
+
+function showLoadError(error){
+  const message=error.message||String(error);
+  document.getElementById('badge').textContent='Identity check failed';
+  document.getElementById('badge').className='status';
+  document.getElementById('identity').innerHTML=`<div class="metric"><span>Status</span><strong class="danger">${esc(message)}</strong></div>`;
+  document.getElementById('automatic-message').textContent=message;
+  document.getElementById('automatic-message').className='notice danger';
+  document.getElementById('result').textContent=`FAILED: ${message}`;
+  document.getElementById('result').className='notice danger';
+  document.getElementById('claim-card').hidden=false;
+}
+
 async function automaticallyRecognizeOwner(){
   if(automaticClaimStarted)return;
   automaticClaimStarted=true;
@@ -64,27 +118,38 @@ async function automaticallyRecognizeOwner(){
   message.textContent='Creator account detected. Saving this administrator as the persistent Amosclaud owner…';
   try{
     await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation:OWNER_PHRASE})});
-    message.textContent='SUCCESS: Amosclaud automatically recognized this signed-in administrator as the creator and platform owner.';
+    message.textContent='SUCCESS: This signed-in administrator is now the persistent Amosclaud owner.';
     message.className='notice success';
     await load();
-  }catch(e){
-    message.textContent=`Automatic recognition could not complete: ${e.message}\nUse Manual recovery below.`;
+  }catch(error){
+    message.textContent=`Automatic recognition could not complete: ${error.message}`;
     message.className='notice danger';
     document.getElementById('claim-card').hidden=false;
   }
 }
+
 function render(data){
-  const ok=!!data.recognized;
-  const badge=document.getElementById('badge'); badge.textContent=ok?'Recognized platform owner':'Administrator not yet recognized as owner'; badge.className=`status${ok?' ok':''}`;
-  document.getElementById('identity').innerHTML=[['Name',data.name],['Email',data.email],['Administrator',data.is_admin?'Yes':'No'],['Owner recognized',ok?'Yes':'No'],['Recognition source',data.source],['Autonomous role',data.autonomous_recognition]].map(([a,b])=>`<div class="metric"><span>${esc(a)}</span><strong>${esc(b)}</strong></div>`).join('');
+  const ok=Boolean(data.recognized);
+  const badge=document.getElementById('badge');
+  badge.textContent=ok?'Recognized platform owner':'Administrator not yet recognized as owner';
+  badge.className=`status${ok?' ok':''}`;
+  document.getElementById('identity').innerHTML=[['Name',data.name],['Email',data.email],['Administrator',data.is_admin?'Yes':'No'],['Owner recognized',ok?'Yes':'No'],['Recognition source',data.source],['Autonomous role',data.autonomous_recognition]].map(([label,value])=>`<div class="metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
   document.getElementById('claim-card').hidden=ok||!data.claim_available;
-  document.getElementById('result').textContent=ok?'PASS: Autonomous, Runtime Control Center, Vault and model diagnostics now recognize this account as owner.':'BLOCKED: another account is already registered as platform owner. Use a controlled owner-transfer migration.';
-  if(ok){const m=document.getElementById('automatic-message');m.textContent='Owner recognition is active. No button or confirmation is required.';m.className='notice success'}
-  else if(data.claim_available&&data.is_admin){automaticallyRecognizeOwner()}
+  const result=document.getElementById('result');
+  result.textContent=ok?'PASS: Amosclaud recognizes this signed-in account as the platform owner.':data.claim_available?'READY: No owner is registered. Automatic recognition will claim this administrator.':'BLOCKED: Another account is already registered as platform owner.';
+  result.className=`notice${ok?' success':''}`;
+  if(ok){
+    const message=document.getElementById('automatic-message');
+    message.textContent='Owner recognition is active. No manual confirmation is required.';
+    message.className='notice success';
+  }else if(data.claim_available&&data.is_admin){automaticallyRecognizeOwner()}
+  else if(!data.is_admin){document.getElementById('automatic-message').textContent='This account must be an administrator before it can become owner.'}
 }
-async function load(){try{render(await request('/api/v1/core/owner/status'))}catch(e){document.getElementById('result').textContent=e.message;document.getElementById('result').classList.add('danger');document.getElementById('automatic-message').textContent=e.message;document.getElementById('automatic-message').classList.add('danger')}}
+
+async function load(){try{render(await request('/api/v1/core/owner/status'))}catch(error){showLoadError(error)}}
+
 document.getElementById('fill-confirmation').addEventListener('click',()=>{const input=document.getElementById('confirmation');input.value=OWNER_PHRASE;input.focus();document.getElementById('claim-message').textContent='Confirmation ready. Tap “Recognize me as Amosclaud owner.”'});
-document.getElementById('claim-form').addEventListener('submit',async event=>{event.preventDefault();const button=document.getElementById('claim');const message=document.getElementById('claim-message');const confirmation=document.getElementById('confirmation').value.trim().toUpperCase();if(confirmation!==OWNER_PHRASE){message.textContent='The phrase is incomplete. Tap “Fill confirmation phrase” first.';message.className='notice danger';return}button.disabled=true;button.textContent='Recognizing owner…';message.textContent='Saving the protected owner identity…';message.className='notice';try{await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation})});message.textContent='Success. Amosclaud now recognizes this account as owner.';message.className='notice success';await load()}catch(e){message.textContent=e.message;message.className='notice danger'}finally{button.disabled=false;button.textContent='Recognize me as Amosclaud owner'}});
+document.getElementById('claim-form').addEventListener('submit',async event=>{event.preventDefault();const button=document.getElementById('claim');const message=document.getElementById('claim-message');const confirmation=document.getElementById('confirmation').value.trim().toUpperCase();if(confirmation!==OWNER_PHRASE){message.textContent='The phrase is incomplete. Tap “Fill confirmation phrase” first.';message.className='notice danger';return}button.disabled=true;button.textContent='Recognizing owner…';message.textContent='Saving the protected owner identity…';message.className='notice';try{await request('/api/v1/core/owner/claim',{method:'POST',body:JSON.stringify({confirmation})});message.textContent='Success. Amosclaud now recognizes this account as owner.';message.className='notice success';automaticClaimStarted=false;await load()}catch(error){message.textContent=error.message;message.className='notice danger'}finally{button.disabled=false;button.textContent='Recognize me as Amosclaud owner'}});
 load();
 </script>
 </body>

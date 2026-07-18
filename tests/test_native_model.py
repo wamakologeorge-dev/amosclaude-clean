@@ -97,6 +97,34 @@ def test_openai_compatible_server_uses_local_checkpoint(tmp_path, monkeypatch):
         assert licenses.json()["approved"] is False
 
 
+def test_native_model_accepts_amosclaud_api_key(tmp_path, monkeypatch):
+    root = tmp_path / "model"
+    initialize(root)
+    monkeypatch.setenv("AMOSCLAUD_MODEL_HOME", str(root))
+    monkeypatch.delenv("AMOSCLAUD_MODEL_TOKEN", raising=False)
+    monkeypatch.setenv("AMOSCLAUD_API_KEY", "amos_native_test_key")
+    from amosclaud_model.server import create_app
+
+    with TestClient(create_app()) as client:
+        assert client.get("/v1/models").status_code == 401
+        assert (
+            client.get(
+                "/v1/models", headers={"Authorization": "Bearer amos_native_test_key"}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.get("/v1/models", headers={"X-API-Key": "amos_native_test_key"}).status_code
+            == 200
+        )
+        metadata = client.get(
+            "/v1/model_metadata", headers={"X-API-Key": "amos_native_test_key"}
+        )
+        assert metadata.status_code == 200
+        assert metadata.json()["authentication"][0] == "amosclaud-api-key"
+        assert metadata.json()["runtime"]["engine"] == "folder-native"
+
+
 def test_versioned_checkpoints_evaluate_promote_and_rollback(tmp_path):
     root = tmp_path / "model"
     initialize(root, ModelConfig(order=2, temperature=0))

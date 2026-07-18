@@ -48,7 +48,7 @@ def test_read_only_loop_runs_all_reporting_phases_without_writes():
 def test_fix_requires_explicit_write_authorization():
     loop, files = make_loop()
     result = loop.run(objective="repair project", mode="fix", authorized_writes=False)
-    assert result.status == "failed"
+    assert result.status == "blocked"
     assert "authorization" in result.blocker.lower()
     assert files.writes == []
 

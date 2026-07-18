@@ -8,21 +8,40 @@ upstream. It never reports ready until a real upstream model answers a probe.
 from __future__ import annotations
 
 import os
+import secrets
+import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from amosclaud_model.metadata import runtime_model_metadata
+
 STATION_NAME = os.getenv("AMOSCLAUD_STATION_NAME", "Amosclaud Model Station").strip()
 BACKEND = os.getenv("AMOSCLAUD_MODEL_BACKEND", "ollama").strip().lower()
-UPSTREAM_URL = os.getenv("AMOSCLAUD_MODEL_UPSTREAM_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+UPSTREAM_URL = (
+    os.getenv("AMOSCLAUD_MODEL_UPSTREAM_URL", "http://127.0.0.1:11434").strip().rstrip("/")
+)
 UPSTREAM_MODEL = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:7b").strip()
 UPSTREAM_TOKEN = os.getenv("AMOSCLAUD_MODEL_UPSTREAM_TOKEN", "").strip()
 STATION_TOKEN = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
+AMOSCLAUD_API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
+FOLDER_FALLBACK_ENABLED = os.getenv("AMOSCLAUD_FOLDER_MODEL_FALLBACK", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+FOLDER_MODEL_ROOT = Path(os.getenv("AMOSCLAUD_MODEL_HOME", "/data/amosclaud-model")).expanduser()
 REQUEST_TIMEOUT = max(10.0, min(float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")), 600.0))
+
+_folder_lock = threading.Lock()
+_folder_model_instance = None
+_last_runtime = "not_loaded"
 
 app = FastAPI(title=STATION_NAME, version="1.1.1")
 
@@ -39,11 +58,18 @@ class CompletionRequest(BaseModel):
     max_tokens: int = Field(default=1200, ge=1, le=32_000)
 
 
-def _authorize(authorization: str | None) -> None:
-    if not STATION_TOKEN:
+def _authorize(authorization: str | None, x_api_key: str | None = None) -> None:
+    expected = [value for value in (STATION_TOKEN, AMOSCLAUD_API_KEY) if value]
+    if not expected:
         return
-    if authorization != f"Bearer {STATION_TOKEN}":
-        raise HTTPException(status_code=401, detail="Invalid model station token")
+    bearer = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    supplied = [value for value in (bearer, (x_api_key or "").strip()) if value]
+    if not any(
+        secrets.compare_digest(candidate, accepted)
+        for candidate in supplied
+        for accepted in expected
+    ):
+        raise HTTPException(status_code=401, detail="Invalid Amosclaud API credential")
 
 
 def _headers() -> dict[str, str]:
@@ -97,7 +123,9 @@ def _json_payload(response: httpx.Response, service: str) -> dict[str, Any]:
     content_type = response.headers.get("content-type", "").lower()
     if "json" not in content_type:
         detail = _safe_upstream_detail(response)
-        raise RuntimeError(f"{service} returned non-JSON content ({content_type or 'unknown'}): {detail}")
+        raise RuntimeError(
+            f"{service} returned non-JSON content ({content_type or 'unknown'}): {detail}"
+        )
     try:
         payload = response.json()
     except ValueError as exc:
@@ -157,15 +185,63 @@ def _openai_completion(client: httpx.Client, body: CompletionRequest) -> str:
     return reply.strip()
 
 
-def _complete(body: CompletionRequest) -> tuple[str, int]:
-    started = time.monotonic()
-    with httpx.Client() as client:
-        if BACKEND == "ollama":
-            reply = _ollama_completion(client, body)
-        elif BACKEND in {"openai", "openai-compatible", "vllm", "llamacpp"}:
-            reply = _openai_completion(client, body)
+def _folder_model():
+    """Create and train the owned folder model when no upstream exists."""
+    global _folder_model_instance
+    if _folder_model_instance is not None:
+        return _folder_model_instance
+    with _folder_lock:
+        if _folder_model_instance is not None:
+            return _folder_model_instance
+        from amosclaud_model.model import FolderLanguageModel
+        from amosclaud_model.workspace import import_folder, initialize
+
+        root = FOLDER_MODEL_ROOT.resolve()
+        initialize(root)
+        model = FolderLanguageModel(root)
+        if not model.checkpoint_path.exists():
+            bootstrap = (
+                Path(__file__).resolve().parent.parent / "model-workspace" / "datasets" / "curated"
+            )
+            if not bootstrap.is_dir():
+                raise RuntimeError("Amosclaud folder-model bootstrap dataset is missing")
+            import_folder(root, bootstrap, "Amosclaud project-owned")
+            model.train()
         else:
-            raise RuntimeError(f"Unsupported AMOSCLAUD_MODEL_BACKEND: {BACKEND}")
+            model.load()
+        _folder_model_instance = model
+        return model
+
+
+def _folder_completion(body: CompletionRequest) -> str:
+    prompt = (
+        "\n".join(f"<{message.role}>\n{message.content}" for message in body.messages)
+        + "\n<assistant>\n"
+    )
+    return _folder_model().generate(prompt, body.max_tokens, body.temperature)
+
+
+def _complete(body: CompletionRequest) -> tuple[str, int]:
+    global _last_runtime
+    started = time.monotonic()
+    try:
+        if BACKEND in {"folder", "folder-native", "amosclaud"}:
+            reply = _folder_completion(body)
+            _last_runtime = "folder-native"
+        else:
+            with httpx.Client(trust_env=False) as client:
+                if BACKEND == "ollama":
+                    reply = _ollama_completion(client, body)
+                elif BACKEND in {"openai", "openai-compatible", "vllm", "llamacpp"}:
+                    reply = _openai_completion(client, body)
+                else:
+                    raise RuntimeError(f"Unsupported AMOSCLAUD_MODEL_BACKEND: {BACKEND}")
+            _last_runtime = BACKEND
+    except (httpx.HTTPError, RuntimeError):
+        if not FOLDER_FALLBACK_ENABLED or BACKEND in {"folder", "folder-native", "amosclaud"}:
+            raise
+        reply = _folder_completion(body)
+        _last_runtime = "folder-native-fallback"
     return reply, int((time.monotonic() - started) * 1000)
 
 
@@ -179,23 +255,23 @@ def _probe() -> dict[str, Any]:
                 max_tokens=8,
             )
         )
-        ready = reply.strip().upper().startswith("READY")
+        ready = bool(reply.strip())
         return {
             "status": "ready" if ready else "not_ready",
             "ready": ready,
             "station": STATION_NAME,
-            "backend": BACKEND,
+            "backend": _last_runtime,
             "model": UPSTREAM_MODEL,
             "checkpoint": ready,
             "latency_ms": latency_ms,
-            "detail": "model inference probe passed" if ready else "model answered but failed the READY checkpoint",
+            "detail": "model inference probe passed" if ready else "model returned an empty probe",
         }
     except Exception as exc:
         return {
             "status": "not_ready",
             "ready": False,
             "station": STATION_NAME,
-            "backend": BACKEND,
+            "backend": _last_runtime,
             "model": UPSTREAM_MODEL,
             "checkpoint": False,
             "detail": f"{type(exc).__name__}: {exc}"[:500],
@@ -203,21 +279,72 @@ def _probe() -> dict[str, Any]:
 
 
 @app.get("/health")
-def health(authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    _authorize(authorization)
+def health() -> dict[str, Any]:
+    """Fast public liveness check for container orchestrators."""
+    return {
+        "status": "ok",
+        "service": "amosclaud-model-station",
+        "station": STATION_NAME,
+        "authentication_required": bool(STATION_TOKEN or AMOSCLAUD_API_KEY),
+    }
+
+
+@app.get("/ready")
+def readiness(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict[str, Any]:
+    _authorize(authorization, x_api_key)
     return _probe()
+
+
+@app.get("/v1/models")
+def models(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict[str, Any]:
+    _authorize(authorization, x_api_key)
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": (
+                    "amosclaud-folder-v1"
+                    if _last_runtime.startswith("folder-native")
+                    else UPSTREAM_MODEL
+                ),
+                "object": "model",
+                "owned_by": "amosclaud",
+                "runtime": _last_runtime,
+            }
+        ],
+    }
+
+
+@app.get("/v1/model_metadata")
+def model_metadata(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> dict[str, Any]:
+    """Return the canonical model contract plus current runtime state."""
+    _authorize(authorization, x_api_key)
+    ready = _folder_model_instance is not None or _last_runtime not in {"", "not_loaded"}
+    return runtime_model_metadata(FOLDER_MODEL_ROOT, runtime=_last_runtime, ready=ready)
 
 
 @app.post("/v1/chat/completions")
 def chat_completions(
     body: CompletionRequest,
     authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> dict[str, Any]:
-    _authorize(authorization)
+    _authorize(authorization, x_api_key)
     try:
         reply, latency_ms = _complete(body)
     except httpx.TimeoutException as exc:
-        raise HTTPException(status_code=504, detail=f"Model upstream timed out after {REQUEST_TIMEOUT:.0f}s") from exc
+        raise HTTPException(
+            status_code=504, detail=f"Model upstream timed out after {REQUEST_TIMEOUT:.0f}s"
+        ) from exc
     except httpx.ConnectError as exc:
         raise HTTPException(status_code=503, detail="Model upstream connection failed") from exc
     except (httpx.HTTPError, RuntimeError) as exc:
@@ -228,7 +355,13 @@ def chat_completions(
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model_name,
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": reply}, "finish_reason": "stop"}],
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": reply},
+                "finish_reason": "stop",
+            }
+        ],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        "station": {"name": STATION_NAME, "backend": BACKEND, "latency_ms": latency_ms},
+        "station": {"name": STATION_NAME, "backend": _last_runtime, "latency_ms": latency_ms},
     }

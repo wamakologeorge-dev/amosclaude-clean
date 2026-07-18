@@ -8,9 +8,9 @@ def test_kernel_singleton_per_workspace(tmp_path: Path):
     second = get_autonomous_kernel(tmp_path)
     assert first is second
     status = first.status()
-    assert status["product"] == "Amosclaud OS"
+    assert status["product"] == "Amosclaud"
     assert status["driver"] == "Amosclaud Autonomous"
-    assert status["architecture"] == "single-autonomous-kernel"
+    assert status["architecture"] == "one-autonomous-agent"
 
 
 def test_kernel_status_uses_canonical_source(tmp_path: Path):
@@ -18,5 +18,5 @@ def test_kernel_status_uses_canonical_source(tmp_path: Path):
     status = kernel.status()
     assert status["status"] == "ready"
     assert status["single_source"] == "src.amosclaud_os.kernel.AutonomousKernel"
-    assert "engineering-loop" in status["entry_points"]
-    assert "recovery-doctor" in status["entry_points"]
+    assert status["product_areas"] == ["autonomous", "repository", "results"]
+    assert status["public_agents"] == ["Amosclaud Autonomous"]

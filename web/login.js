@@ -8,6 +8,9 @@ const nameInput = document.getElementById('name');
 const identifierInput = document.getElementById('identifier');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
+const emailCodeField = document.getElementById('email-code-field');
+const emailCodeInput = document.getElementById('email-code');
+const emailCodeButton = document.getElementById('email-code-button');
 const passwordHint = document.getElementById('password-hint');
 const deviceNote = document.getElementById('device-note');
 const submitButton = document.getElementById('submit-button');
@@ -18,6 +21,7 @@ const subtitle = document.getElementById('auth-subtitle');
 const message = document.getElementById('message');
 
 let mode = 'login';
+let emailCodeMode = false;
 let navigating = false;
 
 function showMessage(text, success = false) {
@@ -160,10 +164,16 @@ function setMode(nextMode) {
   deviceNote.classList.toggle('hidden', !registering);
   passkeyLoginButton.classList.toggle('hidden', registering);
   passwordLoginDivider.classList.toggle('hidden', registering);
+  emailCodeButton.classList.toggle('hidden', registering);
+  emailCodeMode = false;
+  emailCodeField.classList.add('hidden');
+  emailCodeInput.required = false;
+  passwordInput.closest('label').classList.remove('hidden');
 
   nameInput.required = registering;
   usernameInput.required = registering;
   identifierInput.required = !registering;
+  passwordInput.required = true;
   passwordInput.minLength = registering ? 10 : 1;
   passwordInput.autocomplete = registering ? 'current-password' : 'current-password';
 
@@ -181,6 +191,35 @@ function setMode(nextMode) {
 
 loginTab.addEventListener('click', () => setMode('login'));
 registerTab.addEventListener('click', () => setMode('register'));
+
+emailCodeButton.addEventListener('click', async () => {
+  let mail = identifierInput.value.trim().toLowerCase();
+  if (!mail) {
+    showMessage('Enter your email address first.');
+    identifierInput.focus();
+    return;
+  }
+  if (!mail.includes('@')) mail += '@amosclaud.com';
+  emailCodeButton.disabled = true;
+  try {
+    const result = await requestJson('/api/v1/auth/login/request-code', {
+      method: 'POST',
+      body: JSON.stringify({email: mail}),
+    });
+    emailCodeMode = true;
+    passwordInput.required = false;
+    passwordInput.closest('label').classList.add('hidden');
+    emailCodeField.classList.remove('hidden');
+    emailCodeInput.required = true;
+    submitButton.textContent = 'Verify code and sign in';
+    showMessage(result.message, true);
+    emailCodeInput.focus();
+  } catch (error) {
+    showMessage(error.message);
+  } finally {
+    emailCodeButton.disabled = false;
+  }
+});
 
 passkeyLoginButton.addEventListener('click', async () => {
   showMessage('Waiting for fingerprint or device confirmation…', true);
@@ -217,10 +256,17 @@ form.addEventListener('submit', async event => {
     if (mode === 'login') {
       let mail = identifierInput.value.trim().toLowerCase();
       if (!mail.includes('@')) mail += '@amosclaud.com';
-      await requestJson('/api/v1/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({email: mail, password: passwordInput.value}),
-      });
+      if (emailCodeMode) {
+        await requestJson('/api/v1/auth/login/verify-code', {
+          method: 'POST',
+          body: JSON.stringify({email: mail, code: emailCodeInput.value.trim()}),
+        });
+      } else {
+        await requestJson('/api/v1/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({email: mail, password: passwordInput.value}),
+        });
+      }
       await verifySession();
       openWorkspace();
       return;
@@ -268,7 +314,7 @@ form.addEventListener('submit', async event => {
   } finally {
     if (!navigating) {
       submitButton.disabled = false;
-      submitButton.textContent = mode === 'login' ? 'Sign in with password' : 'Continue securely';
+      submitButton.textContent = mode === 'login' ? (emailCodeMode ? 'Verify code and sign in' : 'Sign in with password') : 'Continue securely';
     }
   }
 });
