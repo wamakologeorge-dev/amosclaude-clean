@@ -61,8 +61,8 @@ async def git_info_refs(
         subprocess.run(["git", "init", "--bare"], cwd=repo_path, check=True)
 
     # Secure binary invocation execution block
-    cmd = ["git", service, "--stateless-rpc", "--advertise-refs", str(repo_path)]
-    result = subprocess.run(cmd, capture_output=True, check=True)
+    cmd = ["git", service, "--stateless-rpc", "--advertise-refs", "."]
+    result = subprocess.run(cmd, capture_output=True, check=True, cwd=repo_path)
 
     service_banner = f"# service={service}\n".encode('utf-8')
     packet_prefix = f"{len(service_banner) + 4:04x}".encode('utf-8')
@@ -94,11 +94,12 @@ async def git_service_rpc(
 
     # CRITICAL: shell=False is enforced explicitly via direct vector list to ensure no shell expansion can occur
     process = subprocess.Popen(
-        ["git", service, "--stateless-rpc", str(repo_path)],
+        ["git", service, "--stateless-rpc", "."],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        shell=False 
+        shell=False,
+        cwd=repo_path
     )
 
     stdout_data, stderr_data = process.communicate(input=body_payload)
