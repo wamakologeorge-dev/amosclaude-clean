@@ -2,6 +2,10 @@
 from fastapi import FastAPI, Request, Response, HTTPException, status, Depends
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
+# Import the custom Git hosting engine router
+from repository.git_server import router as git_router
+# Import the autonomous codex agent engine router
+from agents.codex_agent import router as agent_router
 import httpx
 import logging
 import time
@@ -118,7 +122,15 @@ async def route_service_c(
     path: str, 
     current_user: dict = Depends(get_current_user), # Apply authentication
     rate_limit_ok: bool = Depends(rate_limiter) # Apply rate limiting
-):
+# Mount the multi-tenant Git HTTP Cloning/Pushing gateway engine
+app.include_router(git_router)
+
+# Mount the automated self-correcting Codex Agent task runtime loops
+app.include_router(agent_router)
+
+# Health check endpoint (Keep your existing lines below this)
+@app.get("/health")
+async def health_check():
     logger.info(f"Routing to Service C for user: {current_user['username']}")
     return await proxy_request(request, settings.SERVICE_C_URL)
 
