@@ -1,0 +1,40 @@
+version: 2.1
+
+jobs:
+  verify:
+    docker:
+      - image: cimg/python:3.12
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-python-{{ checksum "requirements.txt" }}
+            - v1-python-
+      - run:
+          name: Install dependencies
+          command: |
+            python -m pip install --upgrade pip
+            python -m pip install pytest flake8
+            if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+      - save_cache:
+          key: v1-python-{{ checksum "requirements.txt" }}
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Compile Python sources
+          command: python -m compileall amoscloud_ai tests
+      - run:
+          name: Check fatal lint errors
+          command: flake8 amoscloud_ai tests --count --select=E9,F63,F7,F82 --show-source --statistics
+      - run:
+          name: Run repository tests
+          command: pytest tests/ -q
+      - store_test_results:
+          path: test-results
+
+workflows:
+  version: 2
+  verify-repository:
+    jobs:
+      - verify
