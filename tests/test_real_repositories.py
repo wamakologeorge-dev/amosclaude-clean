@@ -1,9 +1,10 @@
 from amoscloud_ai.api.routes import repository_templates
 from amoscloud_ai.api.routes.real_repositories import CI_WORKFLOW, RealRepositoryCreate
+from amoscloud_ai.route_discovery import route_paths
 
 
 def test_real_repository_routes_are_mounted_under_repository_api():
-    paths = {route.path for route in repository_templates.router.routes}
+    paths = route_paths(repository_templates.router.routes)
     assert "/repositories/create-real" in paths
     assert "/repositories/{repository_id}/real-status" in paths
 
