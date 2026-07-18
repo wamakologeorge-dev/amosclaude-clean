@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amosclaud"
+version = "1.0.1"
+description = "Amosclaud development, repository, mail, storage, community, CI/CD, and deployment platform."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  {name = "Amosclaud Team", email = "support@amosclaud.com"}
+]
+license = {text = "Proprietary"}
+keywords = ["amosclaud", "fastapi", "cicd", "repositories", "deployment", "pwa"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Build Tools"
+]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://amosclaud.com"
+Repository = "https://github.com/wamakologeorge-dev/amosclaude-clean"
+Documentation = "https://amosclaud.com/docs"
+
+[project.scripts]
+amosclaud = "amoscloud_ai.main:main"
+
+[tool.setuptools.packages.find]
+include = ["amoscloud_ai*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

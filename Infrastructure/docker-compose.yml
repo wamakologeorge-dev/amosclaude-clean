@@ -1,0 +1,20 @@
+services:
+  amosclaud:
+    build:
+      context: ..
+      dockerfile: Infrastructure/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      AUTH_DB_PATH: /data/auth.db
+      AMOS_MAIL_DOMAIN: amosclaud.com
+      PASSKEY_RP_ID: localhost
+      PASSKEY_ORIGIN: http://localhost:8000
+      AUTH_COOKIE_SECURE: "false"
+    volumes:
+      - amosclaud-data:/data
+    restart: unless-stopped
+
+volumes:
+  amosclaud-data:

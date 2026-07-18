@@ -1,10 +1,29 @@
 """Application configuration using Pydantic Settings."""
 
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import secrets
 from functools import lru_cache
 from typing import List
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _runtime_secret_key() -> str:
+    """Return a stable Railway-derived secret or a secure local fallback."""
+    railway_parts = [
+        os.getenv("RAILWAY_PROJECT_ID", ""),
+        os.getenv("RAILWAY_SERVICE_ID", ""),
+        os.getenv("RAILWAY_ENVIRONMENT_ID", ""),
+    ]
+    material = ":".join(part for part in railway_parts if part)
+    if material:
+        return hashlib.sha256(f"amosclaud:{material}".encode()).hexdigest()
+    return secrets.token_urlsafe(48)
 
 
 class Settings(BaseSettings):
@@ -12,6 +31,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # App
@@ -35,38 +55,66 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
 
     # Security
-    secret_key: str = "change-me-in-production"
-    allowed_hosts: List[str] = ["*"]
+    secret_key: str = Field(default_factory=_runtime_secret_key)
+    allowed_hosts: List[str] = [
+        "http://localhost",
+        "http://localhost:8000",
+        "https://amosclaud.com",
+        "https://www.amosclaud.com",
+    ]
 
     # Deployment
     deployment_retries: int = 3
 
+    @field_validator("secret_key", mode="before")
+    @classmethod
+    def ensure_safe_secret(cls, value: object) -> str:
+        candidate = str(value or "").strip()
+        if len(candidate) >= 32 and candidate != "change-me-in-production":
+            return candidate
+        return _runtime_secret_key()
+
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def parse_allowed_hosts(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        raw = value.strip()
+        if not raw:
+            return [
+                "http://localhost",
+                "http://localhost:8000",
+                "https://amosclaud.com",
+                "https://www.amosclaud.com",
+            ]
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
     @field_validator("debug", mode="before")
     @classmethod
-    def parse_debug(cls, v: object) -> object:
-        if isinstance(v, str):
-            normalized = v.strip().lower()
+    def parse_debug(cls, value: object) -> object:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
             if normalized in {"release", "production", "prod"}:
                 return False
             if normalized in {"debug", "development", "dev"}:
                 return True
-        return v
+        return value
 
     @field_validator("celery_broker_url", mode="before")
     @classmethod
-    def set_celery_broker(cls, v: str, info) -> str:
-        if not v:
-            data = info.data
-            return data.get("redis_url", "redis://localhost:6379/0")
-        return v
+    def set_celery_broker(cls, value: str, info) -> str:
+        return value or info.data.get("redis_url", "redis://localhost:6379/0")
 
     @field_validator("celery_result_backend", mode="before")
     @classmethod
-    def set_celery_backend(cls, v: str, info) -> str:
-        if not v:
-            data = info.data
-            return data.get("redis_url", "redis://localhost:6379/0")
-        return v
+    def set_celery_backend(cls, value: str, info) -> str:
+        return value or info.data.get("redis_url", "redis://localhost:6379/0")
 
 
 @lru_cache

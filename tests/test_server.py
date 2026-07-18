@@ -22,6 +22,28 @@ def request(method: str, path: str, **kwargs):
 
 
 # ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+def test_root_requires_authentication():
+    resp = request("GET", "/")
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login"
+
+
+def test_login_page_is_served_by_the_application():
+    resp = request("GET", "/login")
+    assert resp.status_code == 200
+    assert "Amosclaud" in resp.text
+
+
+def test_dashboard_assets_are_served_by_the_application():
+    resp = request("GET", "/static/app.js")
+    assert resp.status_code == 200
+    assert "window.location.origin" in resp.text
+
+
+# ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
@@ -80,7 +102,6 @@ def test_autonomous_agent_rejects_unknown_mode():
 def test_list_pipelines_empty():
     resp = request("GET", "/api/v1/pipelines")
     assert resp.status_code == 200
-    # May contain items from other tests; just ensure it's a list
     assert isinstance(resp.json(), list)
 
 
@@ -106,12 +127,9 @@ def test_get_pipeline_not_found():
 
 
 def test_cancel_pipeline():
-    # Create one first
     payload = {"trigger": "push", "branch": "feature/x", "payload": {}}
     create_resp = request("POST", "/api/v1/pipelines", json=payload)
     pipeline_id = create_resp.json()["id"]
-
-    # Cancel it – if already finished in stub mode it should 409
     cancel_resp = request("DELETE", f"/api/v1/pipelines/{pipeline_id}")
     assert cancel_resp.status_code in (204, 409)
 
@@ -127,12 +145,12 @@ def test_list_deployments_empty():
 
 
 def test_start_deployment():
-    payload = {"environment": "development", "version": "1.0.0", "pre_deploy_tests": False}
+    payload = {"version": "v1.0.0", "environment": "staging"}
     resp = request("POST", "/api/v1/deployments", json=payload)
     assert resp.status_code == 201
     data = resp.json()
-    assert "id" in data
-    assert data["environment"] == "development"
+    assert data["version"] == "v1.0.0"
+    assert data["environment"] == "staging"
     assert data["message"]
     assert data["copilot_reply"].startswith("Amosclaud Autonomous Server:")
     assert data["copilot_role"] == "autonomous build, deployment, and monitoring server"
@@ -145,15 +163,11 @@ def test_get_deployment_not_found():
 
 
 def test_rollback_deployment():
-    # Create a deployment first
-    payload = {"environment": "staging", "version": "1.0.1"}
-    create_resp = request("POST", "/api/v1/deployments", json=payload)
-    dep_id = create_resp.json()["id"]
-
-    rollback_resp = request("POST", f"/api/v1/deployments/{dep_id}/rollback")
-    assert rollback_resp.status_code == 200
-    data = rollback_resp.json()
-    assert data["status"] == "rolled_back"
+    create_resp = request("POST", "/api/v1/deployments", json={"version": "v2.0.0", "environment": "production"})
+    deployment_id = create_resp.json()["id"]
+    resp = request("POST", f"/api/v1/deployments/{deployment_id}/rollback")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "rolled_back"
 
 
 def test_rollback_not_found():
