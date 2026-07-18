@@ -1,9 +1,10 @@
 from amoscloud_ai.autonomous.server.api.cb.router.byte import metadata
 from amoscloud_ai.main import create_app
+from amoscloud_ai.route_discovery import route_paths
 
 
 def test_byte_metadata_router_is_registered():
-    paths = {route.path for route in create_app().routes}
+    paths = route_paths(create_app().routes)
     base = "/api/v1/autonomous/server/api/cb/router/byte/metadata"
     assert base in paths
     assert f"{base}/{{filename}}" in paths
