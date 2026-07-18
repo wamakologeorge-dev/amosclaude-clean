@@ -8,6 +8,7 @@ from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from git.remote import PushInfo
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.github_repositories import (
@@ -72,8 +73,9 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
+          python -m pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f pyproject.toml ]; then pip install -e . || true; fi
+          if [ -f pyproject.toml ]; then pip install -e .; fi
           python -m compileall .
           if find . -maxdepth 3 -type f -name 'test_*.py' | grep -q .; then python -m pytest -q; fi
       - name: Set up Node
@@ -81,12 +83,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: npm
       - name: Verify Node project
         if: steps.detect.outputs.node == 'true'
         shell: bash
         run: |
-          npm ci
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else npm install; fi
           npm test --if-present
           npm run build --if-present
       - name: Verify repository contents
@@ -116,6 +117,13 @@ def _remove_local_repository(repository_id: int) -> None:
     with _db() as db:
         db.execute("DELETE FROM repositories WHERE id=?", (repository_id,))
         db.commit()
+
+
+def _push_or_raise(remote, branch: str) -> None:
+    results = remote.push(refspec=f"{branch}:{branch}", set_upstream=True)
+    if not results or any(result.flags & PushInfo.ERROR for result in results):
+        summary = "; ".join(result.summary for result in results) or "No push result was returned"
+        raise HTTPException(status_code=502, detail=f"GitHub repository was created but the initial push failed: {summary}")
 
 
 @router.post("/create-real", status_code=201)
@@ -182,7 +190,7 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
             remote.set_url(_authenticated_clone_url(full_name, token))
         else:
             remote = repo.create_remote("origin", _authenticated_clone_url(full_name, token))
-        remote.push(refspec=f"{local.default_branch}:{local.default_branch}", set_upstream=True)
+        _push_or_raise(remote, local.default_branch)
         remote.set_url(_public_remote_url(full_name))
 
         now = datetime.now(timezone.utc).isoformat()
