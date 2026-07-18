@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -9,12 +10,22 @@ router = APIRouter(prefix="/git")
 # Define base storage root path for multi-tenant users
 REPOS_ROOT = Path("/var/www/amosclaud/repositories")
 
+_SAFE_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+def validate_path_segment(value: str, field_name: str) -> str:
+    if not value or value in {".", ".."} or not _SAFE_PATH_SEGMENT_RE.fullmatch(value):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}.")
+    return value
+
 def get_repo_absolute_path(username: str, repo_name: str) -> Path:
     """Helper to cleanly extract the bare repository file track path."""
     clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
 
+    safe_username = validate_path_segment(username, "username")
+    safe_repo_name = validate_path_segment(clean_name, "repository name")
+
     base_root = REPOS_ROOT.resolve(strict=False)
-    candidate_path = (base_root / username / clean_name).resolve(strict=False)
+    candidate_path = (base_root / safe_username / safe_repo_name).resolve(strict=False)
 
     try:
         candidate_path.relative_to(base_root)
