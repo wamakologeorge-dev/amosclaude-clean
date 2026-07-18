@@ -3,10 +3,10 @@ name: Amosclaud CI/CD Pipeline
 on:
   push:
     branches:
-      - '**' # Triggers automatically across all active staging paths
+      - '**' # Triggers tracking dynamically across all repository branches
   workflow_dispatch:
 
-# Grants write privileges so Amosclaud-fixee can patch and commit repairs autonomously
+# Grants write access to contents so the reporting bot can push markdown files directly back
 permissions:
   contents: write
 
@@ -33,9 +33,10 @@ jobs:
           pip install fastapi uvicorn pydantic httpx flake8 pytest pytest-asyncio
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      # Runs the main script. If it hits an error, Amosclaud-fixee hooks into the thread,
-      # patches the code, pushes the fix, and updates the branch.
+      # Task Loop Block: Runs testing logic under core system parameters
       - name: Run Guardrail Analysis Matrix
+        id: run_guardrails
+        continue-on-error: true # Prevents the pipeline runner from breaking early before the bot can log data
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -43,14 +44,20 @@ jobs:
           echo "🤖 BACKGROUND ORCHESTRATION: EXECUTING AUTOMATED INTEGRITY TESTS"
           echo "================================================================"
           python main.py --test-guardrails
+          echo "GUARDRAILS_EXIT_CODE=$?" >> $GITHUB_ENV
 
-      # Fires the delivery sequence automatically once tests pass or repairs are applied
-      - name: Execute Server Delivery Sequence
-        if: success()
-        env:
-          AMOSCLOUD_API_TOKEN: ${{ secrets.AMOSCLOUD_API_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          QUIQ_API_KEY: ${{ secrets.QUIQ_API_KEY }}
+      # Reporting Block: Executes on success, prompting the bot to log a positive metric report
+      - name: Report Success to Repository
+        if: env.GUARDRAILS_EXIT_CODE == '0'
         run: |
-          echo "All guardrails passed. Shipping verified build tracking nodes..."
-          python main.py --deploy
+          echo "Pipeline successful. Instructing bot to append green status logs..."
+          python report_bot.py --status success
+
+      # Reporting Block: Executes on failure, prompting the bot to write error telemetry details
+      - name: Report Failure to Repository
+        if: env.GUARDRAILS_EXIT_CODE != '0'
+        run: |
+          echo "Pipeline anomalies detected. Instructing bot to log red warning flags..."
+          python report_bot.py --status failure
+          # Enforce proper final runner status tracking
+          exit 1
