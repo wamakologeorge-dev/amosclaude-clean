@@ -14,6 +14,20 @@ def validate_safe_input(text: str) -> bool:
     """
     return bool(re.match(r"^[a-zA-Z0-9\-_]+$", text))
 
+def build_safe_repo_path(username: str, repo_name: str) -> Path:
+    """
+    Build a repository path and ensure it remains inside REPOS_ROOT
+    after canonical resolution.
+    """
+    clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
+    root_resolved = REPOS_ROOT.resolve()
+    repo_path = (REPOS_ROOT / username / clean_name).resolve()
+    try:
+        repo_path.relative_to(root_resolved)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid repository path.")
+    return repo_path
+
 def check_amosclaud_auth(authorization: str = Header(None)):
     """
     FIXES ALERT 2: Restricts API access to authorized platform users.
@@ -40,8 +54,7 @@ async def git_info_refs(
     if service not in ["git-upload-pack", "git-receive-pack"]:
         raise HTTPException(status_code=400, detail="Unsupported git service invocation token.")
 
-    clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
-    repo_path = REPOS_ROOT / username / clean_name
+    repo_path = build_safe_repo_path(username, repo_name)
     
     if not repo_path.exists():
         os.makedirs(repo_path, exist_ok=True)
@@ -72,8 +85,7 @@ async def git_service_rpc(
     if service not in ["git-upload-pack", "git-receive-pack"]:
         raise HTTPException(status_code=400, detail="Malformed RPC path instruction.")
 
-    clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
-    repo_path = REPOS_ROOT / username / clean_name
+    repo_path = build_safe_repo_path(username, repo_name)
     
     if not repo_path.exists():
         raise HTTPException(status_code=404, detail="Target repository storage track not found.")
