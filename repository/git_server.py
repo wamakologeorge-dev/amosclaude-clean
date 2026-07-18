@@ -11,18 +11,34 @@ router = APIRouter(prefix="/git")
 REPOS_ROOT = Path("/var/www/amosclaud/repositories")
 
 _SAFE_PATH_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SAFE_USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SAFE_REPO_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 def validate_path_segment(value: str, field_name: str) -> str:
     if not value or value in {".", ".."} or not _SAFE_PATH_SEGMENT_RE.fullmatch(value):
         raise HTTPException(status_code=400, detail=f"Invalid {field_name}.")
     return value
 
+def validate_username(username: str) -> str:
+    candidate = validate_path_segment(username, "username")
+    if not _SAFE_USERNAME_RE.fullmatch(candidate):
+        raise HTTPException(status_code=400, detail="Invalid username.")
+    return candidate
+
+def validate_repo_name(repo_name: str) -> str:
+    if not repo_name:
+        raise HTTPException(status_code=400, detail="Invalid repository name.")
+
+    base_name = repo_name[:-4] if repo_name.endswith(".git") else repo_name
+    if not _SAFE_REPO_BASENAME_RE.fullmatch(base_name):
+        raise HTTPException(status_code=400, detail="Invalid repository name.")
+
+    return f"{base_name}.git"
+
 def get_repo_absolute_path(username: str, repo_name: str) -> Path:
     """Helper to cleanly extract the bare repository file track path."""
-    clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
-
-    safe_username = validate_path_segment(username, "username")
-    safe_repo_name = validate_path_segment(clean_name, "repository name")
+    safe_username = validate_username(username)
+    safe_repo_name = validate_repo_name(repo_name)
 
     base_root = REPOS_ROOT.resolve(strict=False)
     candidate_path = (base_root / safe_username / safe_repo_name).resolve(strict=False)
