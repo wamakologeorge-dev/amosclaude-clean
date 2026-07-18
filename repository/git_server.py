@@ -19,9 +19,24 @@ def build_safe_repo_path(username: str, repo_name: str) -> Path:
     Build a repository path and ensure it remains inside REPOS_ROOT
     after canonical resolution.
     """
-    clean_name = repo_name if repo_name.endswith(".git") else f"{repo_name}.git"
+    if not validate_safe_input(username):
+        raise HTTPException(status_code=400, detail="Invalid repository owner.")
+
+    repo_stem = repo_name[:-4] if repo_name.endswith(".git") else repo_name
+    if not validate_safe_input(repo_stem):
+        raise HTTPException(status_code=400, detail="Invalid repository name.")
+
+    clean_name = f"{repo_stem}.git"
+    user_component = Path(username)
+    repo_component = Path(clean_name)
+
+    if user_component.is_absolute() or repo_component.is_absolute():
+        raise HTTPException(status_code=400, detail="Invalid repository path.")
+    if any(part in ("", ".", "..") for part in user_component.parts + repo_component.parts):
+        raise HTTPException(status_code=400, detail="Invalid repository path.")
+
     root_resolved = REPOS_ROOT.resolve()
-    repo_path = (REPOS_ROOT / username / clean_name).resolve()
+    repo_path = (root_resolved / user_component / repo_component).resolve(strict=False)
     try:
         repo_path.relative_to(root_resolved)
     except ValueError:
