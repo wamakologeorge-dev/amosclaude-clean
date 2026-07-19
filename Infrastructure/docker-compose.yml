@@ -1,3 +1,5 @@
+name: amosclaud-platform
+
 services:
   amosclaud:
     build:
@@ -6,17 +8,53 @@ services:
     ports:
       - "8000:8000"
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       PORT: "8000"
       AUTH_DB_PATH: /data/auth.db
-      AMOS_MAIL_DOMAIN: amosclaud.com
-      PASSKEY_RP_ID: localhost
-      PASSKEY_ORIGIN: http://localhost:8000
-      AUTH_COOKIE_SECURE: "false"
+      DATABASE_URL: sqlite:////data/amosclaud.db
+      REPOSITORY_STORAGE_PATH: /data/repositories
+      AMOSCLAUD_REPOSITORIES_ROOT: /data/repositories
+      AMOSCLAUD_WORKSPACE: /data/workspaces
+      AMOSCLAUD_MODEL_HOME: /model
       AMOSCLAUD_MODEL_URL: http://model:8091
-      AMOSCLAUD_MODEL: amosclaud-folder-v1
+      AMOSCLAUD_MODEL_HEALTH_URL: http://model:8091/health
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-amosclaud-folder-v1}
+      AMOSCLAUD_API_URL: http://amosclaud:8000
+      AMOSCLAUD_CREDENTIAL_URL: http://credential-authority:8001
+      AMOSCLAUD_METRICS_URL: http://metrics:9090
+      REDIS_URL: redis://redis:6379/0
+      AMOS_MAIL_DOMAIN: ${AMOS_MAIL_DOMAIN:-www.amosclaud.com}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-http://localhost:8000}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AMOSCLAUD_AUTONOMOUS_ENABLED: "true"
+      AMOSCLAUD_FIXER_ENABLED: "true"
+      AMOSCLAUD_REQUIRE_VERIFICATION: "true"
+      AMOSCLAUD_PROTECT_DEFAULT_BRANCH: "true"
+      AMOSCLAUD_API_KEY: ${AMOSCLAUD_API_KEY:-}
+      AMOSCLAUD_MODEL_TOKEN: ${AMOSCLAUD_MODEL_TOKEN:-}
     volumes:
       - amosclaud-data:/data
+      - amosclaud-model:/model:ro
+    depends_on:
+      model:
+        condition: service_healthy
+      credential-authority:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8000/health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    init: true
     restart: unless-stopped
+    networks:
+      - amosclaud-internal
 
   model:
     build:
@@ -24,9 +62,58 @@ services:
       dockerfile: model-workspace/Dockerfile
     environment:
       AMOSCLAUD_MODEL_HOME: /model
+      AMOSCLAUD_MODEL_TOKEN: ${AMOSCLAUD_MODEL_TOKEN:-}
     volumes:
       - amosclaud-model:/model
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      start_period: 120s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    init: true
     restart: unless-stopped
+    networks:
+      - amosclaud-internal
+
+  credential-authority:
+    build:
+      context: ..
+      dockerfile: Infrastructure/Dockerfile
+    command: ["python", "-m", "api_key_manager.main"]
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      API_KEY_MANAGER_HOST: 0.0.0.0
+      API_KEY_MANAGER_PORT: "8001"
+      API_KEY_MANAGER_DATABASE_URL: sqlite:////credentials/keys.db
+      AGENT_JWT_SECRET_KEY: ${AGENT_JWT_SECRET_KEY:?Set AGENT_JWT_SECRET_KEY to at least 32 characters}
+      API_KEY_MANAGER_ADMIN_USERNAME: ${API_KEY_MANAGER_ADMIN_USERNAME:?Set API_KEY_MANAGER_ADMIN_USERNAME}
+      API_KEY_MANAGER_ADMIN_PASSWORD: ${API_KEY_MANAGER_ADMIN_PASSWORD:?Set API_KEY_MANAGER_ADMIN_PASSWORD}
+    volumes:
+      - amosclaud-credentials:/credentials
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    networks:
+      - amosclaud-internal
 
   metrics:
     build:
@@ -35,21 +122,59 @@ services:
     ports:
       - "127.0.0.1:9090:9090"
     environment:
-      ENVIRONMENT: development
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       AUTH_DB_PATH: /data/auth.db
+      DATABASE_URL: sqlite:////data/amosclaud.db
+      AMOSCLAUD_REPOSITORIES_ROOT: /data/repositories
       AMOSCLAUD_API_HEALTH_URL: http://amosclaud:8000/health
       AMOSCLAUD_API_METRICS_URL: http://amosclaud:8000/metrics
       AMOSCLAUD_MODEL_HEALTH_URL: http://model:8091/health
+      AMOSCLAUD_CREDENTIAL_HEALTH_URL: http://credential-authority:8001/health
       AMOSCLAUD_METRICS_DB: /metrics-data/metrics.db
+      REDIS_URL: redis://redis:6379/0
+      METRICS_SHARED_SECRET: ${METRICS_SHARED_SECRET:-}
     volumes:
       - amosclaud-data:/data:ro
       - amosclaud-metrics:/metrics-data
     depends_on:
-      - amosclaud
-      - model
+      amosclaud:
+        condition: service_healthy
+      model:
+        condition: service_healthy
+      credential-authority:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    init: true
     restart: unless-stopped
+    networks:
+      - amosclaud-internal
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - amosclaud-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - amosclaud-internal
 
 volumes:
   amosclaud-data:
   amosclaud-model:
+  amosclaud-credentials:
   amosclaud-metrics:
+  amosclaud-redis:
+
+networks:
+  amosclaud-internal:
+    driver: bridge
