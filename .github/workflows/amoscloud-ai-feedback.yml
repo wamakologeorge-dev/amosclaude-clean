@@ -1,4 +1,4 @@
-name: AmosCloud AI Feedback Loop
+name: Amosclaud AI Feedback Loop
 
 on:
   pull_request:
