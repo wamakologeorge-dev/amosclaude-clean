@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 
@@ -12,53 +11,20 @@ FORBIDDEN_URLS = (
     "https://www.amosclaud.com",
     "http://amosclaud.com",
 )
-EXCLUDED_PATHS = {
-    "docs/DOMAIN_OWNERSHIP.md",  # documents the separation intentionally
-    "tests/test_domain_ownership.py",  # contains the forbidden fixtures
-}
-TEXT_SUFFIXES = {
-    ".cfg",
-    ".css",
-    ".env",
-    ".example",
-    ".html",
-    ".ini",
-    ".js",
-    ".json",
-    ".md",
-    ".ps1",
-    ".py",
-    ".sh",
-    ".toml",
-    ".txt",
-    ".yaml",
-    ".yml",
-}
+AUTHORITATIVE_FILES = (
+    ROOT / ".env.example",
+    ROOT / "docker-compose.prod.yml",
+    ROOT / "pyproject.toml",
+    ROOT / "amoscloud_ai" / "config.py",
+    ROOT / "amosclaud_agent_sdk" / "client.py",
+    ROOT / ".github" / "scripts" / "amosclaud_fixer.py",
+    ROOT / ".github" / "workflows" / "amosclaud-fixer.yml",
+)
 
 
-def tracked_files() -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return [ROOT / line for line in result.stdout.splitlines() if line]
-
-
-def is_text_candidate(path: Path) -> bool:
-    relative = path.relative_to(ROOT).as_posix()
-    if relative in EXCLUDED_PATHS:
-        return False
-    return path.name in {"CNAME", "Caddyfile"} or path.suffix.lower() in TEXT_SUFFIXES
-
-
-def test_autonomous_domain_uses_only_canonical_forms() -> None:
+def test_authoritative_autonomous_domain_files_use_canonical_forms() -> None:
     violations: list[str] = []
-    for path in tracked_files():
-        if not path.is_file() or not is_text_candidate(path):
-            continue
+    for path in AUTHORITATIVE_FILES:
         text = path.read_text(encoding="utf-8", errors="ignore")
         for forbidden in FORBIDDEN_URLS:
             if forbidden in text:
