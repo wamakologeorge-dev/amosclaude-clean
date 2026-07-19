@@ -61,6 +61,20 @@ jobs:
           grep -q '^watchdog' cmood/requirements.txt
           python -c "import cmood; import shared; import src.amosclaud_os.kernel"
 
+      - name: Verify Railway authentication contract
+        run: |
+          grep -q '^ENVIRONMENT=production$' authentication/railway.env.example
+          grep -q '^HOST=0.0.0.0$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_API_URL=https://www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^PASSKEY_RP_ID=www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^PASSKEY_ORIGIN=https://www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^AUTH_DB_PATH=/data/auth/auth.db$' authentication/railway.env.example
+          grep -q '^REPOSITORY_STORAGE_PATH=/data/repositories$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_CREDENTIAL_URL=http://credential-authority:8001$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_REQUIRE_VERIFICATION=true$' authentication/railway.env.example
+          grep -q 'replace-in-railway' authentication/railway.env.example
+          ! grep -q '^PASSKEY_ORIGIN=https://amosclaud.com$' authentication/railway.env.example
+
       - name: Run platform tests
         env:
           ENVIRONMENT: development
