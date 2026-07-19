@@ -12,6 +12,17 @@ from .options import AmosclaudAgentOptions
 
 @dataclass(frozen=True, slots=True)
 class QueryMessage:
+    """A single event yielded by :func:`query`.
+
+    Attributes:
+        type: One of ``"status"`` (in-progress notification), ``"assistant"``
+            (the agent's reply text), or ``"result"`` (terminal event carrying
+            the full API response).
+        content: Human-readable text for this event.
+        data: Full raw response dict from the Amosclaud API, or a minimal status
+            dict for ``"status"`` events.
+    """
+
     type: Literal["assistant", "status", "result"]
     content: str
     data: dict[str, Any]
@@ -23,6 +34,32 @@ async def query(
     options: AmosclaudAgentOptions | None = None,
     client: AmosclaudAgentClient | None = None,
 ) -> AsyncIterator[QueryMessage]:
+    """Submit a one-shot prompt to Amosclaud Autonomous and stream back events.
+
+    Yields exactly three :class:`QueryMessage` objects in order:
+
+    1. ``"status"`` — emitted immediately before the blocking HTTP call.
+    2. ``"assistant"`` — the agent's reply extracted from the pipeline result.
+    3. ``"result"`` — terminal event containing the same reply and full data dict.
+
+    The HTTP call runs in a thread via :func:`asyncio.to_thread` so the event
+    loop is not blocked during the polling wait.
+
+    Args:
+        prompt: The task or question to send to the agent.
+        options: Configuration for the query (system prompt, tool lists, etc.).
+            Defaults to :class:`~amosclaud_agent_sdk.options.AmosclaudAgentOptions`
+            with its default values.
+        client: HTTP client. Defaults to a new
+            :class:`~amosclaud_agent_sdk.client.AmosclaudAgentClient`.
+
+    Yields:
+        :class:`QueryMessage` instances describing query progress and the final result.
+
+    Raises:
+        AmosclaudAgentError: Propagated from :meth:`~AmosclaudAgentClient.run_and_wait`
+            on network or API failure.
+    """
     configured = options or AmosclaudAgentOptions()
     api = client or AmosclaudAgentClient()
     metadata = dict(configured.metadata)
