@@ -1,8 +1,8 @@
 """Single command control plane for the existing Amosclaud services.
 
 This module does not reimplement the database, repository service, Agent, fixer,
-AmoModel, Byte bus, or FastAPI application. It initializes and checks those
-existing components, then reports one truthful platform status.
+AmoModel, Byte bus, credential authority, or FastAPI application. It initializes
+and checks those existing components, then reports one truthful platform status.
 """
 from __future__ import annotations
 
@@ -53,6 +53,7 @@ class PlatformControl:
         "amomodel": "amomodel.runtime",
         "agent_worker": "agents.codex_agent",
         "agent_sdk": "amosclaud_agent_sdk",
+        "api_key_manager": "api_key_manager.main",
         "byte_bus": "Amosclaud.platform_bus",
         "database": "database.session",
         "repository": "repository.connector",
@@ -65,9 +66,20 @@ class PlatformControl:
     def _import_check(name: str, module_name: str) -> ServiceCheck:
         try:
             importlib.import_module(module_name)
-        except Exception as exc:  # readiness must report import failures truthfully
+        except Exception as exc:
             return ServiceCheck(name, "failed", f"{type(exc).__name__}: {exc}")
         return ServiceCheck(name, "ready", module_name)
+
+    @staticmethod
+    def _secret_check(name: str, env_name: str, minimum: int, *, required: bool) -> ServiceCheck:
+        value = os.getenv(env_name, "")
+        ready = len(value) >= minimum
+        return ServiceCheck(
+            name,
+            "ready" if ready else ("failed" if required else "warning"),
+            "configured" if ready else f"{env_name} must contain at least {minimum} characters",
+            required=required,
+        )
 
     def initialize(self) -> PlatformReport:
         checks: list[ServiceCheck] = []
@@ -79,28 +91,59 @@ class PlatformControl:
 
         try:
             connector = RepositoryConnector(root=self.repository_root)
-            checks.append(
-                ServiceCheck(
-                    "repository_storage",
-                    "ready",
-                    str(connector.root),
-                )
-            )
+            checks.append(ServiceCheck("repository_storage", "ready", str(connector.root)))
         except Exception as exc:
             checks.append(ServiceCheck("repository_storage", "failed", f"{type(exc).__name__}: {exc}"))
 
         for name, module_name in self.IMPORT_CHECKS.items():
             checks.append(self._import_check(name, module_name))
 
-        secret = os.getenv("AMOSCLAUD_BYTE_BUS_SECRET", "").strip()
         checks.append(
-            ServiceCheck(
+            self._secret_check(
                 "byte_bus_secret",
-                "ready" if len(secret) >= 32 else "warning",
-                "configured" if len(secret) >= 32 else "not configured; signed internal bus remains disabled",
+                "AMOSCLAUD_BYTE_BUS_SECRET",
+                32,
                 required=False,
             )
         )
+        checks.append(
+            self._secret_check(
+                "credential_jwt_secret",
+                "AGENT_JWT_SECRET_KEY",
+                32,
+                required=False,
+            )
+        )
+
+        admin_username = os.getenv("API_KEY_MANAGER_ADMIN_USERNAME", "").strip()
+        admin_password = os.getenv("API_KEY_MANAGER_ADMIN_PASSWORD", "")
+        credential_admin_ready = bool(admin_username and len(admin_password) >= 12)
+        checks.append(
+            ServiceCheck(
+                "credential_admin",
+                "ready" if credential_admin_ready else "warning",
+                "configured" if credential_admin_ready else (
+                    "API_KEY_MANAGER_ADMIN_USERNAME and a 12+ character "
+                    "API_KEY_MANAGER_ADMIN_PASSWORD are required before starting the service"
+                ),
+                required=False,
+            )
+        )
+
+        try:
+            from api_key_manager.database import ensure_schema
+
+            ensure_schema()
+            checks.append(ServiceCheck("credential_database", "ready", "schema initialized"))
+        except Exception as exc:
+            checks.append(
+                ServiceCheck(
+                    "credential_database",
+                    "failed",
+                    f"{type(exc).__name__}: {exc}",
+                    required=False,
+                )
+            )
 
         manifest = Path("agents/manifest.json")
         if manifest.is_file():
