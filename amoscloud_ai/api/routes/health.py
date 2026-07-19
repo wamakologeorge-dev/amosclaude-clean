@@ -27,6 +27,20 @@ router.include_router(byte_metadata_router, prefix="/api/v1")
 from amoscloud_ai.api.routes import codex_system_bundle
 router.include_router(codex_system_bundle.router, prefix="/api/v1")
 
+from pathlib import Path
+from fastapi import Request
+from fastapi.responses import FileResponse, RedirectResponse
+from amoscloud_ai.api.routes import autonomous_codex
+from amoscloud_ai.api.routes.auth import get_user_from_session
+router.include_router(autonomous_codex.router, prefix="/api/v1")
+
+@router.get("/autonomous-codex-configuration", include_in_schema=False)
+async def autonomous_codex_dashboard(request: Request):
+    if not get_user_from_session(request.cookies.get("amos_session")):
+        return RedirectResponse("/login", status_code=302)
+    web_dir = Path(__file__).resolve().parents[3] / "web"
+    return FileResponse(web_dir / "autonomous-codex.html")
+
 
 @router.get("/health", response_model=HealthResponse, summary="Service liveness check")
 async def health() -> HealthResponse:
