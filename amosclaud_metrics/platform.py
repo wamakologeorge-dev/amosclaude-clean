@@ -29,26 +29,14 @@ def _database_snapshot() -> tuple[dict[str, float], dict[str, Any]]:
     }
     service: dict[str, Any] = {"up": False}
     try:
-        from database.models import (
-            AutonomousJob,
-            AutonomousJobStatus,
-            CIPipeline,
-            CIStatus,
-            Repository,
-        )
+        from database.models import AutonomousJob, AutonomousJobStatus, CIPipeline, CIStatus, Repository
         from database.session import create_database, session_scope
 
         create_database()
         with session_scope() as db:
-            metrics["amosclaud_repositories_total"] = float(
-                db.scalar(select(func.count()).select_from(Repository)) or 0
-            )
-            metrics["amosclaud_autonomous_jobs_total"] = float(
-                db.scalar(select(func.count()).select_from(AutonomousJob)) or 0
-            )
-            metrics["amosclaud_ci_pipelines_total"] = float(
-                db.scalar(select(func.count()).select_from(CIPipeline)) or 0
-            )
+            metrics["amosclaud_repositories_total"] = float(db.scalar(select(func.count()).select_from(Repository)) or 0)
+            metrics["amosclaud_autonomous_jobs_total"] = float(db.scalar(select(func.count()).select_from(AutonomousJob)) or 0)
+            metrics["amosclaud_ci_pipelines_total"] = float(db.scalar(select(func.count()).select_from(CIPipeline)) or 0)
             job_states = (
                 AutonomousJobStatus.QUEUED,
                 AutonomousJobStatus.INSPECTING,
@@ -58,28 +46,20 @@ def _database_snapshot() -> tuple[dict[str, float], dict[str, Any]]:
                 AutonomousJobStatus.FAILED,
             )
             for status in job_states:
-                count = db.scalar(
-                    select(func.count()).select_from(AutonomousJob).where(AutonomousJob.status == status)
-                ) or 0
-                bucket = (
-                    "running"
-                    if status in {
-                        AutonomousJobStatus.INSPECTING,
-                        AutonomousJobStatus.REPAIRING,
-                        AutonomousJobStatus.VERIFYING,
-                    }
-                    else status.value
-                )
+                count = db.scalar(select(func.count()).select_from(AutonomousJob).where(AutonomousJob.status == status)) or 0
+                bucket = "running" if status in {
+                    AutonomousJobStatus.INSPECTING,
+                    AutonomousJobStatus.REPAIRING,
+                    AutonomousJobStatus.VERIFYING,
+                } else status.value
                 key = f"amosclaud_autonomous_jobs_{bucket}"
                 metrics[key] = metrics.get(key, 0.0) + float(count)
             for status in (CIStatus.RUNNING, CIStatus.PASSED, CIStatus.FAILED):
-                count = db.scalar(
-                    select(func.count()).select_from(CIPipeline).where(CIPipeline.status == status)
-                ) or 0
+                count = db.scalar(select(func.count()).select_from(CIPipeline).where(CIPipeline.status == status)) or 0
                 metrics[f"amosclaud_ci_pipelines_{status.value}"] = float(count)
         metrics["amosclaud_platform_database_up"] = 1.0
         service = {"up": True}
-    except Exception as exc:  # metrics must degrade instead of taking down the server
+    except Exception as exc:
         service = {"up": False, "error": type(exc).__name__}
     return metrics, service
 
@@ -87,11 +67,13 @@ def _database_snapshot() -> tuple[dict[str, float], dict[str, Any]]:
 def collect_platform_snapshot() -> dict[str, Any]:
     """Return one safe snapshot for control-plane and worker readiness."""
     metrics, database_service = _database_snapshot()
+    production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
 
     repository_root = Path(
         os.getenv("AMOSCLAUD_REPOSITORIES_ROOT", os.getenv("REPOSITORY_ROOT", "data/repositories"))
     ).expanduser()
-    repository_up = repository_root.exists() and repository_root.is_dir()
+    repository_root.mkdir(parents=True, exist_ok=True)
+    repository_up = repository_root.is_dir()
     manifest = Path("agents/manifest.json")
     manifest_up = manifest.is_file()
     byte_secret = os.getenv("AMOSCLAUD_BYTE_BUS_SECRET", "").strip()
@@ -100,6 +82,8 @@ def collect_platform_snapshot() -> dict[str, Any]:
         os.getenv("API_KEY_MANAGER_ADMIN_USERNAME", "").strip()
         and os.getenv("API_KEY_MANAGER_ADMIN_PASSWORD", "").strip()
     )
+    credential_configured = bool(_module_ready("api_key_manager.main") and len(jwt_secret) >= 32 and credential_admin)
+    byte_bus_configured = bool(_module_ready("Amosclaud.platform_bus") and len(byte_secret) >= 32)
 
     services: dict[str, dict[str, Any]] = {
         "platform_database": database_service,
@@ -111,19 +95,23 @@ def collect_platform_snapshot() -> dict[str, Any]:
         "agent_sdk": {"up": bool(_module_ready("amosclaud_agent_sdk"))},
         "repository_connector": {"up": bool(_module_ready("repository.connector"))},
         "credential_authority": {
-            "up": bool(_module_ready("api_key_manager.main") and len(jwt_secret) >= 32 and credential_admin)
+            "up": credential_configured or not production,
+            "configured": credential_configured,
+            "required": production,
         },
-        "byte_bus": {"up": bool(_module_ready("Amosclaud.platform_bus") and len(byte_secret) >= 32)},
+        "byte_bus": {
+            "up": byte_bus_configured or not production,
+            "configured": byte_bus_configured,
+            "required": production,
+        },
         "metrics": {"up": True},
     }
 
     for name, state in services.items():
         metrics[f"amosclaud_service_{name}_up"] = 1.0 if state.get("up") else 0.0
     metrics["amosclaud_agent_manifest_valid"] = 1.0 if manifest_up else 0.0
-    metrics["amosclaud_byte_bus_signing_enabled"] = 1.0 if len(byte_secret) >= 32 else 0.0
-    metrics["amosclaud_credential_authority_configured"] = (
-        1.0 if len(jwt_secret) >= 32 and credential_admin else 0.0
-    )
+    metrics["amosclaud_byte_bus_signing_enabled"] = 1.0 if byte_bus_configured else 0.0
+    metrics["amosclaud_credential_authority_configured"] = 1.0 if credential_configured else 0.0
 
     required = (
         "platform_database",
@@ -134,6 +122,8 @@ def collect_platform_snapshot() -> dict[str, Any]:
         "repository_connector",
         "metrics",
     )
+    if production:
+        required += ("credential_authority", "byte_bus")
     healthy = all(services[name]["up"] for name in required)
     return {
         "status": "healthy" if healthy else "degraded",
