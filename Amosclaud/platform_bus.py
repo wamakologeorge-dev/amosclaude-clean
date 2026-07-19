@@ -44,6 +44,7 @@ _ALLOWED_JOB_TRANSITIONS: dict[AutonomousJobStatus, set[AutonomousJobStatus]] = 
         AutonomousJobStatus.FAILED,
     },
     AutonomousJobStatus.VERIFYING: {
+        AutonomousJobStatus.REPAIRING,
         AutonomousJobStatus.PASSED,
         AutonomousJobStatus.FAILED,
     },
