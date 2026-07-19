@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate, apply, and verify a constrained repair patch for CI failures.
 
-The fixer never edits protected automation or secret-bearing files, never commits an
-unverified patch, and emits a machine-readable report for the workflow.
+The fixer uses the Amosclaud-owned model gateway, never edits protected automation
+or secret-bearing files, never commits an unverified patch, and emits a
+machine-readable report for the workflow.
 """
 
 from __future__ import annotations
@@ -12,14 +13,16 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
-
-from openai import OpenAI
 
 ROOT = Path(__file__).resolve().parents[2]
 LOG_PATH = ROOT / os.getenv("AMOSCLAUD_FAILURE_LOG", "amosclaud-failure.log")
 REPORT_PATH = ROOT / "amosclaud-fixer-report.json"
-MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "gpt-5.4-mini")
+AMOSCLAUD_API_URL = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/")
+AMOSCLAUD_API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
+MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "amosclaud-agent")
 MAX_ATTEMPTS = max(1, min(int(os.getenv("AMOSCLAUD_FIXER_ATTEMPTS", "3")), 3))
 MAX_PATCH_BYTES = 250_000
 MAX_CHANGED_FILES = 25
@@ -60,6 +63,7 @@ def redact(text: str) -> str:
     patterns = (
         r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s]+",
         r"gh[pousr]_[A-Za-z0-9_]{20,}",
+        r"amos_(?:svc|agent|auto)_[A-Za-z0-9_-]{16,}",
         r"sk-[A-Za-z0-9_-]{16,}",
     )
     for pattern in patterns:
@@ -84,7 +88,7 @@ def extract_diff(response_text: str) -> str:
     candidate = match.group(1) if match else response_text
     start = candidate.find("diff --git ")
     if start < 0:
-        raise ValueError("model response did not contain a unified git diff")
+        raise ValueError("Amosclaud response did not contain a unified git diff")
     return candidate[start:].strip() + "\n"
 
 
@@ -124,7 +128,47 @@ def restore() -> None:
     git("clean", "-fd", "--exclude=amosclaud-failure.log", "--exclude=amosclaud-fixer-report.json")
 
 
-def request_patch(client: OpenAI, failure_log: str, previous_feedback: str) -> str:
+def amosclaud_chat(instructions: str, prompt: str) -> str:
+    """Call Amosclaud's OpenAI-compatible gateway with an Amosclaud-owned key."""
+    payload = json.dumps(
+        {
+            "model": MODEL,
+            "messages": [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": False,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{AMOSCLAUD_API_URL}/v1/chat/completions",
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {AMOSCLAUD_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Amosclaud-Fixer/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Amosclaud gateway returned HTTP {error.code}: {redact(detail)}") from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"Amosclaud gateway is unreachable: {error.reason}") from error
+
+    try:
+        content = result["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as error:
+        raise RuntimeError("Amosclaud gateway returned an invalid completion payload") from error
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("Amosclaud gateway returned no repair content")
+    return content
+
+
+def request_patch(failure_log: str, previous_feedback: str) -> str:
     instructions = """You are Amosclaud AI Fixer operating inside a Git repository.
 Return ONLY one unified git diff inside a ```diff fence.
 Repair the root cause shown by the failure evidence. Prefer the smallest correct change.
@@ -138,30 +182,23 @@ The patch must apply with `git apply` and must not contain commentary outside th
         f"Repository context:\n{repository_context()}\n\n"
         f"Previous repair feedback:\n{previous_feedback or 'none'}"
     )
-    response = client.responses.create(
-        model=MODEL,
-        instructions=instructions,
-        input=prompt,
-        store=False,
-    )
-    return extract_diff(response.output_text)
+    return extract_diff(amosclaud_chat(instructions, prompt))
 
 
 def main() -> int:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise SystemExit("OPENAI_API_KEY is required for Amosclaud AI Fixer")
+    if not AMOSCLAUD_API_KEY:
+        raise SystemExit("AMOSCLAUD_API_KEY is required for Amosclaud AI Fixer")
     failure_log = redact(LOG_PATH.read_text(encoding="utf-8", errors="replace") if LOG_PATH.exists() else "")
     if not failure_log.strip():
         failure_log = "CI failed without an attached log. Reproduce and repair failures using the repository test suite."
 
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     attempts: list[dict[str, object]] = []
     feedback = ""
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         restore()
         try:
-            patch = request_patch(client, failure_log, feedback)
+            patch = request_patch(failure_log, feedback)
             paths = validate_patch(patch)
             patch_path = ROOT / f"amosclaud-fix-attempt-{attempt}.patch"
             patch_path.write_text(patch, encoding="utf-8")
@@ -173,7 +210,16 @@ def main() -> int:
             attempts.append({"attempt": attempt, "paths": paths, "verified": passed, "verification": verification})
             if passed:
                 REPORT_PATH.write_text(
-                    json.dumps({"status": "verified", "attempts": attempts, "changed_files": paths}, indent=2),
+                    json.dumps(
+                        {
+                            "status": "verified",
+                            "provider": "amosclaud",
+                            "model": MODEL,
+                            "attempts": attempts,
+                            "changed_files": paths,
+                        },
+                        indent=2,
+                    ),
                     encoding="utf-8",
                 )
                 print("AMOSCLAUD_FIX_VERIFIED=true")
@@ -185,7 +231,13 @@ def main() -> int:
             attempts.append({"attempt": attempt, "verified": False, "error": feedback})
 
     restore()
-    REPORT_PATH.write_text(json.dumps({"status": "failed", "attempts": attempts}, indent=2), encoding="utf-8")
+    REPORT_PATH.write_text(
+        json.dumps(
+            {"status": "failed", "provider": "amosclaud", "model": MODEL, "attempts": attempts},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     print("AMOSCLAUD_FIX_VERIFIED=false")
     return 1
 
