@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
 from amoscloud_ai.autonomous_api_chain import AutonomousChainRequest, execute_autonomous_chain
 from amoscloud_ai.model_services import readiness
+from amoscloud_ai.api.routes.repositories import agent_repository_context
 
 router = APIRouter(prefix="/agent", tags=["autonomous-agent"])
 
@@ -27,6 +28,7 @@ class ConnectorRunRequest(BaseModel):
     conversation_id: str | None = Field(default=None, max_length=128)
     use_model: bool = False
     apply_changes: bool = False
+    repository_id: int | None = Field(default=None, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -180,6 +182,23 @@ async def run_connector_task(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> dict:
     user = _connector_user(authorization, x_api_key)
+    safe_metadata = dict(body.metadata)
+    for key in (
+        "repository_id",
+        "repository_name",
+        "repository_role",
+        "trusted_repository_workspace",
+        "trusted_repository_storage_root",
+    ):
+        safe_metadata.pop(key, None)
+    if body.repository_id is not None:
+        safe_metadata.update(
+            agent_repository_context(
+                body.repository_id,
+                int(user["id"]),
+                require_write=body.apply_changes or body.mode.strip().lower() == "fix",
+            )
+        )
     try:
         result = execute_autonomous_chain(
             AutonomousChainRequest(
@@ -192,7 +211,7 @@ async def run_connector_task(
                 source="amosclaud-autonomous-codex-connector",
                 use_model=body.use_model,
                 apply_changes=body.apply_changes,
-                metadata=body.metadata,
+                metadata=safe_metadata,
             )
         )
     except ValueError as exc:

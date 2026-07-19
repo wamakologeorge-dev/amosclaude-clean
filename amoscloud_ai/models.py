@@ -203,6 +203,7 @@ class AutonomousAgentRunRequest(BaseModel):
     mode: str = "autonomous-check"
     objective: Optional[str] = None
     branch: str = "main"
+    repository_id: Optional[int] = Field(default=None, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

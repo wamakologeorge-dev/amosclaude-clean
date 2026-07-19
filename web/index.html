@@ -27,6 +27,12 @@
       </div>
 
       <div class="single-composer">
+        <label class="agent-repository-picker" for="agent-repository-input">
+          <span>Repository</span>
+          <select id="agent-repository-input" aria-label="Repository for autonomous work">
+            <option value="">Loading repositories…</option>
+          </select>
+        </label>
         <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
         <input id="agent-mode-input" type="hidden" value="autonomous-check" />
       </div>

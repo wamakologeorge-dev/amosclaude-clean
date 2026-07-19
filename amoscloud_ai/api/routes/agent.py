@@ -20,6 +20,7 @@ from amoscloud_ai.models import (
     PipelineResponse,
     PipelineStatus,
 )
+from amoscloud_ai.api.routes.repositories import agent_repository_context
 from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
@@ -358,11 +359,29 @@ async def run_agent(
 
     mode = _select_autonomous_mode(mode, objective, body.metadata)
 
+    repository_metadata: dict[str, object] = {}
+    if body.repository_id is not None:
+        repository_metadata = agent_repository_context(
+            body.repository_id,
+            int(user["id"]),
+            require_write=mode == "fix",
+        )
+
     from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
-    execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    safe_metadata = dict(body.metadata)
+    for key in (
+        "repository_id",
+        "repository_name",
+        "repository_role",
+        "trusted_repository_workspace",
+        "trusted_repository_storage_root",
+    ):
+        safe_metadata.pop(key, None)
+    safe_metadata.update(repository_metadata)
+    execution_mode, metadata = _agent_metadata(mode, safe_metadata)
     conversation = _conversation_messages(body.metadata)
     if conversation:
         metadata["conversation_brief"] = conversation

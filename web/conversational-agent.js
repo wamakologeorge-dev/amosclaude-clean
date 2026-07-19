@@ -1,6 +1,7 @@
 (() => {
   const runButton = document.getElementById('btn-run-agent');
   const objectiveInput = document.getElementById('agent-objective-input');
+  const repositoryInput = document.getElementById('agent-repository-input');
   const replies = document.getElementById('agent-replies');
   const statusBadge = document.getElementById('agent-status');
   if (!runButton || !objectiveInput || !replies) return;
@@ -12,6 +13,22 @@
   let latestBundleResult = saved.latestBundleResult && typeof saved.latestBundleResult === 'object'
     ? saved.latestBundleResult : null;
   let controller = null;
+
+  async function loadRepositories() {
+    if (!repositoryInput) return;
+    try {
+      const response = await fetch('/api/v1/repositories', { credentials: 'same-origin' });
+      const repositories = await readJson(response);
+      const selected = localStorage.getItem('amosclaud-last-repository-id') || '';
+      repositoryInput.innerHTML = '<option value="">No repository selected</option>' + repositories.map(repository =>
+        `<option value="${repository.id}">${repository.owner_name}/${repository.name}</option>`
+      ).join('');
+      if (repositories.some(repository => String(repository.id) === selected)) repositoryInput.value = selected;
+      else if (repositories.length) repositoryInput.value = String(repositories[0].id);
+    } catch (_error) {
+      repositoryInput.innerHTML = '<option value="">Repository unavailable</option>';
+    }
+  }
 
   const confirmationPhrases = new Set([
     'proceed', 'proceed with the plan', 'start', 'start now', 'do it', 'build it',
@@ -223,6 +240,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: confirmed ? identifyIntent(raw) : 'autonomous-check', objective: raw, branch: 'main',
+        repository_id: repositoryInput?.value ? Number(repositoryInput.value) : null,
         metadata: { branch: 'main', conversation: conversation.slice(-12), previous_objective: agreedContext(),
           conversation_first: true, user_confirmed_execution: confirmed, single_visible_agent: true },
       }),
@@ -305,4 +323,10 @@
     objectiveInput.style.height = 'auto';
     objectiveInput.style.height = `${Math.min(objectiveInput.scrollHeight, 180)}px`;
   });
+
+  repositoryInput?.addEventListener('change', () => {
+    if (repositoryInput.value) localStorage.setItem('amosclaud-last-repository-id', repositoryInput.value);
+  });
+
+  loadRepositories();
 })();

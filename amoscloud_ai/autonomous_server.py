@@ -48,6 +48,24 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _execution_root(metadata: dict[str, Any]) -> Path:
+    workspace_value = str(metadata.get("trusted_repository_workspace") or "").strip()
+    storage_value = str(metadata.get("trusted_repository_storage_root") or "").strip()
+    if not workspace_value and not storage_value:
+        return repo_root()
+    if not workspace_value or not storage_value:
+        raise ValueError("Trusted repository workspace metadata is incomplete")
+    workspace = Path(workspace_value).resolve()
+    storage_root = Path(storage_value).resolve()
+    try:
+        workspace.relative_to(storage_root)
+    except ValueError as exc:
+        raise ValueError("Selected repository is outside managed storage") from exc
+    if not workspace.is_dir() or not (workspace / ".git").is_dir():
+        raise ValueError("Selected repository workspace is unavailable")
+    return workspace
+
+
 def _conversation_gate(mode: str, objective: str, metadata: dict[str, Any]) -> tuple[CheckResult, dict[str, object]]:
     """Require clear, non-contradictory authorization before consequential work."""
     original_follow_up = str(metadata.get("original_follow_up") or "").strip()
@@ -114,8 +132,8 @@ def _conversation_gate(mode: str, objective: str, metadata: dict[str, Any]) -> t
 
 
 def run_autonomous_server(mode: str, objective: str, metadata: Optional[dict[str, Any]] = None) -> AutonomousRunResult:
-    root = repo_root()
     metadata = dict(metadata or {})
+    root = _execution_root(metadata)
 
     gate, _analysis = _conversation_gate(mode, objective, metadata)
     if gate.status == "failed":

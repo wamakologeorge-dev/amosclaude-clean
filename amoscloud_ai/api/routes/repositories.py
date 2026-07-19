@@ -173,6 +173,29 @@ def _require_owner(row: sqlite3.Row) -> None:
         raise HTTPException(status_code=403, detail="Owner access required")
 
 
+def agent_repository_context(repository_id: int, user_id: int, *, require_write: bool = False) -> dict[str, object]:
+    """Resolve an authenticated repository into trusted autonomous runtime metadata."""
+    with _db() as db:
+        row = _access(db, repository_id, user_id)
+        if require_write:
+            _require_write(row)
+    path = _repo_path(repository_id).resolve()
+    storage_root = REPOSITORY_ROOT.resolve()
+    if not path.is_dir() or not (path / ".git").is_dir():
+        raise HTTPException(status_code=409, detail="Repository workspace is unavailable")
+    try:
+        path.relative_to(storage_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Repository workspace is outside managed storage") from exc
+    return {
+        "repository_id": repository_id,
+        "repository_name": row["name"],
+        "repository_role": row["role"] or "viewer",
+        "trusted_repository_workspace": str(path),
+        "trusted_repository_storage_root": str(storage_root),
+    }
+
+
 def _response(row: sqlite3.Row) -> RepositoryResponse:
     return RepositoryResponse(
         id=row["id"], name=row["name"], description=row["description"],
