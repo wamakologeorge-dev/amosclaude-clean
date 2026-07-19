@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 from sqlalchemy import select
 
@@ -23,6 +22,7 @@ class RepositoryConnectorError(RuntimeError):
 class RepositoryRecord:
     id: int
     owner: str
+    owner_email: str
     name: str
     default_branch: str
     is_private: bool
@@ -83,6 +83,7 @@ class RepositoryConnector:
             return RepositoryRecord(
                 id=int(row.id),
                 owner=safe_owner,
+                owner_email=str(row.owner.email),
                 name=safe_name,
                 default_branch=str(row.default_branch or "main"),
                 is_private=bool(row.is_private),
