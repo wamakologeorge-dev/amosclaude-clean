@@ -1,0 +1,7 @@
+# Amosclaud standalone repository platform requirements
+# Install the main project first: pip install -e .
+GitPython>=3.1.43
+fastapi>=0.115
+pydantic>=2.8
+pytest>=8.2
+uvicorn>=0.30
