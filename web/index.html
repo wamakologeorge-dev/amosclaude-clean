@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-amosclaud-head="true">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -30,6 +30,14 @@
         <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
         <input id="agent-mode-input" type="hidden" value="autonomous-check" />
       </div>
+
+      <section class="autonomous-runtime-controls" aria-label="Autonomous runtime controls">
+        <p>Instructions and owner permission are required before repository changes. Every completed job must return verification evidence and a final result.</p>
+        <button id="btn-check-agent-connections" type="button">Check connections</button>
+        <button id="btn-amomodel-on" type="button">Turn on AmoModel</button>
+        <button id="btn-amomodel-off" type="button">Turn off AmoModel</button>
+        <span id="agent-connections-status" aria-live="polite">Not checked</span>
+      </section>
     </section>
   </main>
 
@@ -38,7 +46,7 @@
     <a href="/repositories" aria-label="Repositories">Repository</a>
     <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
     <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
-    <a href="/" aria-label="Home">Home</a>
+    <a href="/bundles" aria-label="Results">Results</a>
   </nav>
 
   <div id="toast-container" aria-live="assertive"></div>
@@ -46,6 +54,7 @@
   <script src="/static/account.js"></script>
   <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
+  <script src="/static/agent-control.js"></script>
   <script src="/static/single-autonomous-dock.js"></script>
   <script src="/static/app-install.js"></script>
 </body>
