@@ -9,7 +9,7 @@ description = "Amosclaud development, repository, mail, storage, community, CI/C
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  {name = "Amosclaud Team", email = "support@amosclaud.com"}
+  {name = "Amosclaud Team", email = "support@www.amosclaud.com"}
 ]
 license = "LicenseRef-Proprietary"
 license-files = ["LICENSE", "LICENSE-COMMERCIAL.txt"]
@@ -27,11 +27,12 @@ dynamic = ["dependencies"]
 
 [project.urls]
 Homepage = "http://www.amosclaud.com/"
-Repository = "https://github.com/wamakologeorge-dev/amosclaude-clean"
+Repository = "http://www.amosclaud.com/repositories"
 Documentation = "http://www.amosclaud.com/docs"
 
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"
+amosclaud-shell = "amoscloud_ai.solo_shell:main"
 amosclaud-runner = "amoscloud_ai.runner_client:main"
 amosclaud-agent = "amosclaud_agent_sdk.cli:main"
 amosclaud-memory = "amoscloud_ai.virtual_memory:main"
