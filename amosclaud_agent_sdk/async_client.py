@@ -1,13 +1,14 @@
 """Bidirectional multi-turn client built on durable Amosclaud sessions."""
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import dataclasses
+from collections.abc import AsyncGenerator, AsyncIterator
 
 from .client import AmosclaudAgentClient
 from .options import AmosclaudAgentOptions
 from .query import QueryMessage, query
 from .session_store import SessionStore
-from .sessions import AgentSession, create_session, save_session
+from .sessions import AgentSession, _CONVERSATION_WINDOW, create_session, save_session
 
 
 class AmosclaudSDKClient:
@@ -36,18 +37,18 @@ class AmosclaudSDKClient:
         if self.session is None:
             raise RuntimeError("use AmosclaudSDKClient as an async context manager")
         self.session.append("user", prompt)
-        options = self.options
-        options.metadata = {
-            **options.metadata,
+        conversation_metadata = {
+            **self.options.metadata,
             "conversation_id": self.session.id,
-            "conversation": [item.to_dict() for item in self.session.messages[-12:]],
+            "conversation": [item.to_dict() for item in self.session.messages[-_CONVERSATION_WINDOW:]],
         }
-        self._pending = [message async for message in query(prompt, options=options, client=self.client)]
+        query_options = dataclasses.replace(self.options, metadata=conversation_metadata)
+        self._pending = [message async for message in query(prompt, options=query_options, client=self.client)]
         assistant = next((item for item in self._pending if item.type == "assistant"), None)
         if assistant:
             self.session.append("assistant", assistant.content)
         save_session(self.store, self.session)
 
-    async def receive(self) -> AsyncIterator[QueryMessage]:
+    async def receive(self) -> AsyncGenerator[QueryMessage, None]:
         while self._pending:
             yield self._pending.pop(0)

@@ -21,5 +21,9 @@ class AmosclaudResponseError(AmosclaudSDKError):
     """The host returned an invalid response contract."""
 
 
+class AmosclaudAgentError(AmosclaudSDKError):
+    """A safe, user-facing Amosclaud API failure."""
+
+
 class ToolPermissionError(AmosclaudSDKError):
     """A local tool invocation was denied by policy or a hook."""
