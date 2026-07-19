@@ -1,27 +1,22 @@
 """Standalone Amosclaud Metrics Server and System Service Yard (SSY)."""
-
 from __future__ import annotations
 
-import hmac
 import asyncio
+import hmac
 import os
 import threading
 import time
-from pathlib import Path
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import PlainTextResponse
 
 from amosclaud_metrics import __version__
-from amosclaud_metrics.collectors import (
-    database_metrics,
-    scrape_metrics,
-    service_health,
-    system_metrics,
-)
-from amosclaud_metrics.registry import Registry
+from amosclaud_metrics.collectors import database_metrics, scrape_metrics, service_health, system_metrics
 from amosclaud_metrics.history import HistoryStore
+from amosclaud_metrics.platform import collect_platform_snapshot
+from amosclaud_metrics.registry import Registry
 
 
 class SnapshotCache:
@@ -46,9 +41,7 @@ def _token() -> str:
 
 def authorize(authorization: str | None = Header(default=None)) -> None:
     expected = _token()
-    if expected and (
-        not authorization or not hmac.compare_digest(authorization, f"Bearer {expected}")
-    ):
+    if expected and (not authorization or not hmac.compare_digest(authorization, f"Bearer {expected}")):
         raise HTTPException(status_code=401, detail="Invalid metrics credential")
 
 
@@ -57,25 +50,30 @@ def collect_snapshot() -> dict:
     model_url = os.getenv("AMOSCLAUD_MODEL_HEALTH_URL", "http://model:8091/health")
     api_up, api_latency = service_health(api_url)
     model_up, model_latency = service_health(model_url)
+    platform = collect_platform_snapshot()
     values = {
         **system_metrics(),
         **database_metrics(Path(os.getenv("AUTH_DB_PATH", "/data/auth.db"))),
+        **platform["metrics"],
         "amosclaud_api_up": api_up,
         "amosclaud_api_probe_duration_seconds": api_latency,
         "amosclaud_model_up": model_up,
         "amosclaud_model_probe_duration_seconds": model_latency,
     }
+    services = {
+        "api": {"up": bool(api_up), "latency_ms": round(api_latency * 1000, 2)},
+        "model": {"up": bool(model_up), "latency_ms": round(model_latency * 1000, 2)},
+        "database": {"up": bool(values["amosclaud_database_reachable"])},
+        **platform["services"],
+    }
+    required_up = (
+        bool(api_up)
+        and bool(values["amosclaud_database_reachable"])
+        and platform["status"] == "healthy"
+    )
     return {
-        "status": (
-            "healthy"
-            if api_up and model_up and values["amosclaud_database_reachable"]
-            else "degraded"
-        ),
-        "services": {
-            "api": {"up": bool(api_up), "latency_ms": round(api_latency * 1000, 2)},
-            "model": {"up": bool(model_up), "latency_ms": round(model_latency * 1000, 2)},
-            "database": {"up": bool(values["amosclaud_database_reachable"])},
-        },
+        "status": "healthy" if required_up else "degraded",
+        "services": services,
         "metrics": values,
         "collected_at_unix": time.time(),
     }
@@ -83,25 +81,24 @@ def collect_snapshot() -> dict:
 
 def active_alerts(snapshot: dict) -> list[dict]:
     metrics = snapshot["metrics"]
-    alerts = []
-    for service in ("api", "model", "database"):
-        if not snapshot["services"][service]["up"]:
+    alerts: list[dict] = []
+    for service, evidence in snapshot["services"].items():
+        if not evidence.get("up"):
+            severity = "critical" if service in {
+                "api", "database", "platform_database", "repository_storage", "api_gateway"
+            } else "warning"
             alerts.append(
                 {
                     "code": f"{service}_down",
-                    "severity": "critical",
-                    "message": f"Amosclaud {service} is unavailable",
+                    "severity": severity,
+                    "message": f"Amosclaud {service.replace('_', ' ')} is unavailable or unconfigured",
                 }
             )
     total_memory = metrics.get("amosclaud_system_memory_bytes", 0)
     available_memory = metrics.get("amosclaud_system_memory_available_bytes", 0)
     if total_memory and available_memory / total_memory < 0.1:
         alerts.append(
-            {
-                "code": "memory_low",
-                "severity": "warning",
-                "message": "Available memory is below 10%",
-            }
+            {"code": "memory_low", "severity": "warning", "message": "Available memory is below 10%"}
         )
     total_disk = metrics.get("amosclaud_system_disk_bytes", 0)
     free_disk = metrics.get("amosclaud_system_disk_free_bytes", 0)
@@ -115,6 +112,22 @@ def active_alerts(snapshot: dict) -> list[dict]:
                 "code": "webhook_failures",
                 "severity": "warning",
                 "message": "Webhook deliveries need attention",
+            }
+        )
+    if metrics.get("amosclaud_ci_pipelines_failed", 0):
+        alerts.append(
+            {
+                "code": "ci_failures",
+                "severity": "warning",
+                "message": "One or more Amosclaud CI pipelines have failed",
+            }
+        )
+    if metrics.get("amosclaud_autonomous_jobs_failed", 0):
+        alerts.append(
+            {
+                "code": "autonomous_job_failures",
+                "severity": "warning",
+                "message": "One or more Autonomous or Fixer jobs need attention",
             }
         )
     return alerts
@@ -151,11 +164,7 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict:
         snapshot = cache.get()
-        return {
-            "status": snapshot["status"],
-            "service": "amosclaud-metrics",
-            "version": __version__,
-        }
+        return {"status": snapshot["status"], "service": "amosclaud-metrics", "version": __version__}
 
     @app.get("/metrics", dependencies=[Depends(authorize)])
     def metrics() -> PlainTextResponse:
@@ -182,6 +191,17 @@ def create_app() -> FastAPI:
             "status": snapshot["status"],
             "services": snapshot["services"],
             "stations": int(snapshot["metrics"].get("amosclaud_stations_registered", 0)),
+            "repositories": int(snapshot["metrics"].get("amosclaud_repositories_total", 0)),
+            "autonomous_jobs": {
+                key.removeprefix("amosclaud_autonomous_jobs_"): int(value)
+                for key, value in snapshot["metrics"].items()
+                if key.startswith("amosclaud_autonomous_jobs_")
+            },
+            "ci_pipelines": {
+                key.removeprefix("amosclaud_ci_pipelines_"): int(value)
+                for key, value in snapshot["metrics"].items()
+                if key.startswith("amosclaud_ci_pipelines_")
+            },
             "tasks": {
                 key.removeprefix("amosclaud_tasks_"): int(value)
                 for key, value in snapshot["metrics"].items()
@@ -196,7 +216,7 @@ def create_app() -> FastAPI:
 
     @app.get("/v1/history", dependencies=[Depends(authorize)])
     def metric_history(limit: int = 100) -> dict:
-        items = history.recent(limit)
+        items = history.recent(max(1, min(limit, 1000)))
         return {"count": len(items), "snapshots": items}
 
     return app
@@ -210,6 +230,6 @@ def main() -> None:
 
     uvicorn.run(
         "amosclaud_metrics.server:app",
-        host=os.getenv("METRICS_HOST", "0.0.0.0"),
+        host=os.getenv("METRICS_HOST", "127.0.0.1"),
         port=int(os.getenv("METRICS_PORT", "9090")),
     )
