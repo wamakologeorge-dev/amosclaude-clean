@@ -6,23 +6,62 @@ from amoscloud_ai.engineering_agent import run_engineering_agent
 from src.amosclaud_os.kernel import get_autonomous_kernel
 
 
-def test_legacy_codex_agent_uses_canonical_kernel(tmp_path: Path) -> None:
+def test_legacy_codex_agent_uses_canonical_kernel(monkeypatch, tmp_path: Path) -> None:
     agent = CodexAgent(tmp_path)
     assert agent.kernel is get_autonomous_kernel(tmp_path)
     assert agent.provider == "amosclaud"
-    code, stdout, stderr = agent.execute_local_command("echo unsafe")
-    assert code == 2
-    assert stdout == ""
-    assert "Direct shell execution was removed" in stderr
+
+    captured = {}
+
+    def execute(**kwargs):
+        captured.update(kwargs)
+        return {"status": "passed", "summary": "Command verified", "evidence": ["ok"]}
+
+    monkeypatch.setattr(agent.kernel, "execute", execute)
+    code, stdout, stderr = agent.execute_local_command("python -m pytest")
+    assert code == 0
+    assert stdout == "Command verified"
+    assert stderr == ""
+    assert captured["mode"] == "test"
+    assert captured["authorized_writes"] is False
+    assert captured["metadata"]["direct_shell"] is False
 
 
-def test_legacy_model_actions_are_not_executed(tmp_path: Path) -> None:
+def test_legacy_file_actions_require_authorization(monkeypatch, tmp_path: Path) -> None:
     agent = CodexAgent(tmp_path)
-    result = agent.parse_and_execute_actions(
-        '<write_file path="unsafe.py">print("unsafe")</write_file>'
-    )
-    assert result[0]["success"] is False
-    assert not (tmp_path / "unsafe.py").exists()
+    calls = []
+
+    def write_document(path, content, *, authorized_writes=False):
+        calls.append((path, content, authorized_writes))
+        if not authorized_writes:
+            return {"status": "blocked", "error": "write_not_authorized"}
+        return {"status": "written", "path": path, "evidence": ["verified"]}
+
+    monkeypatch.setattr(agent.kernel, "write_document", write_document)
+    markup = '<write_file path="safe.py">print("safe")</write_file>'
+
+    blocked = agent.parse_and_execute_actions(markup)
+    assert blocked[0]["success"] is False
+    assert calls[-1][2] is False
+
+    allowed = agent.parse_and_execute_actions(markup, authorized_writes=True)
+    assert allowed[0]["success"] is True
+    assert calls[-1] == ("safe.py", 'print("safe")', True)
+
+
+def test_legacy_execute_action_routes_through_kernel(monkeypatch, tmp_path: Path) -> None:
+    agent = CodexAgent(tmp_path)
+    captured = {}
+
+    def execute(**kwargs):
+        captured.update(kwargs)
+        return {"status": "passed", "summary": "Tests passed"}
+
+    monkeypatch.setattr(agent.kernel, "execute", execute)
+    result = agent.parse_and_execute_actions("<execute>python -m pytest</execute>")
+    assert result[0]["success"] is True
+    assert result[0]["exit_code"] == 0
+    assert captured["metadata"]["direct_shell"] is False
 
 
 def test_engineering_plan_uses_same_kernel(monkeypatch, tmp_path: Path) -> None:
