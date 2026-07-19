@@ -90,11 +90,11 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: Install repository and fixer dependencies
+      - name: Install repository and verification dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-          python -m pip install openai pytest pytest-asyncio flake8
+          python -m pip install pytest pytest-asyncio flake8
 
       - name: Reproduce failure and collect evidence
         id: reproduce
@@ -118,11 +118,23 @@ jobs:
           } > amosclaud-failure.log 2>&1 || true
           tail -n 300 amosclaud-failure.log
 
+      - name: Verify Amosclaud credential configuration
+        env:
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+        run: |
+          test -n "$AMOSCLAUD_API_KEY" || {
+            echo "Missing repository secret AMOSCLAUD_API_KEY"
+            exit 1
+          }
+          echo "Using Amosclaud-owned model gateway: $AMOSCLAUD_API_URL"
+
       - name: Run Amosclaud AI Fixer
         id: fixer
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'gpt-5.4-mini' }}
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
           AMOSCLAUD_FAILURE_LOG: amosclaud-failure.log
         run: |
@@ -172,6 +184,7 @@ jobs:
           ### Verification
           - Python compilation passed
           - Repository pytest suite passed
+          - Repair generated through the Amosclaud-owned model gateway
           - Repair evidence is attached to workflow run ${GITHUB_RUN_ID}
 
           This pull request was opened only after the generated patch passed local verification. It still requires normal repository review and CI checks before merge.
