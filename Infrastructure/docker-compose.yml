@@ -86,11 +86,20 @@ services:
     build:
       context: ..
       dockerfile: Infrastructure/Dockerfile
-    command: ["python", "-m", "api_key_manager.main"]
+    command:
+      - python
+      - -m
+      - uvicorn
+      - api_key_manager.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
     ports:
       - "127.0.0.1:8001:8001"
     environment:
-      HOST: 0.0.0.0
       PORT: "8001"
       API_KEY_DATABASE_URL: sqlite:////credentials/keys.db
       AGENT_JWT_SECRET_KEY: ${AGENT_JWT_SECRET_KEY:?Set AGENT_JWT_SECRET_KEY to at least 32 characters}
