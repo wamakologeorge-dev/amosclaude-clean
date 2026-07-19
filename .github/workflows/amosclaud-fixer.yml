@@ -121,7 +121,7 @@ jobs:
       - name: Verify Amosclaud credential configuration
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
         run: |
           test -n "$AMOSCLAUD_API_KEY" || {
             echo "Missing repository secret AMOSCLAUD_API_KEY"
@@ -133,7 +133,7 @@ jobs:
         id: fixer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
           AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
           AMOSCLAUD_FAILURE_LOG: amosclaud-failure.log
