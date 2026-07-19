@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from amoscloud_ai.api.routes.agent import verification_contract
 from amoscloud_ai.main import create_app
+from amoscloud_ai.verification import verification_contract
 
 
 REQUIRED_ROUTE_PATHS = {
