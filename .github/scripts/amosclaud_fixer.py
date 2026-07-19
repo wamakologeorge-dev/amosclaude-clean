@@ -19,7 +19,7 @@ from openai import OpenAI
 ROOT = Path(__file__).resolve().parents[2]
 LOG_PATH = ROOT / os.getenv("AMOSCLAUD_FAILURE_LOG", "amosclaud-failure.log")
 REPORT_PATH = ROOT / "amosclaud-fixer-report.json"
-MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "gpt-5.1-codex-mini")
+MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "gpt-5.4-mini")
 MAX_ATTEMPTS = max(1, min(int(os.getenv("AMOSCLAUD_FIXER_ATTEMPTS", "3")), 3))
 MAX_PATCH_BYTES = 250_000
 MAX_CHANGED_FILES = 25
@@ -180,7 +180,7 @@ def main() -> int:
                 print("AMOSCLAUD_CHANGED_FILES=" + ",".join(paths))
                 return 0
             feedback = verification
-        except Exception as error:  # keep the next attempt informed without hiding failure
+        except Exception as error:
             feedback = redact(f"{type(error).__name__}: {error}")
             attempts.append({"attempt": attempt, "verified": False, "error": feedback})
 
