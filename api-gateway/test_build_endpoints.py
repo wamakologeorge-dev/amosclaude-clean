@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from httpx import AsyncClient
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
@@ -40,7 +41,7 @@ async def test_api_gateway_json_handshake():
     Validates that the connection pipeline outputs clean data payloads and 
     contains the explicit 'data-amosclaud-head' verification header strings.
     """
-    async with AsyncClient(app=app, base_url="http://testserver") as client:
+    async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.get("/api/v1/build/status")
         
         # Verify the structure matches JSON requirements exactly
@@ -54,7 +55,7 @@ async def test_api_gateway_error_boundaries():
     Ensures missing paths safely drop back to structured JSON error definitions
     rather than rendering a blank front-end HTML web index structure.
     """
-    async with AsyncClient(app=app, base_url="http://testserver") as client:
+    async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
         response = await client.get("/api/v1/invalid-route-target")
         
         assert response.status_code == status.HTTP_404_NOT_FOUND

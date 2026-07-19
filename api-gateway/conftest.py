@@ -5,6 +5,7 @@ Provides isolated workspace mock engines for Amosclaud-ai and Amosclaud-fixee.
 
 import pytest
 import pytest_asyncio
+import httpx
 from httpx import AsyncClient
 
 # Attempt to load your gateway application instance dynamically
@@ -34,7 +35,7 @@ async def amosclaud_test_client():
     This eliminates downstream HTML engine page leaks ( مثل '<!doctype html>' ).
     """
     async with AsyncClient(
-        app=app,
+        transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
         headers={
             "Accept": "application/json",
