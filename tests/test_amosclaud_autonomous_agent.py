@@ -16,33 +16,27 @@ from amoscloud_ai.verification import verification_contract
 
 
 REQUIRED_ROUTE_PATHS = {
-    # Core Autonomous agent and pipeline surfaces.
     "/api/v1/agent",
     "/api/v1/agent/readiness",
     "/api/v1/agent/run",
     "/api/v1/pipelines/{pipeline_id}",
-    # Model and runtime control.
     "/api/v1/amomodel/status",
     "/api/v1/server/cb/amosclaud",
-    # Autonomous metadata and Codex system bundle.
     "/api/v1/agent-chain/metadata",
     "/api/v1/autonomous/server/api/cb/router/byte/metadata",
     "/api/v1/codex/system-bundle/preview",
-    # Connection and control-bus surfaces.
     "/api/v1/connections/preflight",
     "/control-bus",
-    # OpenAI-compatible Amosclaud gateway.
     "/v1/models",
     "/v1/chat/completions",
 }
-
 
 DASHBOARD_REQUIRED_MARKERS = {
     'data-amosclaud-head="true"',
     'id="btn-check-agent-connections"',
     'id="btn-amomodel-on"',
     'id="btn-amomodel-off"',
-    'id="agent-connections-status"',
+    'id="agent-connection-status"',
     'href="/bundles"',
     'src="/static/agent-control.js"',
     'src="/static/conversational-agent.js"',
