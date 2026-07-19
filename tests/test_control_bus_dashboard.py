@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from amoscloud_ai.main import create_app
+from amoscloud_ai.route_discovery import route_paths
 
 
 def test_control_bus_dashboard_route_is_registered():
     app = create_app()
-    paths = {route.path for route in app.routes}
+    paths = route_paths(app.routes)
     assert "/control-bus" in paths
 
 

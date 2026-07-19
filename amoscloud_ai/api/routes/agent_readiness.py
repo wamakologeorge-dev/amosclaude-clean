@@ -91,10 +91,13 @@ def _connector_user(authorization: str | None, x_api_key: str | None) -> dict[st
 @router.get("/readiness")
 def agent_readiness(request: Request) -> dict:
     """Truthful backend view used by the Autonomous Cloud Agent frontend."""
-    _user(request)
+    # Readiness exposes only safe booleans and public component descriptions.
+    # Keep it available before login so the sign-in page and operators can
+    # distinguish a starting model from an authentication problem.
+    del request
     result = readiness()
     result.update({
-        "status": "ready" if result["ready"] else "needs_configuration",
+        "status": "ready" if result["ready"] else "starting",
         "agent": "Amosclaud Autonomous Cloud Agent",
         "api_chain": "amosclaud-autonomous-v1",
         "architecture": [

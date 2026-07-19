@@ -5,13 +5,15 @@ import sqlite3
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from amomodel.api import router as amomodel_router
 from amoscloud_ai.amo_lang import AmoRuntime, AmoSyntaxError, parse_amo
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.api.routes.core import _owner_user
 from amoscloud_ai.core.command_agent import AgentCommandError, AmosclaudCommandAgent
 from amoscloud_ai.core.workspace import WorkspaceError
 
-router = APIRouter(prefix="/amo", tags=["amo-runtime"])
+router = APIRouter()
+amo_router = APIRouter(prefix="/amo", tags=["amo-runtime"])
 
 
 class AmoRunRequest(BaseModel):
@@ -32,7 +34,7 @@ def _current_user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Ro
     return user
 
 
-@router.post("/run")
+@amo_router.post("/run")
 def run_amo(body: AmoRunRequest, owner=Depends(_owner_user)) -> dict:
     try:
         program = parse_amo(body.source)
@@ -47,7 +49,7 @@ def run_amo(body: AmoRunRequest, owner=Depends(_owner_user)) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/compile")
+@amo_router.post("/compile")
 def compile_amo(body: AmoRunRequest, user: sqlite3.Row = Depends(_current_user)) -> dict:
     del user
     try:
@@ -56,7 +58,7 @@ def compile_amo(body: AmoRunRequest, user: sqlite3.Row = Depends(_current_user))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@router.post("/command/plan")
+@amo_router.post("/command/plan")
 def plan_command(body: CommandRequest, owner=Depends(_owner_user)) -> dict:
     del owner
     try:
@@ -65,7 +67,7 @@ def plan_command(body: CommandRequest, owner=Depends(_owner_user)) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/command/run")
+@amo_router.post("/command/run")
 def run_command(body: CommandRequest, owner=Depends(_owner_user)) -> dict:
     del owner
     try:
@@ -76,3 +78,7 @@ def run_command(body: CommandRequest, owner=Depends(_owner_user)) -> dict:
         return agent.execute(plan, confirmed_actions=set(body.confirmed_actions))
     except AgentCommandError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+router.include_router(amo_router)
+router.include_router(amomodel_router)

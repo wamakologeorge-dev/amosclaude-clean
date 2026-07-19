@@ -24,7 +24,7 @@ from amoscloud_ai.task_dispatch import dispatch_task
 
 router = APIRouter(prefix="/agent", tags=["autonomous-runtime"])
 
-AGENT_NAME = "Amosclaud Autonomous"
+AGENT_NAME = "Amosclaud Autonomous Agent"
 AGENT_OWNER = "Amosclaud"
 AGENT_ROLE = ASSISTANT_SYSTEM_TEMPLATE.role
 AGENT_HOME = "amosclaud.com"
@@ -62,6 +62,19 @@ GUIDANCE_PHRASES = {
     "why is",
     "why does",
 }
+QUESTION_PREFIXES = (
+    "what ",
+    "why ",
+    "how ",
+    "where ",
+    "when ",
+    "who ",
+    "which ",
+    "can i ",
+    "could i ",
+    "should i ",
+    "would i ",
+)
 ACTION_WORDS = {
     "build",
     "create",
@@ -172,8 +185,10 @@ def _is_guidance_request(message: str, mode: str) -> bool:
     if not normalised:
         return False
     explicitly_execute = any(phrase in normalised for phrase in EXECUTION_PHRASES)
-    asks_for_guidance = "?" in message or any(
-        phrase in normalised for phrase in GUIDANCE_PHRASES
+    asks_for_guidance = (
+        "?" in message
+        or normalised.startswith(QUESTION_PREFIXES)
+        or any(phrase in normalised for phrase in GUIDANCE_PHRASES)
     )
     if mode == "autonomous-check" and not explicitly_execute:
         has_action = any(word in normalised.split() for word in ACTION_WORDS)
@@ -193,10 +208,72 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
     if normalised in GREETING_WORDS:
         return ASSISTANT_SYSTEM_TEMPLATE.greeting(name)
     if _is_guidance_request(message, mode):
+        if any(
+            phrase in normalised
+            for phrase in ("what can i build", "what can we build", "what can be built")
+        ):
+            return (
+                "You can build a complete software workflow here: a web application, "
+                "an authenticated API, an Amosclaud agent tool, a self-hosted service, "
+                "a repository automation, or a tested deployment package.\n\n"
+                "Choose one concrete outcome and tell me its users, first workflow, and "
+                "success condition. When you select Build or Fix, I will inspect the "
+                "repository, make the authorized changes, run verification, and report "
+                "the exact files and results."
+            )
         return ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
     if normalised in {"build", "make", "create", "fix"}:
         return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
     return None
+
+
+def _conversation_messages(metadata: dict | None) -> list[str]:
+    messages: list[str] = []
+    for item in (metadata or {}).get("conversation", []):
+        if isinstance(item, dict) and item.get("role") == "user":
+            content = str(item.get("content") or "").strip()
+            if content:
+                messages.append(content[:4000])
+    return messages[-12:]
+
+
+def _project_intake_reply(request: Request, objective: str, metadata: dict | None) -> str | None:
+    """Collect the minimum build brief before forwarding work to Autonomous."""
+
+    name = _display_name(request)
+    prefix = f"{name}, " if name else ""
+    messages = _conversation_messages(metadata)
+    if not messages or _normalise(messages[-1]) != _normalise(objective):
+        messages.append(objective)
+    combined = " ".join(messages).lower()
+    current = _normalise(objective)
+    website_requested = any(word in combined for word in ("website", "web app", "web platform"))
+    if not website_requested:
+        return None
+    generic_request = any(
+        phrase in current
+        for phrase in ("create a website", "build a website", "make a website", "learn how to create a website")
+    )
+    if len(messages) == 1 or generic_request:
+        return f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
+    if current in {"business", "a business", "it is about business", "the website is about business"}:
+        return f"What kind of business, {name or 'and who will use the platform'}?"
+    return None
+
+
+def _select_autonomous_mode(requested: str, objective: str, metadata: dict | None) -> str:
+    """Select the internal workflow while keeping the public interface conversational."""
+
+    context = " ".join([*_conversation_messages(metadata), objective]).lower()
+    if any(word in context for word in ("deploy", "release", "publish to production")):
+        return "deploy"
+    if any(word in context for word in ("monitor", "watch status", "keep watching")):
+        return "monitor"
+    if any(word in context for word in ("fix", "repair", "build", "create", "make")):
+        return "fix"
+    if any(word in context for word in ("inspect", "review", "diagnose", "check")):
+        return "autonomous-check"
+    return requested
 
 
 def _agent_metadata(mode: str, metadata: dict | None) -> tuple[str, dict]:
@@ -263,11 +340,8 @@ async def run_agent(
     run_id = str(uuid.uuid4())
     supplied_objective = (body.objective or "").strip()
     objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
-    conversational_reply = None if continued else _conversation_reply(
-        request,
-        mode,
-        objective,
-    )
+    intake_reply = None if continued else _project_intake_reply(request, objective, body.metadata)
+    conversational_reply = intake_reply or (None if continued else _conversation_reply(request, mode, objective))
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,
@@ -282,11 +356,17 @@ async def run_agent(
             logs=["Conversational response returned without engineering execution."],
         )
 
+    mode = _select_autonomous_mode(mode, objective, body.metadata)
+
     from amoscloud_ai.api.routes.pipelines import _save
 
     pipeline_id = str(uuid.uuid4())
     objective = objective or f"{AGENT_HOME} autonomous operations"
     execution_mode, metadata = _agent_metadata(mode, body.metadata)
+    conversation = _conversation_messages(body.metadata)
+    if conversation:
+        metadata["conversation_brief"] = conversation
+        metadata["autonomous_handoff"] = "background"
     metadata.setdefault("authenticated_user_id", int(user["id"]))
     metadata.setdefault(
         "authentication",

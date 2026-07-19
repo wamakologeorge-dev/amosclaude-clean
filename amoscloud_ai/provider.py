@@ -204,10 +204,10 @@ def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
     except Exception as exc:
         errors.append(f"external adapter {type(exc).__name__}: {exc}")
 
-    detail = "; ".join(errors)[-500:] if errors else "No model runtime is configured"
+    detail = "; ".join(errors)[-500:] if errors else "No model runtime is connected"
     return ProviderResult(
-        reply=f"Amosclaud model planning is unavailable. {detail}",
-        runtime="unavailable",
+        reply=f"Amosclaud model runtime is not connected. {detail}",
+        runtime="unconfigured",
         status="degraded",
         provider="amosclaud",
         model=model,

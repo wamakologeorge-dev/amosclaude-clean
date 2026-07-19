@@ -1,203 +1,77 @@
-<!-- public/index.html -->
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-amosclaud-head="true">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>cmood Cloud Collector Dashboard</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f7f6;
-            color: #333;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 900px;
-            margin: 20px auto;
-            background-color: #ffffff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 30px;
-            font-size: 2.2em;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 15px;
-        }
-        h2 {
-            color: #34495e;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            margin-top: 30px;
-            font-size: 1.5em;
-        }
-        .section {
-            margin-bottom: 25px;
-            padding: 20px;
-            background-color: #fdfdfd;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-        }
-        .status-item, .watcher-item, .endpoint-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px dotted #f0f0f0;
-        }
-        .status-item:last-child, .watcher-item:last-child {
-            border-bottom: none;
-        }
-        .label {
-            font-weight: bold;
-            color: #555;
-        }
-        .value {
-            color: #007bff; /* Blue for active/working status */
-            font-weight: 600;
-        }
-        .value.working {
-            color: #28a745; /* Green for 'Working' */
-        }
-        .value.error {
-            color: #dc3545; /* Red for 'Error' */
-        }
-        #logs-output {
-            background-color: #2d2d2d;
-            color: #f8f8f2;
-            padding: 15px;
-            border-radius: 5px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-            height: 250px;
-            overflow-y: scroll;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            border: 1px solid #444;
-        }
-        .endpoint-method {
-            font-weight: bold;
-            color: #007bff;
-            margin-right: 10px;
-        }
-        .endpoint-path {
-            color: #6c757d;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Amosclaud Autonomous</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #070b14; color: #f8fafc; font-family: Inter, system-ui, sans-serif; }
+    main { width: min(94vw, 1080px); margin: 0 auto; padding: 32px 0 56px; }
+    header, section { background: #0f172a; border: 1px solid #263244; border-radius: 18px; padding: 24px; margin-bottom: 18px; }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: clamp(2rem, 7vw, 3.4rem); }
+    p { color: #cbd5e1; line-height: 1.6; }
+    nav, .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    a, button { border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    a { color: #e2e8f0; background: #1e293b; }
+    button { color: #04130a; background: #22c55e; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .card { border: 1px solid #2b3a55; border-radius: 14px; padding: 16px; background: #111c31; }
+    pre { max-height: 300px; overflow: auto; background: #050914; border-radius: 12px; padding: 16px; color: #dbeafe; white-space: pre-wrap; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>cmood Cloud Collector Dashboard</h1>
+  <main>
+    <header>
+      <p><strong>One identity across every page</strong></p>
+      <h1>Amosclaud Autonomous</h1>
+      <p>This public head uses the same Autonomous, Repository, Results, permissions, job tracking, evidence, and learning-test rules as the main application.</p>
+      <nav aria-label="Amosclaud product areas">
+        <a href="/">Autonomous</a>
+        <a href="/repositories">Repository</a>
+        <a href="/bundles">Results</a>
+      </nav>
+    </header>
 
-        <div class="section">
-            <h2>cmood Agent Status</h2>
-            <div class="status-item">
-                <span class="label">cmood ci clone:</span>
-                <span id="ciCloneStatus" class="value">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="label">cmood cloud clone:</span>
-                <span id="cloudCloneStatus" class="value">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="label">cmood mood agent:</span>
-                <span id="moodAgentStatus" class="value">Loading...</span>
-            </div>
-            <div class="status-item">
-                <span class="label">cmood wait arguments with agent:</span>
-                <span id="waitArgumentsStatus" class="value">Loading...</span>
-            </div>
-        </div>
+    <section>
+      <h2>Active job contract</h2>
+      <div class="grid">
+        <div class="card"><strong>Read</strong><p>Load full repository instructions before work begins.</p></div>
+        <div class="card"><strong>Continue</strong><p>Preserve the chat brief while moving between pages.</p></div>
+        <div class="card"><strong>Authorize</strong><p>Require repository-owner permission before writes or deployment.</p></div>
+        <div class="card"><strong>Execute</strong><p>Create, build, fix, test, and deploy from start to finish.</p></div>
+        <div class="card"><strong>Prove</strong><p>Show evidence, work proof, final location, and usage instructions.</p></div>
+        <div class="card"><strong>Learn safely</strong><p>Track useful learning and execute tests before activation.</p></div>
+      </div>
+    </section>
 
-        <div class="section">
-            <h2>File System Watcher</h2>
-            <div class="watcher-item">
-                <span class="label">Watching directory:</span>
-                <span id="watchingDirectory" class="value">Loading...</span>
-            </div>
-            <div class="watcher-item">
-                <span class="label">Last event:</span>
-                <span id="lastEvent" class="value">Loading...</span>
-            </div>
-            <div class="watcher-item">
-                <span class="label">Timestamp:</span>
-                <span id="eventTimestamp" class="value">Loading...</span>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>FastAPI Endpoints</h2>
-            <div id="fastapiEndpoints">
-                <!-- Endpoints will be populated here -->
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Logs</h2>
-            <pre id="logs-output">Loading logs...</pre>
-        </div>
-    </div>
-
-    <script>
-        async function fetchStatus() {
-            try {
-                const response = await fetch('/status');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-
-                // Update cmood Agent Status
-                document.getElementById('ciCloneStatus').textContent = data.cmood_agent_status.ci_clone;
-                document.getElementById('ciCloneStatus').className = 'value ' + (data.cmood_agent_status.ci_clone === 'Working' ? 'working' : '');
-                document.getElementById('cloudCloneStatus').textContent = data.cmood_agent_status.cloud_clone;
-                document.getElementById('cloudCloneStatus').className = 'value ' + (data.cmood_agent_status.cloud_clone === 'Working' ? 'working' : '');
-                document.getElementById('moodAgentStatus').textContent = data.cmood_agent_status.mood_agent;
-                document.getElementById('moodAgentStatus').className = 'value ' + (data.cmood_agent_status.mood_agent === 'Working' ? 'working' : '');
-                document.getElementById('waitArgumentsStatus').textContent = data.cmood_agent_status.wait_arguments_with_agent;
-                document.getElementById('waitArgumentsStatus').className = 'value ' + (data.cmood_agent_status.wait_arguments_with_agent === 'Working' ? 'working' : '');
-
-                // Update File System Watcher
-                document.getElementById('watchingDirectory').textContent = data.file_system_watcher.watching_directory;
-                document.getElementById('lastEvent').textContent = data.file_system_watcher.last_event + (data.file_system_watcher.last_event_path !== 'N/A' ? ': ' + data.file_system_watcher.last_event_path : '');
-                document.getElementById('eventTimestamp').textContent = data.file_system_watcher.timestamp;
-
-                // Update FastAPI Endpoints (only if not already populated, as they are static)
-                const fastapiEndpointsDiv = document.getElementById('fastapiEndpoints');
-                if (fastapiEndpointsDiv.children.length === 0 && data.fastapi_endpoints) {
-                    data.fastapi_endpoints.forEach(endpoint => {
-                        const div = document.createElement('div');
-                        div.className = 'endpoint-item';
-                        div.innerHTML = `<span class="endpoint-method">${endpoint.method}</span><span class="endpoint-path">${endpoint.path}</span>`;
-                        fastapiEndpointsDiv.appendChild(div);
-                    });
-                }
-
-                // Update Logs
-                const logsOutput = document.getElementById('logs-output');
-                const newLogs = data.logs.join('\n');
-                const shouldScroll = logsOutput.scrollTop + logsOutput.clientHeight === logsOutput.scrollHeight;
-                logsOutput.textContent = newLogs;
-                if (shouldScroll) {
-                    logsOutput.scrollTop = logsOutput.scrollHeight;
-                }
-
-            } catch (error) {
-                console.error('Failed to fetch status:', error);
-                document.getElementById('logs-output').textContent = `Error fetching status: ${error.message}\n${document.getElementById('logs-output').textContent}`;
-            }
-        }
-
-        // Fetch status immediately and then every 2 seconds
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchStatus();
-            setInterval(fetchStatus, 2000); // Refresh every 2 seconds
-        });
-    </script>
+    <section>
+      <h2>Runtime results</h2>
+      <p id="runtime-status">Checking the Amosclaud runtime…</p>
+      <pre id="runtime-proof">No runtime evidence loaded yet.</pre>
+      <div class="actions"><button id="refresh" type="button">Refresh evidence</button></div>
+    </section>
+  </main>
+  <script>
+    const statusEl = document.getElementById('runtime-status');
+    const proofEl = document.getElementById('runtime-proof');
+    async function refresh() {
+      statusEl.textContent = 'Checking the Amosclaud runtime…';
+      try {
+        const response = await fetch('/health', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+        statusEl.textContent = 'Amosclaud Autonomous is reachable.';
+        proofEl.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        statusEl.textContent = 'Runtime evidence is unavailable.';
+        proofEl.textContent = String(error.message || error);
+      }
+    }
+    document.getElementById('refresh').addEventListener('click', refresh);
+    refresh();
+  </script>
 </body>
 </html>

@@ -97,4 +97,4 @@ def test_owner_dependency_requires_owner_email(monkeypatch):
     monkeypatch.delenv("AMOSCLAUD_ADMIN_EMAIL", raising=False)
     with pytest.raises(HTTPException) as exc_info:
         _owner_user(admin={"id": 1, "email": "owner@example.com", "is_admin": 1})
-    assert exc_info.value.status_code == 503
+    assert exc_info.value.status_code == 403

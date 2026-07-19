@@ -13,5 +13,9 @@ def test_question_is_guidance_in_inspect_mode():
     assert _is_guidance_request("What can go wrong with this deployment?", "autonomous-check") is True
 
 
+def test_question_with_action_word_does_not_start_engineering_job():
+    assert _is_guidance_request("What can I build here", "autonomous-check") is True
+
+
 def test_explicit_execution_is_not_treated_as_guidance():
     assert _is_guidance_request("Proceed and start building the website", "autonomous-check") is False

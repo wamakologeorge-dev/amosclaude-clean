@@ -15,12 +15,43 @@ class GitMetadataError(RuntimeError):
 
 @dataclass(frozen=True)
 class GitSnapshot:
+    """Point-in-time evidence collected from a Git repository.
+
+    Attributes:
+        repository: Repository identity and HEAD SHA at collection time.
+        commit: Commit details including changed files and parent SHAs.
+        dirty_files: Working-tree paths that are modified but not committed,
+            as reported by ``git status --short``. Empty when the tree is clean.
+    """
+
     repository: RepositoryRecord
     commit: CommitRecord
     dirty_files: tuple[str, ...]
 
 
+def _parse_remote_name(remote_url: str, fallback: str) -> str:
+    """Extract an owner/repo slug from a git remote URL."""
+    cleaned = remote_url.removesuffix(".git").rstrip("/")
+    # Handles both SSH (git@github.com:owner/repo) and HTTPS formats.
+    after_colon = cleaned.split(":")[-1]
+    after_host = after_colon.split("github.com/")[-1]
+    return after_host or fallback
+
+
 def _run(root: Path, *args: str) -> str:
+    """Run a git sub-command in ``root`` and return trimmed stdout.
+
+    Args:
+        root: Working directory for the git process.
+        *args: Arguments passed to ``git`` after the executable name.
+
+    Returns:
+        Trimmed stdout from the command.
+
+    Raises:
+        GitMetadataError: If the git process exits with a non-zero code,
+            with stderr (or stdout) as the error detail.
+    """
     result = subprocess.run(
         ["git", *args],
         cwd=root,
@@ -41,7 +72,26 @@ def collect_git_snapshot(
     objective: str,
     summary: str,
 ) -> GitSnapshot:
-    """Collect repository and commit evidence without changing the workspace."""
+    """Collect repository and commit evidence without changing the workspace.
+
+    Resolves the remote URL, default branch, HEAD SHA, changed files, and
+    parent SHAs using read-only git commands. The remote URL is used to derive
+    the ``owner/repo`` full name; falls back to the directory name when absent.
+
+    Args:
+        workspace: Path to the local repository root (must contain a ``.git`` dir).
+        objective: The agent objective associated with this snapshot.
+        summary: Human-readable description of the work being recorded.
+
+    Returns:
+        A :class:`GitSnapshot` with populated
+        :class:`~amosclaud_metadata.models.RepositoryRecord` and
+        :class:`~amosclaud_metadata.models.CommitRecord`.
+
+    Raises:
+        GitMetadataError: If ``workspace`` is not a git repository, or if any
+            required git command fails.
+    """
     root = Path(workspace).expanduser().resolve()
     if not (root / ".git").exists():
         raise GitMetadataError(f"Git metadata is unavailable at {root}")
@@ -62,10 +112,7 @@ def collect_git_snapshot(
     except GitMetadataError:
         pass
 
-    full_name = root.name
-    if remote_url:
-        cleaned = remote_url.removesuffix(".git").rstrip("/")
-        full_name = cleaned.split(":")[-1].split("github.com/")[-1]
+    full_name = _parse_remote_name(remote_url, fallback=root.name) if remote_url else root.name
 
     changed = tuple(
         line[3:].strip()

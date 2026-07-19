@@ -8,12 +8,14 @@
     <h3>Backend model services</h3>
     <p id="model-services-summary">Checking the Autonomous backend…</p>
     <div id="model-services-list" class="auto-summary-list"></div>
-    <h3 style="margin-top:24px">Autonomous keys</h3>
-    <p>Create a key for tools and integrations. Keys are shown only once.</p>
-    <label>Key name<input id="autonomous-key-name" value="My Autonomous key" maxlength="80"></label>
-    <button id="create-autonomous-key" class="btn-primary" type="button">Generate secure key</button>
-    <pre id="new-autonomous-key" hidden style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
-    <div id="autonomous-key-list" class="auto-summary-list"></div>`;
+    <div id="autonomous-key-panel">
+      <h3 style="margin-top:24px">External integration keys <small>(optional)</small></h3>
+      <p>Only external tools and remote runners need a key. Signed-in website sessions do not.</p>
+      <label>Key name<input id="autonomous-key-name" value="My Autonomous key" maxlength="80"></label>
+      <button id="create-autonomous-key" class="btn-primary" type="button">Generate integration key</button>
+      <pre id="new-autonomous-key" hidden style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+      <div id="autonomous-key-list" class="auto-summary-list"></div>
+    </div>`;
   sidebar.prepend(panel);
 
   const summary = panel.querySelector('#model-services-summary');
@@ -22,6 +24,7 @@
   const keyName = panel.querySelector('#autonomous-key-name');
   const keyOutput = panel.querySelector('#new-autonomous-key');
   const createButton = panel.querySelector('#create-autonomous-key');
+  const keyPanel = panel.querySelector('#autonomous-key-panel');
 
   async function json(url, options = {}) {
     const response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', ...options, headers: {'Content-Type': 'application/json', ...(options.headers || {})}});
@@ -74,7 +77,21 @@
     } catch (error) { keyList.textContent = `Keys unavailable: ${error.message}`; }
   }
 
-  createButton.addEventListener('click', async () => {
+  async function configureAccess() {
+    try {
+      const user = await json('/api/v1/auth/me');
+      if (user.is_admin) {
+        keyPanel.innerHTML = `
+          <h3 style="margin-top:24px">Administrator access</h3>
+          <p><strong>Admin session active.</strong> No Amosclaud API key is required in this dashboard.</p>
+          <p>Keys are only for software connecting from outside this signed-in browser session.</p>`;
+        return;
+      }
+    } catch (_) {
+      // The API will provide the normal sign-in message if this session has expired.
+    }
+
+    createButton.addEventListener('click', async () => {
     createButton.disabled = true;
     try {
       const created = await json('/api/v1/agent/keys', {method: 'POST', body: JSON.stringify({name: keyName.value.trim() || 'Autonomous key'})});
@@ -83,8 +100,10 @@
       await loadKeys();
     } catch (error) { keyOutput.hidden = false; keyOutput.textContent = error.message; }
     finally { createButton.disabled = false; }
-  });
+    });
+    await loadKeys();
+  }
 
   loadServices();
-  loadKeys();
+  configureAccess();
 })();
