@@ -1,10 +1,11 @@
 system:
   name: Amosclaud OS
-  version: 3.0.0
+  version: 3.1.0
   head_driver: Amosclaud Autonomous
   architecture: single-autonomous-kernel
   composition_root: src.amosclaud_os.kernel.AutonomousKernel
   governance: founder-governed
+  command_entrypoint: python -m amosclaud_platform
 
 routing:
   assistant: autonomous-kernel
@@ -17,9 +18,44 @@ routing:
   recovery_engine: autonomous-kernel
   learning_academy: autonomous-kernel
 
+services:
+  api_gateway: api-gateway
+  database: database
+  repository: repository.connector.RepositoryConnector
+  autonomous_agent: agents.codex_agent.RealCodexAgent
+  fixer: amosclaud-fixer
+  model_runtime: amosclaud_model
+  model_workspace: model-workspace
+  credentials: api_key_manager
+  metrics: amosclaud_metrics
+  sdk: amosclaud_agent_sdk
+  android_client: android
+
+security:
+  credential_env: AMOSCLAUD_API_KEY
+  provider_keys_allowed: false
+  workspace_confinement_required: true
+  isolated_worktree_required: true
+  default_branch_protected: true
+  explicit_write_authorization_required: true
+  secret_redaction_required: true
+
+verification:
+  tests_required_for_code_changes: true
+  clean_diff_review_required: true
+  dependency_security_scan_required: true
+  verification_id_required: true
+  commit_sha_required: true
+  changed_files_required: true
+  success_requires_all_checks: true
+
 rules:
   - No feature may construct an independent Autonomous brain.
+  - All services must route through the single Autonomous kernel or an approved adapter.
+  - All repository work must use RepositoryConnector and an isolated worktree.
   - All write operations require explicit authorization and workspace isolation.
-  - All success claims require verification evidence.
+  - Direct writes to the default branch are prohibited for Agent and Fixer workers.
+  - All success claims require tests, verification evidence, and a commit identity.
   - Failures must report blockers and recovery evidence truthfully.
+  - Credentials, raw secrets, and provider keys must never appear in logs or timelines.
   - User-visible timelines show actions and evidence, not private hidden reasoning.
