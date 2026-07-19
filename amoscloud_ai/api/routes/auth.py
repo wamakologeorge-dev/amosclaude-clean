@@ -110,8 +110,6 @@ def _connect() -> sqlite3.Connection:
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='auth_codes'"
     ).fetchone()
     if auth_codes_schema and "'login'" not in str(auth_codes_schema["sql"] or ""):
-        # SQLite cannot alter a CHECK constraint in place. Preserve outstanding
-        # registration/reset codes while extending old installations for login.
         db.executescript(
             """
             ALTER TABLE auth_codes RENAME TO auth_codes_legacy;
@@ -165,13 +163,28 @@ def _token_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def _cookie_secure() -> bool:
+    """Return a cookie policy compatible with the configured public URL.
+
+    Amosclaud currently uses the canonical HTTP endpoint. A Secure cookie is not
+    returned by browsers over HTTP, which previously made successful logins fail
+    the immediate /auth/me session verification. Operators can explicitly enable
+    secure cookies after moving the deployment to HTTPS.
+    """
+    configured = os.getenv("AUTH_COOKIE_SECURE")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+    public_url = os.getenv("AMOSCLAUD_PUBLIC_URL", "http://www.amosclaud.com/")
+    return public_url.strip().lower().startswith("https://")
+
+
 def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
         max_age=SESSION_DAYS * 86400,
         httponly=True,
-        secure=os.getenv("AUTH_COOKIE_SECURE", "true").lower() == "true",
+        secure=_cookie_secure(),
         samesite="lax",
         path="/",
     )
@@ -210,7 +223,7 @@ def _user_response(row: sqlite3.Row) -> UserResponse:
 
 def _send_code(email: str, code: str, purpose: str) -> None:
     host = os.getenv("SMTP_HOST")
-    sender = os.getenv("SMTP_FROM", "no-reply@amosclaud.com")
+    sender = os.getenv("SMTP_FROM", "no-reply@www.amosclaud.com")
     if not host:
         raise HTTPException(status_code=503, detail="Amosclaud email delivery is not configured")
     port = int(os.getenv("SMTP_PORT", "587"))
@@ -306,8 +319,6 @@ def login(body: LoginRequest, response: Response) -> UserResponse:
 
 @router.post("/login/request-code", status_code=202)
 def request_login_code(body: EmailRequest) -> dict:
-    """Send a passwordless code without revealing whether an account exists."""
-
     email = _normalise_email(body.email)
     with _connect() as db:
         user = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
@@ -387,7 +398,7 @@ def github_link(request: Request, amos_session: str | None = Cookie(default=None
     callback = os.getenv("GITHUB_CALLBACK_URL") or str(request.url_for("github_link_callback"))
     url = "https://github.com/login/oauth/authorize?" + urlencode({"client_id": client_id, "redirect_uri": callback, "scope": "read:user user:email repo", "state": state})
     response = RedirectResponse(url)
-    response.set_cookie(OAUTH_STATE_COOKIE, state, max_age=600, httponly=True, secure=os.getenv("AUTH_COOKIE_SECURE", "true").lower() == "true", samesite="lax")
+    response.set_cookie(OAUTH_STATE_COOKIE, state, max_age=600, httponly=True, secure=_cookie_secure(), samesite="lax")
     return response
 
 
