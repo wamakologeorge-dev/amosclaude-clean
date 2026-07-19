@@ -58,7 +58,6 @@ jobs:
             target_sha="$WORKFLOW_SHA"
             source="github-actions:$WORKFLOW_NAME"
           elif [[ "$EVENT_NAME" == "status" && "$STATUS_STATE" == "failure" ]]; then
-            # CircleCI publishes commit statuses whose context contains CircleCI.
             if [[ "${STATUS_CONTEXT,,}" == *"circleci"* ]]; then
               should_fix=true
               target_sha="$STATUS_SHA"
@@ -123,7 +122,7 @@ jobs:
         id: fixer
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'gpt-5.1-codex-mini' }}
+          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'gpt-5.4-mini' }}
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
           AMOSCLAUD_FAILURE_LOG: amosclaud-failure.log
         run: |
