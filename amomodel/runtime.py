@@ -1,56 +1,41 @@
-"""Folder-native AmoModel lifecycle and bounded execution runtime."""
+"""Governed AmoModel lifecycle and Autonomous job scheduling runtime."""
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from threading import RLock
 from typing import Any
+
+from sqlalchemy import select
+
+from Amosclaud.platform_bus import platform_bus_from_environment
+from database.models import AutonomousJob, CIPipeline, CIStatus, Repository
+from database.session import create_database, session_scope
 
 from .service_graph import ServiceGraph
 from .state import RuntimeState, StateStore
 
 
 class AmoModelRuntime:
-    """Governed runtime that persists truthful state and never executes shell commands.
+    """Truthful control plane for Amosclaud services and Autonomous work.
 
-    All state transitions (power on, off, execute) are serialised through a
-    :class:`threading.RLock` so the runtime is safe for concurrent callers.
-    Every transition is written to the audit log via the underlying
-    :class:`~amomodel.state.StateStore` before the method returns.
-
-    States: ``"off"`` → ``"starting"`` → ``"ready"`` ↔ ``"busy"``,
-    with ``"stopping"`` and ``"degraded"`` as transient states.
+    AmoModel does not execute arbitrary shell commands or claim that work has
+    completed. It owns lifecycle/readiness, creates authoritative database jobs,
+    attaches CI evidence, and exposes status for workers and the platform UI.
     """
 
     def __init__(self, state_path: Path | None = None) -> None:
-        """
-        Args:
-            state_path: Path for the state file. Passed directly to
-                :class:`~amomodel.state.StateStore`; defaults to that class's
-                own default when ``None``.
-        """
         self.store = StateStore(state_path)
         self.graph = ServiceGraph()
         self._lock = RLock()
+        create_database()
 
     def status(self) -> dict[str, Any]:
-        """Return a snapshot of the current runtime state without acquiring the lock."""
         state = self.store.load()
         return self._snapshot(state)
 
     def power_on(self, actor: str) -> dict[str, Any]:
-        """Start the service graph and transition the runtime to ``"ready"``.
-
-        Idempotent: returns the current snapshot immediately if the runtime is
-        already ``"ready"`` or ``"busy"``.
-
-        Args:
-            actor: Identity string recorded in the audit log.
-
-        Returns:
-            Runtime snapshot dict. The ``"state"`` key will be ``"ready"`` on
-            success or ``"degraded"`` if any service failed to start.
-        """
         with self._lock:
             state = self.store.load()
             if state.state in {"ready", "busy"}:
@@ -64,14 +49,6 @@ class AmoModelRuntime:
             return self._snapshot(state)
 
     def power_off(self, actor: str) -> dict[str, Any]:
-        """Shut down the service graph and transition the runtime to ``"off"``.
-
-        Args:
-            actor: Identity string recorded in the audit log.
-
-        Returns:
-            Runtime snapshot dict with ``"state": "off"``.
-        """
         with self._lock:
             state = self.store.load()
             state.state = "stopping"
@@ -83,14 +60,6 @@ class AmoModelRuntime:
             return self._snapshot(state)
 
     def restart(self, actor: str) -> dict[str, Any]:
-        """Power off then power on the runtime under a single lock acquisition.
-
-        Args:
-            actor: Identity string recorded in the audit log.
-
-        Returns:
-            Runtime snapshot dict after the power-on phase completes.
-        """
         with self._lock:
             self.power_off(actor)
             result = self.power_on(actor)
@@ -98,30 +67,34 @@ class AmoModelRuntime:
             self.store.record(state, "restart_finished", actor)
             return result
 
-    def execute(self, actor: str, objective: str, wake: bool = True) -> dict[str, Any]:
-        """Accept an objective and record it through the governed service graph.
+    def execute(
+        self,
+        actor: str,
+        objective: str,
+        wake: bool = True,
+        *,
+        repository_id: int | None = None,
+        pull_request_id: int | None = None,
+        requested_by_id: int | None = None,
+        mode: str = "plan",
+        target_file: str | None = None,
+        error_context: str | None = None,
+        commit_sha: str = "uncommitted",
+    ) -> dict[str, Any]:
+        """Accept an objective or queue governed Autonomous work.
 
-        If the runtime is ``"off"`` and ``wake`` is ``True``, :meth:`power_on`
-        is called automatically before attempting execution. The runtime must
-        be ``"ready"`` to accept work.
-
-        Args:
-            actor: Identity string recorded in the audit log.
-            objective: Plain-language work description. Must not be blank.
-            wake: Auto-start the runtime when it is ``"off"``.
-
-        Returns:
-            A result dict containing the objective, acceptance status,
-            service evidence, and an embedded ``"runtime"`` snapshot.
-
-        Raises:
-            ValueError: If ``objective`` is blank after stripping whitespace.
-            RuntimeError: If the runtime state is not ``"ready"`` after the
-                optional wake phase.
+        With no repository ID this remains a truthful planning/readiness request.
+        With a repository ID it creates a persisted CI pipeline and AutonomousJob.
+        The job remains queued until an approved worker claims it; AmoModel never
+        reports a repair as complete without CI verification evidence.
         """
         clean = objective.strip()
         if not clean:
             raise ValueError("objective must not be empty")
+        normalized_mode = mode.strip().lower()
+        if normalized_mode not in {"plan", "build", "test", "review", "deploy", "monitor", "fix"}:
+            raise ValueError("unsupported AmoModel execution mode")
+
         with self._lock:
             state = self.store.load()
             if state.state == "off" and wake:
@@ -129,37 +102,147 @@ class AmoModelRuntime:
                 state = self.store.load()
             if state.state != "ready":
                 raise RuntimeError(f"AmoModel is not ready; current state is {state.state}")
+
             state.state = "busy"
-            self.store.record(state, "execution_started", actor, clean)
-            # First experiment: deterministic, inspectable execution planning only.
-            result = {
-                "objective": clean,
-                "accepted": True,
-                "engine": "folder-native-deterministic",
-                "message": "AmoModel accepted the objective through its governed service graph.",
-                "service_evidence": self.graph.evidence(state.services),
+            self.store.record(state, "execution_started", actor, f"{normalized_mode}: {clean}")
+            try:
+                result: dict[str, Any] = {
+                    "objective": clean,
+                    "accepted": True,
+                    "mode": normalized_mode,
+                    "engine": "amosclaud-governed-control-plane",
+                    "service_evidence": self.graph.evidence(state.services),
+                }
+                if repository_id is None:
+                    result.update(
+                        {
+                            "status": "planned",
+                            "message": "Objective accepted for governed planning; no repository job was created.",
+                            "next_action": "Provide repository_id to queue an Autonomous platform job.",
+                        }
+                    )
+                else:
+                    result.update(
+                        self._queue_job(
+                            repository_id=repository_id,
+                            pull_request_id=pull_request_id,
+                            requested_by_id=requested_by_id,
+                            objective=clean,
+                            mode=normalized_mode,
+                            target_file=target_file,
+                            error_context=error_context,
+                            commit_sha=commit_sha,
+                        )
+                    )
+                state.executions += 1
+                state.state = "ready"
+                state.last_error = None
+                self.store.record(state, "execution_finished", actor, result.get("task_id", clean))
+                result["runtime"] = self._snapshot(state)
+                return result
+            except Exception as exc:
+                state.state = "degraded"
+                state.last_error = str(exc)
+                self.store.record(state, "execution_failed", actor, str(exc))
+                raise
+
+    def job_status(self, task_id: str) -> dict[str, Any]:
+        clean = task_id.strip()
+        if not clean:
+            raise ValueError("task_id is required")
+        bus = platform_bus_from_environment()
+        if bus is not None:
+            return bus.execute(bus.frame("platform.job.status", {"task_id": clean})).json()
+        with session_scope() as session:
+            job = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == clean))
+            if job is None:
+                raise LookupError("autonomous job not found")
+            return {
+                "task_id": job.task_id,
+                "repository_id": job.repository_id,
+                "pull_request_id": job.pull_request_id,
+                "ci_pipeline_id": job.ci_pipeline_id,
+                "agent_type": job.agent_type,
+                "status": job.status.value,
+                "objective": job.objective,
+                "result_summary": job.result_summary,
+                "ci_status": job.ci_pipeline.status.value if job.ci_pipeline else None,
+                "verification_id": job.ci_pipeline.verification_id if job.ci_pipeline else None,
             }
-            state.executions += 1
-            state.state = "ready"
-            self.store.record(state, "execution_finished", actor, clean)
-            result["runtime"] = self._snapshot(state)
-            return result
+
+    def _queue_job(
+        self,
+        *,
+        repository_id: int,
+        pull_request_id: int | None,
+        requested_by_id: int | None,
+        objective: str,
+        mode: str,
+        target_file: str | None,
+        error_context: str | None,
+        commit_sha: str,
+    ) -> dict[str, Any]:
+        task_id = f"amomodel-{uuid.uuid4().hex}"
+        with session_scope() as session:
+            repository = session.get(Repository, repository_id)
+            if repository is None:
+                raise LookupError("repository not found")
+            pipeline = CIPipeline(
+                repository_id=repository_id,
+                pull_request_id=pull_request_id,
+                commit_sha=(commit_sha.strip() or "uncommitted")[:64],
+                status=CIStatus.PENDING,
+                execution_logs=f"Queued by AmoModel in {mode} mode.",
+            )
+            session.add(pipeline)
+            session.flush()
+            job = AutonomousJob(
+                task_id=task_id,
+                agent_type="amosclaud-fixer" if mode == "fix" else "amosclaud-autonomous",
+                requested_by_id=requested_by_id,
+                repository_id=repository_id,
+                pull_request_id=pull_request_id,
+                ci_pipeline_id=pipeline.id,
+                objective=objective,
+                target_file=(target_file or "")[:500] or None,
+                error_context=(error_context or "")[:20_000] or None,
+            )
+            session.add(job)
+            session.flush()
+            response = {
+                "status": "queued",
+                "message": "Autonomous job and CI pipeline created in the shared platform database.",
+                "task_id": task_id,
+                "repository_id": repository_id,
+                "repository": repository.name,
+                "pull_request_id": pull_request_id,
+                "ci_pipeline_id": pipeline.id,
+                "agent_type": job.agent_type,
+                "verification_required": True,
+            }
+        return response
 
     def _snapshot(self, state: RuntimeState) -> dict[str, Any]:
-        """Build a serializable snapshot dict from ``state``.
-
-        The ``"audit"`` field is capped at the 20 most recent entries to keep
-        response payloads bounded.
-        """
+        services = state.services
         return {
             "name": "AmoModel",
             "version": state.version,
+            "role": "governed-control-plane",
             "state": state.state,
             "updated_at": state.updated_at,
-            "services": state.services,
-            "healthy": state.state == "ready" and self.graph.healthy(state.services),
+            "services": services,
+            "service_evidence": self.graph.evidence(services),
+            "healthy": state.state == "ready" and self.graph.healthy(services),
             "last_error": state.last_error,
             "executions": state.executions,
+            "capabilities": [
+                "runtime-lifecycle",
+                "service-readiness",
+                "autonomous-job-scheduling",
+                "ci-pipeline-creation",
+                "job-status",
+                "audit-evidence",
+            ],
             "audit": state.audit[-20:],
         }
 
@@ -168,7 +251,6 @@ _RUNTIME: AmoModelRuntime | None = None
 
 
 def get_runtime() -> AmoModelRuntime:
-    """Return the process-level singleton :class:`AmoModelRuntime`, creating it on first call."""
     global _RUNTIME
     if _RUNTIME is None:
         _RUNTIME = AmoModelRuntime()
