@@ -26,6 +26,11 @@ _SECRET_TERMS = {
 
 
 def _is_sensitive_field(field_name: str) -> bool:
+    """Return ``True`` if ``field_name`` looks like it carries a secret value.
+
+    Checks against an explicit deny-list and common naming suffixes such as
+    ``_secret``, ``_token``, ``_password``, and ``_api_key``.
+    """
     normalized = field_name.strip().lower()
     return (
         normalized in _SECRET_TERMS
@@ -37,6 +42,14 @@ def _is_sensitive_field(field_name: str) -> bool:
 
 
 def _scan(value: Any, path: str = "payload") -> None:
+    """Recursively walk ``value`` and raise on any secret-like dict key.
+
+    Traverses mappings, lists, tuples, and sets. The ``path`` argument is
+    used to build a human-readable dotted location string for error messages.
+
+    Raises:
+        MetadataValidationError: If any dict key matches :func:`_is_sensitive_field`.
+    """
     if isinstance(value, Mapping):
         for key, item in value.items():
             if _is_sensitive_field(str(key)):
@@ -50,7 +63,19 @@ def _scan(value: Any, path: str = "payload") -> None:
 
 
 def validate_envelope(envelope: MetadataEnvelope) -> None:
-    """Validate one metadata envelope before it reaches persistent storage."""
+    """Validate one metadata envelope before it reaches persistent storage.
+
+    Checks that required string fields are non-blank, that ``payload`` is a
+    non-empty dict, and that no key in the payload tree looks like a secret
+    (passwords, tokens, API keys, etc.).
+
+    Args:
+        envelope: The :class:`~amosclaud_metadata.models.MetadataEnvelope` to validate.
+
+    Raises:
+        MetadataValidationError: On any validation failure, with a message
+            describing the specific problem and location.
+    """
     if not envelope.record_type.strip():
         raise MetadataValidationError("record_type must not be empty")
     if not envelope.source.strip():

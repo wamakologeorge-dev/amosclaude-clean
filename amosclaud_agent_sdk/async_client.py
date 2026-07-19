@@ -11,6 +11,24 @@ from .sessions import AgentSession, create_session, save_session
 
 
 class AmosclaudSDKClient:
+    """Bidirectional, durable multi-turn client for Amosclaud Autonomous.
+
+    Wraps :func:`~amosclaud_agent_sdk.query.query` in a persistent
+    :class:`~amosclaud_agent_sdk.sessions.AgentSession` so that conversation
+    history survives across calls. The last 12 messages are forwarded to the
+    agent on each turn.
+
+    Must be used as an ``async`` context manager; :meth:`send` raises
+    ``RuntimeError`` otherwise.
+
+    Example::
+
+        async with AmosclaudSDKClient() as sdk:
+            await sdk.send("List open pull requests")
+            async for msg in sdk.receive():
+                print(msg.content)
+    """
+
     def __init__(
         self,
         options: AmosclaudAgentOptions | None = None,
@@ -18,6 +36,17 @@ class AmosclaudSDKClient:
         client: AmosclaudAgentClient | None = None,
         store: SessionStore | None = None,
     ) -> None:
+        """
+        Args:
+            options: Query configuration (system prompt, tool allow-list, etc.).
+                Defaults to :class:`~amosclaud_agent_sdk.options.AmosclaudAgentOptions`
+                with its default values.
+            client: HTTP client to use. Defaults to a new
+                :class:`~amosclaud_agent_sdk.client.AmosclaudAgentClient`.
+            store: Session storage backend. Defaults to a new
+                :class:`~amosclaud_agent_sdk.session_store.SessionStore`
+                rooted at ``.amosclaud/sessions``.
+        """
         self.options = options or AmosclaudAgentOptions()
         self.client = client or AmosclaudAgentClient()
         self.store = store or SessionStore()
@@ -33,6 +62,18 @@ class AmosclaudSDKClient:
             save_session(self.store, self.session)
 
     async def send(self, prompt: str) -> None:
+        """Append ``prompt`` as a user turn, call the agent, and buffer the response.
+
+        The outgoing payload includes the last 12 messages of the active session
+        as ``conversation`` metadata. The assistant reply is appended to the
+        session and persisted before this coroutine returns.
+
+        Call :meth:`receive` afterwards to iterate over the buffered
+        :class:`~amosclaud_agent_sdk.query.QueryMessage` objects.
+
+        Raises:
+            RuntimeError: If called outside an ``async with`` block.
+        """
         if self.session is None:
             raise RuntimeError("use AmosclaudSDKClient as an async context manager")
         self.session.append("user", prompt)
@@ -49,5 +90,11 @@ class AmosclaudSDKClient:
         save_session(self.store, self.session)
 
     async def receive(self) -> AsyncIterator[QueryMessage]:
+        """Yield and drain the messages buffered by the most recent :meth:`send` call.
+
+        Yields items in the order they were received: a ``"status"`` message
+        first, then the ``"assistant"`` message, then the ``"result"`` message.
+        The buffer is empty after iteration completes.
+        """
         while self._pending:
             yield self._pending.pop(0)

@@ -1,9 +1,26 @@
+"""Command-line interface for the Amosclaud Agent SDK.
+
+Usage::
+
+    amosclaud-agent status
+    amosclaud-agent run "Deploy the staging environment" --wait
+    amosclaud-agent run "Run tests" --mode build --branch feature/x
+"""
 from __future__ import annotations
 import argparse
 import json
 from .client import AmosclaudAgentClient, AmosclaudAgentError
 
+
 def main(argv: list[str] | None = None) -> int:
+    """Entry point for the ``amosclaud-agent`` CLI.
+
+    Args:
+        argv: Argument list to parse; defaults to ``sys.argv[1:]`` when ``None``.
+
+    Returns:
+        Exit code: ``0`` on success, ``1`` on any ``AmosclaudAgentError``.
+    """
     parser = argparse.ArgumentParser(prog="amosclaud-agent")
     parser.add_argument("--host", default="https://www.amosclaud.com")
     parser.add_argument("--api-key")

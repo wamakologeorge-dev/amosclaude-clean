@@ -15,7 +15,19 @@ class AmosclaudAgentError(AmosclaudSDKError):
 
 @dataclass(slots=True)
 class AmosclaudAgentClient:
-    """Connect Python to the governed Amosclaud agent runtime."""
+    """Connect Python to the governed Amosclaud agent runtime.
+
+    Authentication is resolved in priority order: constructor argument first,
+    then the ``AMOSCLAUD_API_KEY`` / ``AMOSCLAUD_SESSION`` environment variables.
+    At least one of ``api_key`` or ``session_cookie`` must be set before making
+    authenticated requests.
+
+    Args:
+        base_url: Root URL of the Amosclaud service. Trailing slashes are stripped.
+        api_key: Bearer token sent as ``Authorization: Bearer <key>``.
+        session_cookie: Value of the ``amos_session`` cookie for web-session auth.
+        timeout: Per-request socket timeout in seconds.
+    """
     base_url: str = "https://www.amosclaud.com"
     api_key: str | None = None
     session_cookie: str | None = None
@@ -27,20 +39,86 @@ class AmosclaudAgentClient:
         self.session_cookie = self.session_cookie or os.getenv("AMOSCLAUD_SESSION")
 
     def profile(self) -> dict[str, Any]:
+        """Return the authenticated agent's profile from the Amosclaud API."""
         return self._request("GET", "/api/v1/agent")
 
     def readiness(self) -> dict[str, Any]:
+        """Return the service's readiness probe response.
+
+        Useful as a lightweight health check before submitting work.
+        """
         return self._request("GET", "/api/v1/agent/readiness")
 
-    def run(self, objective: str, *, mode: str = "autonomous-check", branch: str = "main", metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        objective: str,
+        *,
+        mode: str = "autonomous-check",
+        branch: str = "main",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Submit an objective and return immediately with the accepted pipeline reference.
+
+        Args:
+            objective: Plain-language description of the work to perform.
+            mode: Execution mode, e.g. ``"autonomous-check"`` or ``"build"``.
+            branch: Repository branch the agent should operate on.
+            metadata: Arbitrary key/value pairs forwarded to the pipeline context.
+
+        Returns:
+            The API response dict, which includes at minimum a ``pipeline_id``
+            and an initial ``status`` field.
+
+        Raises:
+            ValueError: If ``objective`` is blank.
+            AmosclaudAgentError: On HTTP or network failure.
+        """
         if not objective.strip():
             raise ValueError("objective is required")
         return self._request("POST", "/api/v1/agent/run", {"objective": objective, "mode": mode, "branch": branch, "metadata": dict(metadata or {})})
 
     def pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        """Fetch the current state of a pipeline by its identifier.
+
+        Args:
+            pipeline_id: Opaque pipeline ID as returned by :meth:`run`.
+
+        Returns:
+            The pipeline status dict. The ``status`` field is one of
+            ``"success"``, ``"failed"``, ``"cancelled"``, or a running state.
+        """
         return self._request("GET", f"/api/v1/pipelines/{quote(pipeline_id, safe='')}")
 
-    def run_and_wait(self, objective: str, *, mode: str = "autonomous-check", branch: str = "main", metadata: dict[str, Any] | None = None, poll_seconds: float = 1.0, max_wait_seconds: float = 300.0) -> dict[str, Any]:
+    def run_and_wait(
+        self,
+        objective: str,
+        *,
+        mode: str = "autonomous-check",
+        branch: str = "main",
+        metadata: dict[str, Any] | None = None,
+        poll_seconds: float = 1.0,
+        max_wait_seconds: float = 300.0,
+    ) -> dict[str, Any]:
+        """Submit an objective and block until the pipeline reaches a terminal state.
+
+        Polls :meth:`pipeline` every ``poll_seconds`` seconds. Returns immediately
+        if the initial :meth:`run` response already carries a terminal status.
+
+        Args:
+            objective: Work description forwarded to :meth:`run`.
+            mode: Execution mode forwarded to :meth:`run`.
+            branch: Repository branch forwarded to :meth:`run`.
+            metadata: Context metadata forwarded to :meth:`run`.
+            poll_seconds: Seconds between status polls (minimum 0.1).
+            max_wait_seconds: Maximum total blocking time before raising.
+
+        Returns:
+            The terminal pipeline status dict.
+
+        Raises:
+            AmosclaudAgentError: If the pipeline ID is missing from the initial
+                response, or if ``max_wait_seconds`` elapses without a terminal state.
+        """
         accepted = self.run(objective, mode=mode, branch=branch, metadata=metadata)
         if accepted.get("status") in {"success", "failed", "cancelled"}:
             return accepted
@@ -56,6 +134,22 @@ class AmosclaudAgentClient:
         raise AmosclaudAgentError(f"Pipeline {pipeline_id} did not finish within {max_wait_seconds:g} seconds")
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Send an authenticated HTTP request and return the parsed JSON response.
+
+        Sends ``api_key`` as a Bearer token and ``session_cookie`` as the
+        ``amos_session`` cookie when present. Both may be set simultaneously.
+
+        Args:
+            method: HTTP verb (``"GET"``, ``"POST"``, etc.).
+            path: URL path appended to ``base_url``.
+            payload: Optional dict serialised as JSON in the request body.
+
+        Returns:
+            Parsed JSON response as a ``dict``.
+
+        Raises:
+            AmosclaudAgentError: On HTTP errors, network failures, or non-dict responses.
+        """
         headers = {"Accept": "application/json", "User-Agent": "amosclaud-agent-sdk"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
