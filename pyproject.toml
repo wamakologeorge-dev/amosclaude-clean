@@ -26,9 +26,9 @@ classifiers = [
 dynamic = ["dependencies"]
 
 [project.urls]
-Homepage = "https://amosclaud.com"
+Homepage = "http://www.amosclaud.com/"
 Repository = "https://github.com/wamakologeorge-dev/amosclaude-clean"
-Documentation = "https://amosclaud.com/docs"
+Documentation = "http://www.amosclaud.com/docs"
 
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"
