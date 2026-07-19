@@ -66,8 +66,15 @@ def test_merge_ledger_never_marks_history_verified_without_report(tmp_path: Path
     assert ledger[0]["verification_status"] == "historical-unverified"
 
 
-def test_agent_source_rejects_false_engineering_success_wording() -> None:
-    source = Path("amoscloud_ai/api/routes/agent.py").read_text(encoding="utf-8")
-    assert "Agent Assistant response delivered without engineering verification" not in source
-    assert "Engineering completion blocked: passing verification evidence is required." in source
-    assert "Engineering verification is not applicable" in source
+def test_agent_verification_contract_blocks_unverified_engineering() -> None:
+    pending = verification_contract(engineering=True)
+    failed = verification_contract(
+        engineering=True,
+        report={"status": "failed", "verification_id": "v1"},
+    )
+    guidance = verification_contract(engineering=False)
+
+    assert pending == {"required": True, "status": "pending", "verified": False}
+    assert failed["required"] is True
+    assert failed["verified"] is False
+    assert guidance["status"] == "not-applicable"
