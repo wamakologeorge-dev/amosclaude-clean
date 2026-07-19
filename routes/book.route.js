@@ -1,35 +1,23 @@
-const BookService = require('../services/book.service');
+'use strict';
 
-class BookController {
-  async getAllBooks(req, res) {
-    const books = await BookService.getAllBooks();
-    res.json(books);
-  }
+/**
+ * Express routes for the Amosclaud book-library resource.
+ *
+ * This module only maps HTTP routes to the canonical controller. It does not
+ * implement a second controller, service, Agent, or Fixer.
+ */
 
-  async getBookById(req, res) {
-    const id = req.params.id;
-    const book = await BookService.getBookById(id);
-    res.json(book);
-  }
+const express = require('express');
+const BookController = require('../controllers/book.controller');
 
-  async createBook(req, res) {
-    const book = req.body;
-    const newBook = await BookService.createBook(book);
-    res.json(newBook);
-  }
+const router = express.Router();
+const controller = new BookController();
 
-  async updateBook(req, res) {
-    const id = req.params.id;
-    const book = req.body;
-    const updatedBook = await BookService.updateBook(id, book);
-    res.json(updatedBook);
-  }
+router.get('/', controller.getAllBooks.bind(controller));
+router.get('/:id', controller.getBookById.bind(controller));
+router.post('/', controller.createBook.bind(controller));
+router.patch('/:id', controller.updateBook.bind(controller));
+router.put('/:id', controller.updateBook.bind(controller));
+router.delete('/:id', controller.deleteBook.bind(controller));
 
-  async deleteBook(req, res) {
-    const id = req.params.id;
-    await BookService.deleteBook(id);
-    res.json({ message: 'Book deleted successfully' });
-  }
-}
-
-module.exports = BookController;
+module.exports = router;
