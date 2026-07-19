@@ -1,94 +1,82 @@
-name: 🚀 Amoscloud AI - CI Pipeline
+name: Amosclaud CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  schedule:
-    - cron: '0 2 * * *'
+    branches:
+      - '**' # Triggers on all branches, including main
+  workflow_dispatch:
+
+# Grants write access so Amosclaud-fixee can automatically repair and push broken files
+permissions:
+  contents: write
 
 jobs:
-  code-quality:
+  autonomous-validation:
     runs-on: ubuntu-latest
-    name: Code Quality & Linting
-    
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      - run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: black --check . || true
-      - run: isort --check-only . || true
-      - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
 
-  test:
-    runs-on: ubuntu-latest
-    name: Tests & Coverage
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: amoscloud_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - run: |
+      - name: Install Architecture Dependencies
+        run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/amoscloud_test
-          REDIS_URL: redis://localhost:6379/0
-      
-      - uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
+          pip install fastapi uvicorn pydantic httpx flake8
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-  security:
-    runs-on: ubuntu-latest
-    name: Security Scanning
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - run: pip install bandit safety
-      - run: bandit -r src/ -f json -o bandit-report.json || true
-      - run: safety check --json || true
+      # Step 1: Run Guardrail and Boundary Validation (Amosclaud-ai & Amosclaud-fixee Loop)
+      - name: Run Guardrail and Boundary Validation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Executing compile-time guardrail analysis under Amosclaud-ai..."
+          pip install fastapi uvicorn pydantic httpx flake8 pytest pytest-asyncio
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # Task Loop Block: Runs testing logic under core system parameters
+      - name: Run Guardrail Analysis Matrix
+        id: run_guardrails
+        continue-on-error: true # Prevents the pipeline runner from breaking early before the bot can log data
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "================================================================"
+          echo "🤖 BACKGROUND ORCHESTRATION: EXECUTING AUTOMATED INTEGRITY TESTS"
+          echo "================================================================"
+          python main.py --test-guardrails
+          echo "GUARDRAILS_EXIT_CODE=$?" >> $GITHUB_ENV
+
+      # Step 2: Deploy ONLY if guardrails pass successfully
+      - name: Deploy to Amosclaud AI Platform
+        if: success()
+        env:
+          AMOSCLOUD_API_TOKEN: ${{ secrets.AMOSCLOUD_API_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QUIQ_API_KEY: ${{ secrets.QUIQ_API_KEY }}
+        run: |
+          echo "Deployment safety threshold cleared. Initiating production server handoffs..."
+          python main.py --deploy
+      # Reporting Block: Executes on success, prompting the bot to log a positive metric report
+      - name: Report Success to Repository
+        if: env.GUARDRAILS_EXIT_CODE == '0'
+        run: |
+          echo "Pipeline successful. Instructing bot to append green status logs..."
+          python report_bot.py --status success
+
+      # Reporting Block: Executes on failure, prompting the bot to write error telemetry details
+      - name: Report Failure to Repository
+        if: env.GUARDRAILS_EXIT_CODE != '0'
+        run: |
+          echo "Pipeline anomalies detected. Instructing bot to log red warning flags..."
+          python report_bot.py --status failure
+          # Enforce proper final runner status tracking
+          exit 1

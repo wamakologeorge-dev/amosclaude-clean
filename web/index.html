@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>Amosclaud Autonomous</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/conversational-agent.css" />
+  <link rel="stylesheet" href="/static/autonomous-result-cards.css" />
+  <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
+</head>
+<body class="single-autonomous-page">
+  <main class="single-autonomous-shell">
+    <section class="single-agent-card" aria-label="Amosclaud Autonomous">
+      <header class="single-agent-head">
+        <div>
+          <strong>Amosclaud Autonomous</strong>
+          <span id="agent-status">ready</span>
+        </div>
+      </header>
+
+      <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
+        <div class="agent-reply muted">Welcome, George. Ask anything.</div>
+      </div>
+
+      <div class="single-composer">
+        <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+        <input id="agent-mode-input" type="hidden" value="autonomous-check" />
+      </div>
+    </section>
+  </main>
+
+  <nav class="single-dock" aria-label="Amosclaud dock">
+    <a class="active" href="/" aria-label="Autonomous">Auto</a>
+    <a href="/repositories" aria-label="Repositories">Repository</a>
+    <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+    <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
+    <a href="/" aria-label="Home">Home</a>
+  </nav>
+
+  <div id="toast-container" aria-live="assertive"></div>
+  <script src="/static/app.js"></script>
+  <script src="/static/account.js"></script>
+  <script src="/static/autonomous-result-cards.js"></script>
+  <script src="/static/conversational-agent.js"></script>
+  <script src="/static/single-autonomous-dock.js"></script>
+  <script src="/static/app-install.js"></script>
+</body>
+</html>

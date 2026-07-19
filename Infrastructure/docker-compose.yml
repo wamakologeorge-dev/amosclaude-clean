@@ -1,0 +1,55 @@
+services:
+  amosclaud:
+    build:
+      context: ..
+      dockerfile: Infrastructure/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      AUTH_DB_PATH: /data/auth.db
+      AMOS_MAIL_DOMAIN: amosclaud.com
+      PASSKEY_RP_ID: localhost
+      PASSKEY_ORIGIN: http://localhost:8000
+      AUTH_COOKIE_SECURE: "false"
+      AMOSCLAUD_MODEL_URL: http://model:8091
+      AMOSCLAUD_MODEL: amosclaud-folder-v1
+    volumes:
+      - amosclaud-data:/data
+    restart: unless-stopped
+
+  model:
+    build:
+      context: ..
+      dockerfile: model-workspace/Dockerfile
+    environment:
+      AMOSCLAUD_MODEL_HOME: /model
+    volumes:
+      - amosclaud-model:/model
+    restart: unless-stopped
+
+  metrics:
+    build:
+      context: ..
+      dockerfile: metrics-server/Dockerfile
+    ports:
+      - "127.0.0.1:9090:9090"
+    environment:
+      ENVIRONMENT: development
+      AUTH_DB_PATH: /data/auth.db
+      AMOSCLAUD_API_HEALTH_URL: http://amosclaud:8000/health
+      AMOSCLAUD_API_METRICS_URL: http://amosclaud:8000/metrics
+      AMOSCLAUD_MODEL_HEALTH_URL: http://model:8091/health
+      AMOSCLAUD_METRICS_DB: /metrics-data/metrics.db
+    volumes:
+      - amosclaud-data:/data:ro
+      - amosclaud-metrics:/metrics-data
+    depends_on:
+      - amosclaud
+      - model
+    restart: unless-stopped
+
+volumes:
+  amosclaud-data:
+  amosclaud-model:
+  amosclaud-metrics:

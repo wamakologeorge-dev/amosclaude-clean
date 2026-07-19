@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en" data-amosclaud-head="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Amosclaud Autonomous</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#070b14;color:#f8fafc;font-family:Inter,system-ui,sans-serif}main{width:min(94vw,980px);margin:auto;padding:32px 0 56px}header,section{background:#0f172a;border:1px solid #263244;border-radius:18px;padding:24px;margin-bottom:18px}h1,h2{margin-top:0}p{color:#cbd5e1;line-height:1.6}nav,.actions{display:flex;flex-wrap:wrap;gap:12px}a,button{border:0;border-radius:10px;padding:12px 16px;font-weight:700;text-decoration:none;cursor:pointer}a{background:#1e293b;color:#e2e8f0}button{background:#22c55e;color:#04130a}label{display:block;margin:14px 0 6px;font-weight:700}textarea,input{width:100%;padding:12px;border-radius:10px;border:1px solid #334155;background:#050914;color:#f8fafc}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:#111c31;border:1px solid #2b3a55;border-radius:14px;padding:16px}pre{white-space:pre-wrap;overflow:auto;background:#050914;border-radius:12px;padding:16px;min-height:120px}.muted{color:#94a3b8}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p><strong>One identity across every page</strong></p>
+    <h1>Amosclaud Autonomous</h1>
+    <p>The same Autonomous reads repository instructions, preserves the chat brief, builds with owner permission, and returns evidence-backed Results.</p>
+    <nav><a href="/">Autonomous</a><a href="/repositories">Repository</a><a href="/bundles">Results</a></nav>
+  </header>
+
+  <section>
+    <h2>Create or build a repository</h2>
+    <div class="grid">
+      <div class="card"><strong>Instructions</strong><p>Describe the finished result. Autonomous will prepare and execute the authorized job.</p></div>
+      <div class="card"><strong>Image input</strong><p>Upload a screenshot or design and explain what the finished repository should do.</p></div>
+      <div class="card"><strong>Proof</strong><p>Results must include evidence, changed locations, verification, and usage instructions.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <form id="form-instructions">
+      <label for="inst-text">What should Amosclaud Autonomous build?</label>
+      <textarea id="inst-text" name="instructions" rows="5" required></textarea>
+      <label for="inst-ctx">Repository or environment context</label>
+      <textarea id="inst-ctx" name="context" rows="3"></textarea>
+      <div class="actions" style="margin-top:14px"><button type="submit" id="btn-instructions">Create job</button></div>
+    </form>
+  </section>
+
+  <section>
+    <form id="form-photo" enctype="multipart/form-data">
+      <label for="photo-input">Screenshot, mockup, or design</label>
+      <input type="file" name="photo" id="photo-input" accept="image/png,image/jpeg,image/gif,image/webp" required>
+      <label for="photo-inst">Additional instructions</label>
+      <textarea id="photo-inst" name="instructions" rows="3"></textarea>
+      <div class="actions" style="margin-top:14px"><button type="submit" id="btn-photo">Create image-based job</button></div>
+    </form>
+  </section>
+
+  <section id="result-panel">
+    <h2>Results</h2>
+    <p class="muted">Evidence, work proof, final location, and instructions appear here.</p>
+    <pre id="result-content">No job has run yet.</pre>
+  </section>
+</main>
+<script>
+  function bind(formId, endpoint, buttonId){
+    document.getElementById(formId).addEventListener('submit',async(event)=>{
+      event.preventDefault();
+      const button=document.getElementById(buttonId);const output=document.getElementById('result-content');
+      button.disabled=true;output.textContent='Amosclaud Autonomous is creating the job…';
+      try{
+        const response=await fetch(endpoint,{method:'POST',body:new FormData(event.target)});
+        const data=await response.json();
+        output.textContent=JSON.stringify(data,null,2);
+      }catch(error){output.textContent='Job failed: '+(error.message||error)}finally{button.disabled=false}
+    });
+  }
+  bind('form-instructions','/build/instructions','btn-instructions');
+  bind('form-photo','/build/photo','btn-photo');
+</script>
+</body>
+</html>

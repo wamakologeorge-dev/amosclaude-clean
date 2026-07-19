@@ -1,0 +1,8 @@
+amo 1
+agent "Workspace Guide"
+goal "Prove that language and agent identity can run as one program"
+allow agent.respond
+allow memory.read
+remember greeting "Hello from the Amo Runtime."
+say "{{greeting}}"
+say "Your request was: {{input}}"
