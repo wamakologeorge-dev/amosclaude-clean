@@ -1,24 +1,87 @@
-name: Amosclaud Autonomous Fixer Loop
+name: Amosclaud Autonomous Fixer
 
 on:
-  push:
-    branches:
-      - '**'
   workflow_dispatch:
+    inputs:
+      failure_summary:
+        description: Optional failure details to give Amosclaud AI
+        required: false
+        type: string
+  workflow_run:
+    workflows:
+      - CI
+      - Tests
+      - Python verification
+      - Build
+    types: [completed]
+  status:
 
 permissions:
   contents: write
+  pull-requests: write
   issues: write
+  actions: read
+  checks: read
+
+concurrency:
+  group: amosclaud-fixer-${{ github.event.workflow_run.head_sha || github.event.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
-  self-healing-orchestrator:
-    name: 🤖 Amosclaud-Fixer Active Guardrails Matrix
+  decide:
+    name: Decide whether repair is required
     runs-on: ubuntu-latest
+    outputs:
+      should_fix: ${{ steps.decision.outputs.should_fix }}
+      target_sha: ${{ steps.decision.outputs.target_sha }}
+      source: ${{ steps.decision.outputs.source }}
+    steps:
+      - id: decision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+          STATUS_STATE: ${{ github.event.state }}
+          STATUS_CONTEXT: ${{ github.event.context }}
+          STATUS_SHA: ${{ github.event.sha }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          should_fix=false
+          target_sha="$CURRENT_SHA"
+          source="manual"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            should_fix=true
+          elif [[ "$EVENT_NAME" == "workflow_run" && "$WORKFLOW_CONCLUSION" == "failure" ]]; then
+            should_fix=true
+            target_sha="$WORKFLOW_SHA"
+            source="github-actions:$WORKFLOW_NAME"
+          elif [[ "$EVENT_NAME" == "status" && "$STATUS_STATE" == "failure" ]]; then
+            # CircleCI publishes commit statuses whose context contains CircleCI.
+            if [[ "${STATUS_CONTEXT,,}" == *"circleci"* ]]; then
+              should_fix=true
+              target_sha="$STATUS_SHA"
+              source="circleci:$STATUS_CONTEXT"
+            fi
+          fi
+
+          echo "should_fix=$should_fix" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$target_sha" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+
+  repair:
+    name: Amosclaud AI verified repair
+    needs: decide
+    if: needs.decide.outputs.should_fix == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
 
     steps:
-      - name: Checkout Source Assets
+      - name: Checkout failing revision
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.decide.outputs.target_sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -26,55 +89,108 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
-      - name: Install System Dependencies
+      - name: Install repository and fixer dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi uvicorn pydantic httpx flake8 pytest pytest-asyncio
+          python -m pip install -e .
+          python -m pip install openai pytest pytest-asyncio flake8
 
-      - name: Run Analytical Guardrails Analysis
-        id: run_tests
-        run: |
-          echo "================================================================"
-          echo "🔎 INITIATING PIPELINE RUNNER SAFETY TESTS UNDER AMOSCLAUD-AI"
-          echo "================================================================"
-          
-          # Run verification tests. On failure, stream details directly into the fixer parser engine loop.
-          pytest --verbose > test_execution_log.txt || echo "SUITE_FAILED=true" >> $GITHUB_ENV
-
-      - name: Trigger Autonomous Self-Healing Intervention Loop
-        if: env.SUITE_FAILED == 'true'
+      - name: Reproduce failure and collect evidence
+        id: reproduce
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FAILURE_SUMMARY: ${{ inputs.failure_summary }}
+          FAILURE_SOURCE: ${{ needs.decide.outputs.source }}
+          STATUS_TARGET_URL: ${{ github.event.target_url }}
+          WORKFLOW_RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
-          echo "================================================================"
-          echo "🚨 CRASH TRACKER INTERCEPTED: INVOKING AMOSCLAUD-FIXER ENGINE"
-          echo "================================================================"
-          
-          # Call the active file healing runtime logic from line 162 system modules
-          python -c '
-import os, subprocess, re
+          {
+            echo "Failure source: $FAILURE_SOURCE"
+            echo "External status URL: $STATUS_TARGET_URL"
+            echo "GitHub workflow run: $WORKFLOW_RUN_URL"
+            echo "Manual failure summary: $FAILURE_SUMMARY"
+            echo
+            echo "=== Python compile check ==="
+            python -m compileall -q amoscloud_ai src tests
+            echo
+            echo "=== Pytest ==="
+            python -m pytest -q --disable-warnings --maxfail=25
+          } > amosclaud-failure.log 2>&1 || true
+          tail -n 300 amosclaud-failure.log
 
-log_content = open("test_execution_log.txt", "r").read()
-if "FAILED" in log_content or "SyntaxError" in log_content:
-    print("[Amosclaud-fixee] Initializing deep code structural reverse parsing procedures...")
-    # This automatically updates repository anomalies in place and updates the main pipeline root tracking branch
-    subprocess.run(["git", "config", "global", "user.name", "Amosclaud-fixee"], check=True)
-    subprocess.run(["git", "config", "global", "user.email", "fixer@amosclaud.internal"], check=True)
-    
-    # Target files can be modified dynamically here to fix dangling blocks or parameters
-    print("[Amosclaud-fixee] Code-fork structure normalized cleanly.")
-          '
-          
-          # Commit repair artifacts back directly onto the workflow tracking branch
-          git add -A
-          git commit -m "chore: auto-proceed via github/workflow.amosclaud-fixer.yml" || echo "No modifications needed."
-          git push origin HEAD
-
-      - name: Final Handshake Status Affirmation
-        if: success()
+      - name: Run Amosclaud AI Fixer
+        id: fixer
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'gpt-5.1-codex-mini' }}
+          AMOSCLAUD_FIXER_ATTEMPTS: '3'
+          AMOSCLAUD_FAILURE_LOG: amosclaud-failure.log
         run: |
-          echo "================================================================"
-          echo "🐦 Amosclaud-ai is currently analyzing and working!"
-          echo "🟢 Live & Active"
-          echo "================================================================"
+          python .github/scripts/amosclaud_fixer.py | tee amosclaud-fixer-output.txt
+          grep '^AMOSCLAUD_FIX_VERIFIED=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT"
+          grep '^AMOSCLAUD_CHANGED_FILES=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT" || true
+
+      - name: Upload repair evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amosclaud-fixer-${{ github.run_id }}
+          path: |
+            amosclaud-failure.log
+            amosclaud-fixer-report.json
+            amosclaud-fix-attempt-*.patch
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish verified repair branch
+        if: steps.fixer.outputs.AMOSCLAUD_FIX_VERIFIED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ needs.decide.outputs.target_sha }}
+          FAILURE_SOURCE: ${{ needs.decide.outputs.source }}
+          CHANGED_FILES: ${{ steps.fixer.outputs.AMOSCLAUD_CHANGED_FILES }}
+        run: |
+          short_sha="${TARGET_SHA:0:8}"
+          branch="amosclaud-fixer/${short_sha}-${GITHUB_RUN_ID}"
+          git config user.name "Amosclaud Fixer"
+          git config user.email "fixer@amosclaud.internal"
+          git checkout -b "$branch"
+          git add -A -- ':!.github/workflows' ':!amosclaud-failure.log' ':!amosclaud-fixer-report.json' ':!amosclaud-fix-attempt-*.patch'
+          git diff --cached --quiet && { echo "No verified source changes were produced"; exit 1; }
+          git commit -m "fix: repair ${FAILURE_SOURCE} failure at ${short_sha}"
+          git push --set-upstream origin "$branch"
+
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          ## Amosclaud AI Fixer
+
+          Automated repair for **${FAILURE_SOURCE}** at commit \`${TARGET_SHA}\`.
+
+          ### Changed files
+          ${CHANGED_FILES}
+
+          ### Verification
+          - Python compilation passed
+          - Repository pytest suite passed
+          - Repair evidence is attached to workflow run ${GITHUB_RUN_ID}
+
+          This pull request was opened only after the generated patch passed local verification. It still requires normal repository review and CI checks before merge.
+          EOF
+
+          gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$branch" \
+            --title "fix: Amosclaud repair for ${FAILURE_SOURCE}" \
+            --body-file "$body_file"
+
+      - name: Report unrepairable failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FAILURE_SOURCE: ${{ needs.decide.outputs.source }}
+          TARGET_SHA: ${{ needs.decide.outputs.target_sha }}
+        run: |
+          gh issue create \
+            --title "Amosclaud Fixer could not repair ${FAILURE_SOURCE}" \
+            --body "The autonomous fixer could not produce a verified repair for commit \`${TARGET_SHA}\`. Review workflow run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} and its attached evidence."
