@@ -23,6 +23,7 @@ const message = document.getElementById('message');
 let mode = 'login';
 let emailCodeMode = false;
 let navigating = false;
+const passkeysAvailable = Boolean(window.isSecureContext && window.PublicKeyCredential && navigator.credentials);
 
 function showMessage(text, success = false) {
   message.textContent = text;
@@ -161,9 +162,9 @@ function setMode(nextMode) {
   identifierField.classList.toggle('hidden', registering);
   usernameField.classList.toggle('hidden', !registering);
   passwordHint.classList.toggle('hidden', !registering);
-  deviceNote.classList.toggle('hidden', !registering);
-  passkeyLoginButton.classList.toggle('hidden', registering);
-  passwordLoginDivider.classList.toggle('hidden', registering);
+  deviceNote.classList.toggle('hidden', !registering || !passkeysAvailable);
+  passkeyLoginButton.classList.toggle('hidden', registering || !passkeysAvailable);
+  passwordLoginDivider.classList.toggle('hidden', registering || !passkeysAvailable);
   emailCodeButton.classList.toggle('hidden', registering);
   emailCodeMode = false;
   emailCodeField.classList.add('hidden');
@@ -175,16 +176,22 @@ function setMode(nextMode) {
   identifierInput.required = !registering;
   passwordInput.required = true;
   passwordInput.minLength = registering ? 10 : 1;
-  passwordInput.autocomplete = registering ? 'current-password' : 'current-password';
+  passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
 
   if (registering) {
-    title.textContent = 'Continue with your Amosclaud account';
-    subtitle.textContent = 'Enter your @amosclaud.com username and password. Existing accounts sign in; new usernames create an account.';
-    submitButton.textContent = 'Continue securely';
+    title.textContent = 'Create your Amosclaud account';
+    subtitle.textContent = passkeysAvailable
+      ? 'Choose your Amosclaud username, password, and secure device confirmation.'
+      : 'Account creation with device confirmation requires HTTPS. Password sign-in remains available on this server.';
+    submitButton.textContent = passkeysAvailable ? 'Create account securely' : 'HTTPS required for account creation';
+    submitButton.disabled = !passkeysAvailable;
   } else {
     title.textContent = 'Welcome back';
-    subtitle.textContent = 'Use your fingerprint, device security, or Amosclaud mail and password.';
+    subtitle.textContent = passkeysAvailable
+      ? 'Use your passkey, email code, or Amosclaud password.'
+      : 'Use your Amosclaud email or username and password.';
     submitButton.textContent = 'Sign in with password';
+    submitButton.disabled = false;
   }
   showMessage('');
 }
@@ -225,9 +232,7 @@ passkeyLoginButton.addEventListener('click', async () => {
   showMessage('Waiting for fingerprint or device confirmation…', true);
   passkeyLoginButton.disabled = true;
   try {
-    if (!window.PublicKeyCredential || !navigator.credentials) {
-      throw new Error('This browser does not support fingerprint sign-in.');
-    }
+    if (!passkeysAvailable) throw new Error('Passkey sign-in requires HTTPS. Use your password instead.');
     const start = await requestJson('/api/v1/auth/login/passkey/start', {method: 'POST', body: '{}'});
     const credential = await navigator.credentials.get({publicKey: prepareAuthenticationOptions(start.public_key)});
     if (!credential) throw new Error('Fingerprint sign-in was cancelled.');
@@ -249,6 +254,11 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   showMessage('');
   if (!form.reportValidity()) return;
+
+  if (mode === 'register' && !passkeysAvailable) {
+    showMessage('Account creation with a passkey requires HTTPS. Sign in with an existing password account or enable HTTPS.');
+    return;
+  }
 
   submitButton.disabled = true;
   submitButton.textContent = mode === 'login' ? 'Signing in…' : 'Checking account…';
@@ -274,9 +284,6 @@ form.addEventListener('submit', async event => {
 
     const username = usernameInput.value.trim().toLowerCase();
     const address = `${username}@amosclaud.com`;
-
-    // The account-creation form doubles as login. Existing users are signed in
-    // instead of being forced to create another account or another passkey.
     try {
       await requestJson('/api/v1/auth/login', {
         method: 'POST',
@@ -288,10 +295,6 @@ form.addEventListener('submit', async event => {
       return;
     } catch (loginError) {
       if (loginError.status !== 401) throw loginError;
-    }
-
-    if (!window.PublicKeyCredential || !navigator.credentials) {
-      throw new Error('This browser does not support secure device confirmation. Update the browser or use another device.');
     }
 
     showMessage('No existing account matched. Creating your account…', true);
@@ -313,8 +316,10 @@ form.addEventListener('submit', async event => {
     showMessage(cancelled ? 'Device confirmation was cancelled or timed out. Try again.' : error.message);
   } finally {
     if (!navigating) {
-      submitButton.disabled = false;
-      submitButton.textContent = mode === 'login' ? (emailCodeMode ? 'Verify code and sign in' : 'Sign in with password') : 'Continue securely';
+      submitButton.disabled = mode === 'register' && !passkeysAvailable;
+      submitButton.textContent = mode === 'login'
+        ? (emailCodeMode ? 'Verify code and sign in' : 'Sign in with password')
+        : (passkeysAvailable ? 'Create account securely' : 'HTTPS required for account creation');
     }
   }
 });
