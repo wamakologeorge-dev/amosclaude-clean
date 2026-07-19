@@ -32,6 +32,7 @@ except ImportError:
     from config import settings
     from dependencies import get_current_user, rate_limiter
 
+from Amosclaud.platform_bus import PlatformByteBus, platform_bus_from_environment
 from database.models import AutonomousJob, AutonomousJobStatus, Repository
 from database.session import create_database, session_scope
 
@@ -41,7 +42,10 @@ logger = logging.getLogger("AmosclaudGateway")
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
-    description="Authenticated gateway for Amosclaud repositories, Autonomous repair, CI, and deployment.",
+    description=(
+        "Authenticated gateway for Amosclaud repositories, Autonomous repair, "
+        "CI, and deployment."
+    ),
 )
 
 allowed_origins = [
@@ -57,15 +61,35 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Amosclaud-Owner-Key"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-API-Key",
+        "X-Amosclaud-Owner-Key",
+    ],
 )
 
 http_client = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
+platform_bus: PlatformByteBus | None = None
 
 
 @app.on_event("startup")
-async def initialize_shared_database() -> None:
+async def initialize_platform_services() -> None:
+    global platform_bus
     create_database()
+    platform_bus = platform_bus_from_environment()
+    if platform_bus is None:
+        logger.warning(
+            "Internal byte bus is disabled; configure AMOSCLAUD_BYTE_BUS_SECRET"
+        )
+    else:
+        health = platform_bus.execute(platform_bus.frame("platform.health", {})).json()
+        logger.info("Internal byte bus ready: %s", health["status"])
+
+
+@app.on_event("shutdown")
+async def close_gateway_http_client() -> None:
+    await http_client.aclose()
 
 
 class ActionTask(BaseModel):
@@ -98,7 +122,11 @@ async def boundary_handshake_logging_middleware(request: Request, call_next):
     return response
 
 
-async def forward_network_packet(request: Request, target_service_url: str, forwarded_path: str) -> Response:
+async def forward_network_packet(
+    request: Request,
+    target_service_url: str,
+    forwarded_path: str,
+) -> Response:
     body = await request.body()
     headers = dict(request.headers)
     headers.pop("host", None)
@@ -113,17 +141,43 @@ async def forward_network_packet(request: Request, target_service_url: str, forw
         safe_headers = {
             key: value
             for key, value in downstream.headers.items()
-            if key.lower() not in {"content-length", "transfer-encoding", "connection"}
+            if key.lower()
+            not in {"content-length", "transfer-encoding", "connection"}
         }
-        return Response(content=downstream.content, status_code=downstream.status_code, headers=safe_headers)
+        return Response(
+            content=downstream.content,
+            status_code=downstream.status_code,
+            headers=safe_headers,
+        )
     except httpx.RequestError as exc:
         logger.error("Downstream service unavailable: %s", exc)
-        raise HTTPException(status_code=502, detail="Target Amosclaud service is unavailable") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="Target Amosclaud service is unavailable",
+        ) from exc
+
+
+def _publish_job_to_internal_bus(task_id: str) -> None:
+    if platform_bus is None:
+        return
+    try:
+        result = platform_bus.execute(
+            platform_bus.frame("platform.job.status", {"task_id": task_id})
+        ).json()
+        logger.info(
+            "Published Autonomous task %s through byte bus with status %s",
+            task_id,
+            result["status"],
+        )
+    except Exception:
+        logger.exception("Failed to publish task %s through internal byte bus", task_id)
 
 
 def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
     with session_scope() as session:
-        existing = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task.task_id))
+        existing = session.scalar(
+            select(AutonomousJob).where(AutonomousJob.task_id == task.task_id)
+        )
         if existing:
             raise HTTPException(status_code=409, detail="task_id already exists")
         repository = session.get(Repository, task.repository_id)
@@ -142,17 +196,26 @@ def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
         session.add(job)
         session.flush()
         session.refresh(job)
-        return job
+    _publish_job_to_internal_bus(job.task_id)
+    return job
 
 
-@app.post("/api/agent/run", response_model=JobStatusResponse, status_code=status.HTTP_202_ACCEPTED)
+@app.post(
+    "/api/agent/run",
+    response_model=JobStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def run_agent(
     task: ActionTask,
     current_user: dict = Depends(get_current_user),
     _: bool = Depends(rate_limiter),
 ):
     job = _create_job(task, str(current_user.get("username", "user")))
-    logger.info("Queued Autonomous task %s for repository %s", job.task_id, job.repository_id)
+    logger.info(
+        "Queued Autonomous task %s for repository %s",
+        job.task_id,
+        job.repository_id,
+    )
     return JobStatusResponse(
         task_id=job.task_id,
         repository_id=job.repository_id,
@@ -171,7 +234,9 @@ async def read_agent_job(
     __: bool = Depends(rate_limiter),
 ):
     with session_scope() as session:
-        job = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task_id))
+        job = session.scalar(
+            select(AutonomousJob).where(AutonomousJob.task_id == task_id)
+        )
         if job is None:
             raise HTTPException(status_code=404, detail="Autonomous job not found")
         return JobStatusResponse(
@@ -185,7 +250,10 @@ async def read_agent_job(
         )
 
 
-@app.api_route("/api/repository/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route(
+    "/api/repository/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
 async def route_repository_service(
     path: str,
     request: Request,
@@ -195,7 +263,10 @@ async def route_repository_service(
     return await forward_network_packet(request, settings.SERVICE_A_URL, path)
 
 
-@app.api_route("/api/autonomous/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route(
+    "/api/autonomous/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
 async def route_autonomous_service(
     path: str,
     request: Request,
@@ -205,7 +276,10 @@ async def route_autonomous_service(
     return await forward_network_packet(request, settings.SERVICE_B_URL, path)
 
 
-@app.api_route("/api/ci/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@app.api_route(
+    "/api/ci/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+)
 async def route_ci_service(
     path: str,
     request: Request,
@@ -217,10 +291,16 @@ async def route_ci_service(
 
 @app.get("/health")
 async def health_check():
+    bus_status: dict[str, Any] = {"enabled": platform_bus is not None}
+    if platform_bus is not None:
+        bus_status.update(
+            platform_bus.execute(platform_bus.frame("platform.health", {})).json()
+        )
     return {
         "status": "ok",
         "agent": "Amosclaud Autonomous",
         "database": "shared",
+        "byte_bus": bus_status,
         "repository_service": settings.SERVICE_A_URL,
         "autonomous_service": settings.SERVICE_B_URL,
         "ci_service": settings.SERVICE_C_URL,
@@ -228,7 +308,11 @@ async def health_check():
     }
 
 
-@app.post("/api/gateway/fixer-clone-line-auto-enject", response_model=JobStatusResponse, status_code=202)
+@app.post(
+    "/api/gateway/fixer-clone-line-auto-enject",
+    response_model=JobStatusResponse,
+    status_code=202,
+)
 async def queue_fixer_job(
     task: ActionTask,
     current_user: dict = Depends(get_current_user),
@@ -251,4 +335,7 @@ async def queue_fixer_job(
 
 @app.exception_handler(HTTPException)
 async def gateway_http_error(_: Request, exc: HTTPException):
-    return JSONResponse(status_code=exc.status_code, content={"status": "error", "detail": exc.detail})
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "error", "detail": exc.detail},
+    )
