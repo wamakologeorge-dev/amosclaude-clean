@@ -15,7 +15,19 @@ _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
 
 @dataclass(slots=True)
 class AmosclaudAgentClient:
-    """Connect Python to the governed Amosclaud agent runtime."""
+    """Connect Python to the governed Amosclaud agent runtime.
+
+    Authentication is resolved in priority order: constructor argument first,
+    then the ``AMOSCLAUD_API_KEY`` / ``AMOSCLAUD_SESSION`` environment variables.
+    At least one of ``api_key`` or ``session_cookie`` must be set before making
+    authenticated requests.
+
+    Args:
+        base_url: Root URL of the Amosclaud service. Trailing slashes are stripped.
+        api_key: Bearer token sent as ``Authorization: Bearer <key>``.
+        session_cookie: Value of the ``amos_session`` cookie for web-session auth.
+        timeout: Per-request socket timeout in seconds.
+    """
     base_url: str = "https://www.amosclaud.com"
     api_key: str | None = None
     session_cookie: str | None = None
@@ -27,9 +39,14 @@ class AmosclaudAgentClient:
         self.session_cookie = self.session_cookie or os.getenv("AMOSCLAUD_SESSION")
 
     def profile(self) -> dict[str, Any]:
+        """Return the authenticated agent's profile from the Amosclaud API."""
         return self._request("GET", "/api/v1/agent")
 
     def readiness(self) -> dict[str, Any]:
+        """Return the service's readiness probe response.
+
+        Useful as a lightweight health check before submitting work.
+        """
         return self._request("GET", "/api/v1/agent/readiness")
 
     def run(
@@ -49,6 +66,15 @@ class AmosclaudAgentClient:
         )
 
     def pipeline(self, pipeline_id: str) -> dict[str, Any]:
+        """Fetch the current state of a pipeline by its identifier.
+
+        Args:
+            pipeline_id: Opaque pipeline ID as returned by :meth:`run`.
+
+        Returns:
+            The pipeline status dict. The ``status`` field is one of
+            ``"success"``, ``"failed"``, ``"cancelled"``, or a running state.
+        """
         return self._request("GET", f"/api/v1/pipelines/{quote(pipeline_id, safe='')}")
 
     def run_and_wait(
