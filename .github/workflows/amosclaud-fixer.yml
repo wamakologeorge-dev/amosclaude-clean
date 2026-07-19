@@ -7,12 +7,22 @@ on:
         description: Optional failure details to give Amosclaud AI
         required: false
         type: string
+  schedule:
+    - cron: '17 * * * *'
   workflow_run:
     workflows:
-      - CI
-      - Tests
-      - Python verification
-      - Build
+      - Amosclaud CI
+      - 🚀 Amosclaud AI - CI Pipeline
+      - Build and Verify
+      - Python package
+      - CI/CD — Test & Deploy
+      - Amosclaud Workspace CI
+      - 🚀 Amoscloud AI — Live Server Check
+      - Docker Image CI
+      - Platform Build Check
+      - 🏗️ Platform Build Check
+      - CodeQL
+      - CircleCI Pipeline
     types: [completed]
   status:
 
@@ -53,6 +63,9 @@ jobs:
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             should_fix=true
+          elif [[ "$EVENT_NAME" == "schedule" ]]; then
+            should_fix=true
+            source="scheduled-health-scan"
           elif [[ "$EVENT_NAME" == "workflow_run" && "$WORKFLOW_CONCLUSION" == "failure" ]]; then
             should_fix=true
             target_sha="$WORKFLOW_SHA"
@@ -85,9 +98,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: pip
 
       - name: Install repository and verification dependencies
@@ -117,6 +130,15 @@ jobs:
             python -m pytest -q --disable-warnings --maxfail=25
           } > amosclaud-failure.log 2>&1 || true
           tail -n 300 amosclaud-failure.log
+
+      - name: Stop scheduled scan when repository is healthy
+        if: needs.decide.outputs.source == 'scheduled-health-scan'
+        run: |
+          if grep -Eq '[0-9]+ passed(, [0-9]+ skipped)? in ' amosclaud-failure.log \
+             && ! grep -Eq '(^| )FAILED |ERROR collecting|=+ FAILURES =+|=+ ERRORS =+' amosclaud-failure.log; then
+            echo "Scheduled scan found no reproducible test failure."
+            exit 0
+          fi
 
       - name: Verify Amosclaud credential configuration
         env:
@@ -149,6 +171,7 @@ jobs:
           name: amosclaud-fixer-${{ github.run_id }}
           path: |
             amosclaud-failure.log
+            amosclaud-fixer-output.txt
             amosclaud-fixer-report.json
             amosclaud-fix-attempt-*.patch
           if-no-files-found: ignore
@@ -167,27 +190,37 @@ jobs:
           git config user.name "Amosclaud Fixer"
           git config user.email "fixer@amosclaud.internal"
           git checkout -b "$branch"
-          git add -A -- ':!.github/workflows' ':!amosclaud-failure.log' ':!amosclaud-fixer-report.json' ':!amosclaud-fix-attempt-*.patch'
+          git add -A -- ':!.github/workflows' ':!amosclaud-failure.log' ':!amosclaud-fixer-output.txt' ':!amosclaud-fixer-report.json' ':!amosclaud-fix-attempt-*.patch'
           git diff --cached --quiet && { echo "No verified source changes were produced"; exit 1; }
           git commit -m "fix: repair ${FAILURE_SOURCE} failure at ${short_sha}"
           git push --set-upstream origin "$branch"
 
           body_file="$(mktemp)"
           cat > "$body_file" <<EOF
-          ## Amosclaud AI Fixer
+          ## Amosclaud Autonomous Fixer report
 
           Automated repair for **${FAILURE_SOURCE}** at commit \`${TARGET_SHA}\`.
 
-          ### Changed files
+          ### What failed
+          Amosclaud reproduced the failing revision with Python compilation and the repository test suite. The full original evidence is attached to workflow run ${GITHUB_RUN_ID}.
+
+          ### What was fixed
           ${CHANGED_FILES}
 
-          ### Verification
-          - Python compilation passed
-          - Repository pytest suite passed
-          - Repair generated through the Amosclaud-owned model gateway
-          - Repair evidence is attached to workflow run ${GITHUB_RUN_ID}
+          ### What improved
+          - The generated patch was constrained to repository source files.
+          - Python compilation passed after the repair.
+          - The repository pytest suite passed after the repair.
+          - Secrets, workflow definitions, and environment files were not modified by the generated patch.
 
-          This pull request was opened only after the generated patch passed local verification. It still requires normal repository review and CI checks before merge.
+          ### What still needs attention
+          - Normal code review is still required.
+          - GitHub and CircleCI checks must pass on this repair branch.
+          - Security alerts, deployment checks, or external-service failures remain separate blockers unless this patch directly resolves them.
+
+          ### Evidence
+          - Repair generated through the Amosclaud-owned model gateway.
+          - Failure log, generated patches, and verification report are attached to workflow run ${GITHUB_RUN_ID}.
           EOF
 
           gh pr create \
@@ -205,4 +238,4 @@ jobs:
         run: |
           gh issue create \
             --title "Amosclaud Fixer could not repair ${FAILURE_SOURCE}" \
-            --body "The autonomous fixer could not produce a verified repair for commit \`${TARGET_SHA}\`. Review workflow run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} and its attached evidence."
+            --body "The autonomous fixer could not produce a verified repair for commit \`${TARGET_SHA}\`. It did not hide or delete the failure. Review workflow run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} and its attached evidence."
