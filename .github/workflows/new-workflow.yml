@@ -27,12 +27,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install -r cmood/requirements.txt
           pip install pytest httpx
           pip install -e .
 
-      - name: Compile platform and CLI
+      - name: Compile platform, CLI, and compatibility adapters
         run: |
-          python -m compileall -q amoscloud_ai amosclaud_serverless app cli shared src
+          python -m compileall -q amoscloud_ai amosclaud_serverless app cli cmood shared src
 
       - name: Verify Amosclaud CLI contract
         env:
@@ -51,6 +52,14 @@ jobs:
           grep -q '"/api/v1/repositories"' cli/client.py
           grep -q 'Authorization' cli/client.py
           ! grep -Rqi 'cmood cloud' cli/
+
+      - name: Verify cmood uses the unified Amosclaud installation
+        run: |
+          grep -q '^-e ..$' cmood/requirements.txt
+          grep -q '^fastapi' cmood/requirements.txt
+          grep -q '^uvicorn' cmood/requirements.txt
+          grep -q '^watchdog' cmood/requirements.txt
+          python -c "import cmood; import shared; import src.amosclaud_os.kernel"
 
       - name: Run platform tests
         env:
