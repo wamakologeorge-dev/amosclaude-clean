@@ -24,6 +24,7 @@ commands:
       - run:
           name: Install Amosclaud and verification tools
           command: |
+            set -euo pipefail
             python -m pip install --upgrade pip
             if [ -f requirements.txt ]; then
               python -m pip install -r requirements.txt
@@ -41,6 +42,7 @@ commands:
           name: Queue Amosclaud Autonomous repair
           when: on_fail
           command: |
+            set -u
             mkdir -p test-results/amosclaud
             if [ -z "${AMOSCLAUD_API_KEY:-}" ] || [ -z "${AMOSCLAUD_REPOSITORY_ID:-}" ]; then
               echo "Amosclaud failure notification skipped: AMOSCLAUD_API_KEY or AMOSCLAUD_REPOSITORY_ID is not configured." | tee test-results/amosclaud/notification.txt
@@ -50,24 +52,24 @@ commands:
             BASE_URL="${AMOSCLAUD_API_URL:-http://www.amosclaud.com}"
             TASK_ID="circleci-${CIRCLE_WORKFLOW_ID}-${CIRCLE_BUILD_NUM}"
             ERROR_CONTEXT="CircleCI verification failed for ${CIRCLE_PROJECT_REPONAME} at commit ${CIRCLE_SHA1}. Workflow: ${CIRCLE_BUILD_URL}"
+            export TASK_ID ERROR_CONTEXT
 
             python - <<'PY' > /tmp/amosclaud-fixer-payload.json
             import json
             import os
 
             payload = {
-                "task_id": os.environ.get("TASK_ID"),
+                "task_id": os.environ["TASK_ID"],
                 "repository_id": int(os.environ["AMOSCLAUD_REPOSITORY_ID"]),
                 "pull_request_id": int(os.environ["AMOSCLAUD_PULL_REQUEST_ID"]) if os.environ.get("AMOSCLAUD_PULL_REQUEST_ID") else None,
                 "ci_pipeline_id": int(os.environ["AMOSCLAUD_CI_PIPELINE_ID"]) if os.environ.get("AMOSCLAUD_CI_PIPELINE_ID") else None,
                 "target_file": "repository",
-                "error_context": os.environ.get("ERROR_CONTEXT"),
+                "error_context": os.environ["ERROR_CONTEXT"],
                 "objective": "Inspect the CircleCI failure, repair the repository on an isolated branch, run full verification, and open an Amosclaud pull request only when all required checks pass.",
             }
             print(json.dumps(payload))
             PY
 
-            export TASK_ID ERROR_CONTEXT
             HTTP_STATUS=$(curl --silent --show-error --output test-results/amosclaud/response.json --write-out "%{http_code}" \
               --request POST "${BASE_URL%/}/api/gateway/fixer-clone-line-auto-enject" \
               --header "Authorization: Bearer ${AMOSCLAUD_API_KEY}" \
@@ -90,12 +92,14 @@ jobs:
       - run:
           name: Compile Python source
           command: |
+            set -o pipefail
             mkdir -p test-results/compile
             python -m compileall -q amoscloud_ai database api-gateway main.py 2>&1 | tee test-results/compile/compile.log
 
       - run:
           name: Block critical Python errors
           command: |
+            set -o pipefail
             mkdir -p test-results/flake8
             flake8 amoscloud_ai database api-gateway main.py \
               --select=E9,F63,F7,F82 \
@@ -105,6 +109,7 @@ jobs:
       - run:
           name: Run Amosclaud test suite
           command: |
+            set -o pipefail
             mkdir -p test-results/pytest
             pytest -q --junitxml=test-results/pytest/junit.xml \
               2>&1 | tee test-results/pytest/pytest.log
@@ -112,6 +117,7 @@ jobs:
       - run:
           name: Build Python package
           command: |
+            set -o pipefail
             mkdir -p test-results/build
             python -m build 2>&1 | tee test-results/build/build.log
 
