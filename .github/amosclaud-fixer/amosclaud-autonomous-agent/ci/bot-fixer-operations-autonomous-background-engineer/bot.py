@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Amosclaud autonomous background engineering bot.
 
-This wrapper performs repository preflight, records failure evidence, and delegates
-patch generation and verification to the guarded Amosclaud Fixer engine.
+This wrapper performs repository preflight, records failure evidence, injects the
+Python engineering book into the repair context, and delegates patch generation
+and verification to the guarded Amosclaud Fixer engine.
 """
 
 from __future__ import annotations
@@ -51,7 +52,14 @@ def collect_failure_evidence() -> tuple[bool, str]:
         if result.returncode != 0:
             passed = False
     evidence = "\n\n".join(sections)
-    FAILURE_LOG.write_text(evidence, encoding="utf-8")
+    instructions = BOOK.read_text(encoding="utf-8")
+    repair_context = (
+        "=== AMOSCLAUD PYTHON AUTONOMOUS ENGINEERING INSTRUCTIONS ===\n"
+        + instructions
+        + "\n\n=== CURRENT FAILURE EVIDENCE ===\n"
+        + evidence
+    )
+    FAILURE_LOG.write_text(repair_context, encoding="utf-8")
     return passed, evidence
 
 
