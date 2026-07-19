@@ -12,7 +12,6 @@ from amoscloud_ai.api.routes.core import _owner_user
 from amoscloud_ai.core.command_agent import AgentCommandError, AmosclaudCommandAgent
 from amoscloud_ai.core.workspace import WorkspaceError
 
-router = APIRouter()
 amo_router = APIRouter(prefix="/amo", tags=["amo-runtime"])
 
 
@@ -80,5 +79,8 @@ def run_command(body: CommandRequest, owner=Depends(_owner_user)) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-router.include_router(amo_router)
-router.include_router(amomodel_router)
+# Expose concrete routes directly rather than nesting APIRouters. This keeps
+# route discovery and the Autonomous tooling compatible with current FastAPI.
+router = APIRouter()
+router.routes.extend(amo_router.routes)
+router.routes.extend(amomodel_router.routes)
