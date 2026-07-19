@@ -1,14 +1,31 @@
+"""Lexer for the Amosclaud scripting language (Amcl).
+
+Converts raw source text into a flat list of :class:`Token` objects terminated
+by a single ``EOF`` token. Comments begin with ``#`` and run to end-of-line.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 
 class AmclSyntaxError(Exception):
-    pass
+    """Raised by :func:`tokenize` when the source contains invalid syntax."""
 
 
 @dataclass(frozen=True)
 class Token:
+    """A single lexical unit produced by :func:`tokenize`.
+
+    Attributes:
+        kind: Token category — a keyword name in uppercase (e.g. ``"LET"``),
+            ``"IDENT"``, ``"NUMBER"``, ``"STRING"``, a two-character operator
+            such as ``"=="`` or ``"||"``, a single-character punctuator, or
+            ``"EOF"``.
+        value: The literal source text for this token, or ``""`` for ``EOF``.
+        line: 1-based source line number at the start of the token.
+        column: 1-based column number at the start of the token.
+    """
+
     kind: str
     value: str
     line: int
@@ -33,6 +50,27 @@ SINGLE = set("+-*/%(){};,=!<>")
 
 
 def tokenize(source: str) -> list[Token]:
+    """Tokenize ``source`` and return the complete token list including ``EOF``.
+
+    Handles:
+    - Integer and floating-point number literals (at most one ``"."``)
+    - Double-quoted string literals with ``\\n``, ``\\t``, ``\\"`` and ``\\\\`` escapes
+    - Identifiers and keywords (see :data:`KEYWORDS`)
+    - Two-character operators: ``==``, ``!=``, ``<=``, ``>=``, ``&&``, ``||``
+    - Single-character punctuators: ``+ - * / % ( ) { } ; , = ! < >``
+    - Line comments starting with ``#``
+
+    Args:
+        source: Complete source code string to lex.
+
+    Returns:
+        Ordered list of :class:`Token` objects. The last element is always
+        ``Token("EOF", "", line, column)``.
+
+    Raises:
+        AmclSyntaxError: On an unterminated string literal, a number with more
+            than one decimal point, or an unrecognised character.
+    """
     tokens: list[Token] = []
     i = 0
     line = 1

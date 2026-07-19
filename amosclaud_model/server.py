@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 import uuid
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from amosclaud_model import __version__
 from amosclaud_model.config import model_root
+from amosclaud_model.metadata import runtime_model_metadata
 from amosclaud_model.model import FolderLanguageModel, tokenize
 from amosclaud_model.service_log import ModelServiceLog
 from amosclaud_model.training_service import TrainingService, audit_dataset_licenses
@@ -34,10 +36,28 @@ class TrainingRequest(BaseModel):
     operation: str = Field(default="train", pattern="^(train|evaluate)$")
 
 
-def _authorize(authorization: str | None = Header(default=None)) -> None:
-    expected = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
-    if expected and authorization != f"Bearer {expected}":
-        raise HTTPException(status_code=401, detail="Invalid model service credential")
+def _authorize(
+    authorization: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    expected = [
+        value
+        for value in (
+            os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip(),
+            os.getenv("AMOSCLAUD_API_KEY", "").strip(),
+        )
+        if value
+    ]
+    if not expected:
+        return
+    bearer = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    supplied = [value for value in (bearer, (x_api_key or "").strip()) if value]
+    if not any(
+        secrets.compare_digest(candidate, accepted)
+        for candidate in supplied
+        for accepted in expected
+    ):
+        raise HTTPException(status_code=401, detail="Invalid Amosclaud model credential")
 
 
 def create_app() -> FastAPI:
@@ -54,7 +74,11 @@ def create_app() -> FastAPI:
             "status": "ready" if model.checkpoint_path.exists() else "needs_training",
             "model": model.config.name,
             "checkpoint": model.checkpoint_path.exists(),
-            "key_required": bool(os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()),
+            "key_required": bool(
+                os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
+                or os.getenv("AMOSCLAUD_API_KEY", "").strip()
+            ),
+            "amosclaud_api_key_supported": True,
         }
 
     @app.get("/v1/models", dependencies=[Depends(_authorize)])
@@ -63,6 +87,14 @@ def create_app() -> FastAPI:
             "object": "list",
             "data": [{"id": model.config.name, "object": "model", "owned_by": "amosclaud"}],
         }
+
+    @app.get("/v1/model_metadata", dependencies=[Depends(_authorize)])
+    def model_metadata() -> dict:
+        return runtime_model_metadata(
+            root,
+            runtime="folder-native",
+            ready=model.checkpoint_path.exists(),
+        )
 
     @app.post("/v1/chat/completions", dependencies=[Depends(_authorize)])
     def complete(body: CompletionRequest) -> dict:

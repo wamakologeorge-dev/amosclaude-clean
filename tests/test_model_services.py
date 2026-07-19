@@ -7,7 +7,17 @@ from amoscloud_ai.api.routes import agent_readiness
 
 
 def test_model_service_registry_matches_agent_architecture(monkeypatch):
-    monkeypatch.setattr(model_services.model_network, "network_status", lambda: {"ready": True, "ready_stations": 1})
+    monkeypatch.setattr(
+        model_services.provider,
+        "probe",
+        lambda: {
+            "ready": True,
+            "provider": "amosclaud",
+            "runtime": "local",
+            "model": "amosclaud-folder-v1",
+            "detail": "model runtime ready",
+        },
+    )
     result = model_services.readiness()
     ids = [service["id"] for service in result["services"]]
     assert ids[:5] == [

@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+set -eu
+exec "${PYTHON:-python3}" scripts/amosclaud_autonomous_required.py "$@"

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <title>Amosclaud Bundles</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/bundles.css" />
+</head>
+<body>
+  <header class="bundles-topbar">
+    <div>
+      <a href="/cloud/agent" class="brand-link">Amosclaud</a>
+      <span class="page-tag">Bundles</span>
+    </div>
+    <nav>
+      <a href="/cloud/agent">Autonomous</a>
+      <a href="/repositories">Repositories</a>
+      <a href="/bundles" aria-current="page">Bundles</a>
+    </nav>
+  </header>
+
+  <main class="bundles-shell">
+    <section class="bundles-hero">
+      <div>
+        <p class="eyebrow">amosclaud.bundle.v1</p>
+        <h1>Build portable Amosclaud bundles</h1>
+        <p>Create secure, reproducible packages for source, runtimes, connectors, deployments, and extensions.</p>
+      </div>
+      <button id="refresh-bundles" type="button">Refresh</button>
+    </section>
+
+    <section class="bundles-grid">
+      <form id="bundle-form" class="bundle-panel">
+        <h2>Create bundle</h2>
+        <label>Name<input id="bundle-name" required maxlength="80" placeholder="my-project" /></label>
+        <label>Version<input id="bundle-version" required maxlength="40" value="0.1.0" /></label>
+        <label>Type<select id="bundle-type"><option value="source">Source</option><option value="runtime">Runtime</option><option value="connector">Connector</option><option value="deployment">Deployment</option><option value="extension">Extension</option></select></label>
+        <label>Source path<input id="bundle-source" maxlength="500" placeholder="Optional folder inside workspace" /></label>
+        <label>Entrypoint<input id="bundle-entrypoint" maxlength="300" placeholder="Required for deployment bundles" /></label>
+        <label>Description<textarea id="bundle-description" maxlength="1000" rows="4" placeholder="What this bundle contains"></textarea></label>
+        <button id="create-bundle" type="submit">Create bundle</button>
+        <p id="bundle-status" class="bundle-status" aria-live="polite"></p>
+      </form>
+
+      <section class="bundle-panel bundle-library">
+        <div class="panel-heading"><div><h2>Your bundles</h2><p>Download verified archives with manifest and SHA-256 integrity data.</p></div><span id="bundle-count">0</span></div>
+        <div id="bundle-list" class="bundle-list"><p class="empty-state">Loading bundles…</p></div>
+      </section>
+    </section>
+  </main>
+  <script src="/static/bundles.js"></script>
+</body>
+</html>

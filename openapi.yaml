@@ -8,6 +8,175 @@ servers:
 security:
   - bearerApiKey: []
 paths:
+  /admin/service-keys/status:
+    get:
+      operationId: getServiceKeyAuthorityStatus
+      summary: Read the real service-key authority status and counts
+      responses:
+        '200': {description: Hash-only key authority status}
+        '403': {description: Administrator access required}
+  /admin/service-keys:
+    get:
+      operationId: listServerServiceKeys
+      summary: List safe service-key metadata without plaintext credentials
+      responses:
+        '200': {description: Issued service-key prefixes and status}
+    post:
+      operationId: createServerServiceKey
+      summary: Create a scoped service key shown exactly once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, service, scopes]
+              properties:
+                name: {type: string}
+                service: {type: string}
+                scopes: {type: array, items: {type: string}}
+      responses:
+        '201': {description: One-time plaintext key and safe metadata}
+  /admin/service-keys/{key_id}/rotate:
+    post:
+      operationId: rotateServerServiceKey
+      summary: Revoke a service key and issue its replacement atomically
+      parameters:
+        - in: path
+          name: key_id
+          required: true
+          schema: {type: integer}
+      responses:
+        '201': {description: One-time replacement key}
+        '404': {description: Active service key not found}
+  /admin/service-keys/{key_id}:
+    delete:
+      operationId: revokeServerServiceKey
+      summary: Permanently revoke a service key
+      parameters:
+        - in: path
+          name: key_id
+          required: true
+          schema: {type: integer}
+      responses:
+        '204': {description: Service key revoked}
+  /service-keys/verify:
+    get:
+      operationId: verifyServerServiceKey
+      summary: Authenticate a service key and optionally require a scope
+      parameters:
+        - in: query
+          name: scope
+          required: false
+          schema: {type: string}
+      responses:
+        '200': {description: Authenticated service identity and permissions}
+        '401': {description: Invalid or revoked service key}
+        '403': {description: Required scope is missing}
+  /agent/buddies/health:
+    get:
+      operationId: checkAgentBuddiesServer
+      summary: Check the Amosclaud Agent Buddies API server
+      security: []
+      responses:
+        '200': {description: Buddies status service is alive}
+  /agent/buddies/status:
+    get:
+      operationId: getAgentBuddiesStatus
+      summary: Return heartbeat-derived status for every owned agent buddy
+      responses:
+        '200': {description: Truthful buddy presence, workload, and team readiness}
+        '401': {description: Sign-in or Amosclaud Autonomous API key required}
+  /agent/buddies/status/respond:
+    get:
+      operationId: respondAgentBuddiesStatus
+      summary: Return a compact monitoring response for the buddy team
+      responses:
+        '200': {description: Compact responding and online-buddy counts}
+  /agent/buddies/{buddy_id}/heartbeat:
+    post:
+      operationId: heartbeatAgentBuddy
+      summary: Register or refresh an authenticated agent buddy
+      parameters:
+        - in: path
+          name: buddy_id
+          required: true
+          schema: {type: string, pattern: '^[a-z0-9][a-z0-9._-]{1,63}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name: {type: string}
+                role: {type: string}
+                status: {enum: [idle, working, blocked, draining]}
+                capabilities: {type: array, items: {type: string}}
+                active_tasks: {type: integer, minimum: 0}
+                capacity: {type: integer, minimum: 1}
+                version: {type: string}
+                detail: {type: string}
+      responses:
+        '200': {description: Current derived status for this buddy}
+        '401': {description: Invalid Amosclaud Autonomous API key}
+  /bundles/health:
+    get:
+      operationId: checkBundlesApiHost
+      summary: Check persistent Amosclaud bundle storage
+      security: []
+      responses:
+        '200': {description: Bundle host is alive}
+  /bundles:
+    get:
+      operationId: listAmosclaudBundles
+      summary: List hosted Amosclaud software bundles
+      responses:
+        '200': {description: Authenticated bundle catalog}
+        '401': {description: Invalid Amosclaud API key}
+    post:
+      operationId: uploadAmosclaudBundle
+      summary: Publish a checksum-verified Amosclaud software bundle
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, version, platform]
+              properties:
+                file: {type: string, format: binary}
+                version: {type: string}
+                platform: {type: string}
+                channel: {type: string, default: stable}
+      responses:
+        '201': {description: Bundle stored atomically}
+        '409': {description: Bundle version already exists}
+  /bundles/{bundle_id}:
+    get:
+      operationId: getAmosclaudBundleMetadata
+      summary: Read bundle version, platform, size, and checksum
+      parameters:
+        - in: path
+          name: bundle_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Bundle metadata}
+        '404': {description: Bundle not found}
+  /bundles/{bundle_id}/download:
+    get:
+      operationId: downloadHostedAmosclaudBundle
+      summary: Download an authenticated Amosclaud bundle
+      parameters:
+        - in: path
+          name: bundle_id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Bundle archive with SHA-256 response header}
+        '404': {description: Bundle not found}
   /downloads/latest:
     get:
       operationId: getLatestServerDownloads

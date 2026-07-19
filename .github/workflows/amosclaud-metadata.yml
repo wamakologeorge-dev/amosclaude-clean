@@ -1,0 +1,62 @@
+name: Amosclaud Metadata
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "Amosclaud-metadata/**"
+      - ".github/workflows/amosclaud-metadata.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "Amosclaud-metadata/**"
+      - ".github/workflows/amosclaud-metadata.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-metadata:
+    name: Verify metadata package (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install metadata package and verification tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ./Amosclaud-metadata
+          python -m pip install flake8 pytest
+
+      - name: Compile metadata package
+        run: |
+          python -m compileall -q Amosclaud-metadata/src/amosclaud_metadata
+
+      - name: Lint metadata package
+        run: |
+          flake8 Amosclaud-metadata/src Amosclaud-metadata/tests \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
+          flake8 Amosclaud-metadata/src Amosclaud-metadata/tests \
+            --count \
+            --max-complexity=10 \
+            --max-line-length=88 \
+            --statistics
+
+      - name: Run metadata tests
+        run: |
+          pytest Amosclaud-metadata/tests -v
