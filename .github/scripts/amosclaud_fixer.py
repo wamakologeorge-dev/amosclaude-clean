@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 LOG_PATH = ROOT / os.getenv("AMOSCLAUD_FAILURE_LOG", "amosclaud-failure.log")
 REPORT_PATH = ROOT / "amosclaud-fixer-report.json"
-AMOSCLAUD_API_URL = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/")
+AMOSCLAUD_API_URL = os.getenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/").rstrip("/")
 AMOSCLAUD_API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
 MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "amosclaud-agent")
 MAX_ATTEMPTS = max(1, min(int(os.getenv("AMOSCLAUD_FIXER_ATTEMPTS", "3")), 3))
@@ -129,7 +129,7 @@ def restore() -> None:
 
 
 def amosclaud_chat(instructions: str, prompt: str) -> str:
-    """Call Amosclaud's OpenAI-compatible gateway with an Amosclaud-owned key."""
+    """Call Amosclaud's compatible gateway with an Amosclaud-owned key."""
     payload = json.dumps(
         {
             "model": MODEL,
