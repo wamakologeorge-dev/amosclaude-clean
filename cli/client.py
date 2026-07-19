@@ -1,17 +1,27 @@
+"""HTTP client for the Amosclaud Autonomous platform."""
+
+from __future__ import annotations
+
 import json
 import urllib.error
 import urllib.request
+from pathlib import Path
+from typing import Any
 
 from cli.config import CLIConfig
 
 
 class AmosClient:
-    def __init__(self):
-        self.base_url = CLIConfig.API_URL.rstrip("/")
+    def __init__(self, base_url: str | None = None, api_key: str | None = None):
+        self.base_url = (base_url or CLIConfig.API_URL).rstrip("/")
+        self.api_key = CLIConfig.API_KEY if api_key is None else api_key
 
-    def _request(self, method: str, path: str, data: dict | None = None):
+    def _request(self, method: str, path: str, data: dict[str, Any] | None = None):
         url = f"{self.base_url}{path}"
-        headers = {"Content-Type": "application/json"}
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["X-Amosclaud-API-Key"] = self.api_key
         req_data = json.dumps(data).encode("utf-8") if data is not None else None
         request = urllib.request.Request(url, data=req_data, headers=headers, method=method)
 
@@ -22,36 +32,59 @@ class AmosClient:
         except urllib.error.HTTPError as error:
             try:
                 error_body = json.loads(error.read().decode("utf-8"))
-                message = error_body.get("detail", str(error))
-            except Exception:
+                message = error_body.get("detail") or error_body.get("message") or str(error)
+            except (UnicodeDecodeError, json.JSONDecodeError):
                 message = str(error)
             return {"error": True, "status_code": error.code, "message": message}
         except urllib.error.URLError as error:
             return {
                 "error": True,
                 "status_code": 503,
-                "message": f"Could not connect to server at {self.base_url}: {error.reason}",
+                "message": f"Could not connect to Amosclaud at {self.base_url}: {error.reason}",
             }
 
     def get_status(self) -> dict:
-        """Read the real Amosclaud server health endpoint."""
         return self._request("GET", "/health")
 
-    def trigger_cmood_sync(self, file_path: str, action: str) -> dict:
-        """Run synchronization through the persistent Amosclaud pipeline engine."""
+    def run_agent(
+        self,
+        objective: str,
+        *,
+        mode: str = "plan",
+        repository_id: str | None = None,
+        branch: str | None = None,
+        authorized_writes: bool = False,
+    ) -> dict:
+        payload = {
+            "mode": mode,
+            "objective": objective,
+            "branch": branch or CLIConfig.DEFAULT_BRANCH,
+            "metadata": {
+                "agent_id": CLIConfig.AGENT_ID,
+                "repository_id": repository_id or CLIConfig.REPOSITORY_ID or None,
+                "authorized_writes": authorized_writes,
+                "source": "amosclaud-cli",
+            },
+        }
+        return self._request("POST", "/api/v1/agent/run", payload)
+
+    def trigger_sync(self, file_path: str, action: str) -> dict:
+        resolved = Path(file_path).expanduser().resolve()
         payload = {
             "trigger": "cli-sync",
-            "branch": "main",
+            "branch": CLIConfig.DEFAULT_BRANCH,
             "payload": {
-                "file_path": file_path,
+                "file_path": str(resolved),
                 "action": action,
                 "agent_id": CLIConfig.AGENT_ID,
             },
         }
         return self._request("POST", "/api/v1/pipelines", payload)
 
+    # Backward-compatible name retained for older scripts.
+    trigger_cmood_sync = trigger_sync
+
     def get_jobs(self) -> dict:
-        """Read real persisted pipeline jobs and preserve the CLI's jobs response shape."""
         pipelines = self._request("GET", "/api/v1/pipelines")
         if isinstance(pipelines, dict) and pipelines.get("error"):
             return pipelines
@@ -67,3 +100,6 @@ class AmosClient:
                 }
             )
         return {"jobs": jobs}
+
+    def list_repositories(self) -> dict | list:
+        return self._request("GET", "/api/v1/repositories")
