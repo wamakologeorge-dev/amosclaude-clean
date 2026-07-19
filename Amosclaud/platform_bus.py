@@ -1,12 +1,13 @@
 """Secure in-process byte command bus for the Amosclaud platform.
 
-The API gateway remains the authenticated public boundary.  This module turns
+The API gateway remains the authenticated public boundary. This module turns
 validated gateway requests into integrity-checked internal commands and keeps
 AutonomousJob/CIPipeline state in the shared SQLAlchemy database authoritative.
 """
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import hmac
 import json
@@ -28,10 +29,24 @@ _SIGNATURE_HEADER = "amosclaud-signature"
 _NONCE_HEADER = "amosclaud-nonce"
 _EXPIRES_HEADER = "amosclaud-expires"
 _ALLOWED_JOB_TRANSITIONS: dict[AutonomousJobStatus, set[AutonomousJobStatus]] = {
-    AutonomousJobStatus.QUEUED: {AutonomousJobStatus.INSPECTING, AutonomousJobStatus.CANCELLED, AutonomousJobStatus.FAILED},
-    AutonomousJobStatus.INSPECTING: {AutonomousJobStatus.REPAIRING, AutonomousJobStatus.VERIFYING, AutonomousJobStatus.FAILED},
-    AutonomousJobStatus.REPAIRING: {AutonomousJobStatus.VERIFYING, AutonomousJobStatus.FAILED},
-    AutonomousJobStatus.VERIFYING: {AutonomousJobStatus.PASSED, AutonomousJobStatus.FAILED},
+    AutonomousJobStatus.QUEUED: {
+        AutonomousJobStatus.INSPECTING,
+        AutonomousJobStatus.CANCELLED,
+        AutonomousJobStatus.FAILED,
+    },
+    AutonomousJobStatus.INSPECTING: {
+        AutonomousJobStatus.REPAIRING,
+        AutonomousJobStatus.VERIFYING,
+        AutonomousJobStatus.FAILED,
+    },
+    AutonomousJobStatus.REPAIRING: {
+        AutonomousJobStatus.VERIFYING,
+        AutonomousJobStatus.FAILED,
+    },
+    AutonomousJobStatus.VERIFYING: {
+        AutonomousJobStatus.PASSED,
+        AutonomousJobStatus.FAILED,
+    },
     AutonomousJobStatus.PASSED: set(),
     AutonomousJobStatus.FAILED: set(),
     AutonomousJobStatus.CANCELLED: set(),
@@ -39,7 +54,11 @@ _ALLOWED_JOB_TRANSITIONS: dict[AutonomousJobStatus, set[AutonomousJobStatus]] = 
 
 
 def _canonical_signature_input(frame: ByteFrame) -> bytes:
-    headers = {key: value for key, value in frame.headers.items() if key != _SIGNATURE_HEADER}
+    headers = {
+        key: value
+        for key, value in frame.headers.items()
+        if key != _SIGNATURE_HEADER
+    }
     value = {
         "route": frame.route,
         "frame_id": frame.frame_id,
@@ -68,7 +87,11 @@ def signed_frame(
         payload,
         headers={_NONCE_HEADER: nonce_value, _EXPIRES_HEADER: str(expires)},
     )
-    signature = hmac.new(secret, _canonical_signature_input(frame), hashlib.sha256).hexdigest()
+    signature = hmac.new(
+        secret,
+        _canonical_signature_input(frame),
+        hashlib.sha256,
+    ).hexdigest()
     return ByteFrame(
         route=frame.route,
         payload=frame.payload,
@@ -107,9 +130,13 @@ class PlatformByteBus:
             expires = int(expires_raw)
         except ValueError as exc:
             raise PermissionError("invalid byte-frame expiry") from exc
-        if not signature or not nonce or expires < int(time.time()):
+        if not signature or not nonce or expires <= int(time.time()):
             raise PermissionError("expired or unsigned byte-frame")
-        expected = hmac.new(self._secret, _canonical_signature_input(frame), hashlib.sha256).hexdigest()
+        expected = hmac.new(
+            self._secret,
+            _canonical_signature_input(frame),
+            hashlib.sha256,
+        ).hexdigest()
         if not hmac.compare_digest(signature, expected):
             raise PermissionError("invalid byte-frame signature")
         with self._lock:
@@ -124,11 +151,26 @@ class PlatformByteBus:
         self._authorize(frame)
         return self.system.execute_sync(frame)
 
-    def frame(self, route: str, payload: dict[str, Any], *, ttl_seconds: int = 60) -> ByteFrame:
-        return signed_frame(route, payload, secret=self._secret, ttl_seconds=ttl_seconds)
+    def frame(
+        self,
+        route: str,
+        payload: dict[str, Any],
+        *,
+        ttl_seconds: int = 60,
+    ) -> ByteFrame:
+        return signed_frame(
+            route,
+            payload,
+            secret=self._secret,
+            ttl_seconds=ttl_seconds,
+        )
 
     def _health(self, _frame: ByteFrame) -> dict[str, Any]:
-        return {"status": "ok", "database": "shared", "system": self.system.status()}
+        return {
+            "status": "ok",
+            "database": "shared",
+            "system": self.system.status(),
+        }
 
     def _repository_summary(self, frame: ByteFrame) -> dict[str, Any]:
         repository_id = int(frame.json()["repository_id"])
@@ -148,7 +190,9 @@ class PlatformByteBus:
     def _job_status(self, frame: ByteFrame) -> dict[str, Any]:
         task_id = str(frame.json()["task_id"])
         with session_scope() as session:
-            job = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task_id))
+            job = session.scalar(
+                select(AutonomousJob).where(AutonomousJob.task_id == task_id)
+            )
             if job is None:
                 raise LookupError("autonomous job not found")
             return {
@@ -166,26 +210,42 @@ class PlatformByteBus:
         summary = str(payload.get("result_summary") or "")[:20_000] or None
         verification_id = str(payload.get("verification_id") or "")[:100] or None
         with session_scope() as session:
-            job = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task_id))
+            job = session.scalar(
+                select(AutonomousJob).where(AutonomousJob.task_id == task_id)
+            )
             if job is None:
                 raise LookupError("autonomous job not found")
             if requested_status not in _ALLOWED_JOB_TRANSITIONS[job.status]:
-                raise ValueError(f"invalid job transition: {job.status.value} -> {requested_status.value}")
+                raise ValueError(
+                    f"invalid job transition: {job.status.value} -> "
+                    f"{requested_status.value}"
+                )
             if requested_status is AutonomousJobStatus.PASSED and not verification_id:
                 raise ValueError("passed jobs require a verification_id")
             job.status = requested_status
             job.result_summary = summary
             pipeline: CIPipeline | None = job.ci_pipeline
             if pipeline is not None:
-                if requested_status in {AutonomousJobStatus.INSPECTING, AutonomousJobStatus.REPAIRING, AutonomousJobStatus.VERIFYING}:
+                if requested_status in {
+                    AutonomousJobStatus.INSPECTING,
+                    AutonomousJobStatus.REPAIRING,
+                    AutonomousJobStatus.VERIFYING,
+                }:
                     pipeline.status = CIStatus.RUNNING
                 elif requested_status is AutonomousJobStatus.PASSED:
                     pipeline.status = CIStatus.PASSED
                     pipeline.verification_id = verification_id
-                    pipeline.completed_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
-                elif requested_status in {AutonomousJobStatus.FAILED, AutonomousJobStatus.CANCELLED}:
+                    pipeline.completed_at = datetime.datetime.now(
+                        datetime.timezone.utc
+                    )
+                elif requested_status in {
+                    AutonomousJobStatus.FAILED,
+                    AutonomousJobStatus.CANCELLED,
+                }:
                     pipeline.status = CIStatus.FAILED
-                    pipeline.completed_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+                    pipeline.completed_at = datetime.datetime.now(
+                        datetime.timezone.utc
+                    )
                 if summary:
                     pipeline.execution_logs = summary
             return {
