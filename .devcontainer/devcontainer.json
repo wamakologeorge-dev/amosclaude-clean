@@ -1,39 +1,52 @@
 {
-  "name": "Amosclaud Workspace",
+  "name": "Amosclaud Platform Workspace",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
   },
   "workspaceFolder": "/workspaces/amosclaude-clean",
-  "forwardPorts": [8000, 5432, 6379],
+  "forwardPorts": [8000, 8001, 8091, 9090],
   "portsAttributes": {
     "8000": {
-      "label": "Amosclaud Web",
+      "label": "Amosclaud Platform API",
       "onAutoForward": "openPreview"
     },
-    "5432": {
-      "label": "PostgreSQL",
+    "8001": {
+      "label": "Amosclaud Credential Authority",
       "onAutoForward": "silent"
     },
-    "6379": {
-      "label": "Redis",
+    "8091": {
+      "label": "Amosclaud Model Service",
+      "onAutoForward": "silent"
+    },
+    "9090": {
+      "label": "Amosclaud Metrics and SSY",
       "onAutoForward": "silent"
     }
   },
   "containerEnv": {
     "ENVIRONMENT": "development",
     "AUTH_COOKIE_SECURE": "false",
-    "DATABASE_URL": "sqlite:///./data/amoscloud.db",
-    "REDIS_URL": "redis://localhost:6379/0"
+    "DATABASE_URL": "sqlite:///./data/amosclaud.db",
+    "AUTH_DB_PATH": "./data/auth.db",
+    "AMOSCLAUD_REPOSITORIES_ROOT": "./repositories",
+    "AMOSCLAUD_MODEL_HOME": "./model-workspace",
+    "AMOSCLAUD_MODEL_URL": "http://127.0.0.1:8091",
+    "AMOSCLAUD_MODEL_HEALTH_URL": "http://127.0.0.1:8091/health",
+    "AMOSCLAUD_API_HEALTH_URL": "http://127.0.0.1:8000/health",
+    "AMOSCLAUD_API_METRICS_URL": "http://127.0.0.1:8000/metrics",
+    "AMOSCLAUD_METRICS_DB": "./data/metrics.db",
+    "REDIS_URL": "redis://127.0.0.1:6379/0"
   },
   "postCreateCommand": "bash scripts/bootstrap-workspace.sh",
-  "postStartCommand": "mkdir -p data repositories",
+  "postStartCommand": "mkdir -p data repositories model-workspace/checkpoints/versions model-workspace/logs/service model-workspace/training/jobs && (python -m amosclaud_platform status || true)",
   "customizations": {
     "vscode": {
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
         "ms-python.black-formatter",
+        "ms-python.isort",
         "ms-azuretools.vscode-docker",
         "eamodio.gitlens",
         "redhat.vscode-yaml"
@@ -41,8 +54,17 @@
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": ["tests"],
-        "editor.formatOnSave": true
+        "python.testing.pytestArgs": [
+          "tests"
+        ],
+        "python.analysis.extraPaths": [
+          "/workspaces/amosclaude-clean"
+        ],
+        "editor.formatOnSave": true,
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/.pytest_cache": true
+        }
       }
     }
   },
