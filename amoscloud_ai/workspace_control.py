@@ -10,7 +10,7 @@ import shutil
 # Only the resolved Docker executable is called; shell execution is never enabled.
 import subprocess  # nosec B404
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 from shared.runtime import REQUIRED_PLATFORM_ENV, ServiceName, platform_endpoints
@@ -31,54 +31,71 @@ class WorkspaceLayout:
     logs: Path
 
 
-def _find_compose(candidate: Path) -> tuple[Path, Path] | None:
-    """Return the application directory and supported Compose file."""
+def _discover_at(candidate: Path) -> WorkspaceLayout | None:
+    """Resolve unified, packaged, and source workspace layouts.
+
+    The unified repository layout is preferred. The two historical self-hosted
+    layouts remain supported so existing Amosclaud installations do not need to
+    reorganize their repositories merely to use the newer platform controller.
+    """
     unified = candidate / "Infrastructure" / "docker-compose.yml"
     if unified.is_file():
-        return candidate, unified
+        return WorkspaceLayout(
+            root=candidate,
+            app=candidate,
+            compose_file=unified,
+            projects=candidate / "data" / "repositories",
+            config=candidate / "config",
+            data=candidate / "data",
+            logs=candidate / "data" / "logs",
+        )
 
-    installed = candidate / "app" / "docker-compose.selfhost.yml"
-    if installed.is_file():
-        return candidate / "app", installed
+    # Installed distribution: <root>/app/docker-compose.selfhost.yml
+    packaged = candidate / "app" / "docker-compose.selfhost.yml"
+    if packaged.is_file():
+        return WorkspaceLayout(
+            root=candidate,
+            app=candidate / "app",
+            compose_file=packaged,
+            projects=candidate / "workspace" / "projects",
+            config=candidate / "config",
+            data=candidate / "data",
+            logs=candidate / "data" / "logs",
+        )
 
+    # Source checkout: <root>/docker-compose.selfhost.yml
     legacy = candidate / "docker-compose.selfhost.yml"
     if legacy.is_file():
-        return candidate, legacy
+        return WorkspaceLayout(
+            root=candidate,
+            app=candidate,
+            compose_file=legacy,
+            projects=candidate / "AmosclaudWorkspace",
+            config=candidate / "config",
+            data=candidate / "data",
+            logs=candidate / "data" / "logs",
+        )
 
     return None
 
 
 def discover_layout(start: Path | None = None) -> WorkspaceLayout:
     location = (start or Path.cwd()).resolve()
-    candidates = [location, *location.parents]
 
-    discovered: tuple[Path, Path, Path] | None = None
-    for candidate in candidates:
-        compose = _find_compose(candidate)
-        if compose:
-            app, compose_file = compose
-            discovered = (candidate, app, compose_file)
-            break
+    # Starting inside the packaged app must resolve its parent as the workspace
+    # root rather than treating the app directory as a source checkout.
+    if location.name == "app" and (location / "docker-compose.selfhost.yml").is_file():
+        parent_layout = _discover_at(location.parent)
+        if parent_layout is not None:
+            return parent_layout
 
-    if not discovered:
-        raise WorkspaceError(
-            "Run this command from an Amosclaud repository or installed workspace"
-        )
+    for candidate in (location, *location.parents):
+        layout = _discover_at(candidate)
+        if layout is not None:
+            return layout
 
-    root, app, compose_file = discovered
-    projects = (
-        root / "data" / "repositories"
-        if compose_file.name == "docker-compose.yml"
-        else root / "workspace" / "projects"
-    )
-    return WorkspaceLayout(
-        root=root,
-        app=app,
-        compose_file=compose_file,
-        projects=projects,
-        config=root / "config",
-        data=root / "data",
-        logs=root / "data" / "logs",
+    raise WorkspaceError(
+        "Run this command from an Amosclaud repository or installed workspace"
     )
 
 
@@ -157,7 +174,7 @@ def doctor(layout: WorkspaceLayout) -> dict:
         "workspace_root": str(layout.root),
         "compose_file": str(layout.compose_file),
         "application_found": layout.compose_file.is_file(),
-        "configuration_found": (layout.root / "config").is_dir(),
+        "configuration_found": layout.config.is_dir(),
         "docker_found": bool(docker),
         "projects_directory": str(layout.projects),
         "projects_writable": os.access(layout.projects, os.W_OK),
@@ -176,16 +193,23 @@ def doctor(layout: WorkspaceLayout) -> dict:
     else:
         report["docker_ready"] = False
 
-    services_ready = all(contract["services"].values())
-    env_ready = all(contract["required_environment"].values())
-    policy_ready = all(
-        bool(contract[key])
-        for key in (
-            "autonomous_enabled",
-            "fixer_enabled",
-            "verification_required",
-            "default_branch_protected",
+    # Legacy compose files do not contain the unified multi-service contract.
+    # They remain controllable, but only the unified stack can be fully ready.
+    unified = layout.compose_file.name == "docker-compose.yml"
+    services_ready = all(contract["services"].values()) if unified else True
+    env_ready = all(contract["required_environment"].values()) if unified else True
+    policy_ready = (
+        all(
+            bool(contract[key])
+            for key in (
+                "autonomous_enabled",
+                "fixer_enabled",
+                "verification_required",
+                "default_branch_protected",
+            )
         )
+        if unified
+        else True
     )
     report["ready"] = all(
         (
