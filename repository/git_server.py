@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import Any
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
 
@@ -50,7 +49,7 @@ def authenticate_git_principal(
     if user:
         return GitPrincipal(
             kind="user",
-            identity=str(user["username"] or user["email"] or user["id"]),
+            identity=str(user["email"] or user["name"] or user["id"]).lower(),
             scopes=frozenset({"repositories:read", "repositories:write"}),
             is_admin=bool(user["is_admin"]),
         )
@@ -61,7 +60,8 @@ def _authorize(record: RepositoryRecord, principal: GitPrincipal, *, write: bool
     required = "repositories:write" if write else "repositories:read"
     compatibility = "tasks:write" if write else "tasks:read"
     if principal.kind == "user":
-        if principal.is_admin or principal.identity == record.owner:
+        identities = {record.owner.lower(), record.owner_email.lower()}
+        if principal.is_admin or principal.identity in identities:
             return
         raise HTTPException(status_code=403, detail="Repository access denied")
     if required in principal.scopes or compatibility in principal.scopes:
