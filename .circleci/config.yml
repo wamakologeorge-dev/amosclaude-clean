@@ -1,166 +1,132 @@
-8version: 2.1
+version: 2.1
 
-# 1. Define shared execution environments and caching anchors
 executors:
-  python-env:
+  python311:
     docker:
       - image: cimg/python:3.11
     resource_class: medium
+    environment:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
 
-# 2. Configure modular execution pipelines
-jobs:
-  verify:
-    executor: python-env
+commands:
+  restore_python_cache:
     steps:
-      - checkout
-
-      # Restore pip dependencies cache to cut down runtime execution overhead
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "requirements.txt" }}
-            - v1-dependencies-
+            - v3-python-{{ checksum "requirements.txt" }}-{{ checksum "pyproject.toml" }}
+            - v3-python-{{ checksum "requirements.txt" }}-
+            - v3-python-
 
+  install_project:
+    steps:
       - run:
-          name: Install Project Workspace Dependencies
+          name: Install Amosclaud and verification tools
           command: |
             python -m pip install --upgrade pip
             if [ -f requirements.txt ]; then
-              pip install -r requirements.txt
-            else
-              pip install flake8 pytest pydantic fastapi uvicorn
+              python -m pip install -r requirements.txt
             fi
-
-      # Save dependency changes securely back to disk tracking arrays
+            python -m pip install -e .
+            python -m pip install build pytest pytest-cov flake8
       - save_cache:
+          key: v3-python-{{ checksum "requirements.txt" }}-{{ checksum "pyproject.toml" }}
           paths:
             - ~/.cache/pip
-          key: v1-dependencies-{{ checksum "requirements.txt" }}
 
-      # Execute strict workspace lint checks to pinpoint structural formatting anomalies
+  notify_amosclaud_on_failure:
+    steps:
       - run:
-          name: Run Flake8 Code Quality Inspection
+          name: Queue Amosclaud Autonomous repair
+          when: on_fail
           command: |
-            mkdir -p test-results/flake8
-            # Checks codebase format while preventing syntax warnings from throwing unrecoverable errors
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+            mkdir -p test-results/amosclaud
+            if [ -z "${AMOSCLAUD_API_KEY:-}" ] || [ -z "${AMOSCLAUD_REPOSITORY_ID:-}" ]; then
+              echo "Amosclaud failure notification skipped: AMOSCLAUD_API_KEY or AMOSCLAUD_REPOSITORY_ID is not configured." | tee test-results/amosclaud/notification.txt
+              exit 0
+            fi
 
-      - run:
-          name: Acknowledge Self-Healing GitHub Actions Stream
-          command: |
-            echo "---------------------------------------------------------"
-            echo "Amosclaud Code Healing engine executes via GitHub Actions."
-            echo "CircleCI environment tracking pass validated successfully."
-            echo "---------------------------------------------------------"
+            BASE_URL="${AMOSCLAUD_API_URL:-http://www.amosclaud.com}"
+            TASK_ID="circleci-${CIRCLE_WORKFLOW_ID}-${CIRCLE_BUILD_NUM}"
+            ERROR_CONTEXT="CircleCI verification failed for ${CIRCLE_PROJECT_REPONAME} at commit ${CIRCLE_SHA1}. Workflow: ${CIRCLE_BUILD_URL}"
 
-# 3. Build the orchestration workflow tree layout
-workflows:
-  verify-repository-workflow:
-    jobs:
-      - verify
-9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43
-44
-45
-46
-47
-48
-49
-50
-51
-52
-53
-54
-55
-56
-57
-58
-59
-60
-version: 2.1
-    resource_class: medium
+            python - <<'PY' > /tmp/amosclaud-fixer-payload.json
+            import json
+            import os
 
-# 2. Configure modular execution pipelines
+            payload = {
+                "task_id": os.environ.get("TASK_ID"),
+                "repository_id": int(os.environ["AMOSCLAUD_REPOSITORY_ID"]),
+                "pull_request_id": int(os.environ["AMOSCLAUD_PULL_REQUEST_ID"]) if os.environ.get("AMOSCLAUD_PULL_REQUEST_ID") else None,
+                "ci_pipeline_id": int(os.environ["AMOSCLAUD_CI_PIPELINE_ID"]) if os.environ.get("AMOSCLAUD_CI_PIPELINE_ID") else None,
+                "target_file": "repository",
+                "error_context": os.environ.get("ERROR_CONTEXT"),
+                "objective": "Inspect the CircleCI failure, repair the repository on an isolated branch, run full verification, and open an Amosclaud pull request only when all required checks pass.",
+            }
+            print(json.dumps(payload))
+            PY
+
+            export TASK_ID ERROR_CONTEXT
+            HTTP_STATUS=$(curl --silent --show-error --output test-results/amosclaud/response.json --write-out "%{http_code}" \
+              --request POST "${BASE_URL%/}/api/gateway/fixer-clone-line-auto-enject" \
+              --header "Authorization: Bearer ${AMOSCLAUD_API_KEY}" \
+              --header "Content-Type: application/json" \
+              --data @/tmp/amosclaud-fixer-payload.json || true)
+
+            echo "Amosclaud gateway status: ${HTTP_STATUS}" | tee test-results/amosclaud/notification.txt
+            if [ "${HTTP_STATUS}" -lt 200 ] || [ "${HTTP_STATUS}" -ge 300 ]; then
+              echo "Gateway notification failed; CircleCI failure remains authoritative." | tee -a test-results/amosclaud/notification.txt
+            fi
+
 jobs:
   verify:
-    executor: python-env
+    executor: python311
     steps:
       - checkout
-
-      # Restore pip dependencies cache to cut down runtime execution overhead
-      - restore_cache:
-          keys:
-            - v1-dependencies-{{ checksum "requirements.txt" }}
-            - v1-dependencies-
+      - restore_python_cache
+      - install_project
 
       - run:
-          name: Install Project Workspace Dependencies
+          name: Compile Python source
           command: |
-            python -m pip install --upgrade pip
-            if [ -f requirements.txt ]; then
-              pip install -r requirements.txt
-            else
-              pip install flake8 pytest pydantic fastapi uvicorn
-            fi
+            mkdir -p test-results/compile
+            python -m compileall -q amoscloud_ai database api-gateway main.py 2>&1 | tee test-results/compile/compile.log
 
-      # Save dependency changes securely back to disk tracking arrays
-      - save_cache:
-          paths:
-            - ~/.cache/pip
-          key: v1-dependencies-{{ checksum "requirements.txt" }}
-
-      # Execute strict workspace lint checks to pinpoint structural formatting anomalies
       - run:
-          name: Run Flake8 Code Quality Inspection
+          name: Block critical Python errors
           command: |
             mkdir -p test-results/flake8
-            # Checks codebase format while preventing syntax warnings from throwing unrecoverable errors
-            flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+            flake8 amoscloud_ai database api-gateway main.py \
+              --select=E9,F63,F7,F82 \
+              --count --show-source --statistics \
+              2>&1 | tee test-results/flake8/critical.log
 
       - run:
-          name: Acknowledge Self-Healing GitHub Actions Stream
+          name: Run Amosclaud test suite
           command: |
-            echo "---------------------------------------------------------"
-            echo "Amosclaud Code Healing engine executes via GitHub Actions."
-            echo "CircleCI environment tracking pass validated successfully."
-            echo "---------------------------------------------------------"
+            mkdir -p test-results/pytest
+            pytest -q --junitxml=test-results/pytest/junit.xml \
+              2>&1 | tee test-results/pytest/pytest.log
 
-# 3. Build the orchestration workflow tree layout
+      - run:
+          name: Build Python package
+          command: |
+            mkdir -p test-results/build
+            python -m build 2>&1 | tee test-results/build/build.log
+
+      - notify_amosclaud_on_failure
+
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results
+          destination: verification-evidence
+      - store_artifacts:
+          path: dist
+          destination: python-package
+
 workflows:
-  verify-repository-workflow:
+  verify-amosclaud-platform:
     jobs:
       - verify
-
-Generate all configs
