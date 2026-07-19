@@ -1,7 +1,8 @@
 from __future__ import annotations
 import argparse
 import json
-from .client import AmosclaudAgentClient, AmosclaudAgentError
+from .client import AmosclaudAgentClient
+from .errors import AmosclaudAgentError
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="amosclaud-agent")

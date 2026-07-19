@@ -8,10 +8,10 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
-from .errors import AmosclaudSDKError
+from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResponseError
 
-class AmosclaudAgentError(AmosclaudSDKError):
-    """A safe, user-facing Amosclaud API failure."""
+_TERMINAL_STATUSES = {"success", "failed", "cancelled"}
+
 
 @dataclass(slots=True)
 class AmosclaudAgentClient:
@@ -32,17 +32,37 @@ class AmosclaudAgentClient:
     def readiness(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/agent/readiness")
 
-    def run(self, objective: str, *, mode: str = "autonomous-check", branch: str = "main", metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        objective: str,
+        *,
+        mode: str = "autonomous-check",
+        branch: str = "main",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if not objective.strip():
             raise ValueError("objective is required")
-        return self._request("POST", "/api/v1/agent/run", {"objective": objective, "mode": mode, "branch": branch, "metadata": dict(metadata or {})})
+        return self._request(
+            "POST",
+            "/api/v1/agent/run",
+            {"objective": objective, "mode": mode, "branch": branch, "metadata": dict(metadata or {})},
+        )
 
     def pipeline(self, pipeline_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/pipelines/{quote(pipeline_id, safe='')}")
 
-    def run_and_wait(self, objective: str, *, mode: str = "autonomous-check", branch: str = "main", metadata: dict[str, Any] | None = None, poll_seconds: float = 1.0, max_wait_seconds: float = 300.0) -> dict[str, Any]:
+    def run_and_wait(
+        self,
+        objective: str,
+        *,
+        mode: str = "autonomous-check",
+        branch: str = "main",
+        metadata: dict[str, Any] | None = None,
+        poll_seconds: float = 1.0,
+        max_wait_seconds: float = 300.0,
+    ) -> dict[str, Any]:
         accepted = self.run(objective, mode=mode, branch=branch, metadata=metadata)
-        if accepted.get("status") in {"success", "failed", "cancelled"}:
+        if accepted.get("status") in _TERMINAL_STATUSES:
             return accepted
         pipeline_id = str(accepted.get("pipeline_id") or "")
         if not pipeline_id:
@@ -50,21 +70,24 @@ class AmosclaudAgentClient:
         deadline = time.monotonic() + max_wait_seconds
         while time.monotonic() < deadline:
             result = self.pipeline(pipeline_id)
-            if result.get("status") in {"success", "failed", "cancelled"}:
+            if result.get("status") in _TERMINAL_STATUSES:
                 return result
             time.sleep(max(0.1, poll_seconds))
         raise AmosclaudAgentError(f"Pipeline {pipeline_id} did not finish within {max_wait_seconds:g} seconds")
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        headers = {"Accept": "application/json", "User-Agent": "amosclaud-agent-sdk"}
+    def _build_headers(self, *, has_payload: bool) -> dict[str, str]:
+        headers: dict[str, str] = {"Accept": "application/json", "User-Agent": "amosclaud-agent-sdk"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if self.session_cookie:
             headers["Cookie"] = f"amos_session={self.session_cookie}"
-        data = None
-        if payload is not None:
-            data = json.dumps(payload).encode()
+        if has_payload:
             headers["Content-Type"] = "application/json"
+        return headers
+
+    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = json.dumps(payload).encode() if payload is not None else None
+        headers = self._build_headers(has_payload=data is not None)
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
         try:
             with urlopen(request, timeout=self.timeout) as response:
@@ -77,11 +100,11 @@ class AmosclaudAgentClient:
                 detail = raw
             raise AmosclaudAgentError(f"Amosclaud request failed ({error.code}): {detail}") from error
         except (URLError, TimeoutError) as error:
-            raise AmosclaudAgentError(f"Cannot reach {self.base_url}: {error}") from error
+            raise AmosclaudConnectionError(f"Cannot reach {self.base_url}: {error}") from error
         try:
             result = json.loads(raw or "{}")
         except json.JSONDecodeError as error:
-            raise AmosclaudAgentError("Amosclaud returned a non-JSON response") from error
+            raise AmosclaudResponseError("Amosclaud returned a non-JSON response") from error
         if not isinstance(result, dict):
-            raise AmosclaudAgentError("Amosclaud returned an invalid response contract")
+            raise AmosclaudResponseError("Amosclaud returned an invalid response contract")
         return result
