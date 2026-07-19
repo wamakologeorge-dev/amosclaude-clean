@@ -29,6 +29,15 @@ class GitSnapshot:
     dirty_files: tuple[str, ...]
 
 
+def _parse_remote_name(remote_url: str, fallback: str) -> str:
+    """Extract an owner/repo slug from a git remote URL."""
+    cleaned = remote_url.removesuffix(".git").rstrip("/")
+    # Handles both SSH (git@github.com:owner/repo) and HTTPS formats.
+    after_colon = cleaned.split(":")[-1]
+    after_host = after_colon.split("github.com/")[-1]
+    return after_host or fallback
+
+
 def _run(root: Path, *args: str) -> str:
     """Run a git sub-command in ``root`` and return trimmed stdout.
 
@@ -103,10 +112,7 @@ def collect_git_snapshot(
     except GitMetadataError:
         pass
 
-    full_name = root.name
-    if remote_url:
-        cleaned = remote_url.removesuffix(".git").rstrip("/")
-        full_name = cleaned.split(":")[-1].split("github.com/")[-1]
+    full_name = _parse_remote_name(remote_url, fallback=root.name) if remote_url else root.name
 
     changed = tuple(
         line[3:].strip()

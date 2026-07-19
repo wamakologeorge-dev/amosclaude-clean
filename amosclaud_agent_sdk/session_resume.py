@@ -5,18 +5,7 @@ from typing import Any
 
 from .client import AmosclaudAgentClient
 from .session_store import SessionStore
-from .sessions import AgentSession, load_session, save_session
-
-
-def resume_session(store: SessionStore, session_id: str) -> AgentSession:
-    """Load an existing session from ``store`` by its ID.
-
-    Thin alias for :func:`~amosclaud_agent_sdk.sessions.load_session`.
-
-    Raises:
-        FileNotFoundError: If no session with ``session_id`` exists.
-    """
-    return load_session(store, session_id)
+from .sessions import _CONVERSATION_WINDOW, load_session, save_session
 
 
 def continue_session(
@@ -56,7 +45,7 @@ def continue_session(
         mode=mode,
         metadata={
             "conversation_id": session.id,
-            "conversation": [item.to_dict() for item in session.messages[-12:]],
+            "conversation": [item.to_dict() for item in session.messages[-_CONVERSATION_WINDOW:]],
         },
     )
     reply = str(response.get("reply") or response.get("message") or "Request accepted")

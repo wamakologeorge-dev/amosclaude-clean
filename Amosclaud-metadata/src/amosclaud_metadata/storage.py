@@ -101,11 +101,18 @@ class JsonMetadataStore:
 
     def list_records(self, record_type: str | None = None) -> list[Path]:
         """List metadata documents, optionally restricted by record type."""
-        base = (
-            self.root
-            if record_type is None
-            else (self.root / record_type).resolve()
-        )
+        if record_type is None:
+            base = self.root
+        else:
+            category = "".join(
+                character
+                for character in record_type.lower()
+                if character.isalnum() or character in {"-", "_"}
+            )
+            if not category:
+                raise ValueError("record_type does not contain a safe path component")
+            base = (self.root / category).resolve()
+
         if self.root not in base.parents and base != self.root:
             raise ValueError("metadata listing escapes the configured root")
         if not base.exists():

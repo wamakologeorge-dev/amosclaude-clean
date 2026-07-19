@@ -9,6 +9,8 @@ from typing import Any
 from .message_parser import Message, parse_message
 from .session_store import SessionStore
 
+_CONVERSATION_WINDOW = 12
+
 
 @dataclass(slots=True)
 class AgentSession:
