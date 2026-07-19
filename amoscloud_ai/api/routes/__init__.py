@@ -18,10 +18,13 @@ for _route in real_repositories.router.routes:
 # Amosclaud is the source-control and project-management authority. These routes
 # are attached to the native repository router so create_app mounts them under
 # /api/v1 without any GitHub dependency.
+from amoscloud_ai.api.routes import profile as profile
 from amoscloud_ai.api.routes import repositories as repositories
 from amoscloud_ai.api.routes import solo_development as solo_development
 
 _native_paths = {getattr(route, "path", None) for route in repositories.router.routes}
-for _route in solo_development.router.routes:
-    if getattr(_route, "path", None) not in _native_paths:
-        repositories.router.routes.append(_route)
+for _module in (solo_development, profile):
+    for _route in _module.router.routes:
+        if getattr(_route, "path", None) not in _native_paths:
+            repositories.router.routes.append(_route)
+            _native_paths.add(getattr(_route, "path", None))
