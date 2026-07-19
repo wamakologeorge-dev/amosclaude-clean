@@ -1,11 +1,10 @@
 """API routes package and FastAPI router compatibility helpers.
 
 Some FastAPI/Starlette combinations preserve an included ``APIRouter`` as a
-nested wrapper.  Amosclaud's route contracts intentionally inspect the
+nested wrapper. Amosclaud's route contracts intentionally inspect the
 application's top-level route table, so wrappers with ``path == ''`` made real
-endpoints appear unregistered.  Install a small compatibility implementation
-before importing route modules so nested service routers are copied as concrete
-``APIRoute`` and websocket entries.
+endpoints appear unregistered. Install a compatibility implementation before
+importing route modules so nested service routers become concrete route entries.
 """
 
 from __future__ import annotations
@@ -24,6 +23,19 @@ def _join_prefix(prefix: str, path: str) -> str:
     return f"{prefix.rstrip('/')}/{path.lstrip('/')}"
 
 
+def _methods(value: Any) -> frozenset[str]:
+    return frozenset(getattr(value, "methods", None) or ())
+
+
+def _already_registered(target: APIRouter, path: str, methods: frozenset[str]) -> bool:
+    return any(
+        getattr(existing, "path", None) == path
+        and _methods(existing) == methods
+        for existing in target.routes
+        if isinstance(existing, APIRoute)
+    )
+
+
 def _flat_include_router(
     self: APIRouter | FastAPI,
     router: APIRouter,
@@ -39,7 +51,7 @@ def _flat_include_router(
     generate_unique_id_function: Any = None,
     **_: Any,
 ) -> None:
-    """Include every child route directly instead of retaining router wrappers."""
+    """Include child routes directly and keep every path/method contract unique."""
 
     target = self.router if isinstance(self, FastAPI) else self
     inherited_tags = list(tags or [])
@@ -64,9 +76,13 @@ def _flat_include_router(
             continue
 
         if isinstance(route, APIRoute):
+            path = _join_prefix(prefix, route.path)
+            methods = _methods(route)
+            if _already_registered(target, path, methods):
+                continue
             combined_responses = {**inherited_responses, **(route.responses or {})}
             target.add_api_route(
-                _join_prefix(prefix, route.path),
+                path,
                 route.endpoint,
                 response_model=route.response_model,
                 status_code=route.status_code,
@@ -102,33 +118,36 @@ def _flat_include_router(
             continue
 
         if isinstance(route, APIWebSocketRoute):
+            path = _join_prefix(prefix, route.path)
+            if any(
+                isinstance(existing, APIWebSocketRoute)
+                and getattr(existing, "path", None) == path
+                for existing in target.routes
+            ):
+                continue
             target.add_api_websocket_route(
-                _join_prefix(prefix, route.path),
+                path,
                 route.endpoint,
                 name=route.name,
                 dependencies=[*inherited_dependencies, *(route.dependencies or [])],
             )
             continue
 
-        # Preserve Starlette mounts and ordinary routes. They do not create the
-        # empty APIRouter wrappers that caused this failure.
-        target.routes.append(route)
+        # Preserve Starlette mounts and ordinary routes, but do not duplicate the
+        # same object when a compatibility alias includes a parent router twice.
+        if route not in target.routes:
+            target.routes.append(route)
 
 
-# Install before importing route modules; those modules compose several routers
-# during import. The marker prevents duplicate patching in reload/test sessions.
 if not getattr(APIRouter.include_router, "_amosclaud_flattened", False):
     _flat_include_router._amosclaud_flattened = True  # type: ignore[attr-defined]
     APIRouter.include_router = _flat_include_router  # type: ignore[assignment]
     FastAPI.include_router = _flat_include_router  # type: ignore[assignment]
 
 
-# Re-export the Doctor modules. They are mounted directly by create_app.
 from amoscloud_ai.api.routes import admin as admin
 from amoscloud_ai.api.routes import doctor_medical as doctor_medical
 from amoscloud_ai.api.routes import doctor_travel as doctor_travel
-
-# Extend the existing repository-template router with concrete repository routes.
 from amoscloud_ai.api.routes import repository_templates as repository_templates
 from amoscloud_ai.api.routes import real_repositories as real_repositories
 
@@ -137,8 +156,6 @@ for _route in real_repositories.router.routes:
     if getattr(_route, "path", None) not in _existing_paths:
         repository_templates.router.routes.append(_route)
 
-# Amosclaud is the source-control and project-management authority. Attach these
-# routes to the native repository router so create_app mounts one service surface.
 from amoscloud_ai.api.routes import profile as profile
 from amoscloud_ai.api.routes import repositories as repositories
 from amoscloud_ai.api.routes import solo_development as solo_development
