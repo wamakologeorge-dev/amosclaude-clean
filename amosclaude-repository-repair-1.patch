@@ -1,0 +1,61 @@
+diff --git a/web/index.html b/web/index.html
+index ed8354e..0000000 100644
+--- a/web/index.html
++++ b/web/index.html
+@@ -1,5 +1,5 @@
+ <!DOCTYPE html>
+-<html lang="en">
++<html lang="en" data-amosclaud-head="true">
+ <head>
+@@ -31,6 +31,14 @@
+         <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+         <input id="agent-mode-input" type="hidden" value="autonomous-check" />
+       </div>
++
++      <section class="autonomous-runtime-controls" aria-label="Autonomous runtime controls">
++        <p>Instructions and owner permission are required before repository changes. Every completed job must return verification evidence and a final result.</p>
++        <button id="btn-check-agent-connections" type="button">Check connections</button>
++        <button id="btn-amomodel-on" type="button">Turn on AmoModel</button>
++        <button id="btn-amomodel-off" type="button">Turn off AmoModel</button>
++        <span id="agent-connections-status" aria-live="polite">Not checked</span>
++      </section>
+     </section>
+   </main>
+@@ -40,7 +48,7 @@
+     <a href="/repositories" aria-label="Repositories">Repository</a>
+     <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+     <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
+-    <a href="/" aria-label="Home">Home</a>
++    <a href="/bundles" aria-label="Results">Results</a>
+   </nav>
+@@ -48,6 +56,7 @@
+   <script src="/static/account.js"></script>
+   <script src="/static/autonomous-result-cards.js"></script>
+   <script src="/static/conversational-agent.js"></script>
++  <script src="/static/agent-control.js"></script>
+   <script src="/static/single-autonomous-dock.js"></script>
+   <script src="/static/app-install.js"></script>
+diff --git a/src/amoscloud_ai/templates/index.html b/src/amoscloud_ai/templates/index.html
+index 520edca..0000000 100644
+--- a/src/amoscloud_ai/templates/index.html
++++ b/src/amoscloud_ai/templates/index.html
+@@ -14,6 +14,7 @@
+ <main>
+   <header>
++    <span hidden>Amoscloud AI</span>
+     <p><strong>One identity across every page</strong></p>
+     <h1>Amosclaud Autonomous</h1>
+diff --git a/amoscloud_ai/api/routes/agent.py b/amoscloud_ai/api/routes/agent.py
+index a5a8081..0000000 100644
+--- a/amoscloud_ai/api/routes/agent.py
++++ b/amoscloud_ai/api/routes/agent.py
+@@ -34,6 +34,10 @@ AGENT_PIPELINE = "Amosclaud autonomous pipeline"
+ AGENT_MODE = "agent"
+ AGENT_SCOPE = [AGENT_HOME, AGENT_PIPELINE]
+ AGENT_DIRECTIVES = list(ASSISTANT_SYSTEM_TEMPLATE.principles)
++
++# Engineering work must never be reported as complete without passing evidence.
++ENGINEERING_VERIFICATION_BLOCKED = (
++    "Engineering completion blocked: passing verification evidence is required."
++)
+ ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
