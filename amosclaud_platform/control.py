@@ -1,8 +1,9 @@
 """Single command control plane for the existing Amosclaud services.
 
 This module does not reimplement the database, repository service, Agent, fixer,
-AmoModel, Byte bus, credential authority, or FastAPI application. It initializes
-and checks those existing components, then reports one truthful platform status.
+AmoModel, Byte bus, credential authority, metrics, or FastAPI application. It
+initializes and checks those existing components, then reports one truthful
+platform status.
 """
 from __future__ import annotations
 
@@ -56,6 +57,7 @@ class PlatformControl:
         "api_key_manager": "api_key_manager.main",
         "byte_bus": "Amosclaud.platform_bus",
         "database": "database.session",
+        "metrics": "amosclaud_metrics.server",
         "repository": "repository.connector",
     }
 
@@ -114,6 +116,14 @@ class PlatformControl:
                 required=False,
             )
         )
+        checks.append(
+            self._secret_check(
+                "metrics_token",
+                "AMOSCLAUD_METRICS_TOKEN",
+                24,
+                required=False,
+            )
+        )
 
         admin_username = os.getenv("API_KEY_MANAGER_ADMIN_USERNAME", "").strip()
         admin_password = os.getenv("API_KEY_MANAGER_ADMIN_PASSWORD", "")
@@ -139,6 +149,29 @@ class PlatformControl:
             checks.append(
                 ServiceCheck(
                     "credential_database",
+                    "failed",
+                    f"{type(exc).__name__}: {exc}",
+                    required=False,
+                )
+            )
+
+        try:
+            from amosclaud_metrics.platform import collect_platform_snapshot
+
+            snapshot = collect_platform_snapshot()
+            down = sorted(name for name, state in snapshot["services"].items() if not state.get("up"))
+            checks.append(
+                ServiceCheck(
+                    "platform_observability",
+                    "ready" if snapshot["status"] == "healthy" else "warning",
+                    "all required services observable" if not down else f"attention: {', '.join(down)}",
+                    required=False,
+                )
+            )
+        except Exception as exc:
+            checks.append(
+                ServiceCheck(
+                    "platform_observability",
                     "failed",
                     f"{type(exc).__name__}: {exc}",
                     required=False,
