@@ -29,7 +29,13 @@ def _database_snapshot() -> tuple[dict[str, float], dict[str, Any]]:
     }
     service: dict[str, Any] = {"up": False}
     try:
-        from database.models import AutonomousJob, CIPipeline, Repository
+        from database.models import (
+            AutonomousJob,
+            AutonomousJobStatus,
+            CIPipeline,
+            CIStatus,
+            Repository,
+        )
         from database.session import create_database, session_scope
 
         create_database()
@@ -43,18 +49,34 @@ def _database_snapshot() -> tuple[dict[str, float], dict[str, Any]]:
             metrics["amosclaud_ci_pipelines_total"] = float(
                 db.scalar(select(func.count()).select_from(CIPipeline)) or 0
             )
-            for status in ("queued", "inspecting", "repairing", "verifying", "passed", "failed"):
+            job_states = (
+                AutonomousJobStatus.QUEUED,
+                AutonomousJobStatus.INSPECTING,
+                AutonomousJobStatus.REPAIRING,
+                AutonomousJobStatus.VERIFYING,
+                AutonomousJobStatus.PASSED,
+                AutonomousJobStatus.FAILED,
+            )
+            for status in job_states:
                 count = db.scalar(
                     select(func.count()).select_from(AutonomousJob).where(AutonomousJob.status == status)
                 ) or 0
-                bucket = "running" if status in {"inspecting", "repairing", "verifying"} else status
+                bucket = (
+                    "running"
+                    if status in {
+                        AutonomousJobStatus.INSPECTING,
+                        AutonomousJobStatus.REPAIRING,
+                        AutonomousJobStatus.VERIFYING,
+                    }
+                    else status.value
+                )
                 key = f"amosclaud_autonomous_jobs_{bucket}"
                 metrics[key] = metrics.get(key, 0.0) + float(count)
-            for status in ("running", "passed", "failed"):
+            for status in (CIStatus.RUNNING, CIStatus.PASSED, CIStatus.FAILED):
                 count = db.scalar(
                     select(func.count()).select_from(CIPipeline).where(CIPipeline.status == status)
                 ) or 0
-                metrics[f"amosclaud_ci_pipelines_{status}"] = float(count)
+                metrics[f"amosclaud_ci_pipelines_{status.value}"] = float(count)
         metrics["amosclaud_platform_database_up"] = 1.0
         service = {"up": True}
     except Exception as exc:  # metrics must degrade instead of taking down the server
