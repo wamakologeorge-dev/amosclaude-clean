@@ -5,6 +5,8 @@
     "context": ".."
   },
   "workspaceFolder": "/workspaces/amosclaude-clean",
+  "waitFor": "postCreateCommand",
+  "shutdownAction": "stopContainer",
   "forwardPorts": [8000, 8001, 8091, 9090],
   "portsAttributes": {
     "8000": {
@@ -29,17 +31,22 @@
     "AUTH_COOKIE_SECURE": "false",
     "DATABASE_URL": "sqlite:///./data/amosclaud.db",
     "AUTH_DB_PATH": "./data/auth.db",
-    "AMOSCLAUD_REPOSITORIES_ROOT": "./repositories",
-    "AMOSCLAUD_MODEL_HOME": "./model-workspace",
+    "AMOSCLAUD_REPOSITORIES_ROOT": "./data/repositories",
+    "REPOSITORY_STORAGE_PATH": "./data/repositories",
+    "AMOSCLAUD_MODEL_HOME": "./data/model",
     "AMOSCLAUD_MODEL_URL": "http://127.0.0.1:8091",
     "AMOSCLAUD_MODEL_HEALTH_URL": "http://127.0.0.1:8091/health",
+    "AMOSCLAUD_API_URL": "http://127.0.0.1:8000",
     "AMOSCLAUD_API_HEALTH_URL": "http://127.0.0.1:8000/health",
     "AMOSCLAUD_API_METRICS_URL": "http://127.0.0.1:8000/metrics",
     "AMOSCLAUD_METRICS_DB": "./data/metrics.db",
     "REDIS_URL": "redis://127.0.0.1:6379/0"
   },
+  "remoteEnv": {
+    "PYTHONPATH": "/workspaces/amosclaude-clean"
+  },
   "postCreateCommand": "bash scripts/bootstrap-workspace.sh",
-  "postStartCommand": "mkdir -p data repositories model-workspace/checkpoints/versions model-workspace/logs/service model-workspace/training/jobs && (python -m amosclaud_platform status || true)",
+  "postStartCommand": "mkdir -p data/repositories data/model/checkpoints/versions data/model/logs/service data/model/training/jobs && (python -m amosclaud_platform status || true)",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -63,7 +70,9 @@
         "editor.formatOnSave": true,
         "files.exclude": {
           "**/__pycache__": true,
-          "**/.pytest_cache": true
+          "**/.pytest_cache": true,
+          "data/model/checkpoints": true,
+          "data/model/logs": true
         }
       }
     }
