@@ -21,9 +21,10 @@ for _route in real_repositories.router.routes:
 from amoscloud_ai.api.routes import profile as profile
 from amoscloud_ai.api.routes import repositories as repositories
 from amoscloud_ai.api.routes import solo_development as solo_development
+from repository import git_server as native_git
 
 _native_paths = {getattr(route, "path", None) for route in repositories.router.routes}
-for _module in (solo_development, profile):
+for _module in (solo_development, profile, native_git):
     for _route in _module.router.routes:
         if getattr(_route, "path", None) not in _native_paths:
             repositories.router.routes.append(_route)
