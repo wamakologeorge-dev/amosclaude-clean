@@ -1,171 +1,254 @@
-"""Amosclaud Core API Gateway Matrix.
+"""Amosclaud API gateway joining repository, Autonomous, and CI services.
 
-Autonomous routing layer designed to orchestrate down-stream agent architectures
-under real-time observation parameters of Amosclaud-ai and Amosclaud-fixee.
+The gateway is the single authenticated ingress. It persists every Autonomous
+request in the shared database and routes bounded traffic to the repository,
+agent/fixer, and CI/deployment services.
 """
 
 from __future__ import annotations
 
-import time
 import logging
-import httpx
-from typing import Dict, Any, Optional
-from pydantic import BaseModel, Field
-from fastapi import FastAPI, Request, Response, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+import os
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict
 
-# Ensure smooth architecture initialization state tracking properties
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 try:
     from .config import settings
     from .dependencies import get_current_user, rate_limiter
 except ImportError:
-    # Safe system path fallback if executed independently or from container roots
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
     from config import settings
     from dependencies import get_current_user, rate_limiter
 
-# Setup structural logging utilities
+from database.models import AutonomousJob, AutonomousJobStatus, Repository
+from database.session import create_database, session_scope
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AmosclaudGateway")
 
 app = FastAPI(
-    title=settings.PROJECT_NAME if 'settings' in locals() else "Amosclaud Core Gateway",
-    version=settings.PROJECT_VERSION if 'settings' in locals() else "1.0.0",
-    description="Primary API network routing fabric managing secure distributed agent infrastructure loops."
+    title=settings.PROJECT_NAME,
+    version=settings.PROJECT_VERSION,
+    description="Authenticated gateway for Amosclaud repositories, Autonomous repair, CI, and deployment.",
 )
 
-# Configure Cross-Origin Resource Sharing (CORS) rules for external server syncing
+allowed_origins = [
+    item.strip()
+    for item in os.getenv(
+        "AMOSCLAUD_ALLOWED_ORIGINS",
+        "http://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if item.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Amosclaud-Owner-Key"],
 )
 
-# Global connection engine used to forward streaming network traffic down to services
 http_client = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
 
-# --- Core Structured Validation Schemas ---
-class ActionTask(BaseModel):
-    task_id: str = Field(..., description="Unique transaction identity verification mapping key.")
-    agent_type: str = Field("amosclaud-core", description="Target engine mode assignment string parameter.")
-    payload: Dict[str, Any] = Field(default_factory=dict, description="Metadata structural input parameters.")
 
-# --- Strict JSON Interceptor Middleware (Clears Out HTML '<!doctype html>' Leak Errors) ---
+@app.on_event("startup")
+async def initialize_shared_database() -> None:
+    create_database()
+
+
+class ActionTask(BaseModel):
+    task_id: str = Field(min_length=3, max_length=100)
+    agent_type: str = Field(default="amosclaud-core", min_length=3, max_length=100)
+    repository_id: int = Field(gt=0)
+    objective: str = Field(min_length=3, max_length=20_000)
+    target_file: str | None = Field(default=None, max_length=500)
+    error_context: str | None = Field(default=None, max_length=100_000)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class JobStatusResponse(BaseModel):
+    task_id: str
+    repository_id: int
+    agent_type: str
+    status: str
+    objective: str
+    target_file: str | None
+    result_summary: str | None
+
+
 @app.middleware("http")
 async def boundary_handshake_logging_middleware(request: Request, call_next):
-    start_time = time.time()
-    logger.info(f"Incoming traffic request trace: {request.method} {request.url.path}")
-
-    # Intercept non-existent endpoint calls targeting API parameters early to prevent HTML fallback leaks
-    if request.url.path.startswith("/api/") and not any(route.matches(request.scope)[0] for route in app.routes):
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "status": "error",
-                "detail": f"The requested path '{request.url.path}' was not found in the transaction cache memory loop.",
-                "data-amosclaud-head": "true",
-                "agent_signature": "Amosclaud-ai"
-            }
-        )
-
+    started = time.monotonic()
+    logger.info("Gateway request %s %s", request.method, request.url.path)
     response: Response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    response.headers["X-Amosclaud-Agent"] = "Amosclaud-ai"
+    response.headers["X-Process-Time"] = f"{time.monotonic() - started:.6f}"
+    response.headers["X-Amosclaud-Agent"] = "Amosclaud Autonomous"
     return response
 
-# --- Base Handshake Microservice Proxy Router ---
-async def forward_network_packet(request: Request, target_service_url: str):
-    """
-    Dynamically captures incoming request parameters and forwards them across the
-    network boundary to target peripheral nodes, returning clean structured responses.
-    """
+
+async def forward_network_packet(request: Request, target_service_url: str, forwarded_path: str) -> Response:
     body = await request.body()
     headers = dict(request.headers)
     headers.pop("host", None)
-
     try:
-        response = await http_client.request(
+        downstream = await http_client.request(
             method=request.method,
-            url=f"{target_service_url}{request.url.path}",
+            url=f"{target_service_url.rstrip('/')}/{forwarded_path.lstrip('/')}",
             headers=headers,
             content=body,
-            params=request.query_params
+            params=request.query_params,
         )
-        return Response(content=response.content, status_code=response.status_code, headers=dict(response.headers))
+        safe_headers = {
+            key: value
+            for key, value in downstream.headers.items()
+            if key.lower() not in {"content-length", "transfer-encoding", "connection"}
+        }
+        return Response(content=downstream.content, status_code=downstream.status_code, headers=safe_headers)
     except httpx.RequestError as exc:
-        logger.error(f"Downstream connection error routing to target microservice platform: {str(exc)}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Target endpoint microservice node is currently unreachable."
+        logger.error("Downstream service unavailable: %s", exc)
+        raise HTTPException(status_code=502, detail="Target Amosclaud service is unavailable") from exc
+
+
+def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
+    with session_scope() as session:
+        existing = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task.task_id))
+        if existing:
+            raise HTTPException(status_code=409, detail="task_id already exists")
+        repository = session.get(Repository, task.repository_id)
+        if repository is None:
+            raise HTTPException(status_code=404, detail="Amosclaud repository not found")
+        job = AutonomousJob(
+            task_id=task.task_id,
+            agent_type=task.agent_type,
+            repository_id=task.repository_id,
+            objective=task.objective,
+            target_file=task.target_file,
+            error_context=task.error_context,
+            status=AutonomousJobStatus.QUEUED,
+            result_summary=f"Queued by {username or 'authenticated Amosclaud user'}",
+        )
+        session.add(job)
+        session.flush()
+        session.refresh(job)
+        return job
+
+
+@app.post("/api/agent/run", response_model=JobStatusResponse, status_code=status.HTTP_202_ACCEPTED)
+async def run_agent(
+    task: ActionTask,
+    current_user: dict = Depends(get_current_user),
+    _: bool = Depends(rate_limiter),
+):
+    job = _create_job(task, str(current_user.get("username", "user")))
+    logger.info("Queued Autonomous task %s for repository %s", job.task_id, job.repository_id)
+    return JobStatusResponse(
+        task_id=job.task_id,
+        repository_id=job.repository_id,
+        agent_type=job.agent_type,
+        status=job.status.value,
+        objective=job.objective,
+        target_file=job.target_file,
+        result_summary=job.result_summary,
+    )
+
+
+@app.get("/api/agent/jobs/{task_id}", response_model=JobStatusResponse)
+async def read_agent_job(
+    task_id: str,
+    _: dict = Depends(get_current_user),
+    __: bool = Depends(rate_limiter),
+):
+    with session_scope() as session:
+        job = session.scalar(select(AutonomousJob).where(AutonomousJob.task_id == task_id))
+        if job is None:
+            raise HTTPException(status_code=404, detail="Autonomous job not found")
+        return JobStatusResponse(
+            task_id=job.task_id,
+            repository_id=job.repository_id,
+            agent_type=job.agent_type,
+            status=job.status.value,
+            objective=job.objective,
+            target_file=job.target_file,
+            result_summary=job.result_summary,
         )
 
-# --- Active Functional Service Endpoints ---
-@app.post("/api/agent/run", status_code=status.HTTP_202_ACCEPTED)
-async def run_agent(task: ActionTask):
-    """
-    Accepts task orchestration commands and triggers background automation processing paths.
-    """
-    logger.info(f"Ingesting task request matrix token: {task.task_id} into execution pipeline.")
-    return {
-        "status": "processing",
-        "task_id": task.task_id,
-        "message": "Amosclaud-ai is currently analyzing and working!",
-        "data-amosclaud-head": "true"
-    }
 
-@app.api_route("/api/service-a/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def route_service_a(path: str, request: Request, current_user: dict = Depends(get_current_user), rate_limit_ok: bool = Depends(rate_limiter)):
-    return await forward_network_packet(request, "http://127.0.0.1:8001")
+@app.api_route("/api/repository/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def route_repository_service(
+    path: str,
+    request: Request,
+    _: dict = Depends(get_current_user),
+    __: bool = Depends(rate_limiter),
+):
+    return await forward_network_packet(request, settings.SERVICE_A_URL, path)
 
-@app.api_route("/api/service-b/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def route_service_b(path: str, request: Request, current_user: dict = Depends(get_current_user), rate_limit_ok: bool = Depends(rate_limiter)):
-    return await forward_network_packet(request, "http://127.0.0.1:8002")
 
-@app.api_route("/api/service-c/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
-async def route_service_c(path: str, request: Request, current_user: dict = Depends(get_current_user), rate_limit_ok: bool = Depends(rate_limiter)):
-    return await forward_network_packet(request, "http://127.0.0.1:8003")
+@app.api_route("/api/autonomous/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def route_autonomous_service(
+    path: str,
+    request: Request,
+    _: dict = Depends(get_current_user),
+    __: bool = Depends(rate_limiter),
+):
+    return await forward_network_packet(request, settings.SERVICE_B_URL, path)
 
-# --- Handshake Health Check Verification System ---
+
+@app.api_route("/api/ci/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def route_ci_service(
+    path: str,
+    request: Request,
+    _: dict = Depends(get_current_user),
+    __: bool = Depends(rate_limiter),
+):
+    return await forward_network_packet(request, settings.SERVICE_C_URL, path)
+
+
 @app.get("/health")
 async def health_check():
-    """
-    Central connection verification checkpoint acting as the handshake hook
-    for the upstream monitoring processes.
-    """
     return {
         "status": "ok",
-        "agent": "Amosclaud-ai",
-        "message": "Amosclaud-ai is currently analyzing and working!",
-        "state": "Live & Active",
-        "data-amosclaud-head": "true"
+        "agent": "Amosclaud Autonomous",
+        "database": "shared",
+        "repository_service": settings.SERVICE_A_URL,
+        "autonomous_service": settings.SERVICE_B_URL,
+        "ci_service": settings.SERVICE_C_URL,
+        "data-amosclaud-head": "true",
     }
 
-@app.post("/api/gateway/fixer-clone-line-auto-enject")
-async def amosclaud_autonomous_fixer_injection_endpoint(request: Request):
-    """
-    Autonomous injection entry-point loop intercepting pipeline build metrics.
-    Triggers code-fork self-healing routines dynamically on failure states.
-    """
-    payload = await request.json()
-    error_context = payload.get("error_context", "E999")
-    target_file = payload.get("target_file", "main.py")
 
-    logger.warning(f"[Amosclaud-fixee] Intercepted compile crash notification marker sequence in active pool.")
-    logger.info(f"[Amosclaud-fixee] Auto-remediation code-fork evaluation generated cleanly for artifact: {target_file}")
-
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={
-            "status": "remediated",
-            "action": "generator-new-code-fork-error-reverse",
-            "agent_assignment": "Amosclaud-fixee",
-            "workflow_proceed": True,
-            "message": "Automated code fix sequence injected successfully. Main repository synchronized clean."
-        }
+@app.post("/api/gateway/fixer-clone-line-auto-enject", response_model=JobStatusResponse, status_code=202)
+async def queue_fixer_job(
+    task: ActionTask,
+    current_user: dict = Depends(get_current_user),
+    _: bool = Depends(rate_limiter),
+):
+    """Queue a real repair job; never claim remediation before verification."""
+    if task.agent_type == "amosclaud-core":
+        task.agent_type = "amosclaud-fixer"
+    job = _create_job(task, str(current_user.get("username", "user")))
+    return JobStatusResponse(
+        task_id=job.task_id,
+        repository_id=job.repository_id,
+        agent_type=job.agent_type,
+        status=job.status.value,
+        objective=job.objective,
+        target_file=job.target_file,
+        result_summary=job.result_summary,
     )
+
+
+@app.exception_handler(HTTPException)
+async def gateway_http_error(_: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"status": "error", "detail": exc.detail})
