@@ -1,407 +1,72 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-amosclaud-head="true">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Amoscloud AI – Build Assistant</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Amosclaud Autonomous</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #0f1117;
-      --surface: #1a1d27;
-      --border: #2d3148;
-      --accent: #6c63ff;
-      --accent-hover: #554fcc;
-      --text: #e8eaf6;
-      --muted: #7b7fa8;
-      --success: #4caf50;
-      --error: #f44336;
-      --radius: 12px;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 2rem 1rem 4rem;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: 2.5rem;
-    }
-    header h1 {
-      font-size: 2.2rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    header p {
-      color: var(--muted);
-      margin-top: .5rem;
-      font-size: 1rem;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 2rem;
-      width: 100%;
-      max-width: 720px;
-    }
-
-    /* Tab switcher */
-    .tabs {
-      display: flex;
-      gap: .5rem;
-      margin-bottom: 1.5rem;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: .65rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: .95rem;
-      font-weight: 500;
-      transition: all .2s;
-    }
-    .tab-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #fff;
-    }
-    .tab-btn:hover:not(.active) {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-
-    /* Forms */
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-
-    label {
-      display: block;
-      font-size: .85rem;
-      color: var(--muted);
-      margin-bottom: .4rem;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-
-    textarea, input[type="text"] {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: .95rem;
-      padding: .75rem 1rem;
-      resize: vertical;
-      outline: none;
-      transition: border-color .2s;
-    }
-    textarea:focus, input[type="text"]:focus {
-      border-color: var(--accent);
-    }
-
-    .form-group { margin-bottom: 1.25rem; }
-
-    /* Drop zone */
-    .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: var(--radius);
-      padding: 2.5rem 1rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color .2s, background .2s;
-      position: relative;
-    }
-    .drop-zone:hover, .drop-zone.dragover {
-      border-color: var(--accent);
-      background: rgba(108, 99, 255, .06);
-    }
-    .drop-zone input[type="file"] {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-      width: 100%;
-      height: 100%;
-    }
-    .drop-zone .icon { font-size: 2.5rem; margin-bottom: .5rem; }
-    .drop-zone p { color: var(--muted); font-size: .9rem; }
-    .drop-zone .file-name {
-      margin-top: .5rem;
-      color: var(--accent);
-      font-size: .85rem;
-      font-weight: 600;
-    }
-
-    /* Preview */
-    #photo-preview {
-      display: none;
-      margin-top: 1rem;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-    #photo-preview img {
-      width: 100%;
-      max-height: 300px;
-      object-fit: contain;
-      background: #000;
-    }
-
-    /* Submit button */
-    .btn-submit {
-      width: 100%;
-      padding: .85rem;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .2s;
-      margin-top: .5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: .5rem;
-    }
-    .btn-submit:hover { background: var(--accent-hover); }
-    .btn-submit:disabled { opacity: .6; cursor: not-allowed; }
-
-    /* Spinner */
-    .spinner {
-      display: none;
-      width: 18px;
-      height: 18px;
-      border: 3px solid rgba(255,255,255,.3);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Result panel */
-    #result-panel {
-      display: none;
-      margin-top: 2rem;
-    }
-    #result-panel h2 {
-      font-size: 1.1rem;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: .5rem;
-    }
-    #result-panel h2 .badge {
-      padding: .2rem .6rem;
-      border-radius: 20px;
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-    }
-    .badge-success { background: rgba(76,175,80,.2); color: var(--success); }
-    .badge-error   { background: rgba(244,67,54,.2);  color: var(--error); }
-
-    #result-content {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1.25rem;
-      font-size: .9rem;
-      line-height: 1.7;
-      white-space: pre-wrap;
-      max-height: 520px;
-      overflow-y: auto;
-    }
+    *{box-sizing:border-box}body{margin:0;background:#070b14;color:#f8fafc;font-family:Inter,system-ui,sans-serif}main{width:min(94vw,980px);margin:auto;padding:32px 0 56px}header,section{background:#0f172a;border:1px solid #263244;border-radius:18px;padding:24px;margin-bottom:18px}h1,h2{margin-top:0}p{color:#cbd5e1;line-height:1.6}nav,.actions{display:flex;flex-wrap:wrap;gap:12px}a,button{border:0;border-radius:10px;padding:12px 16px;font-weight:700;text-decoration:none;cursor:pointer}a{background:#1e293b;color:#e2e8f0}button{background:#22c55e;color:#04130a}label{display:block;margin:14px 0 6px;font-weight:700}textarea,input{width:100%;padding:12px;border-radius:10px;border:1px solid #334155;background:#050914;color:#f8fafc}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:#111c31;border:1px solid #2b3a55;border-radius:14px;padding:16px}pre{white-space:pre-wrap;overflow:auto;background:#050914;border-radius:12px;padding:16px;min-height:120px}.muted{color:#94a3b8}
   </style>
 </head>
 <body>
+<main>
+  <header>
+    <p><strong>One identity across every page</strong></p>
+    <h1>Amosclaud Autonomous</h1>
+    <p>The same Autonomous reads repository instructions, preserves the chat brief, builds with owner permission, and returns evidence-backed Results.</p>
+    <nav><a href="/">Autonomous</a><a href="/repositories">Repository</a><a href="/bundles">Results</a></nav>
+  </header>
 
-<header>
-  <h1>🚀 Amoscloud AI</h1>
-  <p>Build projects from a photo or plain-text instructions</p>
-</header>
+  <section>
+    <h2>Create or build a repository</h2>
+    <div class="grid">
+      <div class="card"><strong>Instructions</strong><p>Describe the finished result. Autonomous will prepare and execute the authorized job.</p></div>
+      <div class="card"><strong>Image input</strong><p>Upload a screenshot or design and explain what the finished repository should do.</p></div>
+      <div class="card"><strong>Proof</strong><p>Results must include evidence, changed locations, verification, and usage instructions.</p></div>
+    </div>
+  </section>
 
-<div class="card">
-  <!-- Tab switcher -->
-  <div class="tabs" role="tablist">
-    <button class="tab-btn active" role="tab" data-tab="instructions" aria-selected="true">
-      📝 Instructions
-    </button>
-    <button class="tab-btn" role="tab" data-tab="photo" aria-selected="false">
-      🖼️ Photo Upload
-    </button>
-  </div>
-
-  <!-- ── INSTRUCTIONS panel ── -->
-  <div class="tab-panel active" id="panel-instructions">
+  <section>
     <form id="form-instructions">
-      <div class="form-group">
-        <label for="inst-text">What do you want to build?</label>
-        <textarea id="inst-text" name="instructions" rows="5"
-          placeholder="Describe the project, features, tech stack… e.g.
-'Build a REST API in FastAPI with JWT auth, a PostgreSQL database, and Docker deployment.'"
-          required></textarea>
-      </div>
-      <div class="form-group">
-        <label for="inst-ctx">Context (optional)</label>
-        <textarea id="inst-ctx" name="context" rows="2"
-          placeholder="Any extra context: target environment, constraints, existing codebase notes…"></textarea>
-      </div>
-      <button type="submit" class="btn-submit" id="btn-instructions">
-        <span class="spinner" id="spin-instructions"></span>
-        Generate Build Plan
-      </button>
+      <label for="inst-text">What should Amosclaud Autonomous build?</label>
+      <textarea id="inst-text" name="instructions" rows="5" required></textarea>
+      <label for="inst-ctx">Repository or environment context</label>
+      <textarea id="inst-ctx" name="context" rows="3"></textarea>
+      <div class="actions" style="margin-top:14px"><button type="submit" id="btn-instructions">Create job</button></div>
     </form>
-  </div>
+  </section>
 
-  <!-- ── PHOTO UPLOAD panel ── -->
-  <div class="tab-panel" id="panel-photo">
+  <section>
     <form id="form-photo" enctype="multipart/form-data">
-      <div class="form-group">
-        <label>Upload a screenshot, mockup, or design</label>
-        <div class="drop-zone" id="drop-zone">
-          <input type="file" name="photo" id="photo-input"
-            accept="image/png,image/jpeg,image/gif,image/webp" required />
-          <div class="icon">📁</div>
-          <p>Drag &amp; drop or click to select an image</p>
-          <p style="font-size:.75rem;margin-top:.25rem;">(PNG, JPEG, GIF, WebP — max 20 MB)</p>
-          <div class="file-name" id="file-name"></div>
-        </div>
-        <div id="photo-preview"><img id="preview-img" src="" alt="Preview" /></div>
-      </div>
-      <div class="form-group">
-        <label for="photo-inst">Additional instructions (optional)</label>
-        <textarea id="photo-inst" name="instructions" rows="2"
-          placeholder="Any extra notes about the uploaded image…"></textarea>
-      </div>
-      <button type="submit" class="btn-submit" id="btn-photo">
-        <span class="spinner" id="spin-photo"></span>
-        Analyze &amp; Generate Plan
-      </button>
+      <label for="photo-input">Screenshot, mockup, or design</label>
+      <input type="file" name="photo" id="photo-input" accept="image/png,image/jpeg,image/gif,image/webp" required>
+      <label for="photo-inst">Additional instructions</label>
+      <textarea id="photo-inst" name="instructions" rows="3"></textarea>
+      <div class="actions" style="margin-top:14px"><button type="submit" id="btn-photo">Create image-based job</button></div>
     </form>
-  </div>
+  </section>
 
-  <!-- ── Result ── -->
-  <div id="result-panel">
-    <h2>
-      Result
-      <span class="badge" id="result-badge"></span>
-    </h2>
-    <pre id="result-content"></pre>
-  </div>
-</div>
-
+  <section id="result-panel">
+    <h2>Results</h2>
+    <p class="muted">Evidence, work proof, final location, and instructions appear here.</p>
+    <pre id="result-content">No job has run yet.</pre>
+  </section>
+</main>
 <script>
-  // ----- Tab switching -----
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      btn.setAttribute('aria-selected', 'true');
-      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-      document.getElementById('result-panel').style.display = 'none';
-    });
-  });
-
-  // ----- Drag-and-drop + file preview -----
-  const dropZone  = document.getElementById('drop-zone');
-  const photoInput = document.getElementById('photo-input');
-  const fileName  = document.getElementById('file-name');
-  const previewEl = document.getElementById('photo-preview');
-  const previewImg = document.getElementById('preview-img');
-
-  ['dragenter','dragover'].forEach(e =>
-    dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('dragover'); })
-  );
-  ['dragleave','drop'].forEach(e =>
-    dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('dragover'); })
-  );
-  dropZone.addEventListener('drop', ev => {
-    const file = ev.dataTransfer.files[0];
-    if (file) setFile(file);
-  });
-  photoInput.addEventListener('change', () => {
-    if (photoInput.files[0]) setFile(photoInput.files[0]);
-  });
-
-  function setFile(file) {
-    // Sync to input element for form submission
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    photoInput.files = dt.files;
-
-    fileName.textContent = file.name;
-    const reader = new FileReader();
-    reader.onload = e => {
-      previewImg.src = e.target.result;
-      previewEl.style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-  }
-
-  // ----- Generic form submit handler -----
-  function handleSubmit(formId, endpoint, btnId, spinId) {
-    document.getElementById(formId).addEventListener('submit', async ev => {
-      ev.preventDefault();
-      const btn  = document.getElementById(btnId);
-      const spin = document.getElementById(spinId);
-      const panel = document.getElementById('result-panel');
-      const badge = document.getElementById('result-badge');
-      const content = document.getElementById('result-content');
-
-      btn.disabled = true;
-      spin.style.display = 'inline-block';
-      panel.style.display = 'none';
-
-      try {
-        const fd = new FormData(ev.target);
-        const res = await fetch(endpoint, { method: 'POST', body: fd });
-        const data = await res.json();
-
-        const ok = data.status === 'completed';
-        badge.textContent = ok ? '✅ success' : '❌ failed';
-        badge.className = 'badge ' + (ok ? 'badge-success' : 'badge-error');
-        content.textContent = ok
-          ? (data.generated_plan || data.summary)
-          : (data.error || data.summary);
-        panel.style.display = 'block';
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (err) {
-        badge.textContent = '❌ error';
-        badge.className = 'badge badge-error';
-        content.textContent = 'Network error: ' + err.message;
-        panel.style.display = 'block';
-      } finally {
-        btn.disabled = false;
-        spin.style.display = 'none';
-      }
+  function bind(formId, endpoint, buttonId){
+    document.getElementById(formId).addEventListener('submit',async(event)=>{
+      event.preventDefault();
+      const button=document.getElementById(buttonId);const output=document.getElementById('result-content');
+      button.disabled=true;output.textContent='Amosclaud Autonomous is creating the job…';
+      try{
+        const response=await fetch(endpoint,{method:'POST',body:new FormData(event.target)});
+        const data=await response.json();
+        output.textContent=JSON.stringify(data,null,2);
+      }catch(error){output.textContent='Job failed: '+(error.message||error)}finally{button.disabled=false}
     });
   }
-
-  handleSubmit('form-instructions', '/build/instructions', 'btn-instructions', 'spin-instructions');
-  handleSubmit('form-photo',        '/build/photo',         'btn-photo',         'spin-photo');
+  bind('form-instructions','/build/instructions','btn-instructions');
+  bind('form-photo','/build/photo','btn-photo');
 </script>
 </body>
 </html>

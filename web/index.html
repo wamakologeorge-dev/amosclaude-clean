@@ -3,125 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <meta name="application-name" content="Amosclaud" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Amosclaud" />
-  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0d1117" />
   <title>Amosclaud Autonomous</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/static/amosclaud-app-icon.svg" />
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/agent-visual.css" />
-  <link rel="stylesheet" href="/static/sidebar.css" />
-  <link rel="stylesheet" href="/static/notebook-dashboard.css" />
-  <link rel="stylesheet" href="/static/chat-scroll.css" />
-  <link rel="stylesheet" href="/static/autonomous-dashboard.css" />
   <link rel="stylesheet" href="/static/conversational-agent.css" />
+  <link rel="stylesheet" href="/static/autonomous-result-cards.css" />
+  <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
 </head>
-<body>
-  <div id="app">
-    <header id="topbar">
-      <div class="topbar-left"><h1>Amosclaud</h1><span class="version-badge">v1.0.1</span></div>
-      <div class="topbar-right">
-        <span id="status-indicator" class="status-dot status-unknown"></span><span id="status-label">Checking…</span>
-        <span id="refresh-timer" class="refresh-label">Refresh in <span id="countdown">10</span>s</span>
-        <a class="notebook-action" href="/repositories">Repositories</a>
-        <a class="notebook-action" href="/community">Community</a>
-        <a class="notebook-action" href="/mail">Mail</a>
-        <a class="notebook-action" href="/admin" data-admin-only hidden>Admin</a>
-        <span id="current-user" class="user-pill">Loading user…</span>
-        <button id="btn-logout" class="btn-ghost compact-button" type="button">Sign out</button>
-      </div>
-    </header>
-
-    <main class="autonomous-shell">
-      <section class="autonomous-page-head">
+<body class="single-autonomous-page">
+  <main class="single-autonomous-shell">
+    <section class="single-agent-card" aria-label="Amosclaud Autonomous">
+      <header class="single-agent-head">
         <div>
-          <h1>Amosclaud Autonomous</h1>
-          <p>Talk through your idea naturally. The same Autonomous can create, inspect, fix, test, deploy, monitor, and return verified results.</p>
+          <strong>Amosclaud Autonomous</strong>
+          <span id="agent-status">ready</span>
         </div>
-        <span class="runtime-state">Autonomous online</span>
-      </section>
+      </header>
 
-      <section class="autonomous-grid">
-        <article class="auto-card agent-workspace">
-          <div class="auto-card-header">
-            <div>
-              <h2 id="agent-name">Amosclaud Autonomous</h2>
-              <p id="agent-mission">One Autonomous that understands, plans, creates, fixes, tests, deploys, verifies, and reports real results.</p>
-            </div>
-            <span id="agent-status" class="badge badge-success">ready</span>
-          </div>
-          <section class="agent-section">
-            <div class="agent-layout-visual">
-              <div class="agent-controls-stack">
-                <div id="agent-replies" class="agent-replies" aria-live="polite">
-                  <div class="agent-reply muted">Welcome. I’m Amosclaud Autonomous. What would you like me to create, fix, test, or deploy today?</div>
-                </div>
-                <div class="agent-compose">
-                  <input id="agent-mode-input" type="hidden" value="autonomous-check" />
-                  <div class="agent-suggestions" aria-label="Suggested requests">
-                    <button type="button" data-agent-suggestion="I want to create something new.">Create</button>
-                    <button type="button" data-agent-suggestion="I need help fixing a problem.">Fix</button>
-                    <button type="button" data-agent-suggestion="I want to deploy a finished project.">Deploy</button>
-                    <button type="button" data-agent-suggestion="I want you to monitor a project.">Monitor</button>
-                  </div>
-                  <textarea id="agent-objective-input" rows="3" placeholder="Message Amosclaud Autonomous…"></textarea>
-                  <button id="btn-run-agent" class="btn-primary">Send</button>
-                </div>
-              </div>
-              <article class="ai-worker-stage"><div id="ai-worker-canvas"></div></article>
-            </div>
-          </section>
-        </article>
+      <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
+        <div class="agent-reply muted">Welcome, George. Ask anything.</div>
+      </div>
 
-        <aside class="auto-sidebar">
-          <section class="auto-card auto-summary">
-            <h3>How Amosclaud works</h3>
-            <div class="auto-summary-list">
-              <div class="auto-summary-item"><span>1</span><strong>Listen and understand</strong></div>
-              <div class="auto-summary-item"><span>2</span><strong>Ask one useful question</strong></div>
-              <div class="auto-summary-item"><span>3</span><strong>Remember the agreed brief</strong></div>
-              <div class="auto-summary-item"><span>4</span><strong>Act after confirmation</strong></div>
-              <div class="auto-summary-item"><span>5</span><strong>Create, fix, deploy, and verify</strong></div>
-              <div class="auto-summary-item"><span>6</span><strong>Report exact results and evidence</strong></div>
-            </div>
-          </section>
-          <section class="auto-card auto-summary" id="amomodel-controls">
-            <h3>AmoModel</h3>
-            <p id="amomodel-status" class="studio-summary" aria-live="polite">Checking folder-native runtime…</p>
-            <div class="quick-actions">
-              <button id="btn-amomodel-on" class="studio-tool" type="button"><strong>Turn on AmoModel</strong><span>Start the governed service graph</span></button>
-              <button id="btn-amomodel-off" class="studio-tool" type="button"><strong>Turn off AmoModel</strong><span>Stop services and persist state</span></button>
-            </div>
-          </section>
-          <section class="auto-card auto-summary">
-            <h3>Quick actions</h3>
-            <div class="quick-actions">
-              <a class="studio-tool" href="/repositories"><strong>Repositories</strong><span>Inspect real source and branches</span></a>
-              <a class="studio-tool" href="/bundles"><strong>Results</strong><span>Open generated files, packages, and verified outputs</span></a>
-              <button id="btn-check-agent-connections" class="studio-tool" type="button"><strong>Runtime health</strong><span>Check Autonomous and server</span></button>
-            </div>
-            <div id="agent-connection-status" class="studio-summary" aria-live="polite"></div>
-          </section>
-        </aside>
-      </section>
+      <div class="single-composer">
+        <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+        <input id="agent-mode-input" type="hidden" value="autonomous-check" />
+      </div>
+    </section>
+  </main>
 
-      <p class="autonomous-note">Amosclaud Autonomous can create files and projects, inspect and fix repositories, run tests, execute jobs, deploy approved work, monitor systems, and return the real result with exact evidence.</p>
-    </main>
-  </div>
+  <nav class="single-dock" aria-label="Amosclaud dock">
+    <a class="active" href="/" aria-label="Autonomous">Auto</a>
+    <a href="/repositories" aria-label="Repositories">Repository</a>
+    <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+    <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
+    <a href="/" aria-label="Home">Home</a>
+  </nav>
 
   <div id="toast-container" aria-live="assertive"></div>
-
   <script src="/static/app.js"></script>
   <script src="/static/account.js"></script>
+  <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
-  <script src="/static/autonomous-services.js"></script>
-  <script src="/static/amomodel-controls.js"></script>
-  <script src="/static/sidebar.js"></script>
+  <script src="/static/single-autonomous-dock.js"></script>
   <script src="/static/app-install.js"></script>
 </body>
 </html>

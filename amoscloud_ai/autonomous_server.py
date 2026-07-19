@@ -50,7 +50,6 @@ def repo_root() -> Path:
 
 def _conversation_gate(mode: str, objective: str, metadata: dict[str, Any]) -> tuple[CheckResult, dict[str, object]]:
     """Require clear, non-contradictory authorization before consequential work."""
-
     original_follow_up = str(metadata.get("original_follow_up") or "").strip()
     analysis_message = original_follow_up or objective
     previous_objective = str(metadata.get("previous_objective") or "").strip() or None
@@ -217,15 +216,24 @@ def _conflict_marker_check(root: Path) -> CheckResult:
     markers: list[str] = []
     for path in _iter_text_files(root):
         try:
-            for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-                if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
-                    markers.append(f"{path.relative_to(root)}:{number}: {line[:80]}")
-                    break
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
         except OSError:
             continue
+
+        starts = [(number, line) for number, line in enumerate(lines, 1) if line.startswith("<<<<<<<")]
+        separators = [(number, line) for number, line in enumerate(lines, 1) if line == "======="]
+        ends = [(number, line) for number, line in enumerate(lines, 1) if line.startswith(">>>>>>>")]
+
+        # A real unresolved merge conflict contains the complete start/separator/end
+        # sequence. Setext Markdown headings and decorative equals lines must not
+        # block the runtime by themselves.
+        if starts and separators and ends:
+            first_number, first_line = starts[0]
+            markers.append(f"{path.relative_to(root)}:{first_number}: {first_line[:80]}")
+
     if markers:
-        return CheckResult("conflict-markers", "failed", f"{len(markers)} file(s) contain conflict markers.", markers)
-    return CheckResult("conflict-markers", "passed", "No conflict markers found.")
+        return CheckResult("conflict-markers", "failed", f"{len(markers)} file(s) contain unresolved merge conflict blocks.", markers)
+    return CheckResult("conflict-markers", "passed", "No unresolved merge conflict blocks found.")
 
 
 def _python_compile_check(root: Path) -> CheckResult:

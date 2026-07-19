@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -376,10 +377,10 @@ async def verify_domain(project_id: str) -> dict[str, Any]:
             b"".join(answer.strings).decode()
             for answer in answers
         }
-    except Exception as exc:
+    except Exception:
         return {
             "verified": False,
-            "message": f"DNS verification is not ready: {exc}",
+            "message": "DNS verification is not ready. Please try again later.",
         }
 
     verified = row["domain_token"] in values
@@ -416,6 +417,15 @@ def load_environment(project_id: str) -> dict[str, str]:
     return result
 
 
+def resolve_within(base: Path, *parts: str) -> Path:
+    candidate = (base.joinpath(*parts)).resolve()
+    try:
+        candidate.relative_to(base.resolve())
+    except ValueError as exc:
+        raise HTTPException(400, "Path escapes allowed directory") from exc
+    return candidate
+
+
 @app.post("/api/projects/{project_id}/runs", status_code=202)
 async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
     """
@@ -425,12 +435,20 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
     Dramatiq, or a server-station runner instead of executing inside the API
     process.
     """
+    try:
+        uuid.UUID(project_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid project id") from exc
+
     with connect() as db:
         project = db.execute(
             "SELECT * FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
     if not project:
         raise HTTPException(404, "Project not found")
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", project_id):
+        raise HTTPException(400, "Invalid project id")
 
     run_id = str(uuid.uuid4())
     run_dir = ARTIFACTS_DIR / run_id
@@ -448,10 +466,8 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
             (run_id, project_id, payload.objective, started_at, str(log_path)),
         )
 
-    workspace = (PROJECTS_DIR / project_id / project["root_path"]).resolve()
-    project_root = (PROJECTS_DIR / project_id).resolve()
-    if project_root not in workspace.parents and workspace != project_root:
-        raise HTTPException(400, "Root path escapes the project workspace")
+    project_root = resolve_within(PROJECTS_DIR, project_id)
+    workspace = resolve_within(project_root, project["root_path"])
     workspace.mkdir(parents=True, exist_ok=True)
 
     commands = [
@@ -489,12 +505,14 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
 
     output_path = project["output_path"].strip()
     if output_path:
-        output = (workspace / output_path).resolve()
-        if workspace not in output.parents and output != workspace:
+        try:
+            output = resolve_within(workspace, output_path)
+        except HTTPException:
             status = "failed"
             with log_path.open("a", encoding="utf-8") as log:
                 log.write("\nOutput path escapes workspace.\n")
-        elif output.exists():
+            output = None
+        if output is not None and output.exists():
             manifest = run_dir / "artifact-manifest.json"
             manifest.write_text(
                 json.dumps(
@@ -527,6 +545,11 @@ async def start_run(project_id: str, payload: RunInput) -> dict[str, Any]:
 
 @app.get("/api/runs/{run_id}")
 async def get_run(run_id: str) -> dict[str, Any]:
+    try:
+        uuid.UUID(run_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid run id")
+
     with connect() as db:
         run = db.execute(
             "SELECT * FROM runs WHERE id = ?", (run_id,)
@@ -542,7 +565,10 @@ async def get_run(run_id: str) -> dict[str, Any]:
         else ""
     )
     result["log_url"] = f"/artifacts/{run_id}/run.log"
-    manifest = ARTIFACTS_DIR / run_id / "artifact-manifest.json"
+    artifacts_root = ARTIFACTS_DIR.resolve()
+    manifest = (ARTIFACTS_DIR / run_id / "artifact-manifest.json").resolve()
+    if artifacts_root not in manifest.parents:
+        raise HTTPException(400, "Invalid run id")
     result["artifact_manifest_url"] = (
         f"/artifacts/{run_id}/artifact-manifest.json"
         if manifest.exists()
