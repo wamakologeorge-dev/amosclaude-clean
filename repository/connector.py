@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -30,12 +31,11 @@ class RepositoryRecord:
 
 
 class RepositoryConnector:
-    """Resolve database repositories into confined native Git storage paths.
+    """Resolve every Amosclaud repository through one database/storage contract.
 
-    All platform components should use this connector instead of constructing
-    repository paths independently. The shared SQLAlchemy database is the source
-    of truth; filesystem directories never create repository identity by
-    themselves.
+    The shared SQLAlchemy database is authoritative for Agent jobs, CI and pull
+    requests. Existing repositories from the original native SQLite API are
+    mirrored lazily so they remain available while the platform migrates.
     """
 
     def __init__(self, root: str | Path | None = None) -> None:
@@ -61,32 +61,102 @@ class RepositoryConnector:
             raise RepositoryConnectorError("repository path escapes storage root") from exc
         return candidate
 
+    def _mirror_legacy(self, owner: str, name: str) -> None:
+        """Mirror an original auth-database repository into the shared database."""
+        from amoscloud_ai.api.routes.auth import DB_PATH
+
+        if not DB_PATH.exists():
+            return
+        db = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        try:
+            tables = {
+                row[0]
+                for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            if not {"users", "repositories"}.issubset(tables):
+                return
+            row = db.execute(
+                """SELECT r.id,r.name,r.description,r.visibility,r.default_branch,
+                          u.name AS owner_name,u.email AS owner_email
+                     FROM repositories r JOIN users u ON u.id=r.owner_id
+                    WHERE lower(u.name)=lower(?) AND lower(r.name)=lower(?)""",
+                (owner, name),
+            ).fetchone()
+            if row is None:
+                return
+            legacy_root = Path(os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")).resolve()
+            legacy_path = (legacy_root / str(row["id"])).resolve(strict=False)
+            try:
+                legacy_path.relative_to(legacy_root)
+            except ValueError as exc:
+                raise RepositoryConnectorError("legacy repository path escapes storage root") from exc
+            with session_scope() as session:
+                profile = session.scalar(select(UserProfile).where(UserProfile.email == row["owner_email"]))
+                if profile is None:
+                    username = self._safe_segment(str(row["owner_name"]), "repository owner")
+                    existing = session.scalar(select(UserProfile).where(UserProfile.username == username))
+                    if existing is not None:
+                        username = f"{username}-{row['id']}"
+                    profile = UserProfile(username=username, email=str(row["owner_email"]))
+                    session.add(profile)
+                    session.flush()
+                repository = session.scalar(
+                    select(Repository).where(
+                        Repository.owner_id == profile.id,
+                        Repository.name == str(row["name"]),
+                    )
+                )
+                if repository is None:
+                    repository = Repository(
+                        owner_id=profile.id,
+                        name=str(row["name"]),
+                        description=str(row["description"] or ""),
+                        is_private=str(row["visibility"]) != "public",
+                        default_branch=str(row["default_branch"] or "main"),
+                        storage_path=str(legacy_path),
+                    )
+                    session.add(repository)
+        finally:
+            db.close()
+
     def resolve(self, owner: str, name: str) -> RepositoryRecord:
         safe_owner = self._safe_segment(owner, "repository owner")
         safe_name = self._safe_segment(name.removesuffix(".git"), "repository name")
+
+        def lookup() -> Repository | None:
+            with session_scope() as session:
+                return session.scalar(
+                    select(Repository)
+                    .join(UserProfile, Repository.owner_id == UserProfile.id)
+                    .where(UserProfile.username == safe_owner, Repository.name == safe_name)
+                )
+
+        row = lookup()
+        if row is None:
+            self._mirror_legacy(safe_owner, safe_name)
+            row = lookup()
+        if row is None:
+            raise RepositoryConnectorError("repository not found")
+
         with session_scope() as session:
-            row = session.scalar(
-                select(Repository)
-                .join(UserProfile, Repository.owner_id == UserProfile.id)
-                .where(UserProfile.username == safe_owner, Repository.name == safe_name)
-            )
-            if row is None:
+            current = session.get(Repository, int(row.id))
+            if current is None:
                 raise RepositoryConnectorError("repository not found")
             canonical = self.storage_path(safe_owner, safe_name)
-            configured = Path(row.storage_path).expanduser().resolve() if row.storage_path else canonical
-            try:
-                configured.relative_to(self.root)
-            except ValueError as exc:
-                raise RepositoryConnectorError("database storage path escapes repository root") from exc
-            if row.storage_path != str(configured):
-                row.storage_path = str(configured)
+            configured = Path(current.storage_path).expanduser().resolve() if current.storage_path else canonical
+            allowed_roots = {self.root, Path(os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")).resolve()}
+            if not any(_is_within(configured, allowed) for allowed in allowed_roots):
+                raise RepositoryConnectorError("database storage path escapes repository roots")
+            if current.storage_path != str(configured):
+                current.storage_path = str(configured)
             return RepositoryRecord(
-                id=int(row.id),
-                owner=safe_owner,
-                owner_email=str(row.owner.email),
-                name=safe_name,
-                default_branch=str(row.default_branch or "main"),
-                is_private=bool(row.is_private),
+                id=int(current.id),
+                owner=str(current.owner.username),
+                owner_email=str(current.owner.email),
+                name=str(current.name),
+                default_branch=str(current.default_branch or "main"),
+                is_private=bool(current.is_private),
                 storage_path=configured,
             )
 
@@ -100,8 +170,8 @@ class RepositoryConnector:
         record = self.resolve(owner, name)
         record.storage_path.parent.mkdir(parents=True, exist_ok=True)
         if record.storage_path.exists():
-            if not (record.storage_path / "HEAD").exists():
-                raise RepositoryConnectorError("repository storage exists but is not a bare Git repository")
+            if not _is_git_repository(record.storage_path):
+                raise RepositoryConnectorError("repository storage exists but is not a Git repository")
             return record
         subprocess.run(
             ["git", "init", "--bare", f"--initial-branch={record.default_branch}", str(record.storage_path)],
@@ -114,7 +184,7 @@ class RepositoryConnector:
 
     def require_existing(self, owner: str, name: str) -> RepositoryRecord:
         record = self.resolve(owner, name)
-        if not record.storage_path.is_dir() or not (record.storage_path / "HEAD").exists():
+        if not record.storage_path.is_dir() or not _is_git_repository(record.storage_path):
             raise RepositoryConnectorError("repository storage is not initialized")
         return record
 
@@ -150,3 +220,15 @@ class RepositoryConnector:
     @staticmethod
     def remove_workspace(path: str | Path) -> None:
         shutil.rmtree(Path(path), ignore_errors=True)
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_git_repository(path: Path) -> bool:
+    return (path / "HEAD").exists() or (path / ".git" / "HEAD").exists()
