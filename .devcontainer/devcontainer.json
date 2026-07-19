@@ -1,0 +1,50 @@
+{
+  "name": "Amosclaud Workspace",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/amosclaude-clean",
+  "forwardPorts": [8000, 5432, 6379],
+  "portsAttributes": {
+    "8000": {
+      "label": "Amosclaud Web",
+      "onAutoForward": "openPreview"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
+    }
+  },
+  "containerEnv": {
+    "ENVIRONMENT": "development",
+    "AUTH_COOKIE_SECURE": "false",
+    "DATABASE_URL": "sqlite:///./data/amoscloud.db",
+    "REDIS_URL": "redis://localhost:6379/0"
+  },
+  "postCreateCommand": "bash scripts/bootstrap-workspace.sh",
+  "postStartCommand": "mkdir -p data repositories",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"],
+        "editor.formatOnSave": true
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

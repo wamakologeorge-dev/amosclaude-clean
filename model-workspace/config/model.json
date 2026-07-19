@@ -1,0 +1,7 @@
+{
+  "name": "amosclaud-folder-v1",
+  "order": 4,
+  "max_tokens": 512,
+  "temperature": 0.35,
+  "seed": 7
+}

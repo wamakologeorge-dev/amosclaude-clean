@@ -2,152 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🚀 Amoscloud AI Platform</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <title>Amosclaud Autonomous</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/conversational-agent.css" />
+  <link rel="stylesheet" href="/static/autonomous-result-cards.css" />
+  <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
 </head>
-<body>
-  <div id="app">
+<body class="single-autonomous-page">
+  <main class="single-autonomous-shell">
+    <section class="single-agent-card" aria-label="Amosclaud Autonomous">
+      <header class="single-agent-head">
+        <div>
+          <strong>Amosclaud Autonomous</strong>
+          <span id="agent-status">ready</span>
+        </div>
+      </header>
 
-    <!-- ══ Header ══ -->
-    <header id="topbar">
-      <div class="topbar-left">
-        <h1>🚀 Amoscloud AI Platform</h1>
-        <span class="version-badge">v1.0.0</span>
+      <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
+        <div class="agent-reply muted">Welcome, George. Ask anything.</div>
       </div>
-      <div class="topbar-right">
-        <span id="status-indicator" class="status-dot status-unknown" title="Server status"></span>
-        <span id="status-label">Checking…</span>
-        <span id="refresh-timer" class="refresh-label">Auto-refresh in <span id="countdown">10</span>s</span>
+
+      <div class="single-composer">
+        <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+        <input id="agent-mode-input" type="hidden" value="autonomous-check" />
       </div>
-    </header>
+    </section>
+  </main>
 
-    <!-- ══ Main ══ -->
-    <main id="content">
+  <nav class="single-dock" aria-label="Amosclaud dock">
+    <a class="active" href="/" aria-label="Autonomous">Auto</a>
+    <a href="/repositories" aria-label="Repositories">Repository</a>
+    <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+    <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
+    <a href="/" aria-label="Home">Home</a>
+  </nav>
 
-      <!-- Stats row -->
-      <section class="stats-row">
-        <div class="stat-card">
-          <div class="stat-icon">🔁</div>
-          <div class="stat-body">
-            <span class="stat-value" id="stat-pipelines">—</span>
-            <span class="stat-label">Total Pipelines</span>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">🚀</div>
-          <div class="stat-body">
-            <span class="stat-value" id="stat-deployments">—</span>
-            <span class="stat-label">Active Deployments</span>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon" id="health-icon">💚</div>
-          <div class="stat-body">
-            <span class="stat-value" id="stat-health">—</span>
-            <span class="stat-label">Health Status</span>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">⏱️</div>
-          <div class="stat-body">
-            <span class="stat-value" id="stat-uptime">—</span>
-            <span class="stat-label">Server Uptime</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Quick actions -->
-      <section class="actions-row">
-        <button id="btn-trigger-pipeline" class="btn-primary">+ Trigger Pipeline</button>
-        <button id="btn-start-deployment" class="btn-accent">🚀 Start Deployment</button>
-      </section>
-
-      <!-- Pipelines table -->
-      <section class="table-section">
-        <h2>CI/CD Pipelines</h2>
-        <div class="table-wrap">
-          <table id="pipelines-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Branch</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody id="pipelines-body">
-              <tr><td colspan="5" class="empty-row">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Deployments table -->
-      <section class="table-section">
-        <h2>Deployments</h2>
-        <div class="table-wrap">
-          <table id="deployments-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Environment</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody id="deployments-body">
-              <tr><td colspan="5" class="empty-row">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- Modal backdrop -->
-  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
-
-  <!-- Trigger Pipeline Modal -->
-  <div id="modal-pipeline" class="modal hidden" role="dialog" aria-labelledby="modal-pipeline-title">
-    <h3 id="modal-pipeline-title">Trigger Pipeline</h3>
-    <label>Pipeline name
-      <input id="pipeline-name-input" type="text" placeholder="e.g. build-and-test" />
-    </label>
-    <label>Branch
-      <input id="pipeline-branch-input" type="text" placeholder="main" value="main" />
-    </label>
-    <div class="modal-actions">
-      <button id="btn-cancel-pipeline" class="btn-ghost">Cancel</button>
-      <button id="btn-confirm-pipeline" class="btn-primary">Trigger</button>
-    </div>
-  </div>
-
-  <!-- Start Deployment Modal -->
-  <div id="modal-deployment" class="modal hidden" role="dialog" aria-labelledby="modal-deployment-title">
-    <h3 id="modal-deployment-title">Start Deployment</h3>
-    <label>Deployment name
-      <input id="deployment-name-input" type="text" placeholder="e.g. deploy-v2" />
-    </label>
-    <label>Environment
-      <select id="deployment-env-input">
-        <option value="production">production</option>
-        <option value="staging">staging</option>
-        <option value="development">development</option>
-      </select>
-    </label>
-    <div class="modal-actions">
-      <button id="btn-cancel-deployment" class="btn-ghost">Cancel</button>
-      <button id="btn-confirm-deployment" class="btn-accent">Deploy</button>
-    </div>
-  </div>
-
-  <!-- Toast notifications -->
   <div id="toast-container" aria-live="assertive"></div>
-
-  <script src="app.js"></script>
+  <script src="/static/app.js"></script>
+  <script src="/static/account.js"></script>
+  <script src="/static/autonomous-result-cards.js"></script>
+  <script src="/static/conversational-agent.js"></script>
+  <script src="/static/single-autonomous-dock.js"></script>
+  <script src="/static/app-install.js"></script>
 </body>
 </html>

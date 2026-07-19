@@ -1,76 +1,119 @@
-# 🚀 Amoscloud AI Platform
+# Amosclaud Workflow Results Dashboard
 
-![Amoscloud AI Status](https://img.shields.io/badge/Amoscloud--AI-%F0%9F%9F%A2_Live_%26_Active-brightgreen)
+This dashboard is the real results area for Amosclaud Autonomous jobs.
 
-Self-hosted CI/CD & Deployment Automation Platform. Runs entirely from GitHub — no external cloud needed.
+It gives users a Railway-style place to:
 
-## Quick Start
+- create projects;
+- configure repository URL and workspace root path;
+- change build, start, test, or verification commands;
+- define the output path that should become an artifact;
+- add environment variables and encrypted secrets;
+- run a workflow and inspect real process logs and exit codes;
+- open generated artifact manifests;
+- configure and verify custom domains with a DNS TXT record.
 
-### Option 1: Run with Docker (Full Platform)
-
-```bash
-git clone https://github.com/wamakologeorge-dev/amosclaude-clean
-cd amosclaude-clean
-docker-compose up --build
-```
-
-- Dashboard: http://localhost — served by nginx on port 80
-- API Docs: http://localhost:8000/docs
-
-### Option 2: Run directly with Python
+## Run it
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-python -m amoscloud_ai.main
+uvicorn app:app --reload --port 8100
 ```
 
-- Dashboard: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+Open:
 
-## What You Can Do
-
-- 🔁 Manage CI/CD pipelines
-- 🚀 Trigger and rollback deployments
-- 💚 Monitor server health in real-time
-- 📊 View live dashboard at `/`
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Web dashboard |
-| `GET` | `/health` | Server health check |
-| `GET` | `/api/v1/pipelines` | List all pipelines |
-| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
-| `GET` | `/api/v1/deployments` | List all deployments |
-| `POST` | `/api/v1/deployments` | Start a deployment |
-| `GET` | `/docs` | Interactive API docs (Swagger UI) |
-
-## Project Structure
-
-```
-amosclaude-clean/
-├── amoscloud_ai/          # Main FastAPI application package
-│   ├── api/routes/        # health, pipelines, deployments routes
-│   ├── main.py            # App entry point — serves API + web dashboard
-│   ├── config.py          # Settings (pydantic-settings)
-│   └── models.py          # Pydantic models
-├── web/                   # Frontend dashboard (served at /)
-│   ├── index.html         # Dashboard UI
-│   ├── style.css          # Dark theme CSS
-│   └── app.js             # API fetch + auto-refresh
-├── tests/                 # pytest test suite
-├── Dockerfile             # Multi-stage build
-├── docker-compose.yml     # Full stack: API + Redis + nginx
-└── nginx.conf             # Reverse proxy config
+```text
+http://localhost:8100
 ```
 
-## Environment Variables
+Windows PowerShell:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection (optional) |
-| `SECRET_KEY` | `change-me-in-production` | App secret key — **must be changed in production**. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"` |
-| `ENVIRONMENT` | `development` | `development` or `production` |
-| `LOG_LEVEL` | `INFO` | Logging level |
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8100
+```
+
+## Storage
+
+By default, the dashboard creates:
+
+```text
+data/
+├── dashboard.db
+├── .dashboard.key
+├── projects/
+└── artifacts/
+```
+
+Set `AMOSCLAUD_DASHBOARD_DATA=/data/workflow-dashboard` in production.
+
+For a stable encryption key, generate one:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Then set:
+
+```env
+AMOSCLAUD_DASHBOARD_KEY=the-generated-key
+```
+
+Never rotate this key without re-encrypting existing secrets.
+
+## Connect Amosclaud Autonomous
+
+After the agent creates or selects a project:
+
+1. Update project settings with `PATCH /api/projects/{project_id}`.
+2. Save variables using `PUT /api/projects/{project_id}/variables/{name}`.
+3. Start the approved job using `POST /api/projects/{project_id}/runs`.
+4. Store the returned run ID in the conversation.
+5. Link the user to `/?project={project_id}` or add project selection in the existing Amosclaud UI.
+6. Display logs from `GET /api/runs/{run_id}`.
+
+A production executor should replace the synchronous `subprocess.run` block with the existing Amosclaud Task Router or Server Station. The API must enqueue the job, return immediately, and stream or poll run state.
+
+## Security work required before public deployment
+
+This starter is functional, but the following controls are mandatory for a public multi-user service:
+
+- require Amosclaud authentication on every endpoint;
+- add `owner_user_id` to projects, variables, runs, and artifacts;
+- check project ownership on every read and write;
+- execute builds in isolated containers or Server Stations;
+- replace `shell=True` with a controlled execution policy;
+- apply command allowlists, CPU limits, memory limits, and timeouts;
+- clone repositories using short-lived credentials;
+- never return secret values to the browser;
+- log secret access without logging secret contents;
+- use HTTPS and secure cookies;
+- scan generated artifacts before publishing;
+- use a reverse proxy for live previews;
+- require successful DNS verification before attaching a domain.
+
+## Production preview architecture
+
+```text
+Amosclaud conversation
+        │
+        ▼
+Task Router / job queue
+        │
+        ▼
+Isolated builder or Server Station
+        │
+        ├── logs ───────────────► dashboard
+        ├── screenshots ────────► artifact storage
+        ├── website build ──────► preview service
+        └── verification report ► dashboard
+                                      │
+                                      ▼
+                           custom domain router
+```
+
+Generated websites should not run inside the main Amosclaud API process. Publish them to a dedicated preview service and return a `preview_url` for the dashboard’s **Open website** button.

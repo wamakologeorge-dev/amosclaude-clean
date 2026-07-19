@@ -1,36 +1,48 @@
 /**
- * Amoscloud AI Platform — Dashboard JS
- * Fetches /health, /api/v1/pipelines, /api/v1/deployments
- * Auto-refreshes every 10 seconds
+ * Amoscloud AI Platform — shared dashboard JavaScript.
+ *
+ * This file is loaded by more than one page. Every DOM element outside the
+ * shared top bar is therefore optional and must be checked before use.
  */
 
-/* ── Helpers ─────────────────────────────────────────────────── */
 const API = window.location.origin;
 
 function $(id) { return document.getElementById(id); }
 
+function setText(id, value) {
+  const element = $(id);
+  if (element) element.textContent = value;
+}
+
+function bind(id, eventName, handler) {
+  const element = $(id);
+  if (element) element.addEventListener(eventName, handler);
+  return element;
+}
+
 function showToast(msg, type = 'info') {
   const container = $('toast-container');
-  const t = document.createElement('div');
-  t.className = `toast toast--${type}`;
-  t.textContent = msg;
-  container.appendChild(t);
-  setTimeout(() => t.remove(), 3500);
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3500);
 }
 
 function statusBadge(status) {
   if (!status) return '<span class="badge badge-default">unknown</span>';
-  const s = String(status).toLowerCase();
-  let cls = 'badge-default';
-  if (['success', 'completed', 'healthy', 'ok'].includes(s)) cls = 'badge-success';
-  else if (['running', 'active', 'in_progress'].includes(s))  cls = 'badge-running';
-  else if (['pending', 'queued', 'waiting'].includes(s))      cls = 'badge-pending';
-  else if (['failed', 'error', 'cancelled'].includes(s))      cls = 'badge-failed';
-  return `<span class="badge ${cls}">${escapeHtml(status)}</span>`;
+  const value = String(status).toLowerCase();
+  let className = 'badge-default';
+  if (['success', 'completed', 'healthy', 'ok'].includes(value)) className = 'badge-success';
+  else if (['running', 'active', 'in_progress'].includes(value)) className = 'badge-running';
+  else if (['pending', 'queued', 'waiting'].includes(value)) className = 'badge-pending';
+  else if (['failed', 'error', 'cancelled'].includes(value)) className = 'badge-failed';
+  return `<span class="badge ${className}">${escapeHtml(status)}</span>`;
 }
 
-function escapeHtml(str) {
-  return String(str)
+function escapeHtml(value) {
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -39,206 +51,259 @@ function escapeHtml(str) {
 
 function fmtDate(iso) {
   if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch { return iso; }
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
 }
 
-/* ── Health check ────────────────────────────────────────────── */
-async function fetchHealth() {
-  const dot   = $('status-indicator');
-  const label = $('status-label');
-  const icon  = $('health-icon');
-  const stat  = $('stat-health');
+function addAgentReport(message, muted = false) {
+  const replies = $('agent-replies');
+  if (!replies) return;
+  const item = document.createElement('div');
+  item.className = muted ? 'agent-reply muted' : 'agent-reply';
+  item.textContent = message;
+  if (replies.querySelector('.muted')) replies.innerHTML = '';
+  replies.prepend(item);
+}
 
+async function fetchAgent() {
+  const status = $('agent-status');
+  if (!status) return;
   try {
-    const res  = await fetch(`${API}/health`);
-    const data = await res.json();
+    const response = await fetch(`${API}/api/v1/agent`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
 
-    dot.className   = 'status-dot status-ok';
-    label.textContent = 'Server alive';
-    icon.textContent  = '💚';
-    stat.textContent  = data.status || 'ok';
-
-    // Uptime (not always exposed, graceful fallback)
-    if (data.uptime !== undefined) {
-      $('stat-uptime').textContent = `${Math.floor(data.uptime)}s`;
-    } else {
-      $('stat-uptime').textContent = 'running';
-    }
-  } catch {
-    dot.className   = 'status-dot status-error';
-    label.textContent = 'Server unreachable';
-    icon.textContent  = '🔴';
-    stat.textContent  = 'error';
-    $('stat-uptime').textContent = '—';
+    setText('agent-name', data.name || 'Amosclaud Autonomous Server');
+    setText('agent-mission', data.mission || 'Ready to run autonomous Amosclaud operations.');
+    status.className = 'badge badge-success';
+    status.textContent = data.mode || 'ready';
+  } catch (error) {
+    status.className = 'badge badge-failed';
+    status.textContent = 'offline';
+    console.error('[Agent profile]', error);
   }
 }
 
-/* ── Pipelines ───────────────────────────────────────────────── */
+async function fetchHealth() {
+  const dot = $('status-indicator');
+  const label = $('status-label');
+  if (!dot && !label) return;
+
+  try {
+    const response = await fetch(`${API}/health`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    if (dot) dot.className = 'status-dot status-ok';
+    if (label) label.textContent = 'Server alive';
+    setText('health-icon', '💚');
+    setText('stat-health', data.status || 'ok');
+    setText('stat-uptime', data.uptime !== undefined ? `${Math.floor(data.uptime)}s` : 'running');
+  } catch (error) {
+    if (dot) dot.className = 'status-dot status-error';
+    if (label) label.textContent = 'Server unreachable';
+    setText('health-icon', '🔴');
+    setText('stat-health', 'error');
+    setText('stat-uptime', '—');
+    console.error('[Health]', error);
+  }
+}
+
 async function fetchPipelines() {
   const tbody = $('pipelines-body');
+  if (!tbody) return;
   try {
-    const res  = await fetch(`${API}/api/v1/pipelines`);
-    const data = await res.json();
+    const response = await fetch(`${API}/api/v1/pipelines`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
     const rows = Array.isArray(data) ? data : (data.pipelines || data.items || []);
-
-    $('stat-pipelines').textContent = rows.length;
+    setText('stat-pipelines', rows.length);
 
     if (rows.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No pipelines yet.</td></tr>';
       return;
     }
-
-    tbody.innerHTML = rows.map(p => `
+    tbody.innerHTML = rows.map(pipeline => `
       <tr>
-        <td>${escapeHtml(p.id || p.pipeline_id || '—')}</td>
-        <td>${escapeHtml(p.name || '—')}</td>
-        <td>${statusBadge(p.status)}</td>
-        <td>${escapeHtml(p.branch || p.ref || '—')}</td>
-        <td>${fmtDate(p.created_at || p.createdAt)}</td>
+        <td>${escapeHtml(pipeline.id || pipeline.pipeline_id || '—')}</td>
+        <td>${escapeHtml(pipeline.name || pipeline.trigger || 'Pipeline')}</td>
+        <td>${statusBadge(pipeline.status)}</td>
+        <td>${escapeHtml(pipeline.branch || pipeline.ref || '—')}</td>
+        <td>${fmtDate(pipeline.started_at || pipeline.created_at || pipeline.createdAt)}</td>
       </tr>`).join('');
-  } catch (err) {
+  } catch (error) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load pipelines.</td></tr>';
-    console.error('[Pipelines]', err);
+    console.error('[Pipelines]', error);
   }
 }
 
-/* ── Deployments ─────────────────────────────────────────────── */
 async function fetchDeployments() {
   const tbody = $('deployments-body');
+  if (!tbody) return;
   try {
-    const res  = await fetch(`${API}/api/v1/deployments`);
-    const data = await res.json();
+    const response = await fetch(`${API}/api/v1/deployments`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
     const rows = Array.isArray(data) ? data : (data.deployments || data.items || []);
-
-    const active = rows.filter(d => {
-      const s = String(d.status || '').toLowerCase();
-      return ['running', 'active', 'in_progress'].includes(s);
-    }).length;
-    $('stat-deployments').textContent = active || rows.length;
+    const active = rows.filter(deployment =>
+      ['running', 'active', 'in_progress'].includes(String(deployment.status || '').toLowerCase())
+    ).length;
+    setText('stat-deployments', active || rows.length);
 
     if (rows.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No deployments yet.</td></tr>';
       return;
     }
-
-    tbody.innerHTML = rows.map(d => `
+    tbody.innerHTML = rows.map(deployment => `
       <tr>
-        <td>${escapeHtml(d.id || d.deployment_id || '—')}</td>
-        <td>${escapeHtml(d.name || '—')}</td>
-        <td>${statusBadge(d.status)}</td>
-        <td>${escapeHtml(d.environment || d.env || '—')}</td>
-        <td>${fmtDate(d.created_at || d.createdAt)}</td>
+        <td>${escapeHtml(deployment.id || deployment.deployment_id || '—')}</td>
+        <td>${escapeHtml(deployment.name || deployment.version || 'Deployment')}</td>
+        <td>${statusBadge(deployment.status)}</td>
+        <td>${escapeHtml(deployment.environment || deployment.env || '—')}</td>
+        <td>${fmtDate(deployment.started_at || deployment.created_at || deployment.createdAt)}</td>
       </tr>`).join('');
-  } catch (err) {
+  } catch (error) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Failed to load deployments.</td></tr>';
-    console.error('[Deployments]', err);
+    console.error('[Deployments]', error);
   }
 }
 
-/* ── Auto-refresh ────────────────────────────────────────────── */
 const REFRESH_INTERVAL = 10;
 let countdownValue = REFRESH_INTERVAL;
 
 function refreshAll() {
   fetchHealth();
+  fetchAgent();
   fetchPipelines();
   fetchDeployments();
 }
 
 function startCountdown() {
-  const el = $('countdown');
+  const element = $('countdown');
+  if (!element) return null;
   countdownValue = REFRESH_INTERVAL;
-  el.textContent = countdownValue;
-
+  element.textContent = countdownValue;
   return setInterval(() => {
-    countdownValue--;
+    countdownValue -= 1;
     if (countdownValue <= 0) {
       countdownValue = REFRESH_INTERVAL;
       refreshAll();
     }
-    el.textContent = countdownValue;
+    element.textContent = countdownValue;
   }, 1000);
 }
 
-/* ── Modal helpers ───────────────────────────────────────────── */
 function openModal(modalId) {
-  $('modal-backdrop').classList.remove('hidden');
-  $(modalId).classList.remove('hidden');
+  const backdrop = $('modal-backdrop');
+  const modal = $(modalId);
+  if (!backdrop || !modal) return;
+  backdrop.classList.remove('hidden');
+  modal.classList.remove('hidden');
 }
 
 function closeModals() {
-  $('modal-backdrop').classList.add('hidden');
-  document.querySelectorAll('.modal').forEach(m => m.classList.add('hidden'));
+  $('modal-backdrop')?.classList.add('hidden');
+  document.querySelectorAll('.modal').forEach(modal => modal.classList.add('hidden'));
 }
 
-$('modal-backdrop').addEventListener('click', closeModals);
-
-/* ── Trigger Pipeline ────────────────────────────────────────── */
-$('btn-trigger-pipeline').addEventListener('click', () => openModal('modal-pipeline'));
-$('btn-cancel-pipeline').addEventListener('click', closeModals);
-
-$('btn-confirm-pipeline').addEventListener('click', async () => {
-  const name   = $('pipeline-name-input').value.trim();
-  const branch = $('pipeline-branch-input').value.trim() || 'main';
-
-  if (!name) {
-    showToast('Pipeline name is required', 'error');
-    return;
-  }
-
+bind('modal-backdrop', 'click', closeModals);
+bind('btn-trigger-pipeline', 'click', () => openModal('modal-pipeline'));
+bind('btn-cancel-pipeline', 'click', closeModals);
+bind('btn-confirm-pipeline', 'click', async () => {
+  const nameInput = $('pipeline-name-input');
+  const branchInput = $('pipeline-branch-input');
+  const name = nameInput?.value.trim() || '';
+  const branch = branchInput?.value.trim() || 'main';
+  if (!name) { showToast('Pipeline name is required', 'error'); return; }
   try {
-    const res = await fetch(`${API}/api/v1/pipelines`, {
+    const response = await fetch(`${API}/api/v1/pipelines`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, branch }),
+      body: JSON.stringify({ trigger: 'manual', branch, payload: { name } }),
     });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     showToast(`Pipeline "${name}" triggered!`, 'success');
     closeModals();
-    $('pipeline-name-input').value = '';
+    if (nameInput) nameInput.value = '';
     refreshAll();
-  } catch (err) {
+  } catch (error) {
     showToast('Failed to trigger pipeline', 'error');
-    console.error('[Trigger pipeline]', err);
+    console.error('[Trigger pipeline]', error);
   }
 });
 
-/* ── Start Deployment ────────────────────────────────────────── */
-$('btn-start-deployment').addEventListener('click', () => openModal('modal-deployment'));
-$('btn-cancel-deployment').addEventListener('click', closeModals);
-
-$('btn-confirm-deployment').addEventListener('click', async () => {
-  const name        = $('deployment-name-input').value.trim();
-  const environment = $('deployment-env-input').value;
-
-  if (!name) {
-    showToast('Deployment name is required', 'error');
-    return;
-  }
-
+bind('btn-start-deployment', 'click', () => openModal('modal-deployment'));
+bind('btn-cancel-deployment', 'click', closeModals);
+bind('btn-confirm-deployment', 'click', async () => {
+  const nameInput = $('deployment-name-input');
+  const environmentInput = $('deployment-env-input');
+  const name = nameInput?.value.trim() || '';
+  const environment = environmentInput?.value || 'production';
+  if (!name) { showToast('Deployment name is required', 'error'); return; }
   try {
-    const res = await fetch(`${API}/api/v1/deployments`, {
+    const response = await fetch(`${API}/api/v1/deployments`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, environment }),
+      body: JSON.stringify({ version: name, environment }),
     });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     showToast(`Deployment "${name}" started!`, 'success');
     closeModals();
-    $('deployment-name-input').value = '';
+    if (nameInput) nameInput.value = '';
     refreshAll();
-  } catch (err) {
+  } catch (error) {
     showToast('Failed to start deployment', 'error');
-    console.error('[Start deployment]', err);
+    console.error('[Start deployment]', error);
   }
 });
 
-/* ── Init ────────────────────────────────────────────────────── */
+// The cloud-agent page owns its Send button through conversational-agent.js.
+// Keep this legacy handler only for older pages that explicitly opt in.
+if (document.body.dataset.legacyAgentRunner === 'true') {
+  bind('btn-run-agent', 'click', async () => {
+    const runButton = $('btn-run-agent');
+    const status = $('agent-status');
+    const mode = $('agent-mode-input')?.value || 'autonomous-check';
+    const objectiveInput = $('agent-objective-input');
+    const objective = objectiveInput?.value.trim() || '';
+    if (runButton) runButton.disabled = true;
+    if (status) { status.className = 'badge badge-running'; status.textContent = 'running'; }
+    try {
+      const response = await fetch(`${API}/api/v1/agent/run`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, objective: objective || undefined, branch: 'main', metadata: { branch: 'main' } }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      addAgentReport(data.reply || 'Autonomous run accepted.');
+      showToast(`Autonomous run ${data.run_id || ''}`.trim(), 'success');
+      if (objectiveInput) objectiveInput.value = '';
+      refreshAll();
+    } catch (error) {
+      if (status) { status.className = 'badge badge-failed'; status.textContent = 'error'; }
+      showToast('Failed to start autonomous run', 'error');
+      console.error('[Run agent]', error);
+    } finally {
+      if (runButton) runButton.disabled = false;
+      fetchAgent();
+    }
+  });
+}
+
 refreshAll();
 startCountdown();

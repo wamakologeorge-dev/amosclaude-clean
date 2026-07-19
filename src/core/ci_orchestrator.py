@@ -1,4 +1,4 @@
-"""CI Orchestrator - Main automation engine for Amoscloud AI"""
+"""CI Orchestrator - Main automation engine for Amosclaud AI"""
 
 import logging
 from datetime import datetime
