@@ -13,9 +13,15 @@ class ServiceNode:
 
 DEFAULT_GRAPH = (
     ServiceNode("state-store"),
-    ServiceNode("service-graph", ("state-store",)),
-    ServiceNode("execution-engine", ("service-graph",)),
-    ServiceNode("amosclaud-api", ("execution-engine",)),
+    ServiceNode("shared-database", ("state-store",)),
+    ServiceNode("platform-byte-bus", ("shared-database",)),
+    ServiceNode("repository-service", ("shared-database",)),
+    ServiceNode("autonomous-worker", ("platform-byte-bus", "repository-service")),
+    ServiceNode("fixer-worker", ("autonomous-worker",)),
+    ServiceNode("ci-verification", ("repository-service",)),
+    ServiceNode("pull-request-service", ("repository-service", "ci-verification")),
+    ServiceNode("deployment-service", ("ci-verification",)),
+    ServiceNode("amosclaud-api", ("shared-database", "platform-byte-bus")),
 )
 
 
@@ -38,5 +44,16 @@ class ServiceGraph:
     def healthy(self, services: dict[str, str]) -> bool:
         return all(services.get(node.name) == "ready" for node in self.nodes)
 
-    def evidence(self, services: dict[str, str]) -> list[dict[str, str]]:
-        return [{"service": node.name, "status": services.get(node.name, "unknown")} for node in self.nodes]
+    def evidence(self, services: dict[str, str]) -> list[dict[str, object]]:
+        evidence: list[dict[str, object]] = []
+        for node in self.nodes:
+            status = services.get(node.name, "unknown")
+            evidence.append(
+                {
+                    "service": node.name,
+                    "status": status,
+                    "dependencies": list(node.dependencies),
+                    "healthy": status == "ready",
+                }
+            )
+        return evidence
