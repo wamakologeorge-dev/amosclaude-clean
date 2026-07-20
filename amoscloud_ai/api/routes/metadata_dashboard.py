@@ -88,6 +88,12 @@ def _load_records(limit: int = 200) -> tuple[list[dict[str, Any]], list[str]]:
     return records, invalid
 
 
+@router.get("")
+def metadata(request: Request) -> dict[str, Any]:
+    """Expose the canonical agent-chain metadata endpoint."""
+    return metadata_summary(request)
+
+
 @router.get("/summary")
 def metadata_summary(request: Request) -> dict[str, Any]:
     user = _require_user(request)

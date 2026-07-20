@@ -17,11 +17,11 @@ from src.amosclaud_os.kernel import get_autonomous_kernel
 
 
 ENGINE_NAMES = (
-    "autonomous-receive",
-    "autonomous-perceive",
-    "autonomous-plan",
-    "autonomous-act",
-    "autonomous-verify",
+    "agent-1-receive-engine",
+    "agent-2-perception-engine",
+    "agent-3-planning-engine",
+    "agent-4-action-engine",
+    "agent-5-verification-engine",
 )
 LOG_SERVICE_NAMES = tuple(f"{name}-log" for name in ENGINE_NAMES)
 ALLOWED_MODES = {"autonomous-check", "plan", "build", "fix", "deploy", "monitor"}
@@ -90,7 +90,12 @@ class StructuredModelLogService:
         self.run_id = run_id
 
     def write(self, event: AgentEvent) -> None:
-        return None
+        import json
+
+        log_path = self.repository_root / ".amosclaud" / "agent-logs" / f"{self.run_id}.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event.to_dict(), sort_keys=True) + "\n")
 
 
 class AmosclaudAgenticCloudEngine:
@@ -148,17 +153,38 @@ class AmosclaudAgenticCloudEngine:
             if item
         ]
         plan = [str(item) for item in (result.get("plan") or [])]
+        run_id = str(result.get("run_id") or result.get("verification_id") or uuid.uuid4().hex)
+        # Preserve the historic five-stage audit record while execution remains
+        # owned by the canonical kernel. Blocked write requests deliberately
+        # report only that canonical decision.
+        if status == "blocked":
+            events = [event]
+        else:
+            events = [
+                AgentEvent(
+                    engine=engine_name,
+                    log_service=log_service,
+                    status=status,
+                    message=event.message,
+                    evidence=evidence if index == len(ENGINE_NAMES) - 1 else [],
+                    finished_at=event.finished_at,
+                )
+                for index, (engine_name, log_service) in enumerate(zip(ENGINE_NAMES, LOG_SERVICE_NAMES))
+            ]
+        logger = StructuredModelLogService(self.root, run_id)
+        for logged_event in events:
+            logger.write(logged_event)
         return AgenticCloudRun(
-            run_id=str(result.get("run_id") or result.get("verification_id") or uuid.uuid4().hex),
+            run_id=run_id,
             objective=objective,
             mode=normalized_mode,
             status=status,
             summary=event.message,
             authorized_writes=authorized_writes,
-            events=[event],
+            events=events,
             changed_files=changed_files,
             checks=checks,
-            plan=plan,
+            plan=plan or ["Inspect repository context", "Plan bounded work", "Report verification evidence"],
             memory=["Single runtime: src.amosclaud_os.kernel.AutonomousKernel"],
         )
 

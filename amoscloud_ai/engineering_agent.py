@@ -17,6 +17,7 @@ from typing import Any
 
 from amoscloud_ai import provider
 from amoscloud_ai.agent_memory import AgentMemory
+from src.amosclaud_os.kernel import get_autonomous_kernel
 
 PROTECTED_PARTS = {
     ".git",
@@ -224,7 +225,23 @@ def run_engineering_agent(
         "Return a safe, minimal, structured engineering change plan. Output JSON only.",
     )
     if result.status != "ready":
-        raise EngineeringAgentError("Amosclaud model runtime is not ready")
+        # The canonical kernel remains available for an offline plan; this also
+        # keeps compatibility callers on the single Autonomous runtime.
+        kernel_result = get_autonomous_kernel(root).execute(
+            objective=objective,
+            mode="build" if apply_changes else "plan",
+            authorized_writes=apply_changes,
+            metadata={"compatibility_entrypoint": "engineering_agent"},
+        )
+        changed = list(kernel_result.get("changed_files") or [])
+        changes = [EngineeringChange(str(item), "written" if apply_changes else "planned") for item in changed]
+        return EngineeringRun(
+            run_id=str(kernel_result.get("run_id") or run_id), objective=objective,
+            workspace=str(root), summary=str(kernel_result.get("summary") or "Engineering plan prepared"),
+            applied=apply_changes, changes=changes,
+            checks=list(kernel_result.get("checks") or []),
+            evidence=["Runtime: src.amosclaud_os.kernel.AutonomousKernel", *list(kernel_result.get("evidence") or [])],
+        )
 
     plan = _parse_plan(result.reply)
     raw_changes = plan.get("changes", [])
