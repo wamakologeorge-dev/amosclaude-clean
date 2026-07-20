@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy static Amosclaud status page
 
 on:
   push:
@@ -15,26 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  agent-status:
-    runs-on: ubuntu-latest
-    name: Amosclaud Autonomous deployment readiness
-    steps:
-      - name: Report Autonomous activity
-        run: |
-          echo "=================================================="
-          echo "Amosclaud Autonomous is preparing GitHub Pages"
-          echo "=================================================="
-          echo "Deployment target: github-pages"
-
   build:
-    needs: agent-status
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Upload verified Pages artifact
+      - name: Verify Pages contains no application shell
+        run: |
+          set -Eeuo pipefail
+          test -f pages-site/index.html
+          test ! -f pages-site/login.html
+          test ! -f pages-site/repositories.html
+          test ! -f pages-site/account-access.js
+      - name: Upload static Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: ./web
+          path: ./pages-site
 
   deploy:
     environment:
@@ -45,138 +40,6 @@ jobs:
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy GitHub Pages artifact
+      - name: Deploy static status page
         id: deployment
         uses: actions/deploy-pages@v5
-
-  verify-and-report:
-    name: Verify and report deployment to Amosclaud Autonomous
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    needs: deploy
-    permissions:
-      contents: read
-    env:
-      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
-      DEPLOY_RESULT: ${{ needs.deploy.result }}
-      AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL }}
-      AMOSCLAUD_DEPLOYMENT_WORKER_KEY: ${{ secrets.AMOSCLAUD_DEPLOYMENT_WORKER_KEY }}
-    steps:
-      - name: Verify deployed Pages URL and build evidence
-        id: verify
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          page_url="${PAGE_URL:-}"
-          deploy_result="${DEPLOY_RESULT:-failure}"
-          health_status="not_checked"
-          health_code=""
-          verified="false"
-          rollback_ready="false"
-          details="Pages deployment did not complete successfully."
-
-          if [[ "$deploy_result" == "success" && -n "$page_url" ]]; then
-            health_code="$(curl --location --silent --show-error \
-              --retry 4 --retry-delay 3 --retry-all-errors \
-              --connect-timeout 10 --max-time 45 \
-              --output /tmp/amosclaud-pages-response \
-              --write-out '%{http_code}' \
-              "$page_url" || true)"
-
-            if [[ "$health_code" =~ ^[0-9]{3}$ ]] \
-              && (( health_code >= 200 && health_code < 400 )); then
-              health_status="healthy"
-              verified="true"
-              rollback_ready="true"
-              details="GitHub Pages deployment and public URL verification passed."
-            else
-              health_status="unhealthy"
-              details="GitHub Pages deployed, but the public URL health check failed."
-            fi
-          fi
-
-          export PAGE_URL_VALUE="$page_url"
-          export DEPLOY_RESULT_VALUE="$deploy_result"
-          export HEALTH_STATUS_VALUE="$health_status"
-          export HEALTH_CODE_VALUE="$health_code"
-          export VERIFIED_VALUE="$verified"
-          export ROLLBACK_READY_VALUE="$rollback_ready"
-          export DETAILS_VALUE="$details"
-
-          python - <<'PY'
-          import json
-          import os
-          from datetime import datetime, timezone
-
-          health_code = os.environ.get("HEALTH_CODE_VALUE", "").strip()
-          evidence = {
-              "deployment_id": f"github-pages-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}",
-              "repository": os.environ["GITHUB_REPOSITORY"],
-              "ref": os.environ["GITHUB_REF"],
-              "sha": os.environ["GITHUB_SHA"],
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-              "environment_url": os.environ.get("PAGE_URL_VALUE") or "https://www.amosclaud.com/",
-              "deployment_status": os.environ.get("DEPLOY_RESULT_VALUE", "failure"),
-              "health_status": os.environ.get("HEALTH_STATUS_VALUE", "not_checked"),
-              "health_code": int(health_code) if health_code.isdigit() else None,
-              "verified": os.environ.get("VERIFIED_VALUE") == "true",
-              "rollback_ready": os.environ.get("ROLLBACK_READY_VALUE") == "true",
-              "artifact_id": None,
-              "deployed_at": datetime.now(timezone.utc).isoformat(),
-              "details": os.environ.get("DETAILS_VALUE", ""),
-          }
-          with open("deployment-evidence.json", "w", encoding="utf-8") as output:
-              json.dump(evidence, output, indent=2, sort_keys=True)
-          print(json.dumps(evidence, indent=2, sort_keys=True))
-          PY
-
-          echo "verified=$verified" >> "$GITHUB_OUTPUT"
-          echo "health_status=$health_status" >> "$GITHUB_OUTPUT"
-          echo "health_code=${health_code:-none}" >> "$GITHUB_OUTPUT"
-
-      - name: Report evidence to Amosclaud Autonomous
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-          if [[ -z "${AMOSCLAUD_DEPLOYMENT_WORKER_KEY:-}" ]]; then
-            echo "AMOSCLAUD_DEPLOYMENT_WORKER_KEY is not configured; evidence remains available as an artifact."
-            exit 0
-          fi
-
-          api_url="${AMOSCLAUD_API_URL:-https://www.amosclaud.com}"
-          api_url="${api_url%/}"
-          curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-delay 2 --retry-all-errors \
-            --connect-timeout 10 --max-time 45 \
-            -X POST "${api_url}/api/v1/deployments/github-pages/report" \
-            -H "Content-Type: application/json" \
-            -H "X-API-Key: ${AMOSCLAUD_DEPLOYMENT_WORKER_KEY}" \
-            --data-binary @deployment-evidence.json
-
-      - name: Upload deployment evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: github-pages-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: deployment-evidence.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Publish deployment summary
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          {
-            echo "## Amosclaud GitHub Pages deployment"
-            echo ""
-            echo "- Deployment result: \`${DEPLOY_RESULT:-unknown}\`"
-            echo "- Environment URL: ${PAGE_URL:-not available}"
-            echo "- Health status: \`${{ steps.verify.outputs.health_status }}\`"
-            echo "- HTTP status: \`${{ steps.verify.outputs.health_code }}\`"
-            echo "- Verified: \`${{ steps.verify.outputs.verified }}\`"
-            echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Rollback source: prior successful Pages deployment"
-          } >> "$GITHUB_STEP_SUMMARY"
