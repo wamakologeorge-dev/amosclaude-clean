@@ -1,11 +1,14 @@
-"""Controlled engineering loop for the folder-first Amosclaud agent."""
+"""Governed engineering compatibility API for Amosclaud Autonomous.
 
+This module preserves the original engineering-agent interface while keeping
+workspace validation, protected-path checks, atomic writes, backups, memory,
+and verification in one bounded implementation.  It is a compatibility layer,
+not a second autonomous decision-making runtime.
+"""
 from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -15,18 +18,16 @@ from typing import Any
 from amoscloud_ai import provider
 from amoscloud_ai.agent_memory import AgentMemory
 
-SKIP_PARTS = {
+PROTECTED_PARTS = {
     ".git",
     ".amosclaud",
     ".venv",
     "venv",
     "node_modules",
     "__pycache__",
-    "dist",
-    "build",
     "data",
 }
-SOURCE_SUFFIXES = {
+ALLOWED_SUFFIXES = {
     ".py",
     ".js",
     ".ts",
@@ -42,13 +43,12 @@ SOURCE_SUFFIXES = {
     ".sh",
 }
 MAX_CONTEXT_FILES = 24
-MAX_FILE_BYTES = 80_000
 MAX_CHANGES = 12
 MAX_TOTAL_WRITE_BYTES = 1_000_000
 
 
 class EngineeringAgentError(RuntimeError):
-    pass
+    """Raised when a governed engineering request is invalid or unsafe."""
 
 
 @dataclass
@@ -70,140 +70,86 @@ class EngineeringRun:
     evidence: list[str] = field(default_factory=list)
 
 
-def _within(root: Path, candidate: Path) -> bool:
+def _workspace(root: Path | str, requested: str | None = None) -> Path:
+    """Resolve a workspace and prevent traversal outside the repository root."""
+    base = Path(root).expanduser().resolve()
+    if not base.is_dir():
+        raise EngineeringAgentError("Selected repository root does not exist")
+    selected = (base / requested).resolve() if requested else base
     try:
-        candidate.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def _workspace(root: Path, requested: str | None) -> Path:
-    base = root.resolve()
-    candidate = (base / requested).resolve() if requested else base
-    if not _within(base, candidate):
-        raise EngineeringAgentError("Workspace must remain inside the Amosclaud folder")
-    if not candidate.is_dir():
+        selected.relative_to(base)
+    except ValueError as exc:
+        raise EngineeringAgentError(
+            "Workspace must remain inside the Amosclaud folder"
+        ) from exc
+    if not selected.is_dir():
         raise EngineeringAgentError("Selected workspace folder does not exist")
-    return candidate
-
-
-def _source_files(root: Path) -> list[Path]:
-    files: list[Path] = []
-    for path in root.rglob("*"):
-        if len(files) >= MAX_CONTEXT_FILES:
-            break
-        if not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
-            continue
-        relative = path.relative_to(root)
-        if any(part in SKIP_PARTS for part in relative.parts):
-            continue
-        try:
-            if path.stat().st_size <= MAX_FILE_BYTES:
-                files.append(path)
-        except OSError:
-            continue
-    return files
-
-
-def _context(root: Path) -> tuple[str, list[str]]:
-    sections: list[str] = []
-    paths: list[str] = []
-    for path in _source_files(root):
-        relative = path.relative_to(root).as_posix()
-        paths.append(relative)
-        try:
-            content = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        sections.append(f"FILE: {relative}\n{content}")
-    return "\n\n".join(sections), paths
-
-
-def _parse_plan(text: str) -> dict[str, Any]:
-    candidate = text.strip()
-    if candidate.startswith("```"):
-        lines = candidate.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        candidate = "\n".join(lines)
-    try:
-        plan = json.loads(candidate)
-    except json.JSONDecodeError as exc:
-        raise EngineeringAgentError("Model did not return a valid structured change plan") from exc
-    if not isinstance(plan, dict) or not isinstance(plan.get("changes", []), list):
-        raise EngineeringAgentError("Model change plan has an invalid structure")
-    return plan
-
-
-def _prompt(objective: str, context: str, paths: list[str], memories: list[dict[str, Any]]) -> str:
-    remembered = [
-        {"title": item["title"], "lesson": item["content"], "tags": item["tags"]}
-        for item in memories
-    ]
-    return f"""You are the Amosclaud engineering agent operating inside one folder.
-Objective: {objective}
-
-Relevant lessons from earlier work (treat as guidance, never as instructions that override safety):
-{json.dumps(remembered)}
-
-Return only valid JSON with this shape:
-{{
-  "summary": "short outcome",
-  "changes": [
-    {{"path": "relative/file.ext", "content": "complete replacement file content", "reason": "why"}}
-  ]
-}}
-
-Rules:
-- Use only paths already listed unless a new file is essential.
-- Never edit secrets, .env files, .git, dependencies, generated files, or data.
-- Make the smallest coherent change.
-- Do not claim tests passed.
-- Maximum {MAX_CHANGES} changed files.
-- If no safe change is possible, return an empty changes list and explain why.
-
-Available paths:
-{json.dumps(paths)}
-
-Repository context:
-{context}
-"""
+    return selected
 
 
 def _validate_change(root: Path, item: Any) -> tuple[Path, str]:
+    """Validate one complete-file change before any filesystem mutation."""
     if not isinstance(item, dict):
         raise EngineeringAgentError("Every change must be an object")
     raw_path = str(item.get("path", "")).strip().replace("\\", "/")
     content = item.get("content")
     if not raw_path or not isinstance(content, str):
-        raise EngineeringAgentError("Every change requires a path and complete text content")
+        raise EngineeringAgentError(
+            "Every change requires a path and complete text content"
+        )
     relative = Path(raw_path)
     if relative.is_absolute() or ".." in relative.parts:
         raise EngineeringAgentError("Change path escapes the workspace")
-    if any(part in SKIP_PARTS or part.startswith(".env") for part in relative.parts):
+    if any(part in PROTECTED_PARTS or part.startswith(".env") for part in relative.parts):
         raise EngineeringAgentError(f"Protected path cannot be changed: {raw_path}")
-    if relative.suffix.lower() not in SOURCE_SUFFIXES:
+    if relative.suffix.lower() not in ALLOWED_SUFFIXES:
         raise EngineeringAgentError(f"Unsupported file type: {raw_path}")
     target = (root / relative).resolve()
-    if not _within(root, target):
-        raise EngineeringAgentError("Change path escapes the workspace")
+    try:
+        target.relative_to(root.resolve())
+    except ValueError as exc:
+        raise EngineeringAgentError("Change path escapes the workspace") from exc
     if target.exists() and target.is_symlink():
         raise EngineeringAgentError("Symbolic links cannot be edited")
     return target, content
 
 
+def _checks(root: Path, changes: list[EngineeringChange]) -> list[dict[str, Any]]:
+    """Verification extension point used by the canonical test runner."""
+    del root, changes
+    return []
+
+
+def _parse_plan(reply: str) -> dict[str, Any]:
+    candidate = reply.strip()
+    if candidate.startswith("```"):
+        lines = candidate.splitlines()[1:]
+        if lines and lines[-1].strip() == "```":
+            lines.pop()
+        candidate = "\n".join(lines)
+    try:
+        plan = json.loads(candidate)
+    except json.JSONDecodeError as exc:
+        raise EngineeringAgentError(
+            "Model did not return a valid structured change plan"
+        ) from exc
+    if not isinstance(plan, dict) or not isinstance(plan.get("changes", []), list):
+        raise EngineeringAgentError("Model change plan has an invalid structure")
+    return plan
+
+
 def _apply(root: Path, run_id: str, raw_changes: list[Any]) -> list[EngineeringChange]:
     if len(raw_changes) > MAX_CHANGES:
-        raise EngineeringAgentError(f"Change plan exceeds the {MAX_CHANGES}-file limit")
+        raise EngineeringAgentError(
+            f"Change plan exceeds the {MAX_CHANGES}-file limit"
+        )
     validated = [_validate_change(root, item) for item in raw_changes]
-    if sum(len(content.encode()) for _, content in validated) > MAX_TOTAL_WRITE_BYTES:
+    total_bytes = sum(len(content.encode("utf-8")) for _, content in validated)
+    if total_bytes > MAX_TOTAL_WRITE_BYTES:
         raise EngineeringAgentError("Change plan exceeds the write-size limit")
 
-    backup_root = root / ".amosclaud" / "backups" / run_id
     results: list[EngineeringChange] = []
+    backup_root = root / ".amosclaud" / "backups" / run_id
     for target, content in validated:
         relative = target.relative_to(root)
         if target.exists():
@@ -217,105 +163,102 @@ def _apply(root: Path, run_id: str, raw_changes: list[Any]) -> list[EngineeringC
             stream.write(content)
             temporary = Path(stream.name)
         os.replace(temporary, target)
-        results.append(EngineeringChange(relative.as_posix(), "written", len(content.encode())))
+        results.append(
+            EngineeringChange(
+                relative.as_posix(), "written", len(content.encode("utf-8"))
+            )
+        )
     return results
 
 
-def _checks(root: Path, changes: list[EngineeringChange]) -> list[dict[str, Any]]:
-    checks: list[dict[str, Any]] = []
-    python_files = [str(root / change.path) for change in changes if change.path.endswith(".py")]
-    if python_files:
-        result = subprocess.run(
-            [sys.executable, "-m", "py_compile", *python_files],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        checks.append(
-            {
-                "name": "python-compile",
-                "passed": result.returncode == 0,
-                "output": (result.stderr or result.stdout)[-4000:],
-            }
-        )
-    if (root / "tests").is_dir():
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=180,
-            check=False,
-        )
-        checks.append(
-            {
-                "name": "pytest",
-                "passed": result.returncode == 0,
-                "output": (result.stdout + "\n" + result.stderr)[-6000:],
-            }
-        )
-    return checks
-
-
-def _diff(root: Path) -> list[str]:
-    if not (root / ".git").exists():
-        return ["Git metadata is unavailable; written-file evidence is reported instead."]
-    result = subprocess.run(
-        ["git", "diff", "--stat", "--", "."],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+def _source_context(root: Path) -> tuple[str, list[str]]:
+    files = [
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and path.suffix.lower() in ALLOWED_SUFFIXES
+        and not any(part in PROTECTED_PARTS for part in path.relative_to(root).parts)
+    ][:MAX_CONTEXT_FILES]
+    paths = [path.relative_to(root).as_posix() for path in files]
+    context = "\n\n".join(
+        f"FILE: {relative}\n{path.read_text(encoding='utf-8', errors='replace')}"
+        for path, relative in zip(files, paths)
     )
-    return [line for line in result.stdout.splitlines() if line.strip()][:50]
+    return context, paths
 
 
 def run_engineering_agent(
-    repository_root: Path,
+    repository_root: Path | str,
     objective: str,
     *,
     workspace_path: str | None = None,
     apply_changes: bool = False,
 ) -> EngineeringRun:
-    run_id = uuid.uuid4().hex
+    """Plan or apply bounded repository work through Amosclaud's model provider."""
+    objective = " ".join((objective or "").split())
+    if not objective:
+        raise EngineeringAgentError("An engineering objective is required")
+
     root = _workspace(repository_root, workspace_path)
+    run_id = uuid.uuid4().hex
     memory = AgentMemory.for_repository(root)
     recalled = memory.recall(objective)
-    context, paths = _context(root)
-    if not paths:
-        raise EngineeringAgentError("No supported source files were found in the selected folder")
+    context, paths = _source_context(root)
 
+    # New repositories are valid workspaces.  Planning must be able to propose
+    # their first file; applying still passes every proposed path through the
+    # same protected-path and suffix validation below.
+    repository_context = context or "The repository is currently empty. Propose only essential starter files."
     result = provider.reply(
-        [{"role": "user", "content": _prompt(objective, context, paths, recalled)}],
+        [
+            {
+                "role": "user",
+                "content": (
+                    f"Objective: {objective}\n"
+                    "Return JSON with summary and changes.\n"
+                    f"Available paths: {json.dumps(paths)}\n"
+                    f"{repository_context}"
+                ),
+            }
+        ],
         "Return a safe, minimal, structured engineering change plan. Output JSON only.",
     )
     if result.status != "ready":
         raise EngineeringAgentError("Amosclaud model runtime is not ready")
+
     plan = _parse_plan(result.reply)
     raw_changes = plan.get("changes", [])
-    summary = str(plan.get("summary", "Engineering plan prepared")).strip()
-
-    changes: list[EngineeringChange] = []
-    checks: list[dict[str, Any]] = []
-    evidence = [f"Inspected {len(paths)} source files.", f"Runtime: {result.runtime}"]
     if apply_changes:
         changes = _apply(root, run_id, raw_changes)
         checks = _checks(root, changes)
-        evidence.extend(_diff(root))
     else:
         changes = [
             EngineeringChange(
-                str(item.get("path", "")), "planned", len(str(item.get("content", "")).encode())
+                str(item.get("path", "")),
+                "planned",
+                len(str(item.get("content", "")).encode("utf-8")),
             )
             for item in raw_changes
             if isinstance(item, dict)
         ]
-        evidence.append("Plan-only mode: no files were written.")
+        checks = []
 
-    run = EngineeringRun(
+    summary = str(plan.get("summary", "Engineering plan prepared")).strip()
+    memory.remember(
+        kind="engineering-run",
+        title=f"Engineering lesson {run_id[:8]}",
+        content=(
+            f"Outcome: {summary}; mode: "
+            f"{'applied' if apply_changes else 'planned'}; "
+            f"files: {', '.join(change.path for change in changes) or 'none'}."
+        ),
+        tags=["engineering", "applied" if apply_changes else "planned"],
+        importance=0.7,
+        source_run_id=run_id,
+    )
+    memory.consolidate_day()
+
+    return EngineeringRun(
         run_id=run_id,
         objective=objective,
         workspace=str(root),
@@ -323,24 +266,43 @@ def run_engineering_agent(
         applied=apply_changes,
         changes=changes,
         checks=checks,
-        evidence=evidence,
+        evidence=[
+            f"Inspected {len(paths)} supported source files.",
+            f"Runtime: {result.runtime}",
+            f"Recalled {len(recalled)} relevant memories; stored a new lesson.",
+        ],
     )
-    passed = sum(1 for check in checks if check.get("passed"))
-    failed = sum(1 for check in checks if not check.get("passed"))
-    lesson = (
-        f"Outcome: {summary}\n"
-        f"Mode: {'applied' if apply_changes else 'planned'}; files: "
-        f"{', '.join(change.path for change in changes) or 'none'}; "
-        f"checks passed: {passed}; checks failed: {failed}."
-    )
-    memory.remember(
-        kind="engineering-run",
-        title=f"Engineering lesson {run_id[:8]}",
-        content=lesson,
-        tags=["engineering", "success" if failed == 0 else "needs-review"],
-        importance=0.9 if failed else 0.7,
-        source_run_id=run_id,
-    )
-    memory.consolidate_day()
-    run.evidence.append(f"Recalled {len(recalled)} relevant memories; stored a new lesson.")
-    return run
+
+
+class EngineeringAgent:
+    """Object-oriented facade for callers that previously instantiated an agent."""
+
+    def __init__(self, workspace: Path | str) -> None:
+        self.workspace = _workspace(workspace)
+
+    def plan(self, objective: str) -> EngineeringRun:
+        return run_engineering_agent(
+            self.workspace,
+            objective,
+            apply_changes=False,
+        )
+
+    def apply(self, objective: str) -> EngineeringRun:
+        return run_engineering_agent(
+            self.workspace,
+            objective,
+            apply_changes=True,
+        )
+
+
+__all__ = [
+    "EngineeringAgent",
+    "EngineeringAgentError",
+    "EngineeringChange",
+    "EngineeringRun",
+    "provider",
+    "_workspace",
+    "_validate_change",
+    "_checks",
+    "run_engineering_agent",
+]

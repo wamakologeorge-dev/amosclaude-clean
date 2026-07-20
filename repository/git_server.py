@@ -1,134 +1,168 @@
+"""Authenticated Git smart-HTTP transport for native Amosclaud repositories."""
+from __future__ import annotations
+
 import os
-import re
 import subprocess
-from fastapi import APIRouter, Request, Response, HTTPException, Header
-from pathlib import Path
+from dataclasses import dataclass
 
-router = APIRouter(prefix="/git")
-REPOS_ROOT = Path("/var/www/amosclaud/repositories")
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Query, Request, Response
 
-def validate_safe_input(text: str) -> bool:
-    """
-    FIXES ALERT 1: Prevents shell injection attacks.
-    Strictly permits only alphanumeric characters, dashes, and underscores.
-    """
-    return bool(re.match(r"^[a-zA-Z0-9\-_]+$", text))
+from amoscloud_ai.api.routes import auth
+from amoscloud_ai.api.routes.service_keys import authenticate_service_key
+from repository.connector import RepositoryConnector, RepositoryConnectorError, RepositoryRecord
 
-def sanitize_path_component(value: str, field_name: str) -> str:
-    """
-    Normalize and validate a single path segment derived from user input.
-    Returns a canonical safe segment or raises HTTPException.
-    """
-    normalized = value.strip()
-    if not normalized or not validate_safe_input(normalized):
-        raise HTTPException(status_code=400, detail=f"Invalid {field_name}.")
-    return normalized
+router = APIRouter(prefix="/git", tags=["native-git"])
+_CONNECTOR = RepositoryConnector()
+_ALLOWED_SERVICES = {"git-upload-pack", "git-receive-pack"}
+_MAX_PUSH_BYTES = int(os.getenv("AMOSCLAUD_MAX_GIT_REQUEST_BYTES", str(64 * 1024 * 1024)))
+_GIT_TIMEOUT = int(os.getenv("AMOSCLAUD_GIT_TIMEOUT_SECONDS", "120"))
 
-def build_safe_repo_path(username: str, repo_name: str) -> Path:
-    """
-    Build a repository path and ensure it remains inside REPOS_ROOT
-    after canonical resolution.
-    """
-    safe_username = sanitize_path_component(username, "repository owner")
 
-    repo_stem = repo_name[:-4] if repo_name.endswith(".git") else repo_name
-    safe_repo_stem = sanitize_path_component(repo_stem, "repository name")
+@dataclass(frozen=True, slots=True)
+class GitPrincipal:
+    kind: str
+    identity: str
+    scopes: frozenset[str]
+    is_admin: bool = False
 
-    clean_name = f"{safe_repo_stem}.git"
-    user_component = Path(safe_username)
-    repo_component = Path(clean_name)
 
-    if user_component.is_absolute() or repo_component.is_absolute():
-        raise HTTPException(status_code=400, detail="Invalid repository path.")
-    if any(part in ("", ".", "..") for part in user_component.parts + repo_component.parts):
-        raise HTTPException(status_code=400, detail="Invalid repository path.")
+def _bearer(authorization: str | None) -> str:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    return ""
 
-    root_resolved = REPOS_ROOT.resolve()
-    repo_path = (root_resolved / user_component / repo_component).resolve(strict=False)
+
+def authenticate_git_principal(
+    authorization: str | None = Header(default=None),
+    amos_session: str | None = Cookie(default=None),
+) -> GitPrincipal:
+    """Authenticate either an Amosclaud session or a scoped service key."""
+    raw = _bearer(authorization)
+    if raw:
+        key = authenticate_service_key(raw)
+        return GitPrincipal(
+            kind="service-key",
+            identity=str(key.get("service") or key.get("name") or "service"),
+            scopes=frozenset(str(item) for item in key.get("scopes", [])),
+        )
+    user = auth.get_user_from_session(amos_session)
+    if user:
+        return GitPrincipal(
+            kind="user",
+            identity=str(user["email"] or user["name"] or user["id"]).lower(),
+            scopes=frozenset({"repositories:read", "repositories:write"}),
+            is_admin=bool(user["is_admin"]),
+        )
+    raise HTTPException(status_code=401, detail="Authenticate with an Amosclaud session or service key")
+
+
+def _authorize(record: RepositoryRecord, principal: GitPrincipal, *, write: bool) -> None:
+    required = "repositories:write" if write else "repositories:read"
+    compatibility = "tasks:write" if write else "tasks:read"
+    if principal.kind == "user":
+        identities = {record.owner.lower(), record.owner_email.lower()}
+        if principal.is_admin or principal.identity in identities:
+            return
+        raise HTTPException(status_code=403, detail="Repository access denied")
+    if required in principal.scopes or compatibility in principal.scopes:
+        return
+    raise HTTPException(status_code=403, detail=f"Service key requires scope: {required}")
+
+
+def _repository(owner: str, name: str) -> RepositoryRecord:
     try:
-        repo_path.relative_to(root_resolved)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid repository path.")
-    return repo_path
+        return _CONNECTOR.require_existing(owner, name)
+    except RepositoryConnectorError as exc:
+        message = str(exc)
+        status = 404 if "not found" in message or "not initialized" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
 
-def check_amosclaud_auth(authorization: str = Header(None)):
-    """
-    FIXES ALERT 2: Restricts API access to authorized platform users.
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Amosclaud access token.")
-    # Implement token signature verification logic below
-    token = authorization.split(" ")[1]
-    if token == "DEVELOPMENT_MOCK_TOKEN": # Replace with your real DB session key lookup
-        return True
-    return True
+
+def _service(value: str) -> str:
+    if value not in _ALLOWED_SERVICES:
+        raise HTTPException(status_code=400, detail="Unsupported Git service")
+    return value
+
+
+def _git_command(record: RepositoryRecord, service: str, *, advertise: bool = False) -> list[str]:
+    command = ["git", service, "--stateless-rpc"]
+    if advertise:
+        command.append("--advertise-refs")
+    command.append(".")
+    return command
+
 
 @router.get("/{username}/{repo_name}/info/refs")
 async def git_info_refs(
-    username: str, 
-    repo_name: str, 
-    service: str, 
-    request: Request
-):
-    # Sanitize dynamic path parameters instantly
-    if not validate_safe_input(username) or not validate_safe_input(repo_name.replace(".git", "")):
-        raise HTTPException(status_code=400, detail="Invalid character strings detected in repository route.")
-        
-    if service not in ["git-upload-pack", "git-receive-pack"]:
-        raise HTTPException(status_code=400, detail="Unsupported git service invocation token.")
+    username: str,
+    repo_name: str,
+    service: str = Query(...),
+    principal: GitPrincipal = Depends(authenticate_git_principal),
+) -> Response:
+    service = _service(service)
+    record = _repository(username, repo_name)
+    _authorize(record, principal, write=service == "git-receive-pack")
+    try:
+        result = subprocess.run(
+            _git_command(record, service, advertise=True),
+            cwd=record.storage_path,
+            capture_output=True,
+            check=True,
+            timeout=_GIT_TIMEOUT,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise HTTPException(status_code=502, detail="Native Git advertisement failed") from exc
+    banner = f"# service={service}\n".encode("utf-8")
+    payload = f"{len(banner) + 4:04x}".encode("ascii") + banner + b"0000" + result.stdout
+    return Response(
+        content=payload,
+        media_type=f"application/x-{service}-advertisement",
+        headers={"Cache-Control": "no-store"},
+    )
 
-    repo_path = build_safe_repo_path(username, repo_name)
-    
-    if not repo_path.exists():
-        os.makedirs(repo_path, exist_ok=True)
-        subprocess.run(["git", "init", "--bare"], cwd=repo_path, check=True)
-
-    # Secure binary invocation execution block
-    cmd = ["git", service, "--stateless-rpc", "--advertise-refs", "."]
-    result = subprocess.run(cmd, capture_output=True, check=True, cwd=repo_path)
-
-    service_banner = f"# service={service}\n".encode('utf-8')
-    packet_prefix = f"{len(service_banner) + 4:04x}".encode('utf-8')
-    flush_packet = b"0000"
-    
-    response_payload = packet_prefix + service_banner + flush_packet + result.stdout
-    return Response(content=response_payload, media_type=f"application/x-{service}-advertisement")
 
 @router.post("/{username}/{repo_name}/{service}")
 async def git_service_rpc(
-    username: str, 
-    repo_name: str, 
-    service: str, 
-    request: Request
-):
-    # Validate parameters completely before shell evaluation
-    if not validate_safe_input(username) or not validate_safe_input(repo_name.replace(".git", "")):
-        raise HTTPException(status_code=400, detail="Malformed URL naming syntax.")
-        
-    if service not in ["git-upload-pack", "git-receive-pack"]:
-        raise HTTPException(status_code=400, detail="Malformed RPC path instruction.")
+    username: str,
+    repo_name: str,
+    service: str,
+    request: Request,
+    principal: GitPrincipal = Depends(authenticate_git_principal),
+) -> Response:
+    service = _service(service)
+    record = _repository(username, repo_name)
+    write = service == "git-receive-pack"
+    _authorize(record, principal, write=write)
 
-    repo_path = build_safe_repo_path(username, repo_name)
-    
-    if not repo_path.exists():
-        raise HTTPException(status_code=404, detail="Target repository storage track not found.")
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > _MAX_PUSH_BYTES:
+                raise HTTPException(status_code=413, detail="Git request exceeds platform limit")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+    body = await request.body()
+    if len(body) > _MAX_PUSH_BYTES:
+        raise HTTPException(status_code=413, detail="Git request exceeds platform limit")
 
-    body_payload = await request.body()
-
-    # CRITICAL: shell=False is enforced explicitly via direct vector list to ensure no shell expansion can occur
     process = subprocess.Popen(
-        ["git", service, "--stateless-rpc", "."],
+        _git_command(record, service),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         shell=False,
-        cwd=repo_path
+        cwd=record.storage_path,
     )
-
-    stdout_data, stderr_data = process.communicate(input=body_payload)
-
+    try:
+        stdout, _stderr = process.communicate(input=body, timeout=_GIT_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        process.kill()
+        process.communicate()
+        raise HTTPException(status_code=504, detail="Native Git operation timed out") from exc
     if process.returncode != 0:
-        raise HTTPException(status_code=500, detail="Internal Git pipeline error.")
-
-    return Response(content=stdout_data, media_type=f"application/x-{service}-result")
-
+        raise HTTPException(status_code=502, detail="Native Git operation failed")
+    return Response(
+        content=stdout,
+        media_type=f"application/x-{service}-result",
+        headers={"Cache-Control": "no-store"},
+    )

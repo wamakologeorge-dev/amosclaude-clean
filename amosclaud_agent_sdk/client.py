@@ -1,4 +1,4 @@
-"""Dependency-free client for Amosclaud Autonomous on Amosclaud.com."""
+"""Dependency-free client for Amosclaud Autonomous on www.amosclaud.com."""
 from __future__ import annotations
 import json
 import os
@@ -28,13 +28,13 @@ class AmosclaudAgentClient:
         session_cookie: Value of the ``amos_session`` cookie for web-session auth.
         timeout: Per-request socket timeout in seconds.
     """
-    base_url: str = "https://www.amosclaud.com"
+    base_url: str = "http://www.amosclaud.com/"
     api_key: str | None = None
     session_cookie: str | None = None
     timeout: float = 30.0
 
     def __post_init__(self) -> None:
-        self.base_url = (self.base_url or "https://www.amosclaud.com").rstrip("/")
+        self.base_url = (self.base_url or "http://www.amosclaud.com/").rstrip("/")
         self.api_key = self.api_key or os.getenv("AMOSCLAUD_API_KEY")
         self.session_cookie = self.session_cookie or os.getenv("AMOSCLAUD_SESSION")
 

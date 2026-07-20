@@ -43,9 +43,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, _jwt_secret(), algorithm=ALGORITHM)
 
 
-async def get_current_agent_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
+async def get_current_agent_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -84,11 +82,17 @@ def verify_api_key_hash(plain_key: str, hashed_key: str) -> bool:
     return pwd_context.verify(plain_key, hashed_key)
 
 
-async def validate_api_key_dependency(api_key: str, db: Session = Depends(get_db)):
+async def validate_api_key_dependency(
+    api_key: str,
+    db: Session = Depends(get_db),
+    *,
+    required_scopes: set[str] | None = None,
+):
     try:
         key_prefix = api_key_lookup_prefix(api_key)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
     db_api_key = crud.get_api_key_by_prefix(db, key_prefix=key_prefix)
     if not db_api_key or not db_api_key.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key is invalid or inactive")
@@ -96,4 +100,29 @@ async def validate_api_key_dependency(api_key: str, db: Session = Depends(get_db
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired")
     if not verify_api_key_hash(plain_key=api_key, hashed_key=db_api_key.hashed_key):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key is invalid")
-    return crud.update_api_key_last_used(db, db_api_key.key_prefix)
+
+    granted = set(crud.scopes_for(db_api_key))
+    required = required_scopes or set()
+    missing = sorted(required - granted)
+    if missing:
+        crud.record_audit_event(
+            db,
+            event="scope_denied",
+            actor="credential-validator",
+            api_key=db_api_key,
+            detail=f"missing={','.join(missing)}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"API key is missing required scopes: {', '.join(missing)}",
+        )
+
+    db_api_key = crud.update_api_key_last_used(db, db_api_key.key_prefix)
+    crud.record_audit_event(
+        db,
+        event="validated",
+        actor="credential-validator",
+        api_key=db_api_key,
+        detail=f"required={','.join(sorted(required)) or 'none'}",
+    )
+    return db_api_key

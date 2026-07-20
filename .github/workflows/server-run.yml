@@ -1,4 +1,4 @@
-name: 🚀 Amoscloud AI — Live Server Check
+name: 🚀 Amosclaud AI — Live Server Check
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   run-server:
     runs-on: ubuntu-latest
-    name: Start & verify Amoscloud AI server
+    name: Start & verify Amosclaud AI server
 
     steps:
       - uses: actions/checkout@v7
@@ -23,7 +23,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Start Amoscloud AI server
+      - name: Start Amosclaud AI server
         run: |
           mkdir -p data/repositories
           python -m uvicorn amoscloud_ai.main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
@@ -89,7 +89,7 @@ jobs:
       - name: Show server is alive
         run: |
           echo "============================================"
-          echo "✅ Amoscloud AI server ran successfully!"
+          echo "✅ Amosclaud AI server ran successfully!"
           echo "   API: http://127.0.0.1:8000"
           echo "============================================"
           curl -s http://127.0.0.1:8000/health | python -m json.tool

@@ -1,8 +1,13 @@
-from fastapi import FastAPI
-from database.models import Base
-from repository.git_server import router as git_router
+"""Compatibility entry point for the unified Amosclaud Autonomous platform.
 
-app = FastAPI(title="Amosclaud Core Engine Platform")
+Historically this module created a second, partial FastAPI application containing
+only the Git hosting router.  That split route registration and allowed imports
+of ``Amosclaud.Amosclaud`` to expose a different platform from root ``main``.
+It now exports the canonical application factory and application instance.
+"""
 
-# Register the custom Git HTTP Hosting network gateway routes
-app.include_router(git_router)
+from amoscloud_ai.main import create_app
+
+app = create_app()
+
+__all__ = ["app", "create_app"]

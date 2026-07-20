@@ -8,7 +8,7 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -27,6 +27,26 @@ class WorkerStatusUpdate(BaseModel):
     deployment_id: str = Field(..., min_length=1, max_length=120)
     status: str = Field(..., min_length=1, max_length=40)
     logs: str = Field(default="", max_length=2_000_000)
+
+
+class GitHubPagesDeploymentReport(BaseModel):
+    """Evidence emitted by the first-party GitHub Pages workflow."""
+
+    deployment_id: str = Field(..., min_length=1, max_length=160)
+    repository: str = Field(..., min_length=3, max_length=240)
+    ref: str = Field(..., min_length=1, max_length=300)
+    sha: str = Field(..., min_length=7, max_length=64)
+    run_id: str = Field(..., min_length=1, max_length=80)
+    run_attempt: int = Field(default=1, ge=1)
+    environment_url: str = Field(..., min_length=8, max_length=2048)
+    deployment_status: Literal["success", "failure", "cancelled", "skipped"]
+    health_status: Literal["healthy", "unhealthy", "not_checked"]
+    health_code: int | None = Field(default=None, ge=100, le=599)
+    verified: bool = False
+    rollback_ready: bool = False
+    artifact_id: str | None = Field(default=None, max_length=120)
+    deployed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    details: str = Field(default="", max_length=20_000)
 
 
 def _db() -> sqlite3.Connection:
@@ -196,6 +216,51 @@ def update_worker_status(
     deployment.message = deployment_reply(deployment.status)
     deployment.copilot_reply = deployment.message
     _save(deployment)
+    return deployment
+
+
+@router.post(
+    "/github-pages/report",
+    response_model=DeploymentResponse,
+    summary="Record verified GitHub Pages deployment evidence",
+)
+def report_github_pages_deployment(
+    body: GitHubPagesDeploymentReport,
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> DeploymentResponse:
+    """Persist Pages deployment and health evidence for Autonomous visibility."""
+
+    _require_worker_key(x_api_key)
+    successful = body.deployment_status == "success" and body.verified and body.health_status == "healthy"
+    status = DeploymentStatus.COMPLETED if successful else DeploymentStatus.FAILED
+    message = (
+        f"GitHub Pages deployment verified at {body.environment_url}"
+        if successful
+        else f"GitHub Pages deployment requires attention: {body.deployment_status}/{body.health_status}"
+    )
+    evidence = body.model_dump(mode="json")
+    deployment = DeploymentResponse(
+        id=body.deployment_id,
+        status=status,
+        environment="github-pages",
+        version=body.sha,
+        started_at=body.deployed_at,
+        finished_at=datetime.now(timezone.utc),
+        message=message,
+        copilot_reply=message,
+        copilot_role=COPILOT_ROLE,
+        delegation_target=COPILOT_PIPELINE,
+        worker_id="github-actions-pages",
+        logs=json.dumps(evidence, sort_keys=True),
+    )
+    _save(deployment, evidence)
+    log.info(
+        "Recorded GitHub Pages deployment %s status=%s verified=%s url=%s",
+        body.deployment_id,
+        body.deployment_status,
+        body.verified,
+        body.environment_url,
+    )
     return deployment
 
 

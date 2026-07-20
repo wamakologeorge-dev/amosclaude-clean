@@ -6,9 +6,10 @@ require_evidence = true
 stop_on_repeated_failure = 3
 
 [model]
-provider = "openai"
+provider = "amosclaud"
 model_env = "AMOSCLAUD_CODEX_MODEL"
-api_key_env = "OPENAI_API_KEY"
+base_url_env = "AMOSCLAUD_API_URL"
+api_key_env = "AMOSCLAUD_API_KEY"
 reasoning_effort = "high"
 max_output_tokens = 12000
 store_responses = false
@@ -17,27 +18,55 @@ store_responses = false
 root_env = "AMOSCLAUD_WORKSPACE"
 default_root = "workspace/projects"
 allow_outside_workspace = false
+require_repository_connector = true
+
+[repository]
+connector = "repository.connector.RepositoryConnector"
+require_repository_id = true
+require_isolated_worktree = true
+protect_default_branch = true
+allow_direct_default_branch_write = false
 
 [permissions]
 auto_approve_read = true
-auto_approve_write = true
+auto_approve_write = false
 auto_approve_test = true
 auto_approve_format = true
 auto_approve_install = false
 auto_approve_network = false
 auto_approve_deploy = false
 auto_approve_git_push = false
+require_explicit_write_authorization = true
+
+[credentials]
+api_key_env = "AMOSCLAUD_API_KEY"
+required_scopes = ["repositories:read", "repositories:write", "ci:read", "ci:run", "pull-requests:create", "jobs:update"]
+allow_provider_keys = false
 
 [memory]
 enabled = true
 recall_limit = 12
 record_success = true
 record_failure = true
+store_raw_prompts = false
+store_credentials = false
 
 [verification]
 require_tests_for_code_changes = true
 require_clean_diff_review = true
 require_security_scan_for_dependencies = true
+require_verification_id = true
+require_commit_sha = true
+require_changed_files = true
+success_requires_all_checks = true
+
+[audit]
+enabled = true
+record_actions = true
+record_tool_results = true
+record_authorization = true
+record_verification = true
+redact_secrets = true
 
 [limits]
 command_timeout_seconds = 300

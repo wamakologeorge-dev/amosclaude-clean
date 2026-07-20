@@ -5,6 +5,10 @@ from fastapi import APIRouter, Request
 
 from amoscloud_ai.agent_chain import MODE_SKILLS, agent_power_chain
 from amoscloud_ai.api.routes.agent import run_agent
+from amoscloud_ai.api.routes.codex_system_bundle import router as codex_system_bundle_router
+from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
+    router as autonomous_byte_metadata_router,
+)
 from amoscloud_ai.models import AutonomousAgentRunRequest, AutonomousAgentRunResponse
 
 router = APIRouter(prefix="/agent-chain", tags=["agent-power-chain"])
@@ -46,3 +50,10 @@ async def run_agent_chain(
 
     chained_body = body.model_copy(update={"metadata": metadata})
     return await run_agent(chained_body, request)
+
+
+# Keep these standalone Autonomous support routes visible in ``app.routes``.
+# Extending the route list avoids nested APIRouter wrappers introduced by newer
+# FastAPI releases while preserving each support router's own path prefix.
+router.routes.extend(codex_system_bundle_router.routes)
+router.routes.extend(autonomous_byte_metadata_router.routes)

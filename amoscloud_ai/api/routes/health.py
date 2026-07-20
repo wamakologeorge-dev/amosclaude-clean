@@ -1,38 +1,42 @@
 """Fast liveness, readiness, and direct critical-platform routes."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Header, Request
+from fastapi.responses import FileResponse, RedirectResponse
 
+from amomodel.api import router as amomodel_router
 from amomodel.api import status as amomodel_status
 from amoscloud_ai import provider
 from amoscloud_ai.api.routes import (
+    autonomous_codex,
     bundle_pages,
     bundles,
+    codex_system_bundle,
     control_bus_dashboard,
     metadata_dashboard,
     openai_compat,
+)
+from amoscloud_ai.api.routes.auth import get_user_from_session
+from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
+    router as byte_metadata_router,
 )
 from amoscloud_ai.config import settings
 from amoscloud_ai.models import HealthResponse
 from amoscloud_ai.server.cb.Amosclaud import server_identity
 
 router = APIRouter(tags=["health"])
+
+# These service routers are composed here so the platform always exposes its
+# critical Autonomous contracts even when a deployment imports only health.
 router.include_router(bundles.router, prefix="/api/v1")
 router.include_router(bundle_pages.router)
-
-from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import router as byte_metadata_router
 router.include_router(byte_metadata_router, prefix="/api/v1")
-
-from amoscloud_ai.api.routes import codex_system_bundle
 router.include_router(codex_system_bundle.router, prefix="/api/v1")
-
-from pathlib import Path
-from fastapi import Request
-from fastapi.responses import FileResponse, RedirectResponse
-from amoscloud_ai.api.routes import autonomous_codex
-from amoscloud_ai.api.routes.auth import get_user_from_session
 router.include_router(autonomous_codex.router, prefix="/api/v1")
+router.include_router(amomodel_router, prefix="/api/v1")
+
 
 @router.get("/autonomous-codex-configuration", include_in_schema=False)
 async def autonomous_codex_dashboard(request: Request):
@@ -81,9 +85,9 @@ async def readiness() -> dict[str, object]:
     }
 
 
-# These aliases deliberately live on the first-party health router. They keep
-# critical agent and operator endpoints directly visible in FastAPI's top-level
-# route table even when a dependency version preserves nested APIRouters.
+# Direct aliases remain for deployments that import only this router. The
+# flattened include implementation de-duplicates these paths at application
+# construction, so every critical endpoint appears exactly once.
 @router.get("/api/v1/amomodel/status", include_in_schema=False)
 async def direct_amomodel_status(request: Request):
     return await amomodel_status(request)

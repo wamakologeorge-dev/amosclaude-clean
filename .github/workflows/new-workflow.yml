@@ -20,17 +20,63 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest httpx
+          python -m pip install -r requirements.txt
+          (
+            cd cmood
+            python -m pip install -r requirements.txt
+          )
+          python -m pip install pytest httpx
+          python -m pip install -e .
 
-      - name: Compile backend and CLI
+      - name: Compile platform, CLI, and compatibility adapters
         run: |
-          python -m compileall -q amoscloud_ai cli src
+          python -m compileall -q amoscloud_ai amosclaud_serverless app cli cmood shared src
+
+      - name: Verify Amosclaud CLI contract
+        env:
+          AMOSCLAUD_API_URL: http://localhost:8000
+          AMOSCLAUD_API_KEY: workflow-contract-key
+        run: |
+          python -m cli.main --help
+          python -m cli.main run --help
+          python -m cli.main fix --help
+          python -m cli.main sync --help
+          python -m cli.main jobs --help
+          python -m cli.main repositories --help
+          grep -q '"/health"' cli/client.py
+          grep -q '"/api/v1/agent/run"' cli/client.py
+          grep -q '"/api/v1/pipelines"' cli/client.py
+          grep -q '"/api/v1/repositories"' cli/client.py
+          grep -q 'Authorization' cli/client.py
+          ! grep -Rqi 'cmood cloud' cli/
+
+      - name: Verify cmood uses the unified Amosclaud installation
+        run: |
+          grep -q '^-e ..$' cmood/requirements.txt
+          grep -q '^fastapi' cmood/requirements.txt
+          grep -q '^uvicorn' cmood/requirements.txt
+          grep -q '^watchdog' cmood/requirements.txt
+          python -c "import cmood; import shared; import src.amosclaud_os.kernel"
+
+      - name: Verify Railway authentication contract
+        run: |
+          grep -q '^ENVIRONMENT=production$' authentication/railway.env.example
+          grep -q '^HOST=0.0.0.0$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_API_URL=https://www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^PASSKEY_RP_ID=www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^PASSKEY_ORIGIN=https://www.amosclaud.com$' authentication/railway.env.example
+          grep -q '^AUTH_DB_PATH=/data/auth/auth.db$' authentication/railway.env.example
+          grep -q '^REPOSITORY_STORAGE_PATH=/data/repositories$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_CREDENTIAL_URL=http://credential-authority:8001$' authentication/railway.env.example
+          grep -q '^AMOSCLAUD_REQUIRE_VERIFICATION=true$' authentication/railway.env.example
+          grep -q 'replace-in-railway' authentication/railway.env.example
+          ! grep -q '^PASSKEY_ORIGIN=https://amosclaud.com$' authentication/railway.env.example
 
       - name: Run platform tests
         env:
@@ -38,6 +84,7 @@ jobs:
           AUTH_DB_PATH: ./data/build-verify-auth.db
           REPOSITORY_STORAGE_PATH: ./data/build-verify-repositories
           AMOSCLAUD_STORAGE_PATH: ./data/build-verify-storage
+          AMOSCLAUD_API_URL: http://localhost:8000
           SECRET_KEY: build-verify-secret-key-with-at-least-32-characters
           AUTH_COOKIE_SECURE: "false"
         run: pytest tests/ -v --tb=short
@@ -50,9 +97,3 @@ jobs:
           test -f web/service-worker.js
           grep -q "async function api" web/workspace.js
           grep -q "manifest.webmanifest" web/service-worker.js
-
-      - name: Verify CLI uses live Amosclaud APIs
-        run: |
-          grep -q '"/health"' cli/client.py
-          grep -q '"/api/v1/pipelines"' cli/client.py
-          ! grep -q '"/api/v1/cmood/' cli/client.py
