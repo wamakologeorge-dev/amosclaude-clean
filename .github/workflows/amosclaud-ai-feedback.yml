@@ -1,0 +1,41 @@
+name: Amosclaud AI Feedback Loop
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  ai-feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyGithub
+
+      - name: Get PR Code Diff
+        run: |
+          git diff "origin/${{ github.base_ref }}...origin/${{ github.head_ref }}" > pr_diff.txt
+          test -s pr_diff.txt || echo "No textual diff was produced." > pr_diff.txt
+
+      - name: Run Amosclaud Reviewer Engine
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_NAME: ${{ github.repository }}
+          DIFF_PATH: pr_diff.txt
+        run: python .github/scripts/ai_reviewer.py

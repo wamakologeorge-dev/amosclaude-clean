@@ -1,0 +1,13 @@
+# Amosclaud Computer Language example
+fn greet(name) {
+    return "Hello, " + name + " from Amosclaud Computer Language";
+}
+
+let developer = "George";
+print(greet(developer));
+
+let count = 0;
+while (count < 3) {
+    print("AMCL iteration", count);
+    count = count + 1;
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Autonomous Codex Configuration · Amosclaud</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b0d12;--panel:#141822;--line:#293044;--text:#eef2ff;--muted:#9ba7bd;--accent:#72e0b4;--warn:#ffd479}
+    *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--text)}
+    header,main{max-width:1180px;margin:auto;padding:24px}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+    h1,h2,h3{margin:.2em 0}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:20px 0}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 9px;margin:3px;font-size:12px}
+    .ok{color:var(--accent)}.warn{color:var(--warn)}button,select,input,textarea{font:inherit;color:var(--text);background:#0f131c;border:1px solid var(--line);border-radius:10px;padding:10px}
+    textarea{width:100%;min-height:110px}button{cursor:pointer;background:#20362f;border-color:#3b6b5b}pre{white-space:pre-wrap;overflow:auto;color:#cfd8ec}
+    a{color:var(--accent)}
+  </style>
+</head>
+<body>
+<header><div><h1>Autonomous Codex Configuration</h1><div class="muted">Plan-first agent skills, controlled tools, provider readiness, and execution policy.</div></div><a href="/cloud/agent">Back to Agent</a></header>
+<main>
+  <div id="status" class="card">Loading configuration…</div>
+  <section><h2>Two Agent Skills</h2><div id="skills" class="grid"></div></section>
+  <section><h2>Controlled Tool Registry</h2><div id="tools" class="grid"></div></section>
+  <section class="card"><h2>Skill Resolver</h2><p class="muted">Preview which skill and tools Amosclaud will select before a task runs.</p><textarea id="objective" placeholder="Example: inspect the failing Railway health check, plan a fix, and verify the server"></textarea><div style="margin-top:10px"><select id="skill"><option value="">Automatic selection</option><option value="engineering">Engineering</option><option value="research-operations">Research and Operations</option></select> <button id="resolve">Resolve plan</button></div><pre id="result"></pre></section>
+</main>
+<script>
+async function api(path, options){const r=await fetch(path,options);if(r.status===401){location.href='/login';throw new Error('Authentication required')}if(!r.ok)throw new Error(await r.text());return r.json()}
+function pill(text){return `<span class="pill">${text}</span>`}
+async function load(){
+ const config=await api('/api/v1/autonomous-codex/configuration');
+ document.querySelector('#status').innerHTML=`<h2>Runtime policy</h2><div class="grid"><div><b>Planning</b><br><span class="ok">${config.planning_required?'required':'optional'}</span></div><div><b>Verification</b><br><span class="ok">${config.verification_required?'required':'optional'}</span></div><div><b>Rollback</b><br>${config.rollback_on_failed_verification?'enabled':'disabled'}</div><div><b>Limits</b><br>${config.max_iterations} iterations · ${config.max_tool_calls} tool calls · ${config.max_changed_files} files</div></div><h3>Provider configuration</h3>${Object.entries(config.provider).map(([k,v])=>pill(`${k}: ${v}`)).join('')}`;
+ document.querySelector('#skills').innerHTML=config.skills.map(s=>`<article class="card"><h3>${s.title}</h3><p>${s.mission}</p><p>${s.phases.map(pill).join('')}</p><b>Write policy:</b> ${s.default_write_policy}</article>`).join('');
+ document.querySelector('#tools').innerHTML=config.tools.map(t=>`<article class="card"><h3>${t.name}</h3><p>${t.description}</p>${pill(t.category)} ${t.write_capable?pill('write-capable'):pill('read-only')} ${t.approval_required?pill('approval required'):''}</article>`).join('');
+}
+document.querySelector('#resolve').onclick=async()=>{try{const body={objective:document.querySelector('#objective').value,skill:document.querySelector('#skill').value||null};const data=await api('/api/v1/autonomous-codex/select-skill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});document.querySelector('#result').textContent=JSON.stringify(data,null,2)}catch(e){document.querySelector('#result').textContent=e.message}};
+load().catch(e=>document.querySelector('#status').textContent=e.message);
+</script>
+</body>
+</html>

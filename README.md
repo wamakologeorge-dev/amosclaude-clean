@@ -1,105 +1,120 @@
-# Amosclaud AI Platform
+[![Amosclaud Autonomous Fixer](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml/badge.svg)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml)
+# Amosclaud Workflow Results Dashboard
 
-Self-hosted CI/CD and deployment automation for Amosclaud. The app includes a FastAPI server, web dashboard, pipeline/deployment APIs, and Amosclaud Copilot delegation endpoints.
+This dashboard is the real results area for Amosclaud Autonomous jobs.
 
-## Quick Start
+It gives users a Railway-style place to:
 
-### Run With Docker
+- create projects;
+- configure repository URL and workspace root path;
+- change build, start, test, or verification commands;
+- define the output path that should become an artifact;
+- add environment variables and encrypted secrets;
+- run a workflow and inspect real process logs and exit codes;
+- open generated artifact manifests;
+- configure and verify custom domains with a DNS TXT record.
+
+## Run it
 
 ```bash
-git clone https://github.com/wamakologeorge-dev/amosclaude-clean
-cd amosclaude-clean
-docker-compose up --build
-```
-
-- Dashboard: `http://localhost`
-- API Docs: `http://localhost:8000/docs`
-
-### Run With Python
-
-```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-python -m amoscloud_ai.main
+uvicorn app:app --reload --port 8100
 ```
 
-- Dashboard: `http://localhost:8000`
-- API Docs: `http://localhost:8000/docs`
-
-## What You Can Do
-
-- Manage CI/CD pipelines.
-- Trigger and rollback deployments.
-- Monitor server health in real time.
-- Delegate Amosclaud-owned work through Amosclaud Copilot.
-- View the live dashboard at `/`.
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Web dashboard |
-| `GET` | `/health` | Server health check |
-| `GET` | `/api/v1/copilot` | Amosclaud Copilot profile |
-| `POST` | `/api/v1/copilot/delegate` | Delegate work to Amosclaud Copilot |
-| `GET` | `/api/v1/pipelines` | List all pipelines |
-| `POST` | `/api/v1/pipelines` | Create/trigger a pipeline |
-| `GET` | `/api/v1/deployments` | List all deployments |
-| `POST` | `/api/v1/deployments` | Start a deployment |
-| `GET` | `/docs` | Interactive API docs |
-
-## Amosclaud Copilot
-
-Amosclaud Copilot is scoped to Amosclaud-owned application work. Its job is to delegate, build, monitor, and report back only for `amosclaud.com` and the Amosclaud pipeline.
-
-## Production Deployment
-
-The production stack for `amosclaud.com` is defined in `docker-compose.prod.yml`:
-
-- FastAPI API server
-- Celery worker
-- PostgreSQL
-- Redis
-- Caddy reverse proxy with automatic HTTPS for `amosclaud.com` and `www.amosclaud.com`
-
-On the production host, create `.env.production` from `.env.production.example`, point DNS for `amosclaud.com` and `www.amosclaud.com` at the host, then run:
-
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
-```
-
-GitHub Actions deployment is available in `.github/workflows/deploy-amosclaud.yml`. Configure these repository secrets before running it:
-
-- `AMOSCLAUD_SSH_HOST`
-- `AMOSCLAUD_SSH_USER`
-- `AMOSCLAUD_SSH_KEY`
-- `AMOSCLAUD_APP_DIR`
-
-Railway deployment metadata is included in `railway.json` and `Procfile`. If `amosclaud.com` is connected to Railway, merge or deploy this branch there, set production environment variables, and Railway will start `python -m amoscloud_ai.main` with `/health` as the health check.
-
-## Project Structure
+Open:
 
 ```text
-amosclaude-clean/
-├── amoscloud_ai/          # Main FastAPI application package
-│   ├── api/routes/        # health, copilot, pipelines, deployments routes
-│   ├── main.py            # App entry point; serves API and web dashboard
-│   ├── config.py          # Settings
-│   └── models.py          # Pydantic models
-├── web/                   # Frontend dashboard served at /
-├── tests/                 # pytest test suite
-├── Dockerfile             # App container
-├── docker-compose.yml     # Local stack
-├── docker-compose.prod.yml # Production stack
-├── Caddyfile              # Production HTTPS reverse proxy
-└── nginx.conf             # Local reverse proxy config
+http://localhost:8100
 ```
 
-## Environment Variables
+Windows PowerShell:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `sqlite:///./amoscloud.db` | Database connection string |
-| `REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
-| `SECRET_KEY` | `change-me-in-production` | App secret key; change in production |
-| `ENVIRONMENT` | `development` | Runtime environment |
-| `LOG_LEVEL` | `INFO` | Logging level |
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app:app --reload --port 8100
+```
+
+## Storage
+
+By default, the dashboard creates:
+
+```text
+data/
+├── dashboard.db
+├── .dashboard.key
+├── projects/
+└── artifacts/
+```
+
+Set `AMOSCLAUD_DASHBOARD_DATA=/data/workflow-dashboard` in production.
+
+For a stable encryption key, generate one:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Then set:
+
+```env
+AMOSCLAUD_DASHBOARD_KEY=the-generated-key
+```
+
+Never rotate this key without re-encrypting existing secrets.
+
+## Connect Amosclaud Autonomous
+
+After the agent creates or selects a project:
+
+1. Update project settings with `PATCH /api/projects/{project_id}`.
+2. Save variables using `PUT /api/projects/{project_id}/variables/{name}`.
+3. Start the approved job using `POST /api/projects/{project_id}/runs`.
+4. Store the returned run ID in the conversation.
+5. Link the user to `/?project={project_id}` or add project selection in the existing Amosclaud UI.
+6. Display logs from `GET /api/runs/{run_id}`.
+
+A production executor should replace the synchronous `subprocess.run` block with the existing Amosclaud Task Router or Server Station. The API must enqueue the job, return immediately, and stream or poll run state.
+
+## Security work required before public deployment
+
+This starter is functional, but the following controls are mandatory for a public multi-user service:
+
+- require Amosclaud authentication on every endpoint;
+- add `owner_user_id` to projects, variables, runs, and artifacts;
+- check project ownership on every read and write;
+- execute builds in isolated containers or Server Stations;
+- replace `shell=True` with a controlled execution policy;
+- apply command allowlists, CPU limits, memory limits, and timeouts;
+- clone repositories using short-lived credentials;
+- never return secret values to the browser;
+- log secret access without logging secret contents;
+- use HTTPS and secure cookies;
+- scan generated artifacts before publishing;
+- use a reverse proxy for live previews;
+- require successful DNS verification before attaching a domain.
+
+## Production preview architecture
+
+```text
+Amosclaud conversation
+        │
+        ▼
+Task Router / job queue
+        │
+        ▼
+Isolated builder or Server Station
+        │
+        ├── logs ───────────────► dashboard
+        ├── screenshots ────────► artifact storage
+        ├── website build ──────► preview service
+        └── verification report ► dashboard
+                                      │
+                                      ▼
+                           custom domain router
+```
+
+Generated websites should not run inside the main Amosclaud API process. Publish them to a dedicated preview service and return a `preview_url` for the dashboard’s **Open website** button.

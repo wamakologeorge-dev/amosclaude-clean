@@ -1,0 +1,19 @@
+{
+  "schema": "amosclaud.programming-bytes-system.cb/v1",
+  "name": "Amosclaud Programming Bytes System CB",
+  "runtime_import": "Amosclaud.programming_bytes_system_cb",
+  "segments": [
+    "server.cb", "api.cb", "rest.cb", "next.cb", "cmood.cb", "remote.cb",
+    "meta-package.cb", "autonomous.cb", "command.cb", "bumps.cb", "byte.cb",
+    "pages.cb", "router.cb", "graphics.cb", "agent.cb", "word.cb", "global.cb",
+    ".com.cb", "path.cb", "engine.cb", "github.cb", "yml.cb", "ci.cb",
+    "meter.cb", "matrix.cb", "3d.cb", "localhost.cb", "programming.bytes.system.cb"
+  ],
+  "safety": {
+    "integrity_checked_frames": true,
+    "shell_execution": false,
+    "network_execution": false,
+    "path_traversal_rejected": true,
+    "command_allowlist_required": true
+  }
+}
