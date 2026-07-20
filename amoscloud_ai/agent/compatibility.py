@@ -10,7 +10,18 @@ import re
 from pathlib import Path
 from typing import Any
 
-from src.amosclaud_os.kernel import get_autonomous_kernel
+
+def _load_autonomous_kernel(workspace_root: Path):
+    """Resolve the canonical kernel lazily.
+
+    Importing ``src.amosclaud_os.kernel`` at module import time creates a
+    circular import when the kernel package itself is the import entry point
+    (kernel -> src.agent -> amoscloud_ai.agent -> this module -> kernel).
+    Resolving it lazily keeps both import orders working.
+    """
+    from src.amosclaud_os.kernel import get_autonomous_kernel
+
+    return get_autonomous_kernel(workspace_root)
 
 
 _WRITE_FILE_PATTERN = re.compile(
@@ -25,7 +36,7 @@ class CodexAgent:
 
     def __init__(self, workspace_root: str | Path = ".") -> None:
         self.workspace_root = Path(workspace_root).resolve()
-        self.kernel = get_autonomous_kernel(self.workspace_root)
+        self.kernel = _load_autonomous_kernel(self.workspace_root)
         self.provider = "amosclaud"
 
     def get_workspace_map(self) -> str:

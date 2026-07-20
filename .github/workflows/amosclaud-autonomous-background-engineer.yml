@@ -53,18 +53,22 @@ jobs:
           python -m pip install pytest pytest-asyncio flake8
 
       - name: Verify Amosclaud bot configuration
+        id: preflight
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
         run: |
-          test -n "$AMOSCLAUD_API_KEY" || {
-            echo "Missing repository secret AMOSCLAUD_API_KEY"
-            exit 1
-          }
           test -f docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md
           test -f .github/scripts/amosclaud_fixer.py
           test -f .github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/bot.py
+          if [ -n "$AMOSCLAUD_API_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Autonomous background engineer skipped::Repository secret AMOSCLAUD_API_KEY is not configured, so the autonomous background engineer did not run. Add the secret to enable automated background repairs."
+          fi
 
       - name: Run Amosclaud autonomous background engineer
+        if: steps.preflight.outputs.configured == 'true'
         id: engineer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
@@ -115,17 +119,20 @@ jobs:
           }
           git commit -m "fix: autonomous background repair for ${short_sha}"
           git push --set-upstream origin "$branch"
+          {
+            echo "## Amosclaud Autonomous Background Engineer"
+            echo ""
+            echo "This repair was generated using the Python Autonomous Engineering Book and was published only after Python compilation and the repository pytest suite passed."
+            echo ""
+            echo "- Source commit: \`${TARGET_SHA}\`"
+            echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Human review is still required before merge."
+          } > /tmp/amosclaud-pr-body.md
           gh pr create \
             --base "${{ github.event.repository.default_branch }}" \
             --head "$branch" \
             --title "fix: Amosclaud autonomous background repair" \
-            --body "## Amosclaud Autonomous Background Engineer
-
-This repair was generated using the Python Autonomous Engineering Book and was published only after Python compilation and the repository pytest suite passed.
-
-- Source commit: \`${TARGET_SHA}\`
-- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-- Human review is still required before merge."
+            --body-file /tmp/amosclaud-pr-body.md
 
       - name: Report unsuccessful autonomous repair
         if: failure()

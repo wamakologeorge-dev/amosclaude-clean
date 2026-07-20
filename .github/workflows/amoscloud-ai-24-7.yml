@@ -46,7 +46,6 @@ jobs:
 
     env:
       DATABASE_URL: sqlite:///./test.db
-      REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: test-secret-key
 
     steps:

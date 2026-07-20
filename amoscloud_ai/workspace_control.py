@@ -94,9 +94,7 @@ def discover_layout(start: Path | None = None) -> WorkspaceLayout:
         if layout is not None:
             return layout
 
-    raise WorkspaceError(
-        "Run this command from an Amosclaud repository or installed workspace"
-    )
+    raise WorkspaceError("Run this command from an Amosclaud repository or installed workspace")
 
 
 def ensure_layout(layout: WorkspaceLayout) -> None:
@@ -129,9 +127,7 @@ def _compose(layout: WorkspaceLayout, *arguments: str, check: bool = True) -> in
 
 def _runner_profile(layout: WorkspaceLayout) -> tuple[str, ...]:
     runner_env = layout.app / ".env.runner"
-    if runner_env.is_file() and "AMOSCLAUD_RUNNER_ID=" in runner_env.read_text(
-        encoding="utf-8"
-    ):
+    if runner_env.is_file() and "AMOSCLAUD_RUNNER_ID=" in runner_env.read_text(encoding="utf-8"):
         return ("--profile", "connected-runner")
     return ()
 
@@ -154,15 +150,11 @@ def _compose_contract(layout: WorkspaceLayout) -> dict[str, object]:
         "service_urls": {
             service.value: endpoint.base_url for service, endpoint in endpoints.items()
         },
-        "required_environment": {
-            name: f"{name}:" in text for name in REQUIRED_PLATFORM_ENV
-        },
+        "required_environment": {name: f"{name}:" in text for name in REQUIRED_PLATFORM_ENV},
         "autonomous_enabled": 'AMOSCLAUD_AUTONOMOUS_ENABLED: "true"' in text,
         "fixer_enabled": 'AMOSCLAUD_FIXER_ENABLED: "true"' in text,
         "verification_required": 'AMOSCLAUD_REQUIRE_VERIFICATION: "true"' in text,
-        "default_branch_protected": (
-            'AMOSCLAUD_PROTECT_DEFAULT_BRANCH: "true"' in text
-        ),
+        "default_branch_protected": ('AMOSCLAUD_PROTECT_DEFAULT_BRANCH: "true"' in text),
     }
 
 
