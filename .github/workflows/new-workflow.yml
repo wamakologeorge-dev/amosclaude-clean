@@ -26,10 +26,13 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r cmood/requirements.txt
-          pip install pytest httpx
-          pip install -e .
+          python -m pip install -r requirements.txt
+          (
+            cd cmood
+            python -m pip install -r requirements.txt
+          )
+          python -m pip install pytest httpx
+          python -m pip install -e .
 
       - name: Compile platform, CLI, and compatibility adapters
         run: |
