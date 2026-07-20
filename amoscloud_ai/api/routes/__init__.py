@@ -167,3 +167,14 @@ for _module in (solo_development, profile, native_git):
         if getattr(_route, "path", None) not in _native_paths:
             repositories.router.routes.append(_route)
             _native_paths.add(getattr(_route, "path", None))
+
+# Keep account creation and recovery under the one canonical authentication
+# router. This avoids a second app while making the routes visible to tools.
+from amoscloud_ai.api.routes import auth as auth
+from amoscloud_ai.api.routes import account_recovery as account_recovery
+
+_auth_paths = {getattr(route, "path", None) for route in auth.router.routes}
+for _route in account_recovery.router.routes:
+    if getattr(_route, "path", None) not in _auth_paths:
+        auth.router.routes.append(_route)
+        _auth_paths.add(getattr(_route, "path", None))
