@@ -18,6 +18,7 @@ from amoscloud_ai.api.routes import (
     control_bus_dashboard,
     metadata_dashboard,
     openai_compat,
+    owner_bootstrap,
 )
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
@@ -28,6 +29,10 @@ from amoscloud_ai.models import HealthResponse
 from amoscloud_ai.server.cb.Amosclaud import server_identity
 
 router = APIRouter(tags=["health"])
+
+# Register this before the normal auth router so a brand-new installation can
+# create its configured owner account even before outbound email is available.
+router.include_router(owner_bootstrap.router, prefix="/api/v1")
 
 # These service routers are composed here so the platform always exposes its
 # critical Autonomous contracts even when a deployment imports only health.
@@ -101,9 +106,6 @@ def connections_preflight() -> dict[str, object]:
     }
 
 
-# Direct aliases remain for deployments that import only this router. The
-# flattened include implementation de-duplicates these paths at application
-# construction, so every critical endpoint appears exactly once.
 @router.get("/api/v1/amomodel/status", include_in_schema=False)
 async def direct_amomodel_status(request: Request):
     return await amomodel_status(request)
