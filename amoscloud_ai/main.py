@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from amoscloud_ai import __version__, model_network
 from amoscloud_ai.api.routes import (
     account,
+    account_recovery,
     academy,
     admin,
     agent,
@@ -176,6 +177,7 @@ def create_app() -> FastAPI:
     app.include_router(bundles_api_host.router, prefix="/api/v1")
     app.include_router(provider_api.router, prefix="/api/v1")
     app.include_router(account.router, prefix="/api/v1")
+    app.include_router(account_recovery.router, prefix="/api/v1/auth")
     app.include_router(amos_secure_code.router, prefix="/api/v1")
     app.include_router(passkey_signup.router, prefix="/api/v1")
     app.include_router(agent_chain.router, prefix="/api/v1")
