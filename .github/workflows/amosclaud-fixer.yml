@@ -140,18 +140,22 @@ jobs:
             exit 0
           fi
 
-      - name: Verify Amosclaud credential configuration
+      - name: Check Amosclaud credential configuration
+        id: credentials
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
           AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
         run: |
-          test -n "$AMOSCLAUD_API_KEY" || {
-            echo "Missing repository secret AMOSCLAUD_API_KEY"
-            exit 1
-          }
-          echo "Using Amosclaud-owned model gateway: $AMOSCLAUD_API_URL"
+          if [[ -n "$AMOSCLAUD_API_KEY" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Using Amosclaud-owned model gateway: $AMOSCLAUD_API_URL"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::AMOSCLAUD_API_KEY is not configured; preserving evidence and skipping AI repair."
+          fi
 
       - name: Run Amosclaud AI Fixer
+        if: steps.credentials.outputs.configured == 'true'
         id: fixer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
@@ -163,6 +167,20 @@ jobs:
           python .github/scripts/amosclaud_fixer.py | tee amosclaud-fixer-output.txt
           grep '^AMOSCLAUD_FIX_VERIFIED=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT"
           grep '^AMOSCLAUD_CHANGED_FILES=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT" || true
+
+      - name: Report missing Amosclaud credentials
+        if: steps.credentials.outputs.configured == 'false'
+        env:
+          FAILURE_SOURCE: ${{ needs.decide.outputs.source }}
+          TARGET_SHA: ${{ needs.decide.outputs.target_sha }}
+        run: |
+          {
+            echo "## Amosclaud repair skipped"
+            echo
+            echo "The failure from **$FAILURE_SOURCE** at commit \`$TARGET_SHA\` was reproduced and saved as workflow evidence."
+            echo
+            echo "AI repair was skipped because the repository secret \`AMOSCLAUD_API_KEY\` is not configured. Add the secret, then re-run this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload repair evidence
         if: always()
@@ -230,7 +248,7 @@ jobs:
             --body-file "$body_file"
 
       - name: Report unrepairable failure
-        if: failure()
+        if: failure() && steps.credentials.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FAILURE_SOURCE: ${{ needs.decide.outputs.source }}
