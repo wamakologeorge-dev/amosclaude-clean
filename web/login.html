@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0b0f14" />
   <meta name="application-name" content="Amosclaud" />
-  <title>Amosclaud account access</title>
+  <title>Sign in to Amosclaud</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/login.css" />
@@ -17,7 +17,7 @@
         <div class="brand-mark" aria-hidden="true">A</div>
         <div>
           <p class="eyebrow">AMOSCLAUD</p>
-          <p class="brand-note">Secure account service</p>
+          <p class="brand-note">Autonomous account</p>
         </div>
       </div>
 
@@ -27,23 +27,20 @@
       </div>
 
       <h1 id="auth-title">Welcome back</h1>
-      <p id="auth-subtitle" class="muted">Sign in with your Amosclaud username, password, code, or passkey.</p>
-
-      <button id="passkey-login-button" class="secondary-button" type="button">Sign in with a passkey</button>
-      <div id="password-login-divider" class="divider"><span>or use your account details</span></div>
+      <p id="auth-subtitle" class="muted">Enter your username and password.</p>
 
       <form id="auth-form" autocomplete="on" novalidate>
         <label id="name-field" class="hidden">Full name
           <input id="name" name="name" autocomplete="name" minlength="2" maxlength="100" />
         </label>
 
-        <label id="identifier-field">Amosclaud username or address
-          <input id="identifier" name="username" autocomplete="username" placeholder="username or username@amosclaud.com" />
+        <label id="identifier-field">Username
+          <input id="identifier" name="username" autocomplete="username" placeholder="yourname" />
         </label>
 
-        <label id="username-field" class="hidden">Choose your Amosclaud username
+        <label id="username-field" class="hidden">Choose a username
           <div class="address-input">
-            <input id="username" name="amos-username" autocomplete="nickname" minlength="3" maxlength="32" />
+            <input id="username" name="amos-username" autocomplete="nickname" minlength="3" maxlength="32" placeholder="yourname" />
             <span>@amosclaud.com</span>
           </div>
         </label>
@@ -60,26 +57,33 @@
           <input id="new-password" name="new-password" type="password" autocomplete="new-password" minlength="10" />
         </label>
 
-        <label id="email-code-field" class="hidden">Six-digit verification code
+        <label id="email-code-field" class="hidden">Six-digit code
           <input id="email-code" name="email-code" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" pattern="[0-9]{6}" />
         </label>
 
-        <p id="password-hint" class="hint hidden">Use at least 10 characters. A verified recovery email is required so Amosclaud can help you recover your account.</p>
+        <p id="password-hint" class="hint hidden">Use at least 10 characters. Your recovery email is used only for account recovery.</p>
         <section id="device-note" class="device-note hidden">
-          <strong>Passkey security</strong>
+          <strong>Secure device confirmation</strong>
           <span>Your fingerprint, face, or device PIN stays on your device.</span>
         </section>
 
         <button id="submit-button" class="primary-button" type="submit">Sign in</button>
-        <button id="email-code-button" class="text-button" type="button">Email me a sign-in code</button>
       </form>
 
-      <div class="tabs" aria-label="Account recovery">
-        <button id="forgot-password-button" class="tab" type="button">Forgot password</button>
-        <button id="forgot-username-button" class="tab" type="button">Forgot username</button>
-      </div>
+      <details id="more-options">
+        <summary>More sign-in options</summary>
+        <div class="auth-options">
+          <button id="passkey-login-button" class="secondary-button" type="button">Use a passkey</button>
+          <button id="email-code-button" class="text-button" type="button">Email me a sign-in code</button>
+          <div class="tabs" aria-label="Account recovery">
+            <button id="forgot-password-button" class="tab" type="button">Forgot password</button>
+            <button id="forgot-username-button" class="tab" type="button">Forgot username</button>
+          </div>
+        </div>
+      </details>
 
-      <p class="truth-note">Security codes are delivered from <strong>no-reply@amosclaud.com</strong>. Amosclaud never asks you to send a code in chat.</p>
+      <div id="password-login-divider" class="hidden" aria-hidden="true"></div>
+      <p class="truth-note">Security messages come from <strong>no-reply@amosclaud.com</strong>.</p>
       <p id="message" class="message" role="alert" aria-live="polite"></p>
     </section>
   </main>
