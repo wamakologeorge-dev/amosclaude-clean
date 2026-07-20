@@ -27,22 +27,15 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
-        # Keep brute-force protection without trapping a real user for 15 minutes.
-        # The v2 Redis namespace also releases stale locks created by the old flow,
-        # which submitted multiple login probes during one account action.
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "300"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "30"))
-        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v2"
+        self.signup_max_attempts = int(os.getenv("AUTH_SIGNUP_RATE_MAX_ATTEMPTS", "12"))
+        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v3").strip() or "v3"
         self.redis_url = os.getenv("REDIS_URL", "").strip()
         self.production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
-        self.redis = (
-            redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None
-        )
+        self.redis = redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None
         self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
+            "1", "true", "yes", "on",
         }
         self.trust_container_gateway = os.getenv(
             "AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false"
@@ -75,6 +68,16 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     def _client_key(self, request: Request) -> str:
         return f"{self._client_host(request)}:{request.url.path}"
 
+    def _attempt_limit(self, path: str) -> int:
+        if path in {
+            "/api/v1/auth/register/request-code",
+            "/api/v1/auth/register/verify",
+            "/auth/register/request-code",
+            "/auth/register/verify",
+        }:
+            return self.signup_max_attempts
+        return self.auth_max_attempts
+
     def _rate_limited(self, request: Request) -> bool:
         sensitive = {
             "/api/v1/auth/login",
@@ -88,24 +91,30 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         }
         if request.method != "POST" or request.url.path not in sensitive:
             return False
+
         now = time.monotonic()
         cutoff = now - self.auth_window_seconds
         key = self._client_key(request)
+        limit = self._attempt_limit(request.url.path)
+
         if self.redis:
             redis_key = f"amosclaud:rate:auth:{self.auth_rate_namespace}:{key}"
             try:
                 count = self.redis.incr(redis_key)
                 if count == 1:
                     self.redis.expire(redis_key, self.auth_window_seconds)
-                return count > self.auth_max_attempts
+                return count > limit
             except RedisError:
-                if self.production:
-                    return True
+                # Authentication must remain available during a Redis outage.
+                # Fall back to the process-local limiter instead of treating every
+                # real user as abusive and returning an immediate HTTP 429.
+                pass
+
         with self._lock:
             bucket = self._attempts[key]
             while bucket and bucket[0] < cutoff:
                 bucket.popleft()
-            if len(bucket) >= self.auth_max_attempts:
+            if len(bucket) >= limit:
                 return True
             bucket.append(now)
         return False
@@ -136,7 +145,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         if self._rate_limited(request):
             return JSONResponse(
-                {"detail": "Too many authentication attempts. Wait before trying again."},
+                {"detail": "Too many attempts for this action. Please wait a few minutes and try again."},
                 status_code=429,
                 headers={"Retry-After": str(self.auth_window_seconds)},
             )
@@ -164,8 +173,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
         if request.url.path.startswith(("/api/", "/auth")) or request.url.path in {
-            "/login",
-            "/admin",
+            "/login", "/admin",
         }:
             response.headers.setdefault("Cache-Control", "no-store")
         return response
