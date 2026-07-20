@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from amomodel.api import router as amomodel_router
 from amomodel.api import status as amomodel_status
 from amoscloud_ai import provider
+from amoscloud_ai.agent.preflight import run_preflight
 from amoscloud_ai.api.routes import (
     autonomous_codex,
     bundle_pages,
@@ -81,6 +82,21 @@ async def readiness() -> dict[str, object]:
             "authentication": ["session", "Authorization: Bearer <autonomous-key>"],
         },
         "provider": state,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/api/v1/connections/preflight", summary="Autonomous connection preflight")
+def connections_preflight() -> dict[str, object]:
+    """Expose the existing preflight engine through the required public API."""
+    report = run_preflight(require_openai=False)
+    return {
+        "status": "ready" if report.ready else "degraded",
+        "ready": report.ready,
+        "service": "amosclaud-connections",
+        "checks": report.checks,
+        "errors": report.errors,
+        "details": report.details,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
