@@ -1,3 +1,4 @@
+[![Amosclaud Autonomous Fixer](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml/badge.svg)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml)
 # Amosclaud Workflow Results Dashboard
 
 This dashboard is the real results area for Amosclaud Autonomous jobs.
