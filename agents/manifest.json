@@ -1,0 +1,37 @@
+{
+  "schema": "amosclaud.agent-manifest/v1",
+  "framework": "amosclaud-native",
+  "agent": "verified-software-worker",
+  "entrypoint": "agents.codex_agent:RealCodexAgent",
+  "modes": ["ask", "build", "test", "review", "deploy", "monitor"],
+  "targets": ["amosclaud-native", "cloud", "self_hosted", "github-optional"],
+  "guardrails": [
+    "workspace_confinement",
+    "approval_gate",
+    "verification_evidence",
+    "credit_cap",
+    "protected_paths",
+    "bounded_execution",
+    "no_direct_merge"
+  ],
+  "permissions": {
+    "repository_read": true,
+    "repository_write": "assigned-workspace-only",
+    "execute": "verification-allowlist-only",
+    "network": false,
+    "secrets": false,
+    "git_push": false,
+    "merge": false
+  },
+  "limits": {
+    "max_loops": 10,
+    "max_write_bytes": 512000,
+    "max_output_chars": 40000,
+    "command_timeout_seconds": 120
+  },
+  "completion": {
+    "required_status": "passed",
+    "requires_verification_id": true,
+    "requires_allowed_command_exit_zero": true
+  }
+}

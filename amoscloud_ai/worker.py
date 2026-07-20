@@ -1,15 +1,13 @@
-"""Celery worker for Amosclaud AI background tasks.
+"""Celery workers for Amosclaud background tasks.
 
-Start with:
-    celery -A amoscloud_ai.worker worker --loglevel=info
-Or via module:
-    python -m amoscloud_ai.worker
+The API and worker may run in different processes, so task state must always be
+read from and written to the persistent pipeline database. Never rely on a
+process-local dictionary for a user-visible task.
 """
 
 from __future__ import annotations
 
 import asyncio
-import sys
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -36,26 +34,27 @@ celery_app.conf.update(
 
 @celery_app.task(name="amoscloud_ai.run_pipeline", bind=True, max_retries=3)
 def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute a CI pipeline in the background."""
-    log.info(f"[worker] Running pipeline {pipeline_id}")
+    """Receive, execute, verify, and persist one pipeline task."""
+    from amoscloud_ai.api.routes.pipelines import _get, _save
+    from amoscloud_ai.models import PipelineStatus
+
+    log.info("[worker] Received pipeline task %s", pipeline_id)
+    pipeline = _get(pipeline_id)
+    if pipeline is None:
+        raise ValueError(f"Pipeline {pipeline_id!r} was not persisted before dispatch")
+
+    pipeline.status = PipelineStatus.RUNNING
+    pipeline.message = "Amosclaud Autonomous Agent: task received. Execution started."
+    pipeline.copilot_reply = pipeline.message
+    if pipeline.jobs:
+        job = pipeline.jobs[0]
+        job.status = PipelineStatus.RUNNING
+        job.started_at = datetime.now(timezone.utc)
+        job.logs.append("Task received by the execution worker.")
+        job.logs.append("Execution started: understand → inspect → plan → act → verify → report.")
+    _save(pipeline, payload)
+
     try:
-        # Import here to avoid circular imports at module load time
-        from amoscloud_ai.api.routes.pipelines import _pipelines
-        from amoscloud_ai.copilot import pipeline_reply
-        from amoscloud_ai.models import PipelineStatus
-
-        pipeline = _pipelines.get(pipeline_id)
-        if pipeline:
-            pipeline.status = PipelineStatus.RUNNING
-            reply = pipeline_reply(PipelineStatus.RUNNING)
-            pipeline.message = reply
-            pipeline.copilot_reply = reply
-            if pipeline.jobs:
-                pipeline.jobs[0].status = PipelineStatus.RUNNING
-                pipeline.jobs[0].started_at = datetime.now(timezone.utc)
-                pipeline.jobs[0].logs.append(reply)
-
-        # ── Pipeline logic ────────────────────────────────────────────────
         if payload.get("trigger") == "autonomous":
             from amoscloud_ai.autonomous_server import run_autonomous_server
 
@@ -65,72 +64,67 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
                 run_payload.get("objective", "amosclaud.com autonomous operations"),
                 run_payload.get("metadata", {}),
             )
-            success = result.status == PipelineStatus.SUCCESS
-            orchestrator_jobs = []
+            pipeline.status = result.status
+            pipeline.message = result.reply
+            pipeline.copilot_reply = result.reply
             reports_count = len(result.checks)
-            if pipeline and pipeline.jobs:
+            jobs_count = 1
+            if pipeline.jobs:
                 pipeline.jobs[0].logs.extend(result.logs)
         else:
             from src.core.ci_orchestrator import CIOrchestrator
 
             orchestrator = CIOrchestrator(config=payload)
-            success = asyncio.run(
+            successful = asyncio.run(
                 orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
             )
-            orchestrator_jobs = orchestrator.jobs
+            pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
+            pipeline.message = (
+                "Amosclaud Autonomous Agent: pipeline completed with verified evidence."
+                if successful
+                else "Amosclaud Autonomous Agent: pipeline stopped after a blocking verification failure."
+            )
+            pipeline.copilot_reply = pipeline.message
+            if orchestrator.jobs:
+                pipeline.jobs = orchestrator.jobs
             reports_count = len(orchestrator.reports)
-        # ─────────────────────────────────────────────────────────────────
+            jobs_count = len(orchestrator.jobs)
 
-        if pipeline:
-            pipeline.status = PipelineStatus.SUCCESS if success else PipelineStatus.FAILED
-            pipeline.finished_at = datetime.now(timezone.utc)
-            # Attach any job/report data captured by the orchestrator
-            if orchestrator_jobs:
-                pipeline.jobs = orchestrator_jobs
-            reply = pipeline_reply(pipeline.status)
-            pipeline.message = reply
-            pipeline.copilot_reply = reply
-            if pipeline.jobs:
-                pipeline.jobs[0].status = pipeline.status
-                pipeline.jobs[0].finished_at = pipeline.finished_at
-                pipeline.jobs[0].logs.append(reply)
+        pipeline.finished_at = datetime.now(timezone.utc)
+        if pipeline.jobs:
+            pipeline.jobs[0].status = pipeline.status
+            pipeline.jobs[0].finished_at = pipeline.finished_at
+            pipeline.jobs[0].logs.append(pipeline.message or "Task finished.")
+        _save(pipeline, payload)
 
-        result_status = "success" if success else "failed"
-        log.info(f"[worker] Pipeline {pipeline_id} finished with status: {result_status}")
+        result_status = pipeline.status.value
+        log.info("[worker] Pipeline %s finished with status: %s", pipeline_id, result_status)
         return {
             "pipeline_id": pipeline_id,
             "status": result_status,
-            "jobs_count": len(orchestrator_jobs),
+            "jobs_count": jobs_count,
             "reports_count": reports_count,
         }
-
     except Exception as exc:
-        log.error(f"[worker] Pipeline {pipeline_id} failed: {exc}")
-        try:
-            from amoscloud_ai.api.routes.pipelines import _pipelines
-            from amoscloud_ai.copilot import pipeline_reply
-            from amoscloud_ai.models import PipelineStatus
-            pipeline = _pipelines.get(pipeline_id)
-            if pipeline:
-                pipeline.status = PipelineStatus.FAILED
-                pipeline.finished_at = datetime.now(timezone.utc)
-                reply = pipeline_reply(PipelineStatus.FAILED)
-                pipeline.message = reply
-                pipeline.copilot_reply = reply
-                for job in pipeline.jobs:
-                    if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
-                        job.status = PipelineStatus.FAILED
-                        job.finished_at = pipeline.finished_at
-                        job.logs.append(reply)
-        except Exception:
-            pass
+        log.exception("[worker] Pipeline %s failed", pipeline_id)
+        pipeline = _get(pipeline_id) or pipeline
+        pipeline.status = PipelineStatus.FAILED
+        pipeline.finished_at = datetime.now(timezone.utc)
+        pipeline.message = f"Amosclaud Autonomous Agent: execution failed safely: {type(exc).__name__}."
+        pipeline.copilot_reply = pipeline.message
+        for job in pipeline.jobs:
+            if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
+                job.status = PipelineStatus.FAILED
+                job.finished_at = pipeline.finished_at
+                job.logs.append(f"Runtime error: {type(exc).__name__}: {exc}")
+        _save(pipeline, payload, str(exc))
         raise self.retry(exc=exc, countdown=5)
 
 
 @celery_app.task(name="amoscloud_ai.run_deployment", bind=True, max_retries=3)
 def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a deployment in the background."""
-    log.info(f"[worker] Running deployment {deployment_id} to {config.get('environment')}")
+    log.info("[worker] Running deployment %s to %s", deployment_id, config.get("environment"))
     try:
         from amoscloud_ai.api.routes.deployments import _deployments
         from amoscloud_ai.copilot import deployment_reply
@@ -139,11 +133,9 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
         dep = _deployments.get(deployment_id)
         if dep:
             dep.status = DeploymentStatus.IN_PROGRESS
-            reply = deployment_reply(DeploymentStatus.IN_PROGRESS)
-            dep.message = reply
-            dep.copilot_reply = reply
+            dep.message = deployment_reply(DeploymentStatus.IN_PROGRESS)
+            dep.copilot_reply = dep.message
 
-        # ── Deployment logic ──────────────────────────────────────────────
         from src.core.smart_deployer import SmartDeployer
 
         deployer = SmartDeployer(config=config)
@@ -153,51 +145,56 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
                 config.get("environment") or "development",
             )
         )
-        # ─────────────────────────────────────────────────────────────────
 
         if dep:
-            # Map SmartDeployer's final status back to the API model
             if success:
                 dep.status = DeploymentStatus.COMPLETED
             else:
-                # deployer.status reflects FAILED or ROLLED_BACK
-                deployer_status = deployer.status.value  # e.g. "rolled_back" or "failed"
                 dep.status = (
                     DeploymentStatus.ROLLED_BACK
-                    if deployer_status == "rolled_back"
+                    if deployer.status.value == "rolled_back"
                     else DeploymentStatus.FAILED
                 )
             dep.finished_at = datetime.now(timezone.utc)
-            reply = deployment_reply(dep.status)
-            dep.message = reply
-            dep.copilot_reply = reply
+            dep.message = deployment_reply(dep.status)
+            dep.copilot_reply = dep.message
 
         result_status = dep.status.value if dep else ("completed" if success else "failed")
-        log.info(f"[worker] Deployment {deployment_id} finished with status: {result_status}")
         return {"deployment_id": deployment_id, "status": result_status}
-
     except Exception as exc:
-        log.error(f"[worker] Deployment {deployment_id} failed: {exc}")
+        log.exception("[worker] Deployment %s failed", deployment_id)
         try:
             from amoscloud_ai.api.routes.deployments import _deployments
             from amoscloud_ai.copilot import deployment_reply
             from amoscloud_ai.models import DeploymentStatus
+
             dep = _deployments.get(deployment_id)
             if dep:
                 dep.status = DeploymentStatus.FAILED
                 dep.finished_at = datetime.now(timezone.utc)
-                reply = deployment_reply(DeploymentStatus.FAILED)
-                dep.message = reply
-                dep.copilot_reply = reply
+                dep.message = deployment_reply(DeploymentStatus.FAILED)
+                dep.copilot_reply = dep.message
         except Exception:
             pass
         raise self.retry(exc=exc, countdown=5)
 
 
+@celery_app.task(name="amoscloud_ai.run_global_task", bind=True, max_retries=2)
+def run_global_task(self, task_id: str) -> dict[str, str]:
+    """Execute one approved Global Task Router job."""
+    try:
+        from amoscloud_ai.cloud_task_runner import execute_cloud_task
+
+        execute_cloud_task(task_id)
+        return {"task_id": task_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Global task %s failed in worker", task_id)
+        raise self.retry(exc=exc, countdown=10)
+
+
 def main() -> None:
     """Start the Celery worker when invoked as a module."""
-    argv = ["worker", "--loglevel", settings.log_level.lower(), "-c", "2"]
-    celery_app.worker_main(argv=argv)
+    celery_app.worker_main(argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"])
 
 
 if __name__ == "__main__":

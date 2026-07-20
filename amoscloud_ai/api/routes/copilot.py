@@ -41,11 +41,12 @@ async def delegate_to_copilot(body: CopilotDelegationRequest) -> CopilotDelegati
     accepted_at = datetime.now(timezone.utc)
     pipeline_id = str(uuid.uuid4())
     reply = pipeline_reply(PipelineStatus.PENDING)
+    branch = body.metadata.get("branch", "main") if body.metadata else "main"
     pipeline = PipelineResponse(
         id=pipeline_id,
         status=PipelineStatus.PENDING,
         trigger="copilot",
-        branch=body.metadata.get("branch") if body.metadata else None,
+        branch=branch,
         started_at=accepted_at,
         message=reply,
         copilot_reply=reply,

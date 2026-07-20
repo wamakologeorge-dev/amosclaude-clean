@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-amosclaud-head="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Amosclaud Autonomous</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #070b14; color: #f8fafc; }
+    main { width: min(94vw, 980px); margin: 0 auto; padding: 36px 0 56px; }
+    header, section { border: 1px solid #263244; border-radius: 18px; background: #0f172a; padding: 24px; margin-bottom: 18px; }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: clamp(2rem, 7vw, 3.25rem); margin-bottom: 8px; }
+    p { color: #cbd5e1; line-height: 1.6; }
+    nav, .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    a, button { appearance: none; border: 0; border-radius: 10px; padding: 12px 18px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    a { background: #1e293b; color: #e2e8f0; }
+    button { background: #22c55e; color: #04130a; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+    .card { border: 1px solid #2b3a55; border-radius: 14px; padding: 16px; background: #111c31; }
+    .status { padding: 16px; border-radius: 12px; background: #111c31; border: 1px solid #2b3a55; }
+    code { color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p><strong>One identity across every page</strong></p>
+      <h1>Amosclaud Autonomous</h1>
+      <p>The same Autonomous reads repository instructions, continues the chat brief, creates and executes authorized jobs, and reports verified Results.</p>
+      <nav aria-label="Amosclaud product areas">
+        <a href="http://localhost:8000/">Autonomous</a>
+        <a href="http://localhost:8000/repositories">Repository</a>
+        <a href="http://localhost:8000/bundles">Results</a>
+      </nav>
+    </header>
+
+    <section aria-labelledby="jobs-title">
+      <h2 id="jobs-title">Jobs</h2>
+      <div class="grid">
+        <div class="card"><strong>Understand</strong><p>Read repository instructions and preserve the user’s active conversation.</p></div>
+        <div class="card"><strong>Execute</strong><p>Create, build, fix, test, or deploy only with the repository owner’s permission.</p></div>
+        <div class="card"><strong>Prove</strong><p>Show evidence, work proof, final locations, and instructions for using the result.</p></div>
+        <div class="card"><strong>Learn safely</strong><p>Track useful learning data and test it before activation.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Local server</h2>
+      <div class="status" id="status">Checking the local Amosclaud server…</div>
+      <div class="actions" style="margin-top:16px">
+        <button id="open" type="button">Open Amosclaud Autonomous</button>
+        <a href="SELF_HOSTING.md">Read setup guide</a>
+      </div>
+      <p>The full platform runs through <code>http://localhost:8000</code>. Start the server before opening the authenticated application.</p>
+    </section>
+  </main>
+  <script>
+    const localUrl = 'http://localhost:8000';
+    const status = document.getElementById('status');
+    document.getElementById('open').addEventListener('click', () => { window.location.href = localUrl; });
+    (async () => {
+      try {
+        const response = await fetch(`${localUrl}/health`, { cache: 'no-store', mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        status.textContent = 'Amosclaud Autonomous is running and ready.';
+      } catch (error) {
+        status.innerHTML = 'Amosclaud is not running yet. Start the server, wait for readiness, then press <strong>Open Amosclaud Autonomous</strong>.';
+      }
+    })();
+  </script>
+</body>
+</html>

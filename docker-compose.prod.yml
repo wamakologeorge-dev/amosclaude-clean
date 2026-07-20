@@ -47,12 +47,16 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
-      ALLOWED_HOSTS: '["https://amosclaud.com","https://www.amosclaud.com"]'
+      ALLOWED_HOSTS: '["http://www.amosclaud.com/"]'
+      AMOSCLAUD_PUBLIC_URL: http://www.amosclaud.com/
+      AMOSCLAUD_API_URL: http://www.amosclaud.com/
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - amosclaud_data:/data
     networks:
       - amosclaud_network
     restart: unless-stopped
@@ -73,12 +77,16 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
-      ALLOWED_HOSTS: '["https://amosclaud.com","https://www.amosclaud.com"]'
+      ALLOWED_HOSTS: '["http://www.amosclaud.com/"]'
+      AMOSCLAUD_PUBLIC_URL: http://www.amosclaud.com/
+      AMOSCLAUD_API_URL: http://www.amosclaud.com/
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - amosclaud_data:/data
     networks:
       - amosclaud_network
     restart: unless-stopped
@@ -100,6 +108,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  amosclaud_data:
   postgres_data:
   redis_data:
   caddy_data:

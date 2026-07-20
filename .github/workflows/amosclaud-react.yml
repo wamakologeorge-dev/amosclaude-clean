@@ -1,0 +1,66 @@
+name: Amosclaud Autonomous ReAct
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/agent/**"
+      - "tests/test_autonomous_react_loop.py"
+      - ".github/workflows/amosclaud-react.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "src/agent/**"
+      - "tests/test_autonomous_react_loop.py"
+      - ".github/workflows/amosclaud-react.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-react:
+    name: Verify ReAct (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest flake8
+
+      - name: Compile ReAct boundary
+        run: |
+          python -m compileall -q src/agent
+          python -m py_compile tests/test_autonomous_react_loop.py
+
+      - name: Lint ReAct boundary
+        run: |
+          flake8 src/agent tests/test_autonomous_react_loop.py \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
+          flake8 src/agent tests/test_autonomous_react_loop.py \
+            --count \
+            --max-complexity=12 \
+            --max-line-length=88 \
+            --show-source \
+            --statistics
+
+      - name: Run focused ReAct tests
+        run: pytest tests/test_autonomous_react_loop.py -vv --tb=long
