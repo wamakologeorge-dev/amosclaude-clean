@@ -7,6 +7,8 @@ import hmac
 import os
 import secrets
 import smtplib
+
+from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -224,7 +226,7 @@ def _user_response(row: sqlite3.Row) -> UserResponse:
 def _send_code(email: str, code: str, purpose: str) -> None:
     host = os.getenv("SMTP_HOST")
     sender = os.getenv("SMTP_FROM", "no-reply@www.amosclaud.com")
-    if not host:
+    if not host and not http_mail_configured():
         raise HTTPException(status_code=503, detail="Amosclaud email delivery is not configured")
     port = int(os.getenv("SMTP_PORT", "587"))
     username = os.getenv("SMTP_USERNAME")
@@ -242,6 +244,17 @@ def _send_code(email: str, code: str, purpose: str) -> None:
     message["To"] = email
     message["Subject"] = subject
     message.set_content(f"Your Amosclaud code is {code}. Use it within {CODE_MINUTES} minutes to {action}. If you did not request this, ignore this email.")
+
+    if http_mail_configured():
+        try:
+            deliver_via_http(sender, email, subject, message.get_content())
+            return
+        except HttpMailError as exc:
+            if not host:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Amosclaud email delivery is temporarily unavailable. Ask the administrator to verify the SMTP settings, then try again.",
+                ) from exc
 
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
