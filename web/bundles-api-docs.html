@@ -38,8 +38,8 @@
       <div class="endpoint"><span class="method">GET</span><code>/bundles/{bundle_id}</code></div>
       <div class="endpoint"><span class="method">GET</span><code>/bundles/{bundle_id}/download</code></div>
       <h3>Catalog request</h3><div class="snippet"><button class="copy" data-copy="catalogCode">Copy</button><pre id="catalogCode">curl -H "Authorization: Bearer $AMOSCLAUD_BUNDLES_API_KEY" \
-  https://amosclaud.com/api/v1/bundles</pre></div>
-      <h3>Upload request</h3><div class="snippet"><button class="copy" data-copy="uploadCode">Copy</button><pre id="uploadCode">curl -X POST https://amosclaud.com/api/v1/bundles \
+  http://www.amosclaud.com/api/v1/bundles</pre></div>
+      <h3>Upload request</h3><div class="snippet"><button class="copy" data-copy="uploadCode">Copy</button><pre id="uploadCode">curl -X POST http://www.amosclaud.com/api/v1/bundles \
   -H "X-API-Key: $AMOSCLAUD_BUNDLES_API_KEY" \
   -F version=1.0.0 -F platform=linux-x86_64 \
   -F channel=stable -F file=@Amosclaud-Server.tar.gz</pre></div>
