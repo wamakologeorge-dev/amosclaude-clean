@@ -36,11 +36,19 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - name: Verify deploy hook is configured
+      - name: Check deploy hook configuration
+        id: hook
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        run: test -n "$RENDER_DEPLOY_HOOK_URL"
+        run: |
+          if [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Render deploy skipped::Repository secret RENDER_DEPLOY_HOOK_URL is not configured, so no deploy was triggered. Add the secret to enable automatic Render deploys."
+          fi
       - name: Trigger Render deploy
+        if: steps.hook.outputs.configured == 'true'
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL"

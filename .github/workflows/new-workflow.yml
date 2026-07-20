@@ -84,7 +84,7 @@ jobs:
           AUTH_DB_PATH: ./data/build-verify-auth.db
           REPOSITORY_STORAGE_PATH: ./data/build-verify-repositories
           AMOSCLAUD_STORAGE_PATH: ./data/build-verify-storage
-          AMOSCLAUD_API_URL: http://localhost:8000
+          AMOSCLAUD_API_URL: http://amosclaud:8000
           SECRET_KEY: build-verify-secret-key-with-at-least-32-characters
           AUTH_COOKIE_SECURE: "false"
         run: pytest tests/ -v --tb=short

@@ -31,9 +31,9 @@
       <h1>Amosclaud Autonomous</h1>
       <p>The same Autonomous reads repository instructions, continues the chat brief, creates and executes authorized jobs, and reports verified Results.</p>
       <nav aria-label="Amosclaud product areas">
-        <a href="http://localhost:8000/">Autonomous</a>
-        <a href="http://localhost:8000/repositories">Repository</a>
-        <a href="http://localhost:8000/bundles">Results</a>
+        <a href="http://www.amosclaud.com/">Autonomous</a>
+        <a href="http://www.amosclaud.com/repositories">Repository</a>
+        <a href="http://www.amosclaud.com/bundles">Results</a>
       </nav>
     </header>
 
@@ -48,26 +48,30 @@
     </section>
 
     <section>
-      <h2>Local server</h2>
-      <div class="status" id="status">Checking the local Amosclaud server…</div>
+      <h2>Open the platform</h2>
+      <div class="status" id="status">Checking for a local Amosclaud server…</div>
       <div class="actions" style="margin-top:16px">
         <button id="open" type="button">Open Amosclaud Autonomous</button>
-        <a href="SELF_HOSTING.md">Read setup guide</a>
+        <a href="https://github.com/wamakologeorge-dev/amosclaude-clean/blob/main/SELF_HOSTING.md" target="_blank" rel="noopener">Read setup guide</a>
       </div>
-      <p>The full platform runs through <code>http://localhost:8000</code>. Start the server before opening the authenticated application.</p>
+      <p>The hosted platform runs at <code>http://www.amosclaud.com/</code>. Developers can also run a local server on <code>http://localhost:8000</code>; when one is detected, this page opens it instead.</p>
     </section>
   </main>
   <script>
+    const productionUrl = 'http://www.amosclaud.com/';
     const localUrl = 'http://localhost:8000';
     const status = document.getElementById('status');
-    document.getElementById('open').addEventListener('click', () => { window.location.href = localUrl; });
+    const openButton = document.getElementById('open');
+    let targetUrl = productionUrl;
+    openButton.addEventListener('click', () => { window.location.href = targetUrl; });
     (async () => {
       try {
         const response = await fetch(`${localUrl}/health`, { cache: 'no-store', mode: 'cors' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        status.textContent = 'Amosclaud Autonomous is running and ready.';
+        targetUrl = localUrl;
+        status.textContent = 'A local Amosclaud server is running and ready. Opening uses http://localhost:8000.';
       } catch (error) {
-        status.innerHTML = 'Amosclaud is not running yet. Start the server, wait for readiness, then press <strong>Open Amosclaud Autonomous</strong>.';
+        status.innerHTML = 'No local server detected. Press <strong>Open Amosclaud Autonomous</strong> to use the hosted platform at <code>www.amosclaud.com</code>.';
       }
     })();
   </script>

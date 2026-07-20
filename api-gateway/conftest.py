@@ -8,16 +8,18 @@ import pytest_asyncio
 import httpx
 from httpx import AsyncClient
 
-# Attempt to load your gateway application instance dynamically
-try:
-    from main import app
-except ImportError:
-    # Fallback to local gateway path context if called from repository root
-    import sys
-    import os
-    sys.path.insert(0, os.path.dirname(__file__))
-    from main import app
+# Load the gateway application under a distinct module name. Importing it as
+# ``main`` polluted sys.modules and shadowed the repository root entry point.
+import importlib.util
+from pathlib import Path
 
+_gateway_spec = importlib.util.spec_from_file_location(
+    "api_gateway_main", Path(__file__).with_name("main.py")
+)
+assert _gateway_spec and _gateway_spec.loader
+_gateway_module = importlib.util.module_from_spec(_gateway_spec)
+_gateway_spec.loader.exec_module(_gateway_module)
+app = _gateway_module.app
 
 @pytest.fixture(scope="session")
 def anyio_backend() -> str:

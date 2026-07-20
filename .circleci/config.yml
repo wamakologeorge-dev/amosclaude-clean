@@ -54,7 +54,7 @@ commands:
             ERROR_CONTEXT="CircleCI verification failed for ${CIRCLE_PROJECT_REPONAME} at commit ${CIRCLE_SHA1}. Workflow: ${CIRCLE_BUILD_URL}"
             export TASK_ID ERROR_CONTEXT
 
-            python - <<'PY' > /tmp/amosclaud-fixer-payload.json
+            python - \<<'PY' > /tmp/amosclaud-fixer-payload.json
             import json
             import os
 
