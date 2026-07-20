@@ -21,6 +21,7 @@
   const title = byId('auth-title');
   const subtitle = byId('auth-subtitle');
   const message = byId('message');
+  const moreOptions = byId('more-options');
 
   if (!form || !submit || !message) return;
 
@@ -47,7 +48,7 @@
         headers: {'Content-Type': 'application/json', ...(options.headers || {})},
       });
     } catch (_) {
-      throw new Error('Amosclaud could not reach the account service. Check the deployment and try again.');
+      throw new Error('The Amosclaud platform server is not available. This page must be opened from the live Autonomous server, not GitHub Pages.');
     }
     const text = await response.text();
     let data = {};
@@ -119,30 +120,31 @@
 
     if (next === 'login') {
       title.textContent = 'Welcome back';
-      subtitle.textContent = 'Sign in with your Amosclaud username, password, code, or passkey.';
+      subtitle.textContent = 'Enter your username and password.';
       hidden(fields.identifier, false); hidden(fields.password, false); hidden(emailCode, false);
-      hidden(passkeyButton, !passkeysAvailable); hidden(divider, !passkeysAvailable);
+      hidden(passkeyButton, !passkeysAvailable);
       required(inputs.identifier, true); required(inputs.password, true);
       inputs.password.autocomplete = 'current-password';
       submit.textContent = 'Sign in';
     } else if (next === 'register') {
-      title.textContent = 'Create your Amosclaud account';
-      subtitle.textContent = 'Choose your @amosclaud.com username and verify a separate recovery email.';
+      title.textContent = 'Create your account';
+      subtitle.textContent = 'Choose a username, recovery email, and password.';
       hidden(fields.name, false); hidden(fields.username, false); hidden(fields.recovery, false); hidden(fields.password, false);
       hidden(fields.hint, false); hidden(fields.device, !passkeysAvailable);
       required(inputs.name, true); required(inputs.username, true); required(inputs.recovery, true); required(inputs.password, true);
       inputs.password.minLength = 10; inputs.password.autocomplete = 'new-password';
-      submit.textContent = passkeysAvailable ? 'Create account securely' : 'HTTPS required for account creation';
+      submit.textContent = passkeysAvailable ? 'Create account' : 'Secure HTTPS is required';
       submit.disabled = !passkeysAvailable;
+      if (moreOptions) moreOptions.open = false;
     } else if (next === 'forgot-password') {
-      title.textContent = 'Reset your password';
-      subtitle.textContent = 'Amosclaud will send a six-digit code to your verified recovery email.';
+      title.textContent = 'Reset password';
+      subtitle.textContent = 'Enter your recovery email. We will send a six-digit code.';
       hidden(fields.recovery, false); hidden(fields.code, false); hidden(fields.nextPassword, false);
       required(inputs.recovery, true); required(inputs.nextPassword, true);
       submit.textContent = 'Send recovery code';
     } else {
-      title.textContent = 'Recover your username';
-      subtitle.textContent = 'Verify your recovery email before Amosclaud reveals your account address.';
+      title.textContent = 'Find your username';
+      subtitle.textContent = 'Enter your recovery email. We will send a six-digit code.';
       hidden(fields.recovery, false); hidden(fields.code, false);
       required(inputs.recovery, true);
       submit.textContent = 'Send username code';
@@ -158,14 +160,14 @@
 
   emailCode.addEventListener('click', async () => {
     const address = canonicalAddress(inputs.identifier.value);
-    if (!inputs.identifier.value.trim()) return show('Enter your Amosclaud username first.');
+    if (!inputs.identifier.value.trim()) return show('Enter your username first.');
     emailCode.disabled = true;
     try {
       const result = await request('/api/v1/auth/login/request-code', {method: 'POST', body: JSON.stringify({email: address})});
       loginCodeMode = true;
       hidden(fields.password, true); hidden(fields.code, false);
       required(inputs.password, false); required(inputs.code, true);
-      submit.textContent = 'Verify code and sign in';
+      submit.textContent = 'Sign in with code';
       show(result.message, true);
     } catch (error) { show(error.message); }
     finally { emailCode.disabled = false; }
@@ -211,12 +213,12 @@
           accountCreated = true;
           hidden(fields.name, true); hidden(fields.username, true); hidden(fields.password, true); hidden(fields.code, false);
           required(inputs.code, true);
-          submit.textContent = 'Verify recovery email';
-          show('Account created. Enter the code sent from no-reply@amosclaud.com to finish recovery setup.', true);
+          submit.textContent = 'Verify email';
+          show('Account created. Enter the code sent to your recovery email.', true);
           return;
         }
         await request('/api/v1/auth/account-recovery/email/verify', {method: 'POST', body: JSON.stringify({email: inputs.recovery.value.trim(), code: inputs.code.value.trim()})});
-        show('Account and recovery email verified. Opening Amosclaud…', true);
+        show('Account verified. Opening Amosclaud…', true);
         window.location.replace('/cloud/agent');
         return;
       }
@@ -225,10 +227,10 @@
       if (mode === 'forgot-username') {
         if (!inputs.code.value.trim()) {
           const result = await request('/api/v1/auth/account-recovery/username/request', {method: 'POST', body: JSON.stringify({recovery_email: recoveryEmail})});
-          required(inputs.code, true); submit.textContent = 'Verify and show username'; show(result.message, true); inputs.code.focus(); return;
+          required(inputs.code, true); submit.textContent = 'Show username'; show(result.message, true); inputs.code.focus(); return;
         }
         const result = await request('/api/v1/auth/account-recovery/username/verify', {method: 'POST', body: JSON.stringify({recovery_email: recoveryEmail, code: inputs.code.value.trim()})});
-        show(`Your Amosclaud account is ${result.address}.`, true);
+        show(`Your account is ${result.address}.`, true);
         inputs.identifier.value = result.address;
         return;
       }
@@ -238,7 +240,7 @@
         required(inputs.code, true); submit.textContent = 'Reset password'; show(result.message, true); inputs.code.focus(); return;
       }
       await request('/api/v1/auth/account-recovery/password/reset', {method: 'POST', body: JSON.stringify({recovery_email: recoveryEmail, code: inputs.code.value.trim(), password: inputs.nextPassword.value})});
-      show('Password changed. All older sessions were signed out. You can now sign in.', true);
+      show('Password changed. You can now sign in.', true);
       setTimeout(() => setMode('login'), 1200);
     } catch (error) {
       show(error.name === 'NotAllowedError' ? 'Device confirmation was cancelled or timed out.' : error.message);
