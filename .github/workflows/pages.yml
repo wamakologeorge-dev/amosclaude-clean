@@ -3,6 +3,9 @@ name: Deploy static Amosclaud status page
 on:
   push:
     branches: ["main"]
+    paths:
+      - "pages-site/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +29,7 @@ jobs:
           test ! -f pages-site/login.html
           test ! -f pages-site/repositories.html
           test ! -f pages-site/account-access.js
+          test ! -f pages-site/CNAME
       - name: Upload static Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
