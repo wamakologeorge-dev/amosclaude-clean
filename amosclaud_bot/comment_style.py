@@ -6,6 +6,8 @@ KEY_MARKERS = (
     "**status:**",
     "**runtime status:**",
     "**autonomous status:**",
+    "**result:**",
+    "**compilation:**",
     "**risk:**",
     "**error:**",
     "**files changed:**",
@@ -26,9 +28,12 @@ def compact_public_comment(body: str) -> str:
     """Keep routine GitHub issue comments short while preserving decisive evidence.
 
     Full execution evidence remains available in Actions logs, PR checks, and artifacts.
-    Security/privacy notices that are already short are left unchanged.
+    Security/privacy notices that are already short are left unchanged. The on-demand
+    workflow status board is already intentionally compact, so it is preserved as-is.
     """
     text = (body or "").strip()
+    if text.startswith("### Amosclaud — Workflow Status"):
+        return text[:1800]
     if not text or len(text) <= MAX_PUBLIC_COMMENT:
         return text
 
