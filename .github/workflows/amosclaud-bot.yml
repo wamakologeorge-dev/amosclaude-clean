@@ -128,7 +128,8 @@ jobs:
             tests/test_amosclaud_professional_review.py \
             tests/test_amosclaud_approval_gate.py \
             tests/test_amosclaud_privacy_gate.py \
-            tests/test_amosclaud_comment_style.py
+            tests/test_amosclaud_comment_style.py \
+            tests/test_amosclaud_status_board.py
 
           trap - ERR
           {
