@@ -85,6 +85,29 @@ def test_inspect_routes_to_local_autonomous_and_returns_structured_report(monkey
     assert "@amosclaud fix <specific problem>" in response.body
 
 
+def test_inspection_does_not_follow_symlink_outside_repository(monkeypatch, tmp_path):
+    install_fake_kernel(monkeypatch)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    (outside / "test_escape.py").write_text("raise RuntimeError('must not be scanned')\n", encoding="utf-8")
+    (tmp_path / "linked-tests").symlink_to(outside, target_is_directory=True)
+
+    bot = AmosclaudBot("owner/repo", workspace=tmp_path)
+    response = bot.handle_comment(
+        {
+            "comment": {"body": "@amosclaud inspect repository", "author_association": "NONE"},
+            "issue": {"number": 8},
+        }
+    )
+
+    assert "0 Python test file(s) were detected" in response.body
+
+
+def test_safe_relative_file_rejects_parent_traversal(tmp_path):
+    root, owner_uid = bot_module._inspection_root(tmp_path)
+    assert bot_module._safe_relative_file(root, "../secret.txt", owner_uid) is None
+
+
 def test_fix_from_untrusted_user_is_blocked(monkeypatch):
     install_fake_kernel(monkeypatch)
     bot = AmosclaudBot("owner/repo")
