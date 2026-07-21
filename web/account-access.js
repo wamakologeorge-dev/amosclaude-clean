@@ -334,5 +334,19 @@
     }
   });
 
+
+  // Account settings can use these helpers to add a verified, separate recovery
+  // address without duplicating authentication transport or error handling.
+  window.AmosclaudAccountAccess = Object.freeze({
+    requestRecoveryEmail: recoveryEmail => request('/api/v1/auth/account-recovery/email/request', {
+      method: 'POST',
+      body: JSON.stringify({email: email(recoveryEmail)}),
+    }),
+    verifyRecoveryEmail: (recoveryEmail, code) => request('/api/v1/auth/account-recovery/email/verify', {
+      method: 'POST',
+      body: JSON.stringify({email: email(recoveryEmail), code: String(code || '').trim()}),
+    }),
+  });
+
   setMode('login');
 })();
