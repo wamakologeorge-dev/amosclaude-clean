@@ -1,0 +1,30 @@
+version: 1
+
+review:
+  professional_mode: true
+  require_human_review_for_medium_risk: true
+  request_changes_for_high_risk: true
+  large_diff_threshold_lines: 800
+
+  high_risk_paths:
+    - ".github/workflows/**"
+    - ".github/actions/**"
+    - "Infrastructure/**"
+    - "infrastructure/**"
+    - "SECURITY.md"
+    - ".github/SECURITY.md"
+    - "CODEOWNERS"
+    - ".github/CODEOWNERS"
+    - "Dockerfile"
+    - "railway.json"
+    - "vercel.json"
+
+  checks:
+    security: true
+    tests: true
+    code_quality: true
+    autonomous_evidence: true
+
+fixer:
+  writes_require_trusted_collaborator: true
+  recommended_command: "@amosclaud fix <specific problem>"
