@@ -36,6 +36,27 @@ def test_parse_command_supports_bot_alias_and_defaults_to_help():
     assert parse_command("@amosclaud-bot") == ("help", "")
 
 
+def test_natural_language_write_request_routes_to_fixer():
+    assert parse_command("@amosclaud create a health check file and test it") == (
+        "fix",
+        "create a health check file and test it",
+    )
+
+
+def test_natural_language_problem_routes_to_autonomous_inspection():
+    assert parse_command("@amosclaud my tests started failing after the last merge") == (
+        "inspect",
+        "my tests started failing after the last merge",
+    )
+
+
+def test_natural_language_review_routes_to_review():
+    assert parse_command("@amosclaud review this PR and tell me what is risky") == (
+        "review",
+        "this PR and tell me what is risky",
+    )
+
+
 def test_unrelated_comment_is_ignored():
     assert parse_command("please inspect this") == (None, "")
 
@@ -53,6 +74,7 @@ def test_status_reports_repository_local_runtime(monkeypatch):
     assert "Website dependency: **none**" in response.body
     assert "Amosclaud Autonomous: **ready**" in response.body
     assert "Amosclaud-Fixer: **available" in response.body
+    assert "Natural-language assistant mode: **enabled**" in response.body
 
 
 def test_inspect_routes_to_local_autonomous_and_returns_structured_report(monkeypatch, tmp_path):
@@ -72,7 +94,7 @@ def test_inspect_routes_to_local_autonomous_and_returns_structured_report(monkey
             "issue": {"number": 7},
         }
     )
-    assert "Amosclaud Bot — Inspect" in response.body
+    assert "Amosclaud Autonomous Assistant — Inspect" in response.body
     assert "Engine:** Amosclaud Autonomous" in response.body
     assert "Status:** **COMPLETED**" in response.body
     assert "Repository findings" in response.body
@@ -82,7 +104,6 @@ def test_inspect_routes_to_local_autonomous_and_returns_structured_report(monkey
     assert "4. Code quality" in response.body
     assert "Priority" in response.body
     assert "Recommended next action" in response.body
-    assert "@amosclaud fix <specific problem>" in response.body
 
 
 def test_inspection_does_not_follow_symlink_outside_repository(monkeypatch, tmp_path):
@@ -135,6 +156,22 @@ def test_fix_from_trusted_collaborator_routes_to_fixer(monkeypatch):
     assert "`app.py`" in response.body
 
 
+def test_natural_language_create_from_owner_routes_to_fixer(monkeypatch):
+    install_fake_kernel(monkeypatch)
+    bot = AmosclaudBot("owner/repo")
+    response = bot.handle_comment(
+        {
+            "comment": {
+                "body": "@amosclaud create a health check file and test it",
+                "author_association": "OWNER",
+            },
+            "issue": {"number": 9},
+        }
+    )
+    assert "Autonomous Assistant — Fix" in response.body
+    assert "Fixer repaired: create a health check file and test it" in response.body
+
+
 def test_failed_workflow_run_targets_linked_pull_request():
     bot = AmosclaudBot("owner/repo")
     number, response = bot.handle_workflow_run(
@@ -150,4 +187,4 @@ def test_failed_workflow_run_targets_linked_pull_request():
     assert number == 11
     assert response.should_comment is True
     assert "detected a CI failure" in response.body
-    assert "Amosclaud-Fixer" in response.body
+    assert "Tell me naturally" in response.body

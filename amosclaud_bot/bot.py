@@ -11,7 +11,7 @@ from typing import Any
 
 from src.amosclaud_os.kernel import get_autonomous_kernel
 
-BOT_NAMES = ("@amosclaud", "@amosclaud-bot")
+BOT_NAMES = ("@amosclaud-bot", "@amosclaud")
 COMMANDS = {"help", "status", "inspect", "verify", "review", "fix"}
 WRITE_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
@@ -20,6 +20,46 @@ WRITE_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 class BotResponse:
     body: str
     should_comment: bool = True
+
+
+def _infer_assistant_command(remainder: str) -> tuple[str, str]:
+    """Interpret natural-language requests as autonomous assistant intents.
+
+    The assistant keeps the existing command surface, but users no longer need
+    to memorize it. Write-oriented verbs route to Fixer, verification language
+    routes to verify, review language routes to review, and everything else is
+    treated as an Autonomous inspection/planning request.
+    """
+    objective = " ".join((remainder or "").strip().split())
+    lowered = objective.lower()
+
+    write_hints = (
+        "fix ",
+        "repair ",
+        "create ",
+        "build ",
+        "implement ",
+        "add ",
+        "update ",
+        "change ",
+        "modify ",
+        "remove ",
+        "delete ",
+        "refactor ",
+        "make ",
+        "resolve ",
+        "correct ",
+    )
+    verify_hints = ("verify ", "test ", "check whether", "confirm ", "validate ")
+    review_hints = ("review ", "look over ", "audit ", "analyze this pr", "analyse this pr")
+
+    if any(lowered.startswith(hint) for hint in write_hints):
+        return "fix", objective
+    if any(lowered.startswith(hint) for hint in verify_hints):
+        return "verify", objective
+    if any(lowered.startswith(hint) for hint in review_hints):
+        return "review", objective
+    return "inspect", objective
 
 
 def parse_command(text: str) -> tuple[str | None, str]:
@@ -33,7 +73,9 @@ def parse_command(text: str) -> tuple[str | None, str]:
         return "help", ""
     command, _, objective = remainder.partition(" ")
     command = command.lower().strip()
-    return (command if command in COMMANDS else "help"), objective.strip()
+    if command in COMMANDS:
+        return command, objective.strip()
+    return _infer_assistant_command(remainder)
 
 
 def _summarize_result(result: dict[str, Any]) -> str:
@@ -60,7 +102,6 @@ def _summarize_result(result: dict[str, Any]) -> str:
 
 
 def _inspection_root(workspace: Path) -> tuple[Path, int | None]:
-    """Resolve the repository root once and capture its owner for scan validation."""
     root = workspace.resolve(strict=True)
     if not root.is_dir():
         raise RuntimeError("Amosclaud inspection workspace must be a directory")
@@ -69,7 +110,6 @@ def _inspection_root(workspace: Path) -> tuple[Path, int | None]:
 
 
 def _safe_repository_file(root: Path, candidate: Path, owner_uid: int | None) -> Path | None:
-    """Return a safe regular file only when it stays inside and is owned with the repository."""
     try:
         if candidate.is_symlink():
             return None
@@ -94,7 +134,6 @@ def _safe_relative_file(root: Path, relative: str, owner_uid: int | None) -> Pat
 
 
 def _count_files(root: Path, patterns: tuple[str, ...], owner_uid: int | None) -> int:
-    """Count matching repository files without following symlinked directories or foreign-owned files."""
     seen: set[Path] = set()
     for current, dirs, files in os.walk(root, followlinks=False):
         current_path = Path(current)
@@ -114,7 +153,6 @@ def _count_files(root: Path, patterns: tuple[str, ...], owner_uid: int | None) -
 
 
 def _repository_inspection(workspace: Path) -> dict[str, Any]:
-    """Collect deterministic repository evidence without leaving the checked-out repository."""
     root, owner_uid = _inspection_root(workspace)
 
     workflow_files: list[Path] = []
@@ -202,12 +240,7 @@ def _repository_inspection(workspace: Path) -> dict[str, Any]:
     }
 
     priorities: dict[str, list[str]] = {"high": [], "medium": [], "low": []}
-    labels = {
-        "ci_cd": "CI/CD",
-        "tests": "Tests",
-        "security": "Security",
-        "code_quality": "Code quality",
-    }
+    labels = {"ci_cd": "CI/CD", "tests": "Tests", "security": "Security", "code_quality": "Code quality"}
     for key, finding in findings.items():
         priorities[str(finding["attention"])].append(labels[key])
 
@@ -244,12 +277,12 @@ def _format_inspection_report(result: dict[str, Any], workspace: Path) -> str:
         f"- **MEDIUM:** {priority_text('medium')}\n"
         f"- **LOW:** {priority_text('low')}\n\n"
         "## Recommended next action\n"
-        "Use `@amosclaud fix <specific problem>` for a trusted, targeted repair after reviewing the findings."
+        "Tell me naturally what you want next, or use `@amosclaud fix <specific problem>` for a targeted repair."
     )[:6000]
 
 
 class AmosclaudBot:
-    """GitHub-native control plane for the repository-local Amosclaud runtime."""
+    """GitHub-native autonomous assistant for the repository-local Amosclaud runtime."""
 
     def __init__(self, repository: str, token: str = "", workspace: Path | str = ".") -> None:
         self.repository = repository
@@ -281,14 +314,9 @@ class AmosclaudBot:
             raise RuntimeError(f"GitHub API request failed ({exc.code}): {detail[:500]}") from exc
 
     def post_comment(self, issue_number: int, body: str) -> None:
-        self._request(
-            "POST",
-            f"/repos/{self.repository}/issues/{issue_number}/comments",
-            {"body": body},
-        )
+        self._request("POST", f"/repos/{self.repository}/issues/{issue_number}/comments", {"body": body})
 
     def _run_local(self, command: str, objective: str, *, allow_writes: bool) -> dict[str, Any]:
-        """Run the existing repository-local Autonomous/Fixer; never depend on the website."""
         kernel = get_autonomous_kernel(self.workspace)
         metadata = {
             "source": "amosclaud-bot",
@@ -300,17 +328,11 @@ class AmosclaudBot:
                 return {
                     "status": "blocked",
                     "error": "write_not_authorized",
-                    "evidence": [
-                        "Amosclaud-Fixer is available, but repository writes are limited to trusted repository collaborators."
-                    ],
+                    "evidence": ["Amosclaud-Fixer is available, but repository writes are limited to trusted repository collaborators."],
                 }
             return kernel.repair(issue=objective, authorized_writes=True)
 
-        mode = {
-            "inspect": "plan",
-            "review": "review",
-            "verify": "verify",
-        }.get(command, "plan")
+        mode = {"inspect": "plan", "review": "review", "verify": "verify"}.get(command, "plan")
         return kernel.execute(
             objective=objective,
             mode=mode,
@@ -333,41 +355,40 @@ class AmosclaudBot:
 
         if command == "help":
             return BotResponse(
-                "### Amosclaud Bot\n"
-                "I run directly from this GitHub repository through GitHub Actions. The website is not required.\n\n"
-                "- `@amosclaud status` — show local Autonomous/Fixer readiness\n"
-                "- `@amosclaud inspect <objective>` — inspect with Amosclaud Autonomous\n"
-                "- `@amosclaud verify <objective>` — run verification through Autonomous\n"
-                "- `@amosclaud review <objective>` — review repository work\n"
-                "- `@amosclaud fix <objective>` — route a trusted collaborator's repair to Amosclaud-Fixer\n"
+                "### Amosclaud Autonomous Assistant\n"
+                "I work directly inside this GitHub repository through GitHub Actions. The website is not required.\n\n"
+                "You can talk to me naturally after `@amosclaud`. For example:\n\n"
+                "- `@amosclaud my tests started failing after the last merge, inspect the problem`\n"
+                "- `@amosclaud fix the failing authentication test and add a regression test`\n"
+                "- `@amosclaud create a repository health-check file and test it`\n"
+                "- `@amosclaud review this PR and tell me what is risky`\n\n"
+                "Explicit commands still work: `status`, `inspect`, `review`, `verify`, and `fix`. "
+                "Sensitive/private work still goes through the approval and privacy gates."
             )
 
         kernel = get_autonomous_kernel(self.workspace)
         if command == "status":
             status = kernel.status()
             return BotResponse(
-                "### Amosclaud Bot status\n"
+                "### Amosclaud Autonomous Assistant — Status\n"
                 "- GitHub Actions runner: **ready**\n"
                 "- Website dependency: **none**\n"
                 f"- Repository: `{self.repository}`\n"
                 f"- Target: {target}\n"
                 f"- Amosclaud Autonomous: **{status.get('status', 'unknown')}**\n"
                 "- Amosclaud-Fixer: **available through Autonomous repair**\n"
+                "- Natural-language assistant mode: **enabled**\n"
                 f"- Workspace: `{status.get('workspace', self.workspace)}`"
             )
 
         request_objective = objective or f"{command.capitalize()} {target}"
         result = self._run_local(command, request_objective, allow_writes=trusted_writer)
         engine = "Amosclaud-Fixer" if command == "fix" else "Amosclaud Autonomous"
-        details = (
-            _format_inspection_report(result, self.workspace)
-            if command == "inspect"
-            else _summarize_result(result)
-        )
+        details = _format_inspection_report(result, self.workspace) if command == "inspect" else _summarize_result(result)
         return BotResponse(
-            f"### Amosclaud Bot — {command.capitalize()}\n\n"
+            f"### Amosclaud Autonomous Assistant — {command.capitalize()}\n\n"
             f"**Engine:** {engine}\n"
-            f"**Objective:** {request_objective}\n\n"
+            f"**Understood objective:** {request_objective}\n\n"
             f"{details}"
         )
 
@@ -384,11 +405,11 @@ class AmosclaudBot:
         name = run.get("name") or "GitHub Actions"
         url = run.get("html_url") or ""
         body = (
-            "### Amosclaud Bot detected a CI failure\n"
+            "### Amosclaud Autonomous Assistant detected a CI failure\n"
             f"Workflow **{name}** failed for this pull request.\n\n"
             f"Run: {url}\n\n"
-            "The bot runs locally in GitHub Actions. Comment `@amosclaud inspect CI failure` to inspect it, "
-            "or `@amosclaud fix CI failure` to route the repair through Amosclaud-Fixer."
+            "Tell me naturally what you want me to do, for example `@amosclaud inspect this CI failure` "
+            "or `@amosclaud fix this CI failure and verify the repair`."
         )
         return number, BotResponse(body)
 

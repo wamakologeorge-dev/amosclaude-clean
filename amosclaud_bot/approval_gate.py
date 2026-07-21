@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
@@ -37,11 +38,24 @@ HIGH_RISK_FILES = {
 }
 
 APPROVAL_MARKER = "<!-- amosclaud-approval-source:"
+APPROVAL_CONSUMED_MARKER = "<!-- amosclaud-approval-consumed -->"
+APPROVAL_RECORD_MARKER = "<!-- amosclaud-approval-record -->"
+TRUSTED_BOT_LOGINS = {"github-actions[bot]"}
 
 
 def _is_sensitive_objective(objective: str) -> bool:
     lowered = (objective or "").lower()
     return any(hint in lowered for hint in SENSITIVE_HINTS)
+
+
+def _normalize_objective(objective: str) -> str:
+    return " ".join((objective or "").strip().lower().split())
+
+
+def _approval_source(source_number: int | str, objective: str) -> str:
+    """Bind an approval to one issue and one exact normalized objective."""
+    digest = hashlib.sha256(_normalize_objective(objective).encode("utf-8")).hexdigest()[:16]
+    return f"issue-comment-{source_number}-{digest}"
 
 
 def _high_risk_files(files: list[dict[str, Any]]) -> list[str]:
@@ -55,18 +69,119 @@ def _high_risk_files(files: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def _existing_open_approval(bot: AmosclaudBot, source: str) -> int | None:
-    issues = bot._request("GET", f"/repos/{bot.repository}/issues?state=open&per_page=100")
-    if not isinstance(issues, list):
-        return None
+def _issues(bot: AmosclaudBot, *, state: str) -> list[dict[str, Any]]:
+    issues = bot._request("GET", f"/repos/{bot.repository}/issues?state={state}&per_page=100")
+    return issues if isinstance(issues, list) else []
+
+
+def _matching_approval_issue(
+    bot: AmosclaudBot,
+    source: str,
+    *,
+    state: str = "all",
+    legacy_objective: str | None = None,
+) -> dict[str, Any] | None:
     marker = f"{APPROVAL_MARKER}{source} -->"
-    for issue in issues:
+    for issue in _issues(bot, state=state):
         if issue.get("pull_request"):
             continue
-        if marker in str(issue.get("body") or ""):
-            number = issue.get("number")
-            return int(number) if isinstance(number, int) else None
+        body = str(issue.get("body") or "")
+        if marker not in body:
+            continue
+        if legacy_objective is not None and f"`{legacy_objective}`" not in body:
+            continue
+        return issue
     return None
+
+
+def _existing_open_approval(bot: AmosclaudBot, source: str) -> int | None:
+    issue = _matching_approval_issue(bot, source, state="open")
+    if issue is None:
+        return None
+    number = issue.get("number")
+    return int(number) if isinstance(number, int) else None
+
+
+def _approval_comments(bot: AmosclaudBot, issue_number: int) -> list[dict[str, Any]] | None:
+    """Read the complete approval audit trail. Fail closed if pagination is ambiguous."""
+    all_comments: list[dict[str, Any]] = []
+    for page in range(1, 51):
+        comments = bot._request(
+            "GET",
+            f"/repos/{bot.repository}/issues/{issue_number}/comments?per_page=100&page={page}",
+        )
+        if not isinstance(comments, list):
+            return None
+        all_comments.extend(item for item in comments if isinstance(item, dict))
+        if len(comments) < 100:
+            return all_comments
+    return None
+
+
+def _is_trusted_bot_record(comment: dict[str, Any]) -> bool:
+    user = comment.get("user") or {}
+    login = str(user.get("login") or "").lower()
+    user_type = str(user.get("type") or "").lower()
+    return login in TRUSTED_BOT_LOGINS and user_type == "bot"
+
+
+def _approval_decision(bot: AmosclaudBot, issue_number: int) -> str | None:
+    comments = _approval_comments(bot, issue_number)
+    if comments is None:
+        return None
+
+    decision: str | None = None
+    consumed = False
+    for comment in comments:
+        body = str(comment.get("body") or "")
+        if APPROVAL_CONSUMED_MARKER in body and _is_trusted_bot_record(comment):
+            consumed = True
+        if APPROVAL_RECORD_MARKER not in body or not _is_trusted_bot_record(comment):
+            continue
+        if "**Decision:** **APPROVED**" in body:
+            decision = "APPROVED"
+        elif "**Decision:** **DENIED**" in body:
+            decision = "DENIED"
+
+    if consumed:
+        return "CONSUMED"
+    return decision
+
+
+def _find_approved_request(
+    bot: AmosclaudBot,
+    *,
+    source_number: int | str,
+    objective: str,
+) -> int | None:
+    source = _approval_source(source_number, objective)
+    issue = _matching_approval_issue(bot, source, state="all")
+
+    if issue is None:
+        legacy_source = f"issue-comment-{source_number}"
+        issue = _matching_approval_issue(
+            bot,
+            legacy_source,
+            state="all",
+            legacy_objective=objective,
+        )
+
+    if issue is None:
+        return None
+    number = issue.get("number")
+    if not isinstance(number, int):
+        return None
+    return number if _approval_decision(bot, number) == "APPROVED" else None
+
+
+def _consume_approval(bot: AmosclaudBot, approval_number: int, source_number: int | str) -> None:
+    bot.post_comment(
+        approval_number,
+        "### Amosclaud Approval — Execution authorized\n"
+        f"{APPROVAL_CONSUMED_MARKER}\n"
+        f"Approval consumed by the re-run from source #{source_number}. "
+        "This approval cannot authorize another execution.",
+    )
 
 
 def _create_approval_issue(
@@ -93,7 +208,7 @@ def _create_approval_issue(
         "A trusted repository human must comment one of:\n\n"
         "- `@amosclaud approve`\n"
         "- `@amosclaud deny`\n\n"
-        "Approval is deliberately separate from execution. After approval, re-run the original command so the execution remains explicit and auditable."
+        "Approval is deliberately separate from execution. After approval, re-run the original command so the execution remains explicit and auditable. Each approval authorizes one execution only."
     )
     created = bot._request(
         "POST",
@@ -125,7 +240,7 @@ def _record_decision(bot: AmosclaudBot, payload: dict[str, Any], command: str) -
     state = "APPROVED" if command == "approve" else "DENIED"
     bot.post_comment(
         number,
-        f"### Amosclaud Approval\n**Decision:** **{state}**\n\nThe approval record is now auditable. Re-run the original sensitive command only if the decision is APPROVED.",
+        f"### Amosclaud Approval\n{APPROVAL_RECORD_MARKER}\n**Decision:** **{state}**\n\nThe approval record is now auditable. Re-run the original sensitive command only if the decision is APPROVED.",
     )
     bot._request("PATCH", f"/repos/{bot.repository}/issues/{number}", {"state": "closed"})
     return 0
@@ -136,6 +251,7 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
         comment = payload.get("comment") or {}
         command, objective = parse_command(str(comment.get("body") or ""))
         normalized = " ".join(str(comment.get("body") or "").strip().split()).lower()
+        association = str(comment.get("author_association") or "NONE").upper()
 
         if normalized.startswith("@amosclaud approve") or normalized.startswith("@amosclaud-bot approve"):
             return _record_decision(bot, payload, "approve")
@@ -145,9 +261,30 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
         if command == "fix" and _is_sensitive_objective(objective):
             issue = payload.get("issue") or {}
             source_number = issue.get("number", "unknown")
+
+            if association not in WRITE_ASSOCIATIONS:
+                bot.post_comment(
+                    int(source_number),
+                    "### Amosclaud Bot — Sensitive write request blocked\nOnly OWNER, MEMBER, or COLLABORATOR may create or consume approval for a sensitive repair.",
+                )
+                return 0
+
+            approved = _find_approved_request(
+                bot,
+                source_number=source_number,
+                objective=objective,
+            )
+            if approved is not None:
+                _consume_approval(bot, approved, source_number)
+                bot.post_comment(
+                    int(source_number),
+                    f"### Amosclaud Bot — Approval verified\nApproval issue #{approved} authorizes this one execution. Proceeding with Amosclaud-Fixer.",
+                )
+                return None
+
             approval = _create_approval_issue(
                 bot,
-                source=f"issue-comment-{source_number}",
+                source=_approval_source(source_number, objective),
                 title=f"Sensitive Amosclaud-Fixer request from #{source_number}",
                 reason_lines=[f"Sensitive capability keyword detected in requested repair: `{objective}`"],
                 requested_capability="Amosclaud-Fixer",
@@ -160,7 +297,7 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
 
     if event_name == "pull_request":
         pr = payload.get("pull_request") or {}
-        number = pr.get("number") or (payload.get("number"))
+        number = pr.get("number") or payload.get("number")
         if not isinstance(number, int):
             return None
         files = bot._request("GET", f"/repos/{bot.repository}/pulls/{number}/files?per_page=100")
