@@ -1,0 +1,54 @@
+version: 1
+
+human_approval:
+  enabled: true
+  issue_prefix: "[Amosclaud Approval Required]"
+  trusted_associations:
+    - OWNER
+    - MEMBER
+    - COLLABORATOR
+
+  automatic_issue_creation:
+    pull_request_sensitive_changes: true
+    sensitive_tool_requests: true
+
+  protected_paths:
+    - ".github/workflows/**"
+    - ".github/actions/**"
+    - "Infrastructure/**"
+    - "infrastructure/**"
+    - "SECURITY.md"
+    - ".github/SECURITY.md"
+    - "CODEOWNERS"
+    - ".github/CODEOWNERS"
+    - "Dockerfile"
+    - "railway.json"
+    - "vercel.json"
+
+  protected_tool_hints:
+    - deploy
+    - deployment
+    - workflow
+    - github actions
+    - permission
+    - permissions
+    - authentication
+    - authorization
+    - security
+    - secret
+    - credential
+    - infrastructure
+    - production
+
+  decision_commands:
+    approve: "@amosclaud approve"
+    deny: "@amosclaud deny"
+
+  execution_policy:
+    approval_does_not_auto_execute: true
+    rerun_original_command_after_approval: true
+
+  audit:
+    keep_approval_issue: true
+    record_human_identity: true
+    record_source_issue_or_pull_request: true

@@ -55,17 +55,57 @@ def test_status_reports_repository_local_runtime(monkeypatch):
     assert "Amosclaud-Fixer: **available" in response.body
 
 
-def test_inspect_routes_to_local_autonomous(monkeypatch):
+def test_inspect_routes_to_local_autonomous_and_returns_structured_report(monkeypatch, tmp_path):
     install_fake_kernel(monkeypatch)
-    bot = AmosclaudBot("owner/repo")
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: CI\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_sample.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
+    (tmp_path / "SECURITY.md").write_text("# Security\n", encoding="utf-8")
+    (tmp_path / ".github" / "dependabot.yml").write_text("version: 2\n", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n[tool.ruff]\n", encoding="utf-8")
+
+    bot = AmosclaudBot("owner/repo", workspace=tmp_path)
     response = bot.handle_comment(
         {
-            "comment": {"body": "@amosclaud inspect failing CI", "author_association": "NONE"},
+            "comment": {"body": "@amosclaud inspect this repository", "author_association": "NONE"},
             "issue": {"number": 7},
         }
     )
+    assert "Amosclaud Bot — Inspect" in response.body
     assert "Engine:** Amosclaud Autonomous" in response.body
-    assert "Autonomous executed plan: failing CI" in response.body
+    assert "Status:** **COMPLETED**" in response.body
+    assert "Repository findings" in response.body
+    assert "1. CI/CD" in response.body
+    assert "2. Tests" in response.body
+    assert "3. Security" in response.body
+    assert "4. Code quality" in response.body
+    assert "Priority" in response.body
+    assert "Recommended next action" in response.body
+    assert "@amosclaud fix <specific problem>" in response.body
+
+
+def test_inspection_does_not_follow_symlink_outside_repository(monkeypatch, tmp_path):
+    install_fake_kernel(monkeypatch)
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    (outside / "test_escape.py").write_text("raise RuntimeError('must not be scanned')\n", encoding="utf-8")
+    (tmp_path / "linked-tests").symlink_to(outside, target_is_directory=True)
+
+    bot = AmosclaudBot("owner/repo", workspace=tmp_path)
+    response = bot.handle_comment(
+        {
+            "comment": {"body": "@amosclaud inspect repository", "author_association": "NONE"},
+            "issue": {"number": 8},
+        }
+    )
+
+    assert "0 Python test file(s) were detected" in response.body
+
+
+def test_safe_relative_file_rejects_parent_traversal(tmp_path):
+    root, owner_uid = bot_module._inspection_root(tmp_path)
+    assert bot_module._safe_relative_file(root, "../secret.txt", owner_uid) is None
 
 
 def test_fix_from_untrusted_user_is_blocked(monkeypatch):
