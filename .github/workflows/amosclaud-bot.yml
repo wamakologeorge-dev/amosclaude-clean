@@ -1,0 +1,38 @@
+name: Amosclaud Bot
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_run:
+    workflows: ["CI/CD — Test & Deploy", "Python verification"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  respond:
+    if: >-
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'issue_comment' &&
+       (startsWith(github.event.comment.body, '@amosclaud') || startsWith(github.event.comment.body, '@amosclaud-bot')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run Amosclaud Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMOSCLAUD_BOT_AUTONOMOUS_ENDPOINT: ${{ secrets.AMOSCLAUD_BOT_AUTONOMOUS_ENDPOINT }}
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+        run: python -m amosclaud_bot.bot
