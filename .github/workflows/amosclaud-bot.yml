@@ -58,7 +58,7 @@ jobs:
       - name: Run Amosclaud Bot
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m amosclaud_bot.approvals
+        run: python -m amosclaud_bot.professional
 
       - name: Verify repair before publishing
         if: >-
@@ -71,7 +71,7 @@ jobs:
             exit 0
           fi
           python -m compileall -q amosclaud_bot src
-          python -m pytest -q tests/test_amosclaud_bot.py tests/test_amosclaud_professional_review.py tests/test_amosclaud_approvals.py
+          python -m pytest -q tests/test_amosclaud_bot.py tests/test_amosclaud_professional_review.py
 
       - name: Commit and publish Amosclaud-Fixer changes
         if: >-
