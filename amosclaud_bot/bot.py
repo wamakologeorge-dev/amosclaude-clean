@@ -11,7 +11,7 @@ from typing import Any
 
 from src.amosclaud_os.kernel import get_autonomous_kernel
 
-BOT_NAMES = ("@amosclaud", "@amosclaud-bot")
+BOT_NAMES = ("@amosclaud-bot", "@amosclaud")
 COMMANDS = {"help", "status", "inspect", "verify", "review", "fix"}
 WRITE_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
