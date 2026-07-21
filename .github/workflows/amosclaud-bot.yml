@@ -1,0 +1,100 @@
+name: Amosclaud Bot
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_run:
+    workflows: ["CI/CD — Test & Deploy", "Python verification"]
+    types: [completed]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  respond:
+    if: >-
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'issue_comment' &&
+       (startsWith(github.event.comment.body, '@amosclaud') || startsWith(github.event.comment.body, '@amosclaud-bot')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Check out pull request head
+        if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr checkout "${{ github.event.issue.number }}"
+
+      - name: Prepare repair branch for issue
+        if: >-
+          github.event_name == 'issue_comment' &&
+          !github.event.issue.pull_request &&
+          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        run: git switch -c "amosclaud-bot/fix-${{ github.event.issue.number }}-${{ github.run_id }}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Amosclaud repository runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run Amosclaud Bot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m amosclaud_bot.bot
+
+      - name: Verify repair before publishing
+        if: >-
+          github.event_name == 'issue_comment' &&
+          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No repository changes were produced by Amosclaud-Fixer."
+            exit 0
+          fi
+          python -m compileall -q amosclaud_bot src
+          python -m pytest -q tests/test_amosclaud_bot.py
+
+      - name: Commit and publish Amosclaud-Fixer changes
+        if: >-
+          github.event_name == 'issue_comment' &&
+          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name "amosclaud-bot"
+          git config user.email "amosclaud-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: Amosclaud-Fixer repair for #${{ github.event.issue.number }}"
+
+          if [ "${{ github.event.issue.pull_request != null }}" = "true" ]; then
+            git push
+            gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot\nAmosclaud-Fixer verified, committed, and pushed the repair to this pull request."
+          else
+            git push -u origin HEAD
+            PR_URL=$(gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$(git branch --show-current)" \
+              --title "Amosclaud-Fixer: repair issue #${{ github.event.issue.number }}" \
+              --body "Automated repair created by Amosclaud Bot through the repository-local Amosclaud Autonomous and Amosclaud-Fixer pipeline.\n\nCloses #${{ github.event.issue.number }}")
+            gh issue comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot\nAmosclaud-Fixer created and verified a repair pull request: ${PR_URL}"
+          fi
