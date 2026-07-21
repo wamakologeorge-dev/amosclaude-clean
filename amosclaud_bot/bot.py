@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import urllib.error
@@ -58,36 +59,91 @@ def _summarize_result(result: dict[str, Any]) -> str:
     return "\n".join(lines)[:6000]
 
 
-def _count_files(root: Path, patterns: tuple[str, ...]) -> int:
+def _inspection_root(workspace: Path) -> tuple[Path, int | None]:
+    """Resolve the repository root once and capture its owner for scan validation."""
+    root = workspace.resolve(strict=True)
+    if not root.is_dir():
+        raise RuntimeError("Amosclaud inspection workspace must be a directory")
+    stat_result = root.stat()
+    return root, getattr(stat_result, "st_uid", None)
+
+
+def _safe_repository_file(root: Path, candidate: Path, owner_uid: int | None) -> Path | None:
+    """Return a safe regular file only when it stays inside and is owned with the repository."""
+    try:
+        if candidate.is_symlink():
+            return None
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            return None
+        stat_result = resolved.stat()
+        if owner_uid is not None and getattr(stat_result, "st_uid", owner_uid) != owner_uid:
+            return None
+        if not resolved.is_file():
+            return None
+        return resolved
+    except (FileNotFoundError, OSError, RuntimeError):
+        return None
+
+
+def _safe_relative_file(root: Path, relative: str, owner_uid: int | None) -> Path | None:
+    path = Path(relative)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return _safe_repository_file(root, root / path, owner_uid)
+
+
+def _count_files(root: Path, patterns: tuple[str, ...], owner_uid: int | None) -> int:
+    """Count matching repository files without following symlinked directories or foreign-owned files."""
     seen: set[Path] = set()
-    for pattern in patterns:
-        seen.update(path for path in root.rglob(pattern) if path.is_file())
+    for current, dirs, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        dirs[:] = [
+            name
+            for name in dirs
+            if not (current_path / name).is_symlink()
+            and (current_path / name).resolve(strict=False).is_relative_to(root)
+        ]
+        for name in files:
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                continue
+            safe = _safe_repository_file(root, current_path / name, owner_uid)
+            if safe is not None:
+                seen.add(safe)
     return len(seen)
 
 
 def _repository_inspection(workspace: Path) -> dict[str, Any]:
-    """Collect deterministic repository evidence for a useful GitHub inspection report."""
-    github_workflows = workspace / ".github" / "workflows"
-    workflow_files = sorted(
-        [*github_workflows.glob("*.yml"), *github_workflows.glob("*.yaml")]
-    ) if github_workflows.exists() else []
+    """Collect deterministic repository evidence without leaving the checked-out repository."""
+    root, owner_uid = _inspection_root(workspace)
 
-    test_count = _count_files(workspace, ("test_*.py", "*_test.py"))
+    workflow_files: list[Path] = []
+    workflows_dir = root / ".github" / "workflows"
+    if workflows_dir.exists() and not workflows_dir.is_symlink():
+        for pattern in ("*.yml", "*.yaml"):
+            for candidate in workflows_dir.glob(pattern):
+                safe = _safe_repository_file(root, candidate, owner_uid)
+                if safe is not None:
+                    workflow_files.append(safe)
+    workflow_files = sorted(set(workflow_files))
+
+    test_count = _count_files(root, ("test_*.py", "*_test.py"), owner_uid)
     has_pytest_config = any(
-        (workspace / name).exists()
+        _safe_relative_file(root, name, owner_uid) is not None
         for name in ("pyproject.toml", "pytest.ini", "tox.ini", "setup.cfg")
     )
 
     security_policy = any(
-        (workspace / name).exists()
+        _safe_relative_file(root, name, owner_uid) is not None
         for name in ("SECURITY.md", ".github/SECURITY.md")
     )
-    dependabot = (workspace / ".github" / "dependabot.yml").exists() or (
-        workspace / ".github" / "dependabot.yaml"
-    ).exists()
+    dependabot = any(
+        _safe_relative_file(root, name, owner_uid) is not None
+        for name in (".github/dependabot.yml", ".github/dependabot.yaml")
+    )
 
-    pyproject = workspace / "pyproject.toml"
-    pyproject_text = pyproject.read_text(encoding="utf-8", errors="ignore") if pyproject.exists() else ""
+    pyproject = _safe_relative_file(root, "pyproject.toml", owner_uid)
+    pyproject_text = pyproject.read_text(encoding="utf-8", errors="ignore") if pyproject else ""
     quality_tools = [
         tool
         for tool in ("ruff", "black", "mypy", "pytest", "coverage")
