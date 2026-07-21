@@ -1,0 +1,79 @@
+version: 1
+
+mode: controlled-power
+
+principles:
+  - protect-main-with-pull-requests
+  - keep-development-branches-writable
+  - least-privilege-by-default
+  - require-human-review-for-high-risk-changes
+  - preserve-amosclaud-autonomous-and-fixer-development-flow
+
+trusted_writers:
+  github_associations:
+    - OWNER
+    - MEMBER
+    - COLLABORATOR
+
+branch_policy:
+  protected_branch: main
+  allow_direct_development_on_feature_branches: true
+  prefer_pull_requests_for_main: true
+  allow_amosclaud_to_create_branches: true
+  allow_amosclaud_to_push_feature_branches: true
+  allow_amosclaud_to_open_pull_requests: true
+
+protected_paths:
+  require_human_review:
+    - ".github/workflows/**"
+    - ".github/actions/**"
+    - ".github/CODEOWNERS"
+    - "SECURITY.md"
+    - "Infrastructure/**"
+    - "Dockerfile"
+    - "docker-compose*.yml"
+    - "railway.json"
+    - "vercel.json"
+    - "Procfile"
+    - "**/auth/**"
+    - "**/permissions/**"
+
+amosclaud_bot:
+  inspect:
+    writes_allowed: false
+  review:
+    writes_allowed: false
+  verify:
+    writes_allowed: false
+  fix:
+    writes_allowed: true
+    trusted_writers_only: true
+    prefer_feature_branch: true
+    verify_before_publish: true
+
+filesystem_safety:
+  block_parent_traversal: true
+  block_absolute_path_escape: true
+  block_symlink_escape: true
+  do_not_follow_symlink_directories: true
+  validate_repository_ownership: true
+
+secrets:
+  never_commit_patterns:
+    - ".env"
+    - ".env.*"
+    - "*.pem"
+    - "*.key"
+    - "*.p12"
+    - "*.pfx"
+  require_github_or_platform_secret_store: true
+
+verification:
+  require_tests_when_available: true
+  require_compile_check_for_python_changes: true
+  require_bot_tests_for_amosclaud_bot_changes: true
+  fail_closed_on_verification_error: true
+
+notes:
+  - "This policy is intentionally designed to keep Amosclaud development powerful while reducing accidental writes to high-risk areas."
+  - "It does not disable branch creation, pull-request creation, feature-branch pushes, or normal Amosclaud development work."

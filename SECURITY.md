@@ -22,6 +22,24 @@ You can expect an initial acknowledgement within 7 days. Confirmed vulnerabiliti
 
 Never commit API keys, tokens, passwords, private keys, or populated `.env` files. Use example environment files only for documented placeholders and store real values in GitHub Secrets or the deployment platform's secret manager.
 
+## Amosclaud Controlled-Power Model
+
+Amosclaud is intentionally designed to retain strong development capability while reducing accidental high-risk changes.
+
+The repository security policy is defined in `.amosclaud/security.yml`.
+
+Under this model:
+
+- Amosclaud may inspect, review, verify, create branches, push feature-branch changes, and open pull requests.
+- Amosclaud-Fixer write operations remain limited to trusted repository collaborators.
+- `main` should receive changes through pull requests rather than routine direct development writes.
+- High-risk files such as GitHub Actions workflows, deployment configuration, authentication/permission code, `SECURITY.md`, and `CODEOWNERS` require human review before merge.
+- Read-only inspection and review operations must not modify the repository.
+- Repair work must be verified before it is published as a commit or pull request.
+- Filesystem inspection must reject path traversal, repository escape through symlinks, and other attempts to read outside the checked-out repository.
+
+This model is not intended to lock out legitimate development tools. Feature branches remain writable so maintainers and authorized automation can continue building and repairing Amosclaud efficiently.
+
 ## Deployment Security
 
 Before exposing this self-hosted application to the internet:
