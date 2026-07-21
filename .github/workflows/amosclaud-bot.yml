@@ -17,11 +17,6 @@ permissions:
 
 jobs:
   respond:
-    if: >-
-      github.event_name == 'workflow_run' ||
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' &&
-       (startsWith(github.event.comment.body, '@amosclaud') || startsWith(github.event.comment.body, '@amosclaud-bot')))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -55,10 +50,10 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
 
-      - name: Run Amosclaud Bot
+      - name: Run Amosclaud Bot dispatcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python -m amosclaud_bot.professional
+        run: python -m amosclaud_bot.dispatcher
 
       - name: Verify repair before publishing
         if: >-
@@ -92,7 +87,7 @@ jobs:
           if [ "${{ github.event.issue.pull_request != null }}" = "true" ]; then
             git push
             gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot
-Amosclaud-Fixer verified, committed, and pushed the repair to this pull request."
+          Amosclaud-Fixer verified, committed, and pushed the repair to this pull request."
           else
             git push -u origin HEAD
             PR_URL=$(gh pr create \
@@ -101,5 +96,5 @@ Amosclaud-Fixer verified, committed, and pushed the repair to this pull request.
               --title "Amosclaud-Fixer: repair issue #${{ github.event.issue.number }}" \
               --body "Automated repair created by Amosclaud Bot through the repository-local Amosclaud Autonomous and Amosclaud-Fixer pipeline.\n\nCloses #${{ github.event.issue.number }}")
             gh issue comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot
-Amosclaud-Fixer created and verified a repair pull request: ${PR_URL}"
+          Amosclaud-Fixer created and verified a repair pull request: ${PR_URL}"
           fi
