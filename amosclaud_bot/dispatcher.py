@@ -9,6 +9,7 @@ from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 from .comment_style import compact_public_comment
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
+from .status_board import handle_status_request
 
 PRIVATE_ROUTE_MARKER = Path("/tmp/amosclaud-private-routed")
 _ORIGINAL_POST_COMMENT = AmosclaudBot.post_comment
@@ -85,7 +86,7 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
 
 
 def run_dispatcher_from_environment() -> int:
-    """Route supported GitHub events through privacy, approval, professional, then base bot handling."""
+    """Route supported GitHub events through privacy, status, approval, review, then base bot handling."""
     _install_compact_comment_mode()
 
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
@@ -106,6 +107,10 @@ def run_dispatcher_from_environment() -> int:
             return privacy_result
         if privacy_only:
             return 0
+
+        status_result = handle_status_request(bot, payload)
+        if status_result is not None:
+            return status_result
 
     if PRIVATE_ROUTE_MARKER.exists():
         return 0
