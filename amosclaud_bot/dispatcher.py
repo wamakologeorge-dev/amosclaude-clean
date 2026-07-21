@@ -9,6 +9,8 @@ from .bot import AmosclaudBot, parse_command
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
 
+PRIVATE_ROUTE_MARKER = Path("/tmp/amosclaud-private-routed")
+
 
 def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | None:
     comment = payload.get("comment") or {}
@@ -40,6 +42,9 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
             "This work was routed away from the public issue because Amosclaud classified it as serious/private work."
         ),
     )
+
+    # Later workflow steps use this marker to avoid public verification/publishing output.
+    PRIVATE_ROUTE_MARKER.write_text("private\n", encoding="utf-8")
 
     if route.configured:
         bot.post_comment(
