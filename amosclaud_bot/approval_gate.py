@@ -39,6 +39,8 @@ HIGH_RISK_FILES = {
 
 APPROVAL_MARKER = "<!-- amosclaud-approval-source:"
 APPROVAL_CONSUMED_MARKER = "<!-- amosclaud-approval-consumed -->"
+APPROVAL_RECORD_MARKER = "<!-- amosclaud-approval-record -->"
+TRUSTED_BOT_LOGINS = {"github-actions[bot]"}
 
 
 def _is_sensitive_objective(objective: str) -> bool:
@@ -100,24 +102,46 @@ def _existing_open_approval(bot: AmosclaudBot, source: str) -> int | None:
     return int(number) if isinstance(number, int) else None
 
 
+def _approval_comments(bot: AmosclaudBot, issue_number: int) -> list[dict[str, Any]] | None:
+    """Read the complete approval audit trail. Fail closed if pagination is ambiguous."""
+    all_comments: list[dict[str, Any]] = []
+    for page in range(1, 51):
+        comments = bot._request(
+            "GET",
+            f"/repos/{bot.repository}/issues/{issue_number}/comments?per_page=100&page={page}",
+        )
+        if not isinstance(comments, list):
+            return None
+        all_comments.extend(item for item in comments if isinstance(item, dict))
+        if len(comments) < 100:
+            return all_comments
+    return None
+
+
+def _is_trusted_bot_record(comment: dict[str, Any]) -> bool:
+    user = comment.get("user") or {}
+    login = str(user.get("login") or "").lower()
+    user_type = str(user.get("type") or "").lower()
+    return login in TRUSTED_BOT_LOGINS and user_type == "bot"
+
+
 def _approval_decision(bot: AmosclaudBot, issue_number: int) -> str | None:
-    comments = bot._request(
-        "GET",
-        f"/repos/{bot.repository}/issues/{issue_number}/comments?per_page=100",
-    )
-    if not isinstance(comments, list):
+    comments = _approval_comments(bot, issue_number)
+    if comments is None:
         return None
 
     decision: str | None = None
     consumed = False
     for comment in comments:
         body = str(comment.get("body") or "")
+        if APPROVAL_CONSUMED_MARKER in body and _is_trusted_bot_record(comment):
+            consumed = True
+        if APPROVAL_RECORD_MARKER not in body or not _is_trusted_bot_record(comment):
+            continue
         if "**Decision:** **APPROVED**" in body:
             decision = "APPROVED"
         elif "**Decision:** **DENIED**" in body:
             decision = "DENIED"
-        if APPROVAL_CONSUMED_MARKER in body:
-            consumed = True
 
     if consumed:
         return "CONSUMED"
@@ -130,12 +154,6 @@ def _find_approved_request(
     source_number: int | str,
     objective: str,
 ) -> int | None:
-    """Return one unconsumed approval bound to this exact sensitive request.
-
-    New approvals are keyed by an objective digest. A narrow compatibility path
-    accepts older approvals (created before objective binding existed) only when
-    the approval issue body contains the exact original objective.
-    """
     source = _approval_source(source_number, objective)
     issue = _matching_approval_issue(bot, source, state="all")
 
@@ -222,7 +240,7 @@ def _record_decision(bot: AmosclaudBot, payload: dict[str, Any], command: str) -
     state = "APPROVED" if command == "approve" else "DENIED"
     bot.post_comment(
         number,
-        f"### Amosclaud Approval\n**Decision:** **{state}**\n\nThe approval record is now auditable. Re-run the original sensitive command only if the decision is APPROVED.",
+        f"### Amosclaud Approval\n{APPROVAL_RECORD_MARKER}\n**Decision:** **{state}**\n\nThe approval record is now auditable. Re-run the original sensitive command only if the decision is APPROVED.",
     )
     bot._request("PATCH", f"/repos/{bot.repository}/issues/{number}", {"state": "closed"})
     return 0
@@ -233,6 +251,7 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
         comment = payload.get("comment") or {}
         command, objective = parse_command(str(comment.get("body") or ""))
         normalized = " ".join(str(comment.get("body") or "").strip().split()).lower()
+        association = str(comment.get("author_association") or "NONE").upper()
 
         if normalized.startswith("@amosclaud approve") or normalized.startswith("@amosclaud-bot approve"):
             return _record_decision(bot, payload, "approve")
@@ -242,6 +261,13 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
         if command == "fix" and _is_sensitive_objective(objective):
             issue = payload.get("issue") or {}
             source_number = issue.get("number", "unknown")
+
+            if association not in WRITE_ASSOCIATIONS:
+                bot.post_comment(
+                    int(source_number),
+                    "### Amosclaud Bot — Sensitive write request blocked\nOnly OWNER, MEMBER, or COLLABORATOR may create or consume approval for a sensitive repair.",
+                )
+                return 0
 
             approved = _find_approved_request(
                 bot,
@@ -271,7 +297,7 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
 
     if event_name == "pull_request":
         pr = payload.get("pull_request") or {}
-        number = pr.get("number") or (payload.get("number"))
+        number = pr.get("number") or payload.get("number")
         if not isinstance(number, int):
             return None
         files = bot._request("GET", f"/repos/{bot.repository}/pulls/{number}/files?per_page=100")
