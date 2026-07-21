@@ -15,22 +15,50 @@ permissions:
   pull-requests: write
   actions: read
 
+concurrency:
+  group: amosclaud-bot-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   respond:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out repository
+      - name: Check out trusted repository base
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted Amosclaud repository runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run protected privacy preflight
+        if: github.event_name == 'issue_comment'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMOSCLAUD_PRIVATE_REPOSITORY: ${{ vars.AMOSCLAUD_PRIVATE_REPOSITORY }}
+          AMOSCLAUD_PRIVATE_TOKEN: ${{ secrets.AMOSCLAUD_PRIVATE_TOKEN }}
+          AMOSCLAUD_PRIVACY_ONLY: '1'
+        run: python -m amosclaud_bot.dispatcher
+
       - name: Check out pull request head
         if: github.event_name == 'issue_comment' && github.event.issue.pull_request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr checkout "${{ github.event.issue.number }}"
+        run: |
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Protected/private request stopped before PR-head checkout."
+            exit 0
+          fi
+          gh pr checkout "${{ github.event.issue.number }}"
 
       - name: Prepare repair branch for issue
         if: >-
@@ -38,23 +66,16 @@ jobs:
           !github.event.issue.pull_request &&
           (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        run: git switch -c "amosclaud-bot/fix-${{ github.event.issue.number }}-${{ github.run_id }}"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Amosclaud repository runtime
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Protected/private request does not create a public repair branch."
+            exit 0
+          fi
+          git switch -c "amosclaud-bot/fix-${{ github.event.issue.number }}-${{ github.run_id }}"
 
       - name: Run Amosclaud Bot dispatcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          AMOSCLAUD_PRIVATE_REPOSITORY: ${{ vars.AMOSCLAUD_PRIVATE_REPOSITORY }}
-          AMOSCLAUD_PRIVATE_TOKEN: ${{ secrets.AMOSCLAUD_PRIVATE_TOKEN }}
         run: python -m amosclaud_bot.dispatcher
 
       - name: Verify real repair before publishing
