@@ -2,5 +2,5 @@
 # This file is intentionally separate from the production web runtime.
 torch>=2.2,<3
 python-dotenv>=1.0,<2
-pytest>=8.1,<9
+pytest>=9.1.1,<10
 flake8>=6,<8
