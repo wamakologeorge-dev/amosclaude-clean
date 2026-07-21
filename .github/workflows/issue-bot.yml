@@ -1,30 +1,31 @@
 name: 🤖 Amosclaude-AI Issue Bot
 
-# Trigger on every new comment posted on a GitHub Issue.
-# This workflow does NOT require GitHub Copilot – it uses the Claude (Anthropic)
-# API directly via the ANTHROPIC_API_KEY repository secret.
+# Legacy issue assistant retained for compatibility, but it is opt-in only.
+# Canonical @amosclaud / @amosclaud-bot commands are owned exclusively by
+# .github/workflows/amosclaud-bot.yml and the Amosclaud Python dispatcher.
 on:
   issue_comment:
     types: [created]
 
-# Only run on issue comments (not pull-request comments)
-# and never on comments from bots.
 jobs:
   respond:
-    # Skip comments that are on pull requests (issue_comment fires for both)
+    # Run only for explicit legacy-assistant requests on issues, never PR comments
+    # and never bot-authored comments. This prevents duplicate responses and keeps
+    # approval-gated Amosclaud commands under the canonical dispatcher.
     if: >
       github.event.issue.pull_request == null &&
       !contains(github.event.comment.user.login, '[bot]') &&
-      github.event.comment.user.login != 'github-actions'
+      github.event.comment.user.login != 'github-actions' &&
+      (startsWith(github.event.comment.body, '@amosclaude-ai') ||
+       startsWith(github.event.comment.body, '@Amosclaude-AI'))
 
     runs-on: ubuntu-latest
-    name: Respond to issue comment
+    name: Respond to explicit legacy assistant request
 
-    # Minimum permissions – no Copilot or special agent permissions needed.
     permissions:
-      contents: write       # read files + create branches + push commits
-      issues: write         # post comments on issues
-      pull-requests: write  # open pull requests
+      contents: write
+      issues: write
+      pull-requests: write
 
     steps:
       - name: Checkout repository
