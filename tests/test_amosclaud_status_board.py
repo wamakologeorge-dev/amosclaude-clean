@@ -55,3 +55,24 @@ def test_all_successful_real_runs_report_ready() -> None:
 
     board = build_status_board(PassingBot(), {"issue": {"number": 8}})
     assert "**Overall:** 🟩 READY" in board
+
+
+def test_pull_request_status_uses_exact_head_sha() -> None:
+    class PrBot(FakeBot):
+        def _request(self, method: str, path: str):
+            self.calls.append(path)
+            if path == "/repos/owner/repo/pulls/42":
+                return {"head": {"ref": "feature/demo", "sha": "abcdef1234567890"}}
+            if "head_sha=abcdef1234567890" in path:
+                return {
+                    "workflow_runs": [
+                        {"name": "Build and Verify", "status": "completed", "conclusion": "success"}
+                    ]
+                }
+            raise AssertionError(path)
+
+    bot = PrBot()
+    board = build_status_board(bot, {"issue": {"number": 42, "pull_request": {"url": "x"}}})
+    assert "🟩 **Build and Verify** — PASSED" in board
+    assert "**Target:** `feature/demo`" in board
+    assert any("head_sha=abcdef1234567890" in call for call in bot.calls)
