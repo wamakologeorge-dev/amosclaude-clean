@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from amoscloud_ai.api.routes.auth import DB_PATH
 from amoscloud_ai.copilot import COPILOT_PIPELINE, COPILOT_ROLE, pipeline_reply
@@ -178,7 +178,6 @@ async def list_pipelines() -> List[PipelineResponse]:
     return [_row_to_pipeline(row) for row in rows]
 
 
-@router.get("/{pipeline_id}", response_model=PipelineResponse, summary="Get a pipeline")
 async def get_pipeline(pipeline_id: str) -> PipelineResponse:
     pipeline = _get(pipeline_id)
     if not pipeline:
@@ -207,7 +206,6 @@ async def trigger_pipeline(body: PipelineTrigger) -> PipelineResponse:
     return await _run_pipeline(pipeline, payload)
 
 
-@router.delete("/{pipeline_id}", status_code=204, summary="Cancel a pipeline")
 async def cancel_pipeline(pipeline_id: str) -> None:
     pipeline = _get(pipeline_id)
     if not pipeline:
@@ -224,3 +222,12 @@ async def cancel_pipeline(pipeline_id: str) -> None:
             job.finished_at = pipeline.finished_at
             job.logs.append(pipeline.message)
     _save(pipeline)
+
+
+@router.api_route("/{pipeline_id}", methods=["GET", "DELETE"], response_model=PipelineResponse, summary="Get or cancel a pipeline")
+async def pipeline_detail(pipeline_id: str, request: Request):
+    """Use one route entry for the pipeline resource across its supported methods."""
+    if request.method == "GET":
+        return await get_pipeline(pipeline_id)
+    await cancel_pipeline(pipeline_id)
+    return Response(status_code=204)

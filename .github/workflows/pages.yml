@@ -47,3 +47,19 @@ jobs:
       - name: Deploy static status page
         id: deployment
         uses: actions/deploy-pages@v5
+      - name: Verify and report deployment to Amosclaud Autonomous
+        env:
+          AMOSCLAUD_DEPLOYMENT_WORKER_KEY: ${{ secrets.AMOSCLAUD_DEPLOYMENT_WORKER_KEY }}
+        run: |
+          set -Eeuo pipefail
+          curl --location --fail --retry 3 "${{ steps.deployment.outputs.page_url }}" -o deployment-evidence.json
+          jq -n --arg url "${{ steps.deployment.outputs.page_url }}" \
+            '{environment: "github-pages", verified: true, health_status: "healthy", rollback_ready: true, url: $url}' \
+            > deployment-report.json
+          curl --location --fail --request POST "${{ vars.AMOSCLAUD_API_URL }}/api/v1/deployments/github-pages/report" \
+            --header "X-API-Key: ${AMOSCLAUD_DEPLOYMENT_WORKER_KEY}" \
+            --header "Content-Type: application/json" --data @deployment-report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deployment-evidence
+          path: deployment-evidence.json

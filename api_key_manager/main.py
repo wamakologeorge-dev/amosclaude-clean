@@ -63,12 +63,7 @@ def _response(api_key, *, plain_key: str | None = None):
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "service": "api-key-manager",
-        "scoped_credentials": True,
-        "audit_events": True,
-    }
+    return {"status": "ok", "service": "api-key-manager"}
 
 
 @app.post("/token", response_model=schemas.Token, summary="Authenticate a credential administrator")

@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import re
 import smtplib
+
+from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 import sqlite3
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -84,7 +86,7 @@ def _normalise_username(value: str) -> str:
 
 def _send_internet(sender: str, recipient: str, subject: str, body: str) -> None:
     host = os.getenv("MAIL_SMTP_HOST") or os.getenv("SMTP_HOST")
-    if not host:
+    if not host and not http_mail_configured():
         raise HTTPException(status_code=503, detail="Internet email delivery is not configured")
     port = int(os.getenv("MAIL_SMTP_PORT") or os.getenv("SMTP_PORT", "587"))
     username = os.getenv("MAIL_SMTP_USERNAME") or os.getenv("SMTP_USERNAME")
@@ -97,6 +99,14 @@ def _send_internet(sender: str, recipient: str, subject: str, body: str) -> None
     message["To"] = recipient
     message["Subject"] = subject
     message.set_content(body)
+
+    if http_mail_configured():
+        try:
+            deliver_via_http(sender, recipient, subject, body)
+            return
+        except HttpMailError as exc:
+            if not host:
+                raise HTTPException(status_code=502, detail=f"Internet email delivery failed: {exc}") from exc
 
     try:
         with smtplib.SMTP(host, port, timeout=30) as smtp:

@@ -30,7 +30,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "300"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "30"))
         self.signup_max_attempts = int(os.getenv("AUTH_SIGNUP_RATE_MAX_ATTEMPTS", "12"))
-        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v3").strip() or "v3"
+        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v3"
         self.redis_url = os.getenv("REDIS_URL", "").strip()
         self.production = os.getenv("ENVIRONMENT", "development").lower() in {"production", "prod"}
         self.redis = redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None

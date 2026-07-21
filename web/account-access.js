@@ -34,6 +34,7 @@
   let mode = 'login';
   let loginCodeMode = false;
   let signupCodeRequested = false;
+  // Recovery email enrollment uses /api/v1/auth/account-recovery/email/request and /api/v1/auth/account-recovery/email/verify.
   const passkeysAvailable = Boolean(window.isSecureContext && window.PublicKeyCredential && navigator.credentials);
 
   function show(text, success = false) {
