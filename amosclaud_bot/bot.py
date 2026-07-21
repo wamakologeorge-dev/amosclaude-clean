@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import urllib.error
@@ -58,6 +59,195 @@ def _summarize_result(result: dict[str, Any]) -> str:
     return "\n".join(lines)[:6000]
 
 
+def _inspection_root(workspace: Path) -> tuple[Path, int | None]:
+    """Resolve the repository root once and capture its owner for scan validation."""
+    root = workspace.resolve(strict=True)
+    if not root.is_dir():
+        raise RuntimeError("Amosclaud inspection workspace must be a directory")
+    stat_result = root.stat()
+    return root, getattr(stat_result, "st_uid", None)
+
+
+def _safe_repository_file(root: Path, candidate: Path, owner_uid: int | None) -> Path | None:
+    """Return a safe regular file only when it stays inside and is owned with the repository."""
+    try:
+        if candidate.is_symlink():
+            return None
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            return None
+        stat_result = resolved.stat()
+        if owner_uid is not None and getattr(stat_result, "st_uid", owner_uid) != owner_uid:
+            return None
+        if not resolved.is_file():
+            return None
+        return resolved
+    except (FileNotFoundError, OSError, RuntimeError):
+        return None
+
+
+def _safe_relative_file(root: Path, relative: str, owner_uid: int | None) -> Path | None:
+    path = Path(relative)
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return _safe_repository_file(root, root / path, owner_uid)
+
+
+def _count_files(root: Path, patterns: tuple[str, ...], owner_uid: int | None) -> int:
+    """Count matching repository files without following symlinked directories or foreign-owned files."""
+    seen: set[Path] = set()
+    for current, dirs, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        dirs[:] = [
+            name
+            for name in dirs
+            if not (current_path / name).is_symlink()
+            and (current_path / name).resolve(strict=False).is_relative_to(root)
+        ]
+        for name in files:
+            if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns):
+                continue
+            safe = _safe_repository_file(root, current_path / name, owner_uid)
+            if safe is not None:
+                seen.add(safe)
+    return len(seen)
+
+
+def _repository_inspection(workspace: Path) -> dict[str, Any]:
+    """Collect deterministic repository evidence without leaving the checked-out repository."""
+    root, owner_uid = _inspection_root(workspace)
+
+    workflow_files: list[Path] = []
+    workflows_dir = root / ".github" / "workflows"
+    if workflows_dir.exists() and not workflows_dir.is_symlink():
+        for pattern in ("*.yml", "*.yaml"):
+            for candidate in workflows_dir.glob(pattern):
+                safe = _safe_repository_file(root, candidate, owner_uid)
+                if safe is not None:
+                    workflow_files.append(safe)
+    workflow_files = sorted(set(workflow_files))
+
+    test_count = _count_files(root, ("test_*.py", "*_test.py"), owner_uid)
+    has_pytest_config = any(
+        _safe_relative_file(root, name, owner_uid) is not None
+        for name in ("pyproject.toml", "pytest.ini", "tox.ini", "setup.cfg")
+    )
+
+    security_policy = any(
+        _safe_relative_file(root, name, owner_uid) is not None
+        for name in ("SECURITY.md", ".github/SECURITY.md")
+    )
+    dependabot = any(
+        _safe_relative_file(root, name, owner_uid) is not None
+        for name in (".github/dependabot.yml", ".github/dependabot.yaml")
+    )
+
+    pyproject = _safe_relative_file(root, "pyproject.toml", owner_uid)
+    pyproject_text = pyproject.read_text(encoding="utf-8", errors="ignore") if pyproject else ""
+    quality_tools = [
+        tool
+        for tool in ("ruff", "black", "mypy", "pytest", "coverage")
+        if tool in pyproject_text.lower()
+    ]
+
+    findings = {
+        "ci_cd": {
+            "found": (
+                f"{len(workflow_files)} GitHub Actions workflow file(s) are present."
+                if workflow_files
+                else "No GitHub Actions workflow files were found under `.github/workflows`."
+            ),
+            "recommendation": (
+                "Keep required checks enabled and investigate any currently failing workflow before merging changes."
+                if workflow_files
+                else "Add a CI workflow that runs tests and verification on pull requests."
+            ),
+            "attention": "medium" if not workflow_files else "low",
+        },
+        "tests": {
+            "found": f"{test_count} Python test file(s) were detected in the repository.",
+            "recommendation": (
+                "Keep the test suite running in CI and add coverage for every new bot/Fixer behavior."
+                if test_count
+                else "Add automated tests before expanding autonomous write behavior."
+            ),
+            "attention": "high" if not test_count else "low",
+            "pytest_config": has_pytest_config,
+        },
+        "security": {
+            "found": (
+                f"Security policy: {'present' if security_policy else 'not detected'}; "
+                f"Dependabot configuration: {'present' if dependabot else 'not detected'}."
+            ),
+            "recommendation": (
+                "Keep dependency updates and repository write permissions reviewed, especially for autonomous fixes."
+                if security_policy and dependabot
+                else "Add the missing security policy and/or Dependabot configuration to strengthen repository maintenance."
+            ),
+            "attention": "low" if security_policy and dependabot else "medium",
+        },
+        "code_quality": {
+            "found": (
+                "Configured quality/test tooling detected in `pyproject.toml`: " + ", ".join(quality_tools) + "."
+                if quality_tools
+                else "No common Python quality tools were detected in `pyproject.toml`."
+            ),
+            "recommendation": (
+                "Keep lint/type/test checks aligned with CI so Autonomous and Fixer changes are verified consistently."
+                if quality_tools
+                else "Configure linting and/or type checking so generated repairs receive an additional quality gate."
+            ),
+            "attention": "low" if quality_tools else "medium",
+        },
+    }
+
+    priorities: dict[str, list[str]] = {"high": [], "medium": [], "low": []}
+    labels = {
+        "ci_cd": "CI/CD",
+        "tests": "Tests",
+        "security": "Security",
+        "code_quality": "Code quality",
+    }
+    for key, finding in findings.items():
+        priorities[str(finding["attention"])].append(labels[key])
+
+    return {"findings": findings, "priorities": priorities}
+
+
+def _format_inspection_report(result: dict[str, Any], workspace: Path) -> str:
+    inspection = _repository_inspection(workspace)
+    findings = inspection["findings"]
+    priorities = inspection["priorities"]
+    status = str(result.get("status") or "unknown").upper()
+
+    def priority_text(level: str) -> str:
+        values = priorities[level]
+        return ", ".join(values) if values else "None detected by this baseline scan"
+
+    return (
+        f"**Status:** **{status}**\n\n"
+        "## Repository findings\n\n"
+        "### 1. CI/CD\n"
+        f"- **Found:** {findings['ci_cd']['found']}\n"
+        f"- **Recommended action:** {findings['ci_cd']['recommendation']}\n\n"
+        "### 2. Tests\n"
+        f"- **Found:** {findings['tests']['found']}\n"
+        f"- **Recommended action:** {findings['tests']['recommendation']}\n\n"
+        "### 3. Security\n"
+        f"- **Found:** {findings['security']['found']}\n"
+        f"- **Recommended action:** {findings['security']['recommendation']}\n\n"
+        "### 4. Code quality\n"
+        f"- **Found:** {findings['code_quality']['found']}\n"
+        f"- **Recommended action:** {findings['code_quality']['recommendation']}\n\n"
+        "## Priority\n"
+        f"- **HIGH:** {priority_text('high')}\n"
+        f"- **MEDIUM:** {priority_text('medium')}\n"
+        f"- **LOW:** {priority_text('low')}\n\n"
+        "## Recommended next action\n"
+        "Use `@amosclaud fix <specific problem>` for a trusted, targeted repair after reviewing the findings."
+    )[:6000]
+
+
 class AmosclaudBot:
     """GitHub-native control plane for the repository-local Amosclaud runtime."""
 
@@ -114,8 +304,6 @@ class AmosclaudBot:
                         "Amosclaud-Fixer is available, but repository writes are limited to trusted repository collaborators."
                     ],
                 }
-            # repair() is the compatibility entry point into the same Autonomous
-            # repair capability (Amosclaud-Fixer), with explicit write authority.
             return kernel.repair(issue=objective, authorized_writes=True)
 
         mode = {
@@ -171,11 +359,16 @@ class AmosclaudBot:
         request_objective = objective or f"{command.capitalize()} {target}"
         result = self._run_local(command, request_objective, allow_writes=trusted_writer)
         engine = "Amosclaud-Fixer" if command == "fix" else "Amosclaud Autonomous"
+        details = (
+            _format_inspection_report(result, self.workspace)
+            if command == "inspect"
+            else _summarize_result(result)
+        )
         return BotResponse(
-            f"### Amosclaud Bot — {command}\n"
+            f"### Amosclaud Bot — {command.capitalize()}\n\n"
             f"**Engine:** {engine}\n"
             f"**Objective:** {request_objective}\n\n"
-            f"{_summarize_result(result)}"
+            f"{details}"
         )
 
     def handle_workflow_run(self, payload: dict[str, Any]) -> tuple[int | None, BotResponse]:
