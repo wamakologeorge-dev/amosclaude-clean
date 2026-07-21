@@ -48,3 +48,33 @@ def test_long_inspection_keeps_status_and_priority() -> None:
     assert "**HIGH:** CI/CD" in compact
     assert "**MEDIUM:** Security" in compact
     assert "**LOW:** Tests" in compact
+
+
+def test_workflow_status_board_is_preserved() -> None:
+    message = "### Amosclaud — Workflow Status\n\n" + "\n".join(
+        f"🟩 **Workflow {index}** — PASSED" for index in range(12)
+    )
+    compact = compact_public_comment(message)
+
+    assert compact.startswith("### Amosclaud — Workflow Status")
+    assert "Workflow 0" in compact
+    assert "Workflow 11" in compact
+
+
+def test_verified_result_markers_survive_long_comment() -> None:
+    message = "\n".join(
+        [
+            "### Amosclaud — Verified result",
+            "🟩 **Result:** PASSED",
+            "🟩 **Compilation:** PASSED",
+            "🟩 **Tests:** PASSED",
+            "**Files changed:** 2",
+            "C" * 900,
+        ]
+    )
+    compact = compact_public_comment(message)
+
+    assert "**Result:** PASSED" in compact
+    assert "**Compilation:** PASSED" in compact
+    assert "**Tests:** PASSED" in compact
+    assert "**Files changed:** 2" in compact
