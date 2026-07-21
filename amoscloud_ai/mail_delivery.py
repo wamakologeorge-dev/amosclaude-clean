@@ -9,6 +9,8 @@ import os
 import smtplib
 from email.message import EmailMessage
 
+from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
+
 
 class MailDeliveryError(RuntimeError):
     """Raised when Amosclaud cannot deliver a security message."""
@@ -24,7 +26,7 @@ def _setting(primary: str, fallback: str | None = None, default: str = "") -> st
 def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: int = 15) -> None:
     """Deliver a one-time account-security code through Amosclaud SMTP."""
     host = _setting("MAIL_SMTP_HOST", "SMTP_HOST")
-    if not host:
+    if not host and not http_mail_configured():
         raise MailDeliveryError("Amosclaud email delivery is not configured")
 
     port = int(_setting("MAIL_SMTP_PORT", "SMTP_PORT", "587"))
@@ -54,6 +56,15 @@ def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: i
         "Amosclaud staff will never ask you to send this code in chat or email.\n"
         "If you did not request this message, you can ignore it."
     )
+
+    if http_mail_configured():
+        try:
+            deliver_via_http(sender, recipient, subject, message.get_content())
+            return
+        except HttpMailError as exc:
+            if not host:
+                raise MailDeliveryError("Amosclaud could not deliver the security code") from exc
+            # fall back to SMTP below when it is configured
 
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
