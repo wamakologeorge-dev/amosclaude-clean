@@ -44,12 +44,14 @@ amosclaud-model = "amosclaud_model.cli:main"
 amosclaud-metrics = "amosclaud_metrics.server:main"
 amcl = "amosclaud_language.cli:main"
 amosclaud-tamper-server = "Amosclaud.api.path.byte.server.router.folder.cb.chapter.core.system.py:main"
+amosclaud-bot = "amosclaud_bot.cli:main"
 
 [tool.setuptools.packages.find]
 include = [
   "Amosclaud*",
   "amoscloud_ai*",
   "amosclaud_agent_sdk*",
+  "amosclaud_bot*",
   "amosclaud_language*",
   "amosclaud_model*",
   "amosclaud_metrics*",
