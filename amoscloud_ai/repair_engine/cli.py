@@ -5,7 +5,8 @@ import json
 import shlex
 from pathlib import Path
 
-from .core import AutonomousRepairEngine, RepairReport
+from .core import RepairReport
+from .decision_engine import AutonomousDecisionEngine, objective_from_environment
 
 
 def markdown(report: RepairReport) -> str:
@@ -39,28 +40,32 @@ def markdown(report: RepairReport) -> str:
             lines.append(f"- {mark} `{repair.path}` — {repair.description}")
     else:
         lines.append("- No repair was applied.")
-    lines.extend(["", "## Verification evidence", ""])
+    lines.extend(["", "## Decision and verification evidence", ""])
     for evidence in report.evidence:
         mark = "✓" if evidence.passed else "✗"
         lines.append(f"- {mark} **{evidence.name}** ({evidence.duration_seconds:.2f}s)")
+        if evidence.output:
+            summary = evidence.output.replace("\n", " ")[:500]
+            lines.append(f"  - `{summary}`")
     lines.extend(
         [
             "",
             "## Truthfulness and safety",
             "",
-            "A PASS is emitted only when static diagnosis is healthy and every configured verification command succeeds. Critical findings are never rewritten automatically. Repairs are limited to deterministic low-risk transformations.",
+            "A PASS is emitted only when the selected repair is healthy under Doctor verification and every configured verification command succeeds. Objective-named files are prioritized over unrelated findings. Failed attempts are rolled back, critical findings are never rewritten automatically, and only deterministic low-risk transformations may be published.",
         ]
     )
     return "\n".join(lines) + "\n"
 
 
 def parser() -> argparse.ArgumentParser:
-    value = argparse.ArgumentParser(description="Amosclaud Autonomous Repair Engine v1")
+    value = argparse.ArgumentParser(description="Amosclaud Autonomous Decision and Self-Healing Engine")
     value.add_argument("root", nargs="?", default=".", help="Repository root")
     value.add_argument("--apply", action="store_true", help="Apply deterministic safe repairs")
+    value.add_argument("--objective", default="", help="Human objective used to prioritize files and findings")
     value.add_argument("--required", action="append", default=[], help="Required repository file")
     value.add_argument("--verify", action="append", default=[], help="Verification command; repeatable")
-    value.add_argument("--max-attempts", type=int, default=2)
+    value.add_argument("--max-attempts", type=int, default=3)
     value.add_argument("--json", dest="json_path", help="Write JSON report")
     value.add_argument("--markdown", dest="markdown_path", help="Write Markdown report")
     value.add_argument("--memory", default=".amosclaud/repair-memory.jsonl")
@@ -74,8 +79,10 @@ def main() -> None:
     memory_path = Path(args.memory)
     if not memory_path.is_absolute():
         memory_path = root / memory_path
-    engine = AutonomousRepairEngine(
+    objective = args.objective.strip() or objective_from_environment()
+    engine = AutonomousDecisionEngine(
         root,
+        objective=objective,
         required_files=args.required,
         commands=commands,
         max_attempts=args.max_attempts,
