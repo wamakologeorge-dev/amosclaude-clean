@@ -1,0 +1,120 @@
+name: Amosclaud Autonomous Repair Engine
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apply_repairs:
+        description: Apply deterministic safe repairs in the checked-out branch
+        required: true
+        type: boolean
+        default: false
+      verify_command:
+        description: Optional verification command
+        required: false
+        type: string
+        default: "python -m pytest -q tests/test_repair_engine.py"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  doctor-fixer-verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Prepare changed-file repair scope
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/amosclaud-scope
+          mkdir -p /tmp/amosclaud-scope
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" > /tmp/amosclaud-changed-files.txt
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "$file" ]] && continue
+            case "$file" in
+              *.py|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.sh|*.html|*.css|*.md|*.toml)
+                mkdir -p "/tmp/amosclaud-scope/$(dirname "$file")"
+                cp "$file" "/tmp/amosclaud-scope/$file"
+                ;;
+            esac
+          done < /tmp/amosclaud-changed-files.txt
+
+      - name: Run Amosclaud Doctor and Fixer
+        id: doctor
+        run: |
+          set +e
+          python -m amoscloud_ai.repair_engine.cli \
+            /tmp/amosclaud-scope \
+            --apply \
+            --memory /tmp/amosclaud-repair-memory.jsonl \
+            --json /tmp/amosclaud-repair-report.json \
+            --markdown /tmp/amosclaud-repair-report.md
+          doctor_status=$?
+          set -e
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "/tmp/amosclaud-scope/$file" ]] && continue
+            cp "/tmp/amosclaud-scope/$file" "$file"
+          done < /tmp/amosclaud-changed-files.txt
+          echo "exit_code=$doctor_status" >> "$GITHUB_OUTPUT"
+          echo "Doctor exit code: $doctor_status"
+          if [[ -f /tmp/amosclaud-repair-report.json ]]; then
+            echo "--- repair-report.json ---"
+            cat /tmp/amosclaud-repair-report.json
+          fi
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            echo "--- repair-report.md ---"
+            cat /tmp/amosclaud-repair-report.md
+          fi
+
+      - name: Install repair engine test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pytest
+
+      - name: Verify repair engine package
+        env:
+          VERIFY_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_command || 'python -m pytest -q tests/test_repair_engine.py' }}
+        run: |
+          set -euo pipefail
+          bash -lc "$VERIFY_COMMAND"
+          python -m compileall -q amoscloud_ai/repair_engine
+
+      - name: Commit deterministic repairs
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.apply_repairs) }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No deterministic repair was required."
+            exit 0
+          fi
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: apply Amosclaud deterministic repairs"
+          git push
+
+      - name: Enforce Doctor result
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.doctor.outputs.exit_code }}" != "0" ]]; then
+            echo "Amosclaud Doctor reported a blocking finding. See the printed JSON and Markdown report above."
+            exit 1
+          fi
+
+      - name: Publish repair report
+        if: always()
+        run: |
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            cat /tmp/amosclaud-repair-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Amosclaud repair report unavailable" >> "$GITHUB_STEP_SUMMARY"
+          fi
