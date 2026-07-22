@@ -8,8 +8,8 @@ from amoscloud_ai.repair_engine.core import Finding, Severity
 
 
 def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: Path) -> None:
-    first = tmp_path / "first.txt"
-    second = tmp_path / "second.txt"
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
     first.write_text("first   ", encoding="utf-8")
     second.write_text("second   ", encoding="utf-8")
 
@@ -20,14 +20,14 @@ def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: 
     ).run(apply=True)
 
     assert report.final_verdict == Verdict.PASS
-    assert report.changed_files == ["first.txt", "second.txt"]
+    assert report.changed_files == ["first.md", "second.md"]
     assert first.read_text(encoding="utf-8") == "first\n"
     assert second.read_text(encoding="utf-8") == "second\n"
     assert len([item for item in report.evidence if item.name.startswith("Doctor healing cycle")]) >= 2
 
 
 def test_doctor_rolls_back_whole_healing_session_when_critical_remains(tmp_path: Path) -> None:
-    safe = tmp_path / "safe.txt"
+    safe = tmp_path / "safe.md"
     broken = tmp_path / "broken.py"
     safe.write_text("repair me   ", encoding="utf-8")
     broken.write_text("def broken(:\n", encoding="utf-8")
