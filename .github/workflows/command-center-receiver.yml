@@ -141,25 +141,19 @@ jobs:
           set -euo pipefail
           default_branch="$(gh api "repos/$TARGET" --jq '.default_branch')"
           head_sha="$(gh api "repos/$TARGET/commits/$default_branch" --jq '.sha')"
-
           normalized='[]'
           for attempt in 1 2 3; do
             raw="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"check_runs":[]}')"
             normalized="$(jq --arg run_id "$CURRENT_RUN_ID" '
-              [ .check_runs[]?
-                | select((.details_url // "") | contains("/actions/runs/" + $run_id) | not)
-              ]
+              [ .check_runs[]? | select((.details_url // "") | contains("/actions/runs/" + $run_id) | not) ]
               | sort_by(.started_at // .completed_at // "")
               | reduce .[] as $check ({}; .[$check.name] = $check)
               | [.[]]
             ' <<<"$raw")"
             pending_now="$(jq '[.[] | select(.status != "completed" or .conclusion == null)] | length' <<<"$normalized")"
-            if (( pending_now == 0 || attempt == 3 )); then
-              break
-            fi
+            if (( pending_now == 0 || attempt == 3 )); then break; fi
             sleep 10
           done
-
           total="$(jq 'length' <<<"$normalized")"
           failed="$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure")] | length' <<<"$normalized")"
           pending="$(jq '[.[] | select(.status != "completed" or .conclusion == null)] | length' <<<"$normalized")"
@@ -167,12 +161,10 @@ jobs:
           failed_details="$(jq -r '.[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure") | "- **" + .name + "**: " + (.conclusion // "unknown")' <<<"$normalized")"
           pending_details="$(jq -r '.[] | select(.status != "completed" or .conclusion == null) | "- " + .name + ": " + (.status // "pending")' <<<"$normalized")"
           other_details="$(jq -r '.[] | select(.status == "completed" and (.conclusion != null)) | select(.conclusion != "failure" and .conclusion != "timed_out" and .conclusion != "cancelled" and .conclusion != "action_required" and .conclusion != "startup_failure") | "- " + .name + ": " + .conclusion' <<<"$normalized" | head -25)"
-
           if (( pending > 0 )); then verdict=PENDING; icon='🟡';
           elif (( failed > 0 )); then verdict=FAIL; icon='🔴';
           elif (( total == 0 )); then verdict=UNKNOWN; icon='⚪';
           else verdict=PASS; icon='🟢'; fi
-
           cat > /tmp/result.md <<EOF
           ### Amosclaud ${ACTION} result
 
@@ -243,8 +235,12 @@ jobs:
           - Request: \`$REQUEST_ID\`
           - Target: \`$TARGET\`
 
-          The repair or verification command failed. No successful repair is being claimed. Review the engine workflow log for exact evidence.
+          The repair or verification command failed. No successful repair is being claimed.
           EOF
+            if [[ -s /tmp/amosclaud-repair-report.md ]]; then
+              printf '\n#### Doctor evidence\n\n' >> /tmp/failure.md
+              sed -n '1,120p' /tmp/amosclaud-repair-report.md >> /tmp/failure.md
+            fi
             gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/failure.md || true
           }
           trap report_failure ERR
@@ -254,14 +250,40 @@ jobs:
           default_branch="$(git branch --show-current)"
           before_sha="$(git rev-parse HEAD)"
 
+          doctor_status=0
           python -m amoscloud_ai.repair_engine.cli . \
             --apply \
+            --objective "$OBJECTIVE" \
             --memory /tmp/amosclaud-repair-memory.jsonl \
             --json /tmp/amosclaud-repair-report.json \
             --markdown /tmp/amosclaud-repair-report.md || doctor_status=$?
-          doctor_status="${doctor_status:-0}"
 
           mapfile -t changed < <(git status --porcelain | sed 's/^...//')
+
+          if (( doctor_status != 0 )); then
+            trap - ERR
+            git reset --hard "$before_sha" >/dev/null
+            cat > /tmp/verification-failed.md <<EOF
+          ### Amosclaud repair result
+
+          🔴 **Result:** VERIFICATION FAILED
+
+          - Request: \`$REQUEST_ID\`
+          - Target: \`$TARGET\`
+          - Examined commit: \`$before_sha\`
+          - Doctor exit code: \`$doctor_status\`
+          - Repository changes published: \`no\`
+
+          Doctor rejected the repair or found no verifiable safe repair. Any working-tree changes were rolled back.
+
+          #### Doctor evidence
+
+          EOF
+            sed -n '1,140p' /tmp/amosclaud-repair-report.md >> /tmp/verification-failed.md
+            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/verification-failed.md
+            exit 0
+          fi
+
           if (( ${#changed[@]} == 0 )); then
             trap - ERR
             cat > /tmp/no-change.md <<EOF
@@ -272,10 +294,14 @@ jobs:
           - Request: \`$REQUEST_ID\`
           - Target: \`$TARGET\`
           - Examined commit: \`$before_sha\`
-          - Doctor exit code: \`$doctor_status\`
+          - Doctor exit code: \`0\`
 
-          The deterministic Fixer produced no repository changes. No repair, commit, or passing verification is being claimed.
+          Doctor found no safe deterministic change matching the objective.
+
+          #### Doctor evidence
+
           EOF
+            sed -n '1,140p' /tmp/amosclaud-repair-report.md >> /tmp/no-change.md
             gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/no-change.md
             exit 0
           fi
@@ -284,7 +310,6 @@ jobs:
           import json, py_compile, subprocess
           from pathlib import Path
           import yaml
-
           changed = subprocess.check_output(['git', 'status', '--porcelain'], text=True).splitlines()
           paths = [Path(line[3:]) for line in changed if len(line) > 3 and Path(line[3:]).is_file()]
           for path in paths:
@@ -308,7 +333,7 @@ jobs:
 
           pr_url="$(gh pr create --repo "$TARGET" --base "$default_branch" --head "$branch" \
             --title "Amosclaud-Fixer: ${OBJECTIVE:0:80}" \
-            --body "Automated deterministic repair for request \`$REQUEST_ID\`. The changed files passed syntax-focused verification before publication. Full CI remains the independent final authority.")"
+            --body "Automated deterministic repair for request \`$REQUEST_ID\`. Doctor passed the objective-scoped verification before publication. Full CI remains the independent final authority.")"
 
           files="$(git diff --name-only "$before_sha...$repair_sha" | sed 's/^/- `/' | sed 's/$/`/' | head -30)"
           trap - ERR
@@ -322,12 +347,13 @@ jobs:
           - Base commit: \`$before_sha\`
           - Repair commit: \`$repair_sha\`
           - Pull request: $pr_url
-          - Doctor exit code before publication: \`$doctor_status\`
+          - Doctor exit code before publication: \`0\`
 
           #### Files changed
           $files
 
-          #### Verification
-          Changed Python, JSON, and YAML files passed syntax-focused verification. Full repository CI must pass before the repair is called completely verified.
+          #### Doctor evidence
+
           EOF
+          sed -n '1,140p' /tmp/amosclaud-repair-report.md >> /tmp/final.md
           gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/final.md
