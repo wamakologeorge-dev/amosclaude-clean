@@ -49,18 +49,31 @@ jobs:
           done < /tmp/amosclaud-changed-files.txt
 
       - name: Run Amosclaud Doctor and Fixer
+        id: doctor
         run: |
-          set -euo pipefail
+          set +e
           python -m amoscloud_ai.repair_engine.cli \
             /tmp/amosclaud-scope \
             --apply \
             --memory /tmp/amosclaud-repair-memory.jsonl \
             --json /tmp/amosclaud-repair-report.json \
             --markdown /tmp/amosclaud-repair-report.md
+          doctor_status=$?
+          set -e
           while IFS= read -r file; do
             [[ -z "$file" || ! -f "/tmp/amosclaud-scope/$file" ]] && continue
             cp "/tmp/amosclaud-scope/$file" "$file"
           done < /tmp/amosclaud-changed-files.txt
+          echo "exit_code=$doctor_status" >> "$GITHUB_OUTPUT"
+          echo "Doctor exit code: $doctor_status"
+          if [[ -f /tmp/amosclaud-repair-report.json ]]; then
+            echo "--- repair-report.json ---"
+            cat /tmp/amosclaud-repair-report.json
+          fi
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            echo "--- repair-report.md ---"
+            cat /tmp/amosclaud-repair-report.md
+          fi
 
       - name: Verify repair engine package
         env:
@@ -83,6 +96,14 @@ jobs:
           git add -A
           git commit -m "fix: apply Amosclaud deterministic repairs"
           git push
+
+      - name: Enforce Doctor result
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.doctor.outputs.exit_code }}" != "0" ]]; then
+            echo "Amosclaud Doctor reported a blocking finding. See the printed JSON and Markdown report above."
+            exit 1
+          fi
 
       - name: Publish repair report
         if: always()
