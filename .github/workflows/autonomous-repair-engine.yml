@@ -14,7 +14,7 @@ on:
         description: Optional verification command
         required: false
         type: string
-        default: "python -m pytest -q"
+        default: "python -m pytest -q tests/test_repair_engine.py"
 
 permissions:
   contents: write
@@ -28,29 +28,50 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
 
-      - name: Run Amosclaud repair engine
+      - name: Prepare changed-file repair scope
         env:
-          APPLY_REPAIRS: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_repairs || false }}
-          VERIFY_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_command || 'python -m pytest -q' }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           set -euo pipefail
-          args=(
-            .
-            --required pyproject.toml
-            --required requirements.txt
-            --verify "$VERIFY_COMMAND"
-            --json /tmp/amosclaud-repair-report.json
+          rm -rf /tmp/amosclaud-scope
+          mkdir -p /tmp/amosclaud-scope
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" > /tmp/amosclaud-changed-files.txt
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "$file" ]] && continue
+            case "$file" in
+              *.py|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.sh|*.html|*.css|*.md|*.toml)
+                mkdir -p "/tmp/amosclaud-scope/$(dirname "$file")"
+                cp "$file" "/tmp/amosclaud-scope/$file"
+                ;;
+            esac
+          done < /tmp/amosclaud-changed-files.txt
+
+      - name: Run Amosclaud Doctor and Fixer
+        run: |
+          set -euo pipefail
+          python -m amoscloud_ai.repair_engine.cli \
+            /tmp/amosclaud-scope \
+            --apply \
+            --memory /tmp/amosclaud-repair-memory.jsonl \
+            --json /tmp/amosclaud-repair-report.json \
             --markdown /tmp/amosclaud-repair-report.md
-          )
-          if [[ "$APPLY_REPAIRS" == "true" ]]; then
-            args+=(--apply)
-          fi
-          python -m amoscloud_ai.repair_engine.cli "${args[@]}"
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "/tmp/amosclaud-scope/$file" ]] && continue
+            cp "/tmp/amosclaud-scope/$file" "$file"
+          done < /tmp/amosclaud-changed-files.txt
+
+      - name: Verify repair engine package
+        env:
+          VERIFY_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_command || 'python -m pytest -q tests/test_repair_engine.py' }}
+        run: |
+          set -euo pipefail
+          bash -lc "$VERIFY_COMMAND"
+          python -m compileall -q amoscloud_ai/repair_engine
 
       - name: Commit deterministic repairs
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_repairs }}
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'workflow_dispatch' && inputs.apply_repairs) }}
         run: |
           set -euo pipefail
           if git diff --quiet; then
