@@ -157,3 +157,108 @@ jobs:
             --body-file /tmp/inspection.md
 
           cat /tmp/inspection.md >> "$GITHUB_STEP_SUMMARY"
+
+  execute-verify:
+    if: ${{ inputs.action == 'verify' }}
+    needs: authorize-and-record
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify approved repository from GitHub evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          OBJECTIVE: ${{ inputs.objective }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+
+          repo_json="$(gh api "repos/$TARGET_REPOSITORY")"
+          default_branch="$(jq -r '.default_branch' <<<"$repo_json")"
+          head_sha="$(gh api "repos/$TARGET_REPOSITORY/commits/$default_branch" --jq '.sha')"
+
+          status_json="$(gh api "repos/$TARGET_REPOSITORY/commits/$head_sha/status" 2>/dev/null || echo '{"state":"unknown","statuses":[]}')"
+          combined_state="$(jq -r '.state // "unknown"' <<<"$status_json")"
+          status_count="$(jq -r '.statuses | length' <<<"$status_json")"
+
+          checks_json="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET_REPOSITORY/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"total_count":0,"check_runs":[]}')"
+          check_count="$(jq -r '.total_count // 0' <<<"$checks_json")"
+          successful_checks="$(jq '[.check_runs[]? | select(.conclusion == "success" or .conclusion == "neutral" or .conclusion == "skipped")] | length' <<<"$checks_json")"
+          failed_checks="$(jq '[.check_runs[]? | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure")] | length' <<<"$checks_json")"
+          pending_checks="$(jq '[.check_runs[]? | select(.status != "completed" or .conclusion == null)] | length' <<<"$checks_json")"
+
+          runs_json="$(gh api "repos/$TARGET_REPOSITORY/actions/runs?branch=$default_branch&per_page=20" 2>/dev/null || echo '{"total_count":0,"workflow_runs":[]}')"
+          recent_run_count="$(jq -r '.workflow_runs | length' <<<"$runs_json")"
+          successful_runs="$(jq '[.workflow_runs[]? | select(.conclusion == "success")] | length' <<<"$runs_json")"
+          failed_runs="$(jq '[.workflow_runs[]? | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure")] | length' <<<"$runs_json")"
+          pending_runs="$(jq '[.workflow_runs[]? | select(.status != "completed" or .conclusion == null)] | length' <<<"$runs_json")"
+
+          if (( failed_checks > 0 || failed_runs > 0 )); then
+            verdict="FAIL"
+            reason="GitHub reports at least one failed check or recent workflow run."
+          elif (( pending_checks > 0 || pending_runs > 0 )); then
+            verdict="PENDING"
+            reason="Verification evidence is still running or incomplete."
+          elif (( check_count == 0 && status_count == 0 && recent_run_count == 0 )); then
+            verdict="UNKNOWN"
+            reason="No CI status, check run, or workflow-run evidence was available."
+          elif [[ "$combined_state" == "failure" || "$combined_state" == "error" ]]; then
+            verdict="FAIL"
+            reason="The combined commit status is not successful."
+          elif [[ "$combined_state" == "pending" ]]; then
+            verdict="PENDING"
+            reason="The combined commit status is pending."
+          else
+            verdict="PASS"
+            reason="Available GitHub check and workflow evidence contains no failure or pending result."
+          fi
+
+          check_details="$(jq -r '.check_runs[]? | "- " + .name + ": " + (.conclusion // .status // "unknown")' <<<"$checks_json" | head -30)"
+          run_details="$(jq -r '.workflow_runs[]? | "- " + .name + ": " + (.conclusion // .status // "unknown") + " (" + .event + ")"' <<<"$runs_json" | head -20)"
+
+          cat > /tmp/verification.md <<EOF
+          ## Autonomous verification result
+
+          - **Request ID:** \`$REQUEST_ID\`
+          - **Target:** \`$TARGET_REPOSITORY\`
+          - **Objective:** $OBJECTIVE
+          - **Default branch:** \`$default_branch\`
+          - **Verified head:** \`$head_sha\`
+          - **Verdict:** **$verdict**
+          - **Reason:** $reason
+
+          ### Evidence summary
+
+          - Combined commit status: \`$combined_state\`
+          - Commit status contexts: \`$status_count\`
+          - Check runs found: \`$check_count\`
+          - Successful/neutral/skipped checks: \`$successful_checks\`
+          - Failed checks: \`$failed_checks\`
+          - Pending checks: \`$pending_checks\`
+          - Recent default-branch workflow runs examined: \`$recent_run_count\`
+          - Successful recent runs: \`$successful_runs\`
+          - Failed recent runs: \`$failed_runs\`
+          - Pending recent runs: \`$pending_runs\`
+
+          ### Check runs
+
+          ${check_details:-No check-run details were available.}
+
+          ### Recent workflow runs
+
+          ${run_details:-No workflow-run details were available.}
+
+          ### Truthfulness and safety note
+
+          This verification is read-only. It evaluates GitHub's recorded status, check-run, and workflow-run evidence for the current default-branch head. It does not claim that tests were executed by this receiver, and it does not modify repository files, branches, pull requests, settings, or deployments. A PASS means the available evidence was complete and contained no failure or pending result; UNKNOWN means evidence was unavailable.
+          EOF
+
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Verification result: ${TARGET_REPOSITORY} — ${verdict} [${REQUEST_ID}]" \
+            --body-file /tmp/verification.md
+
+          cat /tmp/verification.md >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$verdict" == "FAIL" ]]; then
+            exit 1
+          fi
