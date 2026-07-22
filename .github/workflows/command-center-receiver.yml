@@ -1,0 +1,97 @@
+name: Amosclaud Command Center Receiver
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: Repository sending the command
+        required: true
+        type: string
+      action:
+        description: inspect, fix, verify, or monitor
+        required: true
+        type: choice
+        options: [inspect, fix, verify, monitor]
+      target_repository:
+        description: Repository Amosclaud should work on
+        required: true
+        type: string
+      objective:
+        description: Human-readable engineering objective
+        required: true
+        type: string
+      request_id:
+        description: Unique dashboard request identifier
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: amosclaud-command-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  authorize-and-record:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate trusted command source
+        env:
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          ACTION: ${{ inputs.action }}
+          OBJECTIVE: ${{ inputs.objective }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE_REPOSITORY" = "wamakologeorge-dev/Amosclaud1"
+          case "$ACTION" in inspect|fix|verify|monitor) ;; *) exit 1 ;; esac
+          case "$TARGET_REPOSITORY" in
+            wamakologeorge-dev/amosclaude-clean|wamakologeorge-dev/workspace|wamakologeorge-dev/starter-workflows|wamakologeorge-dev/Amosclaud1) ;;
+            *) echo "Target is not allowlisted" >&2; exit 1 ;;
+          esac
+          test -n "$OBJECTIVE"
+          test -n "$REQUEST_ID"
+
+      - name: Record approved request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          OBJECTIVE: ${{ inputs.objective }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/request.md <<EOF
+          ## Amosclaud Command Center request
+
+          - **Request ID:** \`$REQUEST_ID\`
+          - **Source:** \`$SOURCE_REPOSITORY\`
+          - **Action:** \`$ACTION\`
+          - **Target:** \`$TARGET_REPOSITORY\`
+          - **Objective:** $OBJECTIVE
+          - **Status:** AUTHORIZED AND QUEUED
+
+          This request passed the source, action, target allowlist, and input validation gates. Execution remains subject to Amosclaud's repository approval, privacy, test, and truthfulness gates.
+          EOF
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Command Center: ${ACTION} ${TARGET_REPOSITORY} [${REQUEST_ID}]" \
+            --body-file /tmp/request.md
+
+      - name: Publish receiver summary
+        run: |
+          {
+            echo "# Amosclaud command accepted"
+            echo
+            echo "- Request: \`${{ inputs.request_id }}\`"
+            echo "- Action: \`${{ inputs.action }}\`"
+            echo "- Target: \`${{ inputs.target_repository }}\`"
+            echo "- Source: \`${{ inputs.source_repository }}\`"
+            echo
+            echo "The request was authorized and entered into the Amosclaud audit queue."
+          } >> "$GITHUB_STEP_SUMMARY"
