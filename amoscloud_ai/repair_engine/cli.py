@@ -5,7 +5,7 @@ import json
 import shlex
 from pathlib import Path
 
-from .core import RepairReport
+from .core import RepairReport, RepairResult
 from .decision_engine import AutonomousDecisionEngine, objective_from_environment
 from .failure_strategy import apply_ci_failure_strategy
 
@@ -74,6 +74,15 @@ def parser() -> argparse.ArgumentParser:
     return value
 
 
+def objective_with_repair_scope(objective: str, repairs: list[RepairResult]) -> str:
+    """Make evidence-selected repair files the explicit Doctor verification scope."""
+    paths = sorted({repair.path for repair in repairs if repair.changed and repair.path})
+    if not paths:
+        return objective
+    scope = " ".join(f"`{path}`" for path in paths)
+    return f"{objective}\nVerify only the evidence-selected repair file(s): {scope}".strip()
+
+
 def main() -> None:
     args = parser().parse_args()
     root = Path(args.root).resolve()
@@ -89,9 +98,10 @@ def main() -> None:
             failure_evidence = objective + "\n" + log_path.read_text(encoding="utf-8", errors="replace")
 
     evidence_repairs = apply_ci_failure_strategy(root, failure_evidence) if args.apply else []
+    scoped_objective = objective_with_repair_scope(objective, evidence_repairs)
     engine = AutonomousDecisionEngine(
         root,
-        objective=objective,
+        objective=scoped_objective,
         required_files=args.required,
         commands=commands,
         max_attempts=args.max_attempts,
