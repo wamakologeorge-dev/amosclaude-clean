@@ -6,10 +6,22 @@ from pathlib import Path
 
 from .approval_gate import handle_approval_event
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
+from .comment_style import compact_public_comment
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
+from .status_board import handle_status_request
 
 PRIVATE_ROUTE_MARKER = Path("/tmp/amosclaud-private-routed")
+_ORIGINAL_POST_COMMENT = AmosclaudBot.post_comment
+
+
+def _compact_post_comment(self: AmosclaudBot, issue_number: int, body: str) -> None:
+    _ORIGINAL_POST_COMMENT(self, issue_number, compact_public_comment(body))
+
+
+def _install_compact_comment_mode() -> None:
+    """Apply one compact public-comment policy across bot, approval, privacy, and review layers."""
+    AmosclaudBot.post_comment = _compact_post_comment
 
 
 def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | None:
@@ -74,7 +86,9 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
 
 
 def run_dispatcher_from_environment() -> int:
-    """Route supported GitHub events through privacy, approval, professional, then base bot handling."""
+    """Route supported GitHub events through privacy, status, approval, review, then base bot handling."""
+    _install_compact_comment_mode()
+
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
     event_path = os.getenv("GITHUB_EVENT_PATH", "")
     repository = os.getenv("GITHUB_REPOSITORY", "")
@@ -93,6 +107,10 @@ def run_dispatcher_from_environment() -> int:
             return privacy_result
         if privacy_only:
             return 0
+
+        status_result = handle_status_request(bot, payload)
+        if status_result is not None:
+            return status_result
 
     if PRIVATE_ROUTE_MARKER.exists():
         return 0

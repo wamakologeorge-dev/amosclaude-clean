@@ -5,9 +5,6 @@ on:
     types: [created]
   pull_request:
     types: [opened, reopened, synchronize]
-  workflow_run:
-    workflows: ["CI/CD — Test & Deploy", "Python verification"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -49,6 +46,23 @@ jobs:
           AMOSCLAUD_PRIVACY_ONLY: '1'
         run: python -m amosclaud_bot.dispatcher
 
+      - name: Classify Amosclaud issue request
+        id: classify
+        if: github.event_name == 'issue_comment'
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from amosclaud_bot.bot import parse_command
+
+          payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          body = str((payload.get("comment") or {}).get("body") or "")
+          command, _ = parse_command(body)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"write_request={'true' if command == 'fix' else 'false'}\n")
+          PY
+
       - name: Check out pull request head
         if: github.event_name == 'issue_comment' && github.event.issue.pull_request
         env:
@@ -64,7 +78,7 @@ jobs:
         if: >-
           github.event_name == 'issue_comment' &&
           !github.event.issue.pull_request &&
-          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         run: |
           if [ -f /tmp/amosclaud-private-routed ]; then
@@ -81,74 +95,66 @@ jobs:
       - name: Verify real repair before publishing
         if: >-
           github.event_name == 'issue_comment' &&
-          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
 
           if [ -f /tmp/amosclaud-private-routed ]; then
             echo "Private work was routed away from this public workflow output."
             exit 0
           fi
 
+          report_failure() {
+            gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud — Verification failed\n\n🟥 **Result:** FAILED\n\nThe requested repository change did not pass real verification. No successful repair is being claimed.\n\nDetails: see GitHub Actions."
+          }
+          trap report_failure ERR
+
           if git diff --quiet && git diff --cached --quiet; then
-            gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud Bot — Repair result\n\n**Status:** NO CHANGES PRODUCED\n\nAmosclaud-Fixer did not modify the repository, so no repair is being claimed and no pull request will be created. Review the objective or inspect the failure evidence and try again."
-            echo "Amosclaud-Fixer produced no repository changes."
+            trap - ERR
+            gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud — No change produced\n\n⬜ **Result:** NO CHANGES\n\nNo repository files were modified, so no repair or creation is being claimed."
             exit 1
           fi
 
           git diff --name-only > /tmp/amosclaud-changed-files.txt
-          git diff --stat > /tmp/amosclaud-diff-stat.txt
+          FILE_COUNT=$(wc -l < /tmp/amosclaud-changed-files.txt | tr -d ' ')
 
-          echo "Running Python compilation verification..."
-          python -m compileall -q amosclaud_bot src 2>&1 | tee /tmp/amosclaud-compile.log
-
-          echo "Running Amosclaud bot verification tests..."
+          python -m compileall -q amosclaud_bot src
           python -m pytest -q \
             tests/test_amosclaud_bot.py \
             tests/test_amosclaud_professional_review.py \
             tests/test_amosclaud_approval_gate.py \
             tests/test_amosclaud_privacy_gate.py \
-            2>&1 | tee /tmp/amosclaud-pytest.log
+            tests/test_amosclaud_comment_style.py \
+            tests/test_amosclaud_status_board.py
 
+          trap - ERR
           {
-            echo "### Amosclaud Bot — Real repair verification"
+            echo "### Amosclaud — Verified result"
             echo
-            echo "**Status:** VERIFIED"
-            echo
-            echo "**Changed files:**"
-            sed 's/^/- `/' /tmp/amosclaud-changed-files.txt | sed 's/$/`/'
-            echo
-            echo "**Diff summary:**"
-            echo '```text'
-            cat /tmp/amosclaud-diff-stat.txt
-            echo '```'
-            echo
-            echo "**Verification executed:**"
-            echo '- `python -m compileall -q amosclaud_bot src`'
-            echo '- targeted Amosclaud bot, professional review, approval, and privacy tests'
-            echo
-            echo "**Pytest result:**"
-            echo '```text'
-            tail -n 12 /tmp/amosclaud-pytest.log
-            echo '```'
-            echo
-            echo "The repair will only be committed and published because these verification steps passed."
+            echo "🟩 **Result:** PASSED"
+            echo "🟩 **Compilation:** PASSED"
+            echo "🟩 **Tests:** PASSED"
+            echo "**Files changed:** ${FILE_COUNT}"
+            head -n 8 /tmp/amosclaud-changed-files.txt | sed 's/^/- `/' | sed 's/$/`/'
+            if [ "$FILE_COUNT" -gt 8 ]; then
+              echo "- ...and $((FILE_COUNT - 8)) more"
+            fi
           } > /tmp/amosclaud-real-results.md
-
-          gh issue comment "$ISSUE_NUMBER" --body-file /tmp/amosclaud-real-results.md
 
       - name: Commit and publish Amosclaud-Fixer changes
         if: >-
           github.event_name == 'issue_comment' &&
-          (startsWith(github.event.comment.body, '@amosclaud fix') || startsWith(github.event.comment.body, '@amosclaud-bot fix')) &&
+          steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           if [ -f /tmp/amosclaud-private-routed ]; then
             echo "Private work was routed away from public commit/PR publishing."
             exit 0
@@ -166,7 +172,12 @@ jobs:
 
           if [ "${{ github.event.issue.pull_request != null }}" = "true" ]; then
             git push
-            gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot — Repair published\n\n**Commit:** \`${REPAIR_SHA}\`\n\nAmosclaud-Fixer produced repository changes, verification passed, and the verified repair was pushed to this pull request."
+            {
+              cat /tmp/amosclaud-real-results.md
+              echo "**Commit:** \`${REPAIR_SHA}\`"
+              echo "**Pull request:** #${{ github.event.issue.number }}"
+            } > /tmp/amosclaud-published-result.md
+            gh pr comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
           else
             git push -u origin HEAD
             PR_URL=$(gh pr create \
@@ -174,5 +185,10 @@ jobs:
               --head "$(git branch --show-current)" \
               --title "Amosclaud-Fixer: repair issue #${{ github.event.issue.number }}" \
               --body "Automated repair created by Amosclaud Bot through the repository-local Amosclaud Autonomous and Amosclaud-Fixer pipeline. The branch was only published after compilation and targeted bot verification tests passed.\n\nCloses #${{ github.event.issue.number }}")
-            gh issue comment "${{ github.event.issue.number }}" --body "### Amosclaud Bot — Repair published\n\n**Commit:** \`${REPAIR_SHA}\`\n**Pull request:** ${PR_URL}\n\nAmosclaud-Fixer produced real repository changes, verification passed, and the verified repair pull request is ready for review."
+            {
+              cat /tmp/amosclaud-real-results.md
+              echo "**Commit:** \`${REPAIR_SHA}\`"
+              echo "**Pull request:** ${PR_URL}"
+            } > /tmp/amosclaud-published-result.md
+            gh issue comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
           fi
