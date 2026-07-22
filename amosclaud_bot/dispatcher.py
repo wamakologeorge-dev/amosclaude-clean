@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from .approval_gate import handle_approval_event
+from .autonomous_planning import announce_plan, resolve_continuation
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 from .comment_style import compact_public_comment
 from .privacy_gate import requires_private_work, route_private_work
@@ -86,7 +87,7 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
 
 
 def run_dispatcher_from_environment() -> int:
-    """Route supported GitHub events through privacy, status, approval, review, then base bot handling."""
+    """Route supported GitHub events through privacy, status, approval, planning, review, then base handling."""
     _install_compact_comment_mode()
 
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
@@ -102,6 +103,9 @@ def run_dispatcher_from_environment() -> int:
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
 
     if event_name == "issue_comment":
+        if resolve_continuation(bot, payload):
+            return 0
+
         privacy_result = _handle_private_issue_comment(bot, payload)
         if privacy_result is not None:
             return privacy_result
@@ -118,6 +122,9 @@ def run_dispatcher_from_environment() -> int:
     approval_result = handle_approval_event(bot, payload, event_name)
     if approval_result is not None:
         return approval_result
+
+    if event_name == "issue_comment":
+        announce_plan(bot, payload)
 
     return run_professional_from_environment()
 
