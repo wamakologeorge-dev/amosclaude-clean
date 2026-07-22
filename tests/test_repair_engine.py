@@ -119,3 +119,25 @@ def test_critical_finding_blocks_decision_engine_repair(tmp_path: Path) -> None:
     assert report.final_verdict == Verdict.FAIL
     assert report.changed_files == []
     assert target.read_text(encoding="utf-8") == "def broken(:   \n"
+
+
+def test_unrelated_critical_finding_does_not_block_explicit_safe_repair(tmp_path: Path) -> None:
+    target = tmp_path / "controlled-test.txt"
+    unrelated = tmp_path / "broken.py"
+    target.write_text("repair this safely   \n", encoding="utf-8")
+    unrelated.write_text("def broken(:\n", encoding="utf-8")
+
+    report = AutonomousDecisionEngine(
+        tmp_path,
+        objective="repair only `controlled-test.txt`",
+        memory_path=tmp_path / "memory.jsonl",
+    ).run(apply=True)
+
+    assert report.final_verdict == Verdict.PASS
+    assert report.changed_files == ["controlled-test.txt"]
+    assert target.read_text(encoding="utf-8") == "repair this safely\n"
+    assert unrelated.read_text(encoding="utf-8") == "def broken(:\n"
+    assert any(
+        item.name == "Unrelated repository findings deferred" and item.passed
+        for item in report.evidence
+    )
