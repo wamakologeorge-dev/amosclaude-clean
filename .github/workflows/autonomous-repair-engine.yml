@@ -75,6 +75,11 @@ jobs:
             cat /tmp/amosclaud-repair-report.md
           fi
 
+      - name: Install repair engine test dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pytest
+
       - name: Verify repair engine package
         env:
           VERIFY_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_command || 'python -m pytest -q tests/test_repair_engine.py' }}
