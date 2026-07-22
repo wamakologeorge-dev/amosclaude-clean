@@ -1,8 +1,7 @@
 # Legacy cmood compatibility adapter dependencies.
-# Install the repository itself so cmood uses the same Amosclaud Autonomous
-# kernel, shared contracts, repository APIs, credentials, and verification
-# models as the rest of PR #434 rather than becoming an independent agent.
--e ..
+# The workflow installs the Amosclaud repository itself explicitly before
+# installing these adapter dependencies, so this file contains only cmood's
+# direct runtime requirements.
 
 fastapi>=0.139.2,<1
 uvicorn[standard]>=0.30,<1
