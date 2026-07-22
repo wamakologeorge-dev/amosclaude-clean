@@ -17,6 +17,7 @@ from .core import (
 )
 from .asset_checks import safer_local_assets
 from .decision_engine import AutonomousDecisionEngine, RepairDecision
+from .healing import HealingRecommendation, doctor_healing_run, recommendations
 from .json_repairs import json_aware_fixer_apply, safer_json_syntax
 
 # Root-relative links are application URLs, not host filesystem paths. Keep the
@@ -29,6 +30,7 @@ Doctor._local_assets = safer_local_assets  # type: ignore[method-assign]
 Doctor._json_syntax = safer_json_syntax  # type: ignore[method-assign]
 _core_fixer_apply = Fixer.apply
 _core_decide = AutonomousDecisionEngine.decide
+_core_run = AutonomousDecisionEngine.run
 
 
 def _verified_fixer_apply(self: Fixer, findings: Sequence[Finding]) -> list[Repair]:
@@ -66,8 +68,13 @@ def _verified_decide(
     return _core_decide(self, findings)
 
 
+def _doctor_led_run(self: AutonomousDecisionEngine, apply: bool = False) -> RepairReport:
+    return doctor_healing_run(_core_run, self, apply=apply)
+
+
 Fixer.apply = _verified_fixer_apply  # type: ignore[method-assign]
 AutonomousDecisionEngine.decide = _verified_decide  # type: ignore[method-assign]
+AutonomousDecisionEngine.run = _doctor_led_run  # type: ignore[method-assign]
 
 __all__ = [
     "AutonomousDecisionEngine",
@@ -76,6 +83,7 @@ __all__ = [
     "Evidence",
     "Finding",
     "Fixer",
+    "HealingRecommendation",
     "Repair",
     "RepairDecision",
     "RepairMemory",
@@ -83,4 +91,5 @@ __all__ = [
     "Severity",
     "Verdict",
     "Verifier",
+    "recommendations",
 ]
