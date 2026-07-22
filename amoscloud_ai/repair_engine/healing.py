@@ -209,11 +209,21 @@ def doctor_healing_run(
         for rel, content in snapshots.items():
             (root / rel).write_bytes(content)
         if snapshots:
+            rolled_back = ", ".join(sorted(snapshots))
             report.evidence.append(
                 Evidence(
                     "Rollback unverified healing session",
                     True,
-                    output=", ".join(sorted(snapshots)),
+                    output=rolled_back,
+                )
+            )
+            # Keep the established evidence contract used by callers and older
+            # tests while also exposing the more specific session-level event.
+            report.evidence.append(
+                Evidence(
+                    "Rollback unverified repair",
+                    True,
+                    output=rolled_back,
                 )
             )
         report.changed_files = []
