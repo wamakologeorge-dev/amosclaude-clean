@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .core import RepairReport
 from .decision_engine import AutonomousDecisionEngine, objective_from_environment
+from .failure_strategy import apply_ci_failure_strategy
 
 
 def markdown(report: RepairReport) -> str:
@@ -62,7 +63,8 @@ def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(description="Amosclaud Autonomous Decision and Self-Healing Engine")
     value.add_argument("root", nargs="?", default=".", help="Repository root")
     value.add_argument("--apply", action="store_true", help="Apply deterministic safe repairs")
-    value.add_argument("--objective", default="", help="Human objective used to prioritize files and findings")
+    value.add_argument("--objective", default="", help="Human objective or CI failure evidence used to prioritize repairs")
+    value.add_argument("--failure-log", help="Path to a captured CI failure log")
     value.add_argument("--required", action="append", default=[], help="Required repository file")
     value.add_argument("--verify", action="append", default=[], help="Verification command; repeatable")
     value.add_argument("--max-attempts", type=int, default=3)
@@ -80,6 +82,13 @@ def main() -> None:
     if not memory_path.is_absolute():
         memory_path = root / memory_path
     objective = args.objective.strip() or objective_from_environment()
+    failure_evidence = objective
+    if args.failure_log:
+        log_path = Path(args.failure_log)
+        if log_path.is_file():
+            failure_evidence = objective + "\n" + log_path.read_text(encoding="utf-8", errors="replace")
+
+    evidence_repairs = apply_ci_failure_strategy(root, failure_evidence) if args.apply else []
     engine = AutonomousDecisionEngine(
         root,
         objective=objective,
@@ -89,6 +98,10 @@ def main() -> None:
         memory_path=memory_path,
     )
     report = engine.run(apply=args.apply)
+    if evidence_repairs:
+        report.repairs = evidence_repairs + report.repairs
+        repaired_paths = [repair.path for repair in evidence_repairs if repair.changed]
+        report.changed_files = sorted(set(report.changed_files + repaired_paths))
     payload = report.as_dict()
     rendered = markdown(report)
     if args.json_path:
