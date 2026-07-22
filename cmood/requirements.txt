@@ -1,8 +1,8 @@
 # Legacy cmood compatibility adapter dependencies.
-# The workflow installs the Amosclaud repository itself explicitly before
-# installing these adapter dependencies, so this file contains only cmood's
-# direct runtime requirements.
+# Install the parent Amosclaud repository in editable mode so cmood always uses
+# the unified local Amosclaud packages during development and CI.
 
+-e ..
 fastapi>=0.139.2,<1
 uvicorn[standard]>=0.30,<1
 pydantic>=2.8,<3
