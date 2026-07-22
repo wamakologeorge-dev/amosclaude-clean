@@ -24,10 +24,13 @@ on:
         description: Unique dashboard request identifier
         required: true
         type: string
+      command_issue:
+        description: Amosclaud1 issue number used as the single command record
+        required: true
+        type: string
 
 permissions:
   contents: read
-  issues: write
   actions: read
 
 concurrency:
@@ -45,6 +48,7 @@ jobs:
           ACTION: ${{ inputs.action }}
           OBJECTIVE: ${{ inputs.objective }}
           REQUEST_ID: ${{ inputs.request_id }}
+          COMMAND_ISSUE: ${{ inputs.command_issue }}
         run: |
           set -euo pipefail
           test "$SOURCE_REPOSITORY" = "wamakologeorge-dev/Amosclaud1"
@@ -55,33 +59,43 @@ jobs:
           esac
           test -n "$OBJECTIVE"
           test -n "$REQUEST_ID"
+          [[ "$COMMAND_ISSUE" =~ ^[0-9]+$ ]]
 
-      - name: Record approved request
+      - name: Update Command Center record to running
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
           ACTION: ${{ inputs.action }}
           TARGET_REPOSITORY: ${{ inputs.target_repository }}
           OBJECTIVE: ${{ inputs.objective }}
           REQUEST_ID: ${{ inputs.request_id }}
-          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          COMMAND_ISSUE: ${{ inputs.command_issue }}
         run: |
           set -euo pipefail
-          cat > /tmp/request.md <<EOF
-          ## Amosclaud Command Center request
+          test -n "$GH_TOKEN" || {
+            echo "AMOSCLAUD_ENGINE_TOKEN is required in amosclaude-clean to update Amosclaud1." >&2
+            exit 1
+          }
+          cat > /tmp/running.md <<EOF
+          ## Amosclaud Command
 
           - **Request ID:** \`$REQUEST_ID\`
-          - **Source:** \`$SOURCE_REPOSITORY\`
           - **Action:** \`$ACTION\`
           - **Target:** \`$TARGET_REPOSITORY\`
           - **Objective:** $OBJECTIVE
-          - **Status:** AUTHORIZED AND QUEUED
+          - **Status:** RUNNING
 
-          This request passed the source, action, target allowlist, and input validation gates. Execution remains subject to Amosclaud's repository approval, privacy, test, and truthfulness gates.
+          ### Progress
+
+          - [x] Command created in Amosclaud1
+          - [x] Authorized by the engine
+          - [x] Execution started
+          - [ ] Result returned
+
+          The request passed the trusted-source, action, target allowlist, and input-validation gates. Execution is running in \`amosclaude-clean\`.
           EOF
-          gh issue create \
-            --repo "${{ github.repository }}" \
-            --title "Command Center: ${ACTION} ${TARGET_REPOSITORY} [${REQUEST_ID}]" \
-            --body-file /tmp/request.md
+          gh api --method PATCH \
+            "repos/wamakologeorge-dev/Amosclaud1/issues/$COMMAND_ISSUE" \
+            -f body="$(cat /tmp/running.md)" >/dev/null
 
       - name: Publish receiver summary
         run: |
@@ -89,11 +103,11 @@ jobs:
             echo "# Amosclaud command accepted"
             echo
             echo "- Request: \`${{ inputs.request_id }}\`"
+            echo "- Command Center issue: \`wamakologeorge-dev/Amosclaud1#${{ inputs.command_issue }}\`"
             echo "- Action: \`${{ inputs.action }}\`"
             echo "- Target: \`${{ inputs.target_repository }}\`"
-            echo "- Source: \`${{ inputs.source_repository }}\`"
             echo
-            echo "The request was authorized and entered into the Amosclaud audit queue."
+            echo "Progress and final results are written back to the same Amosclaud1 issue."
           } >> "$GITHUB_STEP_SUMMARY"
 
   execute-inspect:
@@ -101,12 +115,13 @@ jobs:
     needs: authorize-and-record
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect approved repository
+      - name: Inspect approved repository and return result
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
           TARGET_REPOSITORY: ${{ inputs.target_repository }}
           OBJECTIVE: ${{ inputs.objective }}
           REQUEST_ID: ${{ inputs.request_id }}
+          COMMAND_ISSUE: ${{ inputs.command_issue }}
         run: |
           set -euo pipefail
 
@@ -122,14 +137,22 @@ jobs:
           root_files="$(gh api "repos/$TARGET_REPOSITORY/contents?ref=$default_branch" --jq '.[].name' 2>/dev/null | head -40 || true)"
 
           cat > /tmp/inspection.md <<EOF
-          ## Autonomous inspection result
+          ## Amosclaud Command
 
           - **Request ID:** \`$REQUEST_ID\`
+          - **Action:** \`inspect\`
           - **Target:** \`$TARGET_REPOSITORY\`
           - **Objective:** $OBJECTIVE
-          - **Status:** INSPECTION COMPLETED
+          - **Status:** COMPLETED
 
-          ### Repository facts
+          ### Progress
+
+          - [x] Command created in Amosclaud1
+          - [x] Authorized by the engine
+          - [x] Execution started
+          - [x] Result returned
+
+          ## Inspection result
 
           - Default branch: \`$default_branch\`
           - Current head: \`$head_sha\`
@@ -146,16 +169,14 @@ jobs:
           $root_files
           \`\`\`
 
-          ### Truthfulness and safety note
+          ### Truthfulness and safety
 
-          This was a read-only GitHub API inspection. No repository files, branches, pull requests, issues in the target repository, settings, or deployments were modified. Values marked \`unknown\` could not be read with the workflow token and must not be interpreted as zero.
+          This was a read-only GitHub API inspection. No target files, branches, pull requests, issues, settings, or deployments were modified. Values marked \`unknown\` were unavailable and must not be interpreted as zero.
           EOF
 
-          gh issue create \
-            --repo "${{ github.repository }}" \
-            --title "Inspection result: ${TARGET_REPOSITORY} [${REQUEST_ID}]" \
-            --body-file /tmp/inspection.md
-
+          gh api --method PATCH \
+            "repos/wamakologeorge-dev/Amosclaud1/issues/$COMMAND_ISSUE" \
+            -f body="$(cat /tmp/inspection.md)" >/dev/null
           cat /tmp/inspection.md >> "$GITHUB_STEP_SUMMARY"
 
   execute-verify:
@@ -163,12 +184,13 @@ jobs:
     needs: authorize-and-record
     runs-on: ubuntu-latest
     steps:
-      - name: Verify approved repository from GitHub evidence
+      - name: Verify approved repository and return result
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
           TARGET_REPOSITORY: ${{ inputs.target_repository }}
           OBJECTIVE: ${{ inputs.objective }}
           REQUEST_ID: ${{ inputs.request_id }}
+          COMMAND_ISSUE: ${{ inputs.command_issue }}
         run: |
           set -euo pipefail
 
@@ -200,7 +222,7 @@ jobs:
             reason="Verification evidence is still running or incomplete."
           elif (( check_count == 0 && status_count == 0 && recent_run_count == 0 )); then
             verdict="UNKNOWN"
-            reason="No CI status, check run, or workflow-run evidence was available."
+            reason="No CI status, check-run, or workflow-run evidence was available."
           elif [[ "$combined_state" == "failure" || "$combined_state" == "error" ]]; then
             verdict="FAIL"
             reason="The combined commit status is not successful."
@@ -216,25 +238,34 @@ jobs:
           run_details="$(jq -r '.workflow_runs[]? | "- " + .name + ": " + (.conclusion // .status // "unknown") + " (" + .event + ")"' <<<"$runs_json" | head -20)"
 
           cat > /tmp/verification.md <<EOF
-          ## Autonomous verification result
+          ## Amosclaud Command
 
           - **Request ID:** \`$REQUEST_ID\`
+          - **Action:** \`verify\`
           - **Target:** \`$TARGET_REPOSITORY\`
           - **Objective:** $OBJECTIVE
-          - **Default branch:** \`$default_branch\`
-          - **Verified head:** \`$head_sha\`
+          - **Status:** COMPLETED
           - **Verdict:** **$verdict**
           - **Reason:** $reason
 
-          ### Evidence summary
+          ### Progress
 
+          - [x] Command created in Amosclaud1
+          - [x] Authorized by the engine
+          - [x] Execution started
+          - [x] Result returned
+
+          ## Verification evidence
+
+          - Default branch: \`$default_branch\`
+          - Verified head: \`$head_sha\`
           - Combined commit status: \`$combined_state\`
           - Commit status contexts: \`$status_count\`
           - Check runs found: \`$check_count\`
           - Successful/neutral/skipped checks: \`$successful_checks\`
           - Failed checks: \`$failed_checks\`
           - Pending checks: \`$pending_checks\`
-          - Recent default-branch workflow runs examined: \`$recent_run_count\`
+          - Recent workflow runs examined: \`$recent_run_count\`
           - Successful recent runs: \`$successful_runs\`
           - Failed recent runs: \`$failed_runs\`
           - Pending recent runs: \`$pending_runs\`
@@ -247,16 +278,14 @@ jobs:
 
           ${run_details:-No workflow-run details were available.}
 
-          ### Truthfulness and safety note
+          ### Truthfulness and safety
 
-          This verification is read-only. It evaluates GitHub's recorded status, check-run, and workflow-run evidence for the current default-branch head. It does not claim that tests were executed by this receiver, and it does not modify repository files, branches, pull requests, settings, or deployments. A PASS means the available evidence was complete and contained no failure or pending result; UNKNOWN means evidence was unavailable.
+          This verification is read-only and evaluates GitHub's recorded evidence. It does not claim that tests were executed by this receiver. Missing evidence is reported as UNKNOWN, never as PASS.
           EOF
 
-          gh issue create \
-            --repo "${{ github.repository }}" \
-            --title "Verification result: ${TARGET_REPOSITORY} — ${verdict} [${REQUEST_ID}]" \
-            --body-file /tmp/verification.md
-
+          gh api --method PATCH \
+            "repos/wamakologeorge-dev/Amosclaud1/issues/$COMMAND_ISSUE" \
+            -f body="$(cat /tmp/verification.md)" >/dev/null
           cat /tmp/verification.md >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$verdict" == "FAIL" ]]; then
