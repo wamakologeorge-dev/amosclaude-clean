@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
+import shlex
 from pathlib import Path
 
 from .core import AutonomousRepairEngine, RepairReport
@@ -27,7 +27,9 @@ def markdown(report: RepairReport) -> str:
             location = f" `{item.path}`" if item.path else ""
             if item.line:
                 location += f":{item.line}"
-            lines.append(f"- **{item.severity.value.upper()}** `{item.code}`{location} — {item.message}")
+            lines.append(
+                f"- **{item.severity.value.upper()}** `{item.code}`{location} — {item.message}"
+            )
     else:
         lines.append("- No static blockers detected.")
     lines.extend(["", "## Repairs applied", ""])
@@ -41,12 +43,14 @@ def markdown(report: RepairReport) -> str:
     for evidence in report.evidence:
         mark = "✓" if evidence.passed else "✗"
         lines.append(f"- {mark} **{evidence.name}** ({evidence.duration_seconds:.2f}s)")
-    lines.extend([
-        "",
-        "## Truthfulness and safety",
-        "",
-        "A PASS is emitted only when static diagnosis is healthy and every configured verification command succeeds. Critical findings are never rewritten automatically. Repairs are limited to deterministic low-risk transformations.",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Truthfulness and safety",
+            "",
+            "A PASS is emitted only when static diagnosis is healthy and every configured verification command succeeds. Critical findings are never rewritten automatically. Repairs are limited to deterministic low-risk transformations.",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -66,13 +70,16 @@ def parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = parser().parse_args()
     root = Path(args.root).resolve()
-    commands = [command.split() for command in args.verify]
+    commands = [shlex.split(command) for command in args.verify]
+    memory_path = Path(args.memory)
+    if not memory_path.is_absolute():
+        memory_path = root / memory_path
     engine = AutonomousRepairEngine(
         root,
         required_files=args.required,
         commands=commands,
         max_attempts=args.max_attempts,
-        memory_path=root / args.memory,
+        memory_path=memory_path,
     )
     report = engine.run(apply=args.apply)
     payload = report.as_dict()
