@@ -95,3 +95,65 @@ jobs:
             echo
             echo "The request was authorized and entered into the Amosclaud audit queue."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  execute-inspect:
+    if: ${{ inputs.action == 'inspect' }}
+    needs: authorize-and-record
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect approved repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          OBJECTIVE: ${{ inputs.objective }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+
+          repo_json="$(gh api "repos/$TARGET_REPOSITORY")"
+          default_branch="$(jq -r '.default_branch' <<<"$repo_json")"
+          visibility="$(jq -r '.visibility // (if .private then "private" else "public" end)' <<<"$repo_json")"
+          archived="$(jq -r '.archived' <<<"$repo_json")"
+          open_issues="$(jq -r '.open_issues_count' <<<"$repo_json")"
+          pushed_at="$(jq -r '.pushed_at' <<<"$repo_json")"
+          head_sha="$(gh api "repos/$TARGET_REPOSITORY/commits/$default_branch" --jq '.sha')"
+          workflow_count="$(gh api "repos/$TARGET_REPOSITORY/actions/workflows?per_page=100" --jq '.total_count' 2>/dev/null || echo unknown)"
+          open_prs="$(gh api "repos/$TARGET_REPOSITORY/pulls?state=open&per_page=100" --jq 'length' 2>/dev/null || echo unknown)"
+          root_files="$(gh api "repos/$TARGET_REPOSITORY/contents?ref=$default_branch" --jq '.[].name' 2>/dev/null | head -40 || true)"
+
+          cat > /tmp/inspection.md <<EOF
+          ## Autonomous inspection result
+
+          - **Request ID:** \`$REQUEST_ID\`
+          - **Target:** \`$TARGET_REPOSITORY\`
+          - **Objective:** $OBJECTIVE
+          - **Status:** INSPECTION COMPLETED
+
+          ### Repository facts
+
+          - Default branch: \`$default_branch\`
+          - Current head: \`$head_sha\`
+          - Visibility: \`$visibility\`
+          - Archived: \`$archived\`
+          - Last push: \`$pushed_at\`
+          - Open issue count reported by GitHub: \`$open_issues\`
+          - Open pull requests: \`$open_prs\`
+          - GitHub Actions workflows: \`$workflow_count\`
+
+          ### Root-level files and directories
+
+          \`\`\`
+          $root_files
+          \`\`\`
+
+          ### Truthfulness and safety note
+
+          This was a read-only GitHub API inspection. No repository files, branches, pull requests, issues in the target repository, settings, or deployments were modified. Values marked \`unknown\` could not be read with the workflow token and must not be interpreted as zero.
+          EOF
+
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Inspection result: ${TARGET_REPOSITORY} [${REQUEST_ID}]" \
+            --body-file /tmp/inspection.md
+
+          cat /tmp/inspection.md >> "$GITHUB_STEP_SUMMARY"
