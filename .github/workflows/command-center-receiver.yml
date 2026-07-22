@@ -77,7 +77,18 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id }}
         run: |
           set -euo pipefail
-          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body "### Amosclaud engine accepted the command\n\n🟠 **Status:** RUNNING\n\n- Request: \`$REQUEST_ID\`\n- Action: \`$ACTION\`\n- Target: \`$TARGET\`\n\nThe trusted-source, allowlist, and input-validation gates passed."
+          cat > /tmp/running.md <<EOF
+          ### Amosclaud engine accepted the command
+
+          🟠 **Status:** RUNNING
+
+          - Request: \`$REQUEST_ID\`
+          - Action: \`$ACTION\`
+          - Target: \`$TARGET\`
+
+          The trusted-source, allowlist, and input-validation gates passed.
+          EOF
+          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/running.md
 
   inspect:
     if: inputs.action == 'inspect'
@@ -97,34 +108,71 @@ jobs:
           head_sha="$(gh api "repos/$TARGET/commits/$default_branch" --jq '.sha')"
           workflow_count="$(gh api "repos/$TARGET/actions/workflows?per_page=100" --jq '.total_count' 2>/dev/null || echo unknown)"
           open_prs="$(gh api "repos/$TARGET/pulls?state=open&per_page=100" --jq 'length' 2>/dev/null || echo unknown)"
-          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body "### Amosclaud inspection completed\n\n🟢 **Status:** COMPLETED\n\n- Request: \`$REQUEST_ID\`\n- Target: \`$TARGET\`\n- Default branch: \`$default_branch\`\n- Head commit: \`$head_sha\`\n- Workflows: \`$workflow_count\`\n- Open pull requests: \`$open_prs\`\n\nThis was a read-only inspection. No repair is being claimed."
+          cat > /tmp/inspection.md <<EOF
+          ### Amosclaud inspection completed
+
+          🟢 **Status:** COMPLETED
+
+          - Request: \`$REQUEST_ID\`
+          - Target: \`$TARGET\`
+          - Default branch: \`$default_branch\`
+          - Head commit: \`$head_sha\`
+          - Workflows: \`$workflow_count\`
+          - Open pull requests: \`$open_prs\`
+
+          This was a read-only inspection. No repair is being claimed.
+          EOF
+          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/inspection.md
 
   verify:
     if: inputs.action == 'verify' || inputs.action == 'monitor'
     needs: authorize
     runs-on: ubuntu-latest
     steps:
-      - name: Verify GitHub evidence and return result
+      - name: Verify stable GitHub evidence and return result
         env:
           GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
           TARGET: ${{ inputs.target_repository }}
           ISSUE: ${{ inputs.command_issue }}
           REQUEST_ID: ${{ inputs.request_id }}
           ACTION: ${{ inputs.action }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           default_branch="$(gh api "repos/$TARGET" --jq '.default_branch')"
           head_sha="$(gh api "repos/$TARGET/commits/$default_branch" --jq '.sha')"
-          checks="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"total_count":0,"check_runs":[]}')"
-          total="$(jq -r '.total_count // 0' <<<"$checks")"
-          failed="$(jq '[.check_runs[]? | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure")] | length' <<<"$checks")"
-          pending="$(jq '[.check_runs[]? | select(.status != "completed" or .conclusion == null)] | length' <<<"$checks")"
-          passed="$(jq '[.check_runs[]? | select(.conclusion == "success" or .conclusion == "neutral" or .conclusion == "skipped")] | length' <<<"$checks")"
-          details="$(jq -r '.check_runs[]? | "- " + .name + ": " + (.conclusion // .status // "unknown")' <<<"$checks" | head -25)"
-          if (( failed > 0 )); then verdict=FAIL; icon='🔴';
-          elif (( pending > 0 )); then verdict=PENDING; icon='🟡';
+
+          normalized='[]'
+          for attempt in 1 2 3; do
+            raw="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"check_runs":[]}')"
+            normalized="$(jq --arg run_id "$CURRENT_RUN_ID" '
+              [ .check_runs[]?
+                | select((.details_url // "") | contains("/actions/runs/" + $run_id) | not)
+              ]
+              | sort_by(.started_at // .completed_at // "")
+              | reduce .[] as $check ({}; .[$check.name] = $check)
+              | [.[]]
+            ' <<<"$raw")"
+            pending_now="$(jq '[.[] | select(.status != "completed" or .conclusion == null)] | length' <<<"$normalized")"
+            if (( pending_now == 0 || attempt == 3 )); then
+              break
+            fi
+            sleep 10
+          done
+
+          total="$(jq 'length' <<<"$normalized")"
+          failed="$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure")] | length' <<<"$normalized")"
+          pending="$(jq '[.[] | select(.status != "completed" or .conclusion == null)] | length' <<<"$normalized")"
+          passed="$(jq '[.[] | select(.conclusion == "success" or .conclusion == "neutral" or .conclusion == "skipped")] | length' <<<"$normalized")"
+          failed_details="$(jq -r '.[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled" or .conclusion == "action_required" or .conclusion == "startup_failure") | "- **" + .name + "**: " + (.conclusion // "unknown")' <<<"$normalized")"
+          pending_details="$(jq -r '.[] | select(.status != "completed" or .conclusion == null) | "- " + .name + ": " + (.status // "pending")' <<<"$normalized")"
+          other_details="$(jq -r '.[] | select(.status == "completed" and (.conclusion != null)) | select(.conclusion != "failure" and .conclusion != "timed_out" and .conclusion != "cancelled" and .conclusion != "action_required" and .conclusion != "startup_failure") | "- " + .name + ": " + .conclusion' <<<"$normalized" | head -25)"
+
+          if (( pending > 0 )); then verdict=PENDING; icon='🟡';
+          elif (( failed > 0 )); then verdict=FAIL; icon='🔴';
           elif (( total == 0 )); then verdict=UNKNOWN; icon='⚪';
           else verdict=PASS; icon='🟢'; fi
+
           cat > /tmp/result.md <<EOF
           ### Amosclaud ${ACTION} result
 
@@ -137,14 +185,20 @@ jobs:
           - Passed/neutral/skipped: \`$passed\`
           - Failed: \`$failed\`
           - Pending: \`$pending\`
+          - Unique latest checks examined: \`$total\`
 
-          #### Check evidence
-          ${details:-No check-run evidence was available.}
+          #### Failed checks
+          ${failed_details:-None.}
 
-          This result is based on GitHub's recorded check evidence. UNKNOWN is never reported as PASS.
+          #### Pending checks
+          ${pending_details:-None.}
+
+          #### Other latest check evidence
+          ${other_details:-No additional check-run evidence was available.}
+
+          The current Command Center receiver run is excluded, and only the latest record for each check name is evaluated. PENDING takes priority while evidence is still running. UNKNOWN is never reported as PASS.
           EOF
           gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/result.md
-          [[ "$verdict" != FAIL ]]
 
   fix:
     if: inputs.action == 'fix'
@@ -176,13 +230,22 @@ jobs:
           OBJECTIVE: ${{ inputs.objective }}
         run: |
           set -Eeuo pipefail
-          engine_root="$PWD"
           workdir="$(mktemp -d)"
           branch="amosclaud-fixer/${REQUEST_ID}"
           encoded_token="$(printf '%s' "$GH_TOKEN" | jq -sRr @uri)"
 
           report_failure() {
-            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body "### Amosclaud repair failed\n\n🔴 **Result:** FAILED\n\n- Request: \`$REQUEST_ID\`\n- Target: \`$TARGET\`\n\nThe repair or verification command failed. No successful repair is being claimed. Review the engine workflow log for exact evidence." || true
+            cat > /tmp/failure.md <<EOF
+          ### Amosclaud repair failed
+
+          🔴 **Result:** FAILED
+
+          - Request: \`$REQUEST_ID\`
+          - Target: \`$TARGET\`
+
+          The repair or verification command failed. No successful repair is being claimed. Review the engine workflow log for exact evidence.
+          EOF
+            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/failure.md || true
           }
           trap report_failure ERR
 
@@ -201,7 +264,19 @@ jobs:
           mapfile -t changed < <(git status --porcelain | sed 's/^...//')
           if (( ${#changed[@]} == 0 )); then
             trap - ERR
-            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body "### Amosclaud repair result\n\n⚪ **Result:** NO CHANGE\n\n- Request: \`$REQUEST_ID\`\n- Target: \`$TARGET\`\n- Examined commit: \`$before_sha\`\n- Doctor exit code: \`$doctor_status\`\n\nThe deterministic Fixer produced no repository changes. No repair, commit, or passing verification is being claimed."
+            cat > /tmp/no-change.md <<EOF
+          ### Amosclaud repair result
+
+          ⚪ **Result:** NO CHANGE
+
+          - Request: \`$REQUEST_ID\`
+          - Target: \`$TARGET\`
+          - Examined commit: \`$before_sha\`
+          - Doctor exit code: \`$doctor_status\`
+
+          The deterministic Fixer produced no repository changes. No repair, commit, or passing verification is being claimed.
+          EOF
+            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/no-change.md
             exit 0
           fi
 
