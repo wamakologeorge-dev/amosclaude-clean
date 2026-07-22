@@ -134,6 +134,8 @@ jobs:
 
           files="$(gh api --paginate "repos/$TARGET/pulls/$pr_number/files?per_page=100")"
           checks="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"check_runs":[]}')"
+          export FILES_JSON="$files"
+          export CHECKS_JSON="$checks"
 
           review_json="$(python - <<'PY'
           import json, os, re
@@ -249,6 +251,3 @@ jobs:
           EOF
 
           gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/review.md
-        env:
-          FILES_JSON: ${{ toJSON(fromJSON('[]')) }}
-          CHECKS_JSON: ${{ toJSON(fromJSON('{"check_runs":[]}')) }}
