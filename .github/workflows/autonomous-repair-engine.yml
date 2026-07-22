@@ -1,0 +1,73 @@
+name: Amosclaud Autonomous Repair Engine
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apply_repairs:
+        description: Apply deterministic safe repairs in the checked-out branch
+        required: true
+        type: boolean
+        default: false
+      verify_command:
+        description: Optional verification command
+        required: false
+        type: string
+        default: "python -m pytest -q"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  doctor-fixer-verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+
+      - name: Run Amosclaud repair engine
+        env:
+          APPLY_REPAIRS: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_repairs || false }}
+          VERIFY_COMMAND: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_command || 'python -m pytest -q' }}
+        run: |
+          set -euo pipefail
+          args=(
+            .
+            --required pyproject.toml
+            --required requirements.txt
+            --verify "$VERIFY_COMMAND"
+            --json /tmp/amosclaud-repair-report.json
+            --markdown /tmp/amosclaud-repair-report.md
+          )
+          if [[ "$APPLY_REPAIRS" == "true" ]]; then
+            args+=(--apply)
+          fi
+          python -m amoscloud_ai.repair_engine.cli "${args[@]}"
+
+      - name: Commit deterministic repairs
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply_repairs }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No deterministic repair was required."
+            exit 0
+          fi
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: apply Amosclaud deterministic repairs"
+          git push
+
+      - name: Publish repair report
+        if: always()
+        run: |
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            cat /tmp/amosclaud-repair-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Amosclaud repair report unavailable" >> "$GITHUB_STEP_SUMMARY"
+          fi
