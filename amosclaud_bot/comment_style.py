@@ -29,14 +29,15 @@ def compact_public_comment(body: str) -> str:
 
     Full execution evidence remains available in Actions logs, PR checks, and artifacts.
     Security/privacy notices that are already short are left unchanged. On-demand workflow
-    boards and autonomous plans are intentionally compact and must retain their hidden
-    issue-memory marker, so they are preserved as-is.
+    boards, autonomous plans, and live dashboards retain their complete structured state.
     """
     text = (body or "").strip()
     if text.startswith("### Amosclaud — Workflow Status"):
         return text[:1800]
     if text.startswith("### Amosclaud — Autonomous Plan"):
         return text[:2400]
+    if "<!-- amosclaud-live-execution-dashboard -->" in text:
+        return text[:6000]
     if not text or len(text) <= MAX_PUBLIC_COMMENT:
         return text
 

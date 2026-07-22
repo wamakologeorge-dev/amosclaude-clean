@@ -58,7 +58,8 @@ jobs:
 
           payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
           body = str((payload.get("comment") or {}).get("body") or "")
-          command, _ = parse_command(body)
+          command, objective = parse_command(body)
+          Path("/tmp/amosclaud-objective.txt").write_text(objective or "Repository engineering task", encoding="utf-8")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"write_request={'true' if command == 'fix' else 'false'}\n")
           PY
@@ -87,6 +88,21 @@ jobs:
           fi
           git switch -c "amosclaud-bot/fix-${{ github.event.issue.number }}-${{ github.run_id }}"
 
+      - name: Start live execution dashboard
+        if: >-
+          github.event_name == 'issue_comment' &&
+          steps.classify.outputs.write_request == 'true' &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ -f /tmp/amosclaud-private-routed ]; then exit 0; fi
+          python -m amosclaud_bot.execution_dashboard \
+            --stage edit \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --branch "$(git branch --show-current)"
+
       - name: Run Amosclaud Bot dispatcher
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -99,6 +115,7 @@ jobs:
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -Eeuo pipefail
@@ -109,6 +126,22 @@ jobs:
           fi
 
           report_failure() {
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          cards = [
+              {"name": "Python compilation", "status": "failed", "detail": "Compilation or test execution failed"},
+              {"name": "Targeted pytest", "status": "failed", "detail": "See the GitHub Actions log for exact failure evidence"},
+              {"name": "Truth gate", "status": "passed", "detail": "No successful repair was claimed"},
+          ]
+          Path("/tmp/amosclaud-tests.json").write_text(json.dumps(cards), encoding="utf-8")
+          PY
+            python -m amosclaud_bot.execution_dashboard \
+              --stage test --outcome failed \
+              --objective "$(cat /tmp/amosclaud-objective.txt)" \
+              --files /tmp/amosclaud-changed-files.txt \
+              --tests-json /tmp/amosclaud-tests.json \
+              --branch "$(git branch --show-current)" || true
             gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud — Verification failed\n\n🟥 **Result:** FAILED\n\nThe requested repository change did not pass real verification. No successful repair is being claimed.\n\nDetails: see GitHub Actions."
           }
           trap report_failure ERR
@@ -122,14 +155,38 @@ jobs:
           git diff --name-only > /tmp/amosclaud-changed-files.txt
           FILE_COUNT=$(wc -l < /tmp/amosclaud-changed-files.txt | tr -d ' ')
 
-          python -m compileall -q amosclaud_bot src
+          python -m compileall -q amosclaud_bot src 2>&1 | tee /tmp/amosclaud-compile.log
           python -m pytest -q \
             tests/test_amosclaud_bot.py \
             tests/test_amosclaud_professional_review.py \
             tests/test_amosclaud_approval_gate.py \
             tests/test_amosclaud_privacy_gate.py \
             tests/test_amosclaud_comment_style.py \
-            tests/test_amosclaud_status_board.py
+            tests/test_amosclaud_status_board.py \
+            tests/test_autonomous_planning.py \
+            tests/test_execution_dashboard.py \
+            2>&1 | tee /tmp/amosclaud-pytest.log
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pytest_tail = Path("/tmp/amosclaud-pytest.log").read_text(encoding="utf-8").splitlines()[-1]
+          cards = [
+              {"name": "Python compilation", "status": "passed", "detail": "amosclaud_bot and src compiled successfully"},
+              {"name": "Targeted pytest", "status": "passed", "detail": pytest_tail},
+              {"name": "Dashboard integrity", "status": "passed", "detail": "Live-card regression tests passed"},
+              {"name": "Approval & privacy gates", "status": "passed", "detail": "Protected workflow tests passed"},
+              {"name": "Truth gate", "status": "passed", "detail": "PASS is emitted only after commands return successfully"},
+          ]
+          Path("/tmp/amosclaud-tests.json").write_text(json.dumps(cards), encoding="utf-8")
+          PY
+
+          python -m amosclaud_bot.execution_dashboard \
+            --stage verify --outcome passed \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --files /tmp/amosclaud-changed-files.txt \
+            --tests-json /tmp/amosclaud-tests.json \
+            --branch "$(git branch --show-current)"
 
           trap - ERR
           {
@@ -152,6 +209,8 @@ jobs:
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
 
@@ -169,13 +228,15 @@ jobs:
           git add -A
           git commit -m "fix: Amosclaud-Fixer repair for #${{ github.event.issue.number }}"
           REPAIR_SHA=$(git rev-parse --short HEAD)
+          PR_DISPLAY=""
 
           if [ "${{ github.event.issue.pull_request != null }}" = "true" ]; then
             git push
+            PR_DISPLAY="#${{ github.event.issue.number }}"
             {
               cat /tmp/amosclaud-real-results.md
               echo "**Commit:** \`${REPAIR_SHA}\`"
-              echo "**Pull request:** #${{ github.event.issue.number }}"
+              echo "**Pull request:** ${PR_DISPLAY}"
             } > /tmp/amosclaud-published-result.md
             gh pr comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
           else
@@ -185,6 +246,7 @@ jobs:
               --head "$(git branch --show-current)" \
               --title "Amosclaud-Fixer: repair issue #${{ github.event.issue.number }}" \
               --body "Automated repair created by Amosclaud Bot through the repository-local Amosclaud Autonomous and Amosclaud-Fixer pipeline. The branch was only published after compilation and targeted bot verification tests passed.\n\nCloses #${{ github.event.issue.number }}")
+            PR_DISPLAY="${PR_URL}"
             {
               cat /tmp/amosclaud-real-results.md
               echo "**Commit:** \`${REPAIR_SHA}\`"
@@ -192,3 +254,12 @@ jobs:
             } > /tmp/amosclaud-published-result.md
             gh issue comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
           fi
+
+          python -m amosclaud_bot.execution_dashboard \
+            --stage publish --outcome passed \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --files /tmp/amosclaud-changed-files.txt \
+            --tests-json /tmp/amosclaud-tests.json \
+            --commit "${REPAIR_SHA}" \
+            --pull-request "${PR_DISPLAY}" \
+            --branch "$(git branch --show-current)"
