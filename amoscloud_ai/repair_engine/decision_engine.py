@@ -33,14 +33,11 @@ class RepairDecision:
 
 
 class AutonomousDecisionEngine:
-    """Target-aware deterministic repair loop with verification and rollback.
+    """Objective-aware deterministic repair loop with focused verification.
 
-    The engine deliberately separates responsibilities:
-    - Doctor discovers and verifies findings.
-    - Decision logic ranks findings against the human objective.
-    - Fixer applies only selected low-risk deterministic transformations.
-    - Verifier proves configured commands.
-    - Failed attempts are rolled back and are never published as repairs.
+    Doctor verifies the exact requested repair scope. Unrelated repository
+    findings are recorded as deferred evidence and do not block a safe,
+    explicitly scoped repair. Fixer remains the only component that edits code.
     """
 
     def __init__(
@@ -62,13 +59,15 @@ class AutonomousDecisionEngine:
         self.max_attempts = max(1, max_attempts)
         self.memory = RepairMemory(memory_path or self.root / ".amosclaud" / "repair-memory.jsonl")
         self.target_paths = self._extract_target_paths(self.objective)
+        self.deferred_findings: list[Finding] = []
 
     def _extract_target_paths(self, objective: str) -> tuple[str, ...]:
         candidates: list[str] = []
-        for value in re.findall(r"`([^`]+)`", objective):
-            candidates.append(value.strip())
-        for value in re.findall(r"(?<![\w.-])([\w./-]+\.[A-Za-z0-9]{1,12})(?![\w.-])", objective):
-            candidates.append(value.strip())
+        candidates.extend(value.strip() for value in re.findall(r"`([^`]+)`", objective))
+        candidates.extend(
+            value.strip()
+            for value in re.findall(r"(?<![\w.-])([\w./-]+\.[A-Za-z0-9]{1,12})(?![\w.-])", objective)
+        )
 
         resolved: list[str] = []
         for candidate in candidates:
@@ -85,14 +84,16 @@ class AutonomousDecisionEngine:
         return tuple(resolved)
 
     def _focused_findings(self) -> list[Finding]:
-        """Inspect explicit objective files, including suffixes outside normal source scans."""
+        """Inspect explicit objective files, including normally ignored suffixes."""
         findings: list[Finding] = []
         for rel in self.target_paths:
             path = self.root / rel
             if not path.is_file():
-                findings.append(Finding("missing-objective-file", "Objective file does not exist", Severity.CRITICAL, rel))
+                findings.append(
+                    Finding("missing-objective-file", "Objective file does not exist", Severity.CRITICAL, rel)
+                )
                 continue
-            findings.extend(self.doctor._basic_text_checks(path))  # deterministic text safety checks
+            findings.extend(self.doctor._basic_text_checks(path))
             if path.suffix == ".py":
                 findings.extend(self.doctor._python_syntax(path))
             elif path.suffix == ".json":
@@ -106,15 +107,18 @@ class AutonomousDecisionEngine:
     def diagnose(self) -> list[Finding]:
         global_findings = self.doctor.diagnose()
         if not self.target_paths:
+            self.deferred_findings = []
             return global_findings
 
-        # Keep global critical blockers, but focus repairable work on files named by the objective.
         focused = self._focused_findings()
-        critical = [item for item in global_findings if item.severity == Severity.CRITICAL]
-        merged: dict[tuple[str, str | None, int | None], Finding] = {}
-        for item in [*critical, *focused]:
-            merged[(item.code, item.path, item.line)] = item
-        return list(merged.values())
+        focused_keys = {(item.code, item.path, item.line) for item in focused}
+        self.deferred_findings = [
+            item
+            for item in global_findings
+            if (item.code, item.path, item.line) not in focused_keys
+            and item.path not in self.target_paths
+        ]
+        return focused
 
     def decide(self, findings: Sequence[Finding]) -> RepairDecision | None:
         repairable = [item for item in findings if item.severity == Severity.REPAIRABLE and item.path]
@@ -145,7 +149,7 @@ class AutonomousDecisionEngine:
         confidence = 98 if self.target_paths else 82
         codes = tuple(sorted({item.code for item in selected}))
         reason = (
-            "The objective explicitly names the selected file(s), so unrelated repairable findings are deferred."
+            "The objective explicitly names the selected file(s); Doctor and Fixer are scoped to those files."
             if self.target_paths
             else "No file was named; the highest-priority low-risk deterministic finding was selected."
         )
@@ -162,11 +166,22 @@ class AutonomousDecisionEngine:
         static_verdict = self.doctor.classify(findings)
         evidence = [
             Evidence(
-                "Amosclaud Doctor focused static verification",
+                "Amosclaud Doctor scoped static verification",
                 static_verdict == Verdict.HEALTHY,
                 output=static_verdict.value,
             )
         ]
+        if self.target_paths and self.deferred_findings:
+            summary = "; ".join(
+                f"{item.code}:{item.path or 'repository'}" for item in self.deferred_findings[:20]
+            )
+            evidence.append(
+                Evidence(
+                    "Unrelated repository findings deferred",
+                    True,
+                    output=summary,
+                )
+            )
         if static_verdict == Verdict.HEALTHY and self.commands:
             evidence.extend(self.verifier.run(self.commands))
         return evidence
@@ -189,7 +204,9 @@ class AutonomousDecisionEngine:
 
                 signature = tuple(sorted((item.code, item.path, item.line) for item in report.findings))
                 if signature == previous_signature:
-                    report.evidence.append(Evidence("Self-healing progress guard", False, output="No new diagnosis after retry"))
+                    report.evidence.append(
+                        Evidence("Self-healing progress guard", False, output="No new diagnosis after retry")
+                    )
                     break
                 previous_signature = signature
 
@@ -205,7 +222,8 @@ class AutonomousDecisionEngine:
                 )
 
                 selected = [
-                    item for item in report.findings
+                    item
+                    for item in report.findings
                     if item.severity == Severity.REPAIRABLE and item.path in decision.paths
                 ]
                 snapshot = self._snapshot(decision.paths)
@@ -214,7 +232,9 @@ class AutonomousDecisionEngine:
                 report.repairs.extend(repairs)
 
                 if not changed:
-                    report.evidence.append(Evidence("Repair attempt produced a repository change", False, output="No files changed"))
+                    report.evidence.append(
+                        Evidence("Repair attempt produced a repository change", False, output="No files changed")
+                    )
                     break
 
                 after = self.diagnose()
@@ -225,9 +245,10 @@ class AutonomousDecisionEngine:
                     report.changed_files = sorted(set(changed))
                     break
 
-                # Never leave an unverified repair in the working tree.
                 self._restore(snapshot)
-                report.evidence.append(Evidence("Rollback unverified repair", True, output=", ".join(changed)))
+                report.evidence.append(
+                    Evidence("Rollback unverified repair", True, output=", ".join(changed))
+                )
                 report.findings = self.diagnose()
 
         if not report.evidence:
