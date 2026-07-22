@@ -17,18 +17,123 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pre-ci-guardian:
+    name: Amosclaud Pre-CI Guardian
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted Guardian runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -e . pytest
+
+      - name: Run approval and safety dispatcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m amosclaud_bot.dispatcher
+
+      - name: Prepare changed-file scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/amosclaud-scope
+          mkdir -p /tmp/amosclaud-scope
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" > /tmp/amosclaud-changed-files.txt
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "$file" ]] && continue
+            case "$file" in
+              *.py|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.sh|*.html|*.css|*.md|*.toml)
+                mkdir -p "/tmp/amosclaud-scope/$(dirname "$file")"
+                cp "$file" "/tmp/amosclaud-scope/$file"
+                ;;
+            esac
+          done < /tmp/amosclaud-changed-files.txt
+
+      - name: Doctor diagnose and Fixer repair
+        id: guardian
+        run: |
+          set +e
+          python -m amoscloud_ai.repair_engine.cli \
+            /tmp/amosclaud-scope \
+            --apply \
+            --memory /tmp/amosclaud-repair-memory.jsonl \
+            --json /tmp/amosclaud-repair-report.json \
+            --markdown /tmp/amosclaud-repair-report.md
+          guardian_status=$?
+          set -e
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "/tmp/amosclaud-scope/$file" ]] && continue
+            cp "/tmp/amosclaud-scope/$file" "$file"
+          done < /tmp/amosclaud-changed-files.txt
+          echo "exit_code=$guardian_status" >> "$GITHUB_OUTPUT"
+          if [[ -f /tmp/amosclaud-repair-report.json ]]; then
+            cat /tmp/amosclaud-repair-report.json
+          fi
+
+      - name: Verify Guardian package
+        run: |
+          set -euo pipefail
+          python -m compileall -q amoscloud_ai/repair_engine amosclaud_bot
+          python -m pytest -q tests/test_repair_engine.py
+
+      - name: Commit safe deterministic repairs
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No safe deterministic repair was required."
+            exit 0
+          fi
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: apply Amosclaud Pre-CI Guardian repairs"
+          git push
+
+      - name: Enforce unified Guardian result
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.guardian.outputs.exit_code }}" != "0" ]]; then
+            echo "Doctor found a blocking issue that the safe Fixer could not repair."
+            exit 1
+          fi
+
+      - name: Publish Guardian report
+        if: always()
+        run: |
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            cat /tmp/amosclaud-repair-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Amosclaud Pre-CI Guardian report unavailable" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   respond:
+    if: github.event_name == 'issue_comment'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Check out trusted repository base
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
 
@@ -38,7 +143,6 @@ jobs:
           python -m pip install -e .
 
       - name: Run protected privacy preflight
-        if: github.event_name == 'issue_comment'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AMOSCLAUD_PRIVATE_REPOSITORY: ${{ vars.AMOSCLAUD_PRIVATE_REPOSITORY }}
@@ -48,7 +152,6 @@ jobs:
 
       - name: Classify Amosclaud issue request
         id: classify
-        if: github.event_name == 'issue_comment'
         run: |
           python - <<'PY'
           import json
@@ -65,7 +168,7 @@ jobs:
           PY
 
       - name: Check out pull request head
-        if: github.event_name == 'issue_comment' && github.event.issue.pull_request
+        if: github.event.issue.pull_request
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -77,7 +180,6 @@ jobs:
 
       - name: Prepare repair branch for issue
         if: >-
-          github.event_name == 'issue_comment' &&
           !github.event.issue.pull_request &&
           steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
@@ -90,7 +192,6 @@ jobs:
 
       - name: Start live execution dashboard
         if: >-
-          github.event_name == 'issue_comment' &&
           steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
@@ -110,7 +211,6 @@ jobs:
 
       - name: Verify real repair before publishing
         if: >-
-          github.event_name == 'issue_comment' &&
           steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
@@ -204,7 +304,6 @@ jobs:
 
       - name: Commit and publish Amosclaud-Fixer changes
         if: >-
-          github.event_name == 'issue_comment' &&
           steps.classify.outputs.write_request == 'true' &&
           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         env:
