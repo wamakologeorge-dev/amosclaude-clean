@@ -169,7 +169,8 @@ def format_plan(
         + "\n".join(rendered)
         + brain
         + codex
-        + "\n\nProceeding through the existing privacy, approval, verification, rollback, commit, and pull-request gates.\n"
+        + "\n\nProceeding through the existing approval and publication gates. "
+        + "The enforced order remains privacy, approval, verification, rollback, commit, and pull-request.\n"
         + encode_plan_marker(command, objective)
     )
 
