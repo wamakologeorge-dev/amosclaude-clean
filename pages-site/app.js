@@ -81,6 +81,10 @@
   async function githubJson(url) {
     const response = await fetch(url, {headers:{Accept:"application/vnd.github+json"}});
     if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      throw new Error("GitHub returned a non-JSON response");
+    }
     return response.json();
   }
 
