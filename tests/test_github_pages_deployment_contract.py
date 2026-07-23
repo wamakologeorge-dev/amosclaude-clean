@@ -15,7 +15,7 @@ def test_legacy_pages_report_route_remains_registered_for_compatibility() -> Non
     assert "/api/v1/deployments/github-pages/report" in paths
 
 
-def test_pages_workflow_deploys_and_verifies_agent_issue_hub() -> None:
+def test_pages_workflow_verifies_and_reports_deployment() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "Deploy Amosclaud Agent Issue Hub" in workflow
     assert "Verify Pages hub is static and token-free" in workflow
