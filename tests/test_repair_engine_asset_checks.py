@@ -54,6 +54,18 @@ def test_decorative_equals_line_is_not_a_merge_conflict(tmp_path: Path) -> None:
     assert not any(item.code == "merge-conflict" for item in findings)
 
 
+def test_standalone_exact_separator_is_not_a_merge_conflict(tmp_path: Path) -> None:
+    source = tmp_path / "service.py"
+    source.write_text(
+        '"""\nSection\n=======\n"""\n',
+        encoding="utf-8",
+    )
+
+    findings = Doctor(tmp_path).diagnose()
+
+    assert not any(item.code == "merge-conflict" for item in findings)
+
+
 def test_real_merge_conflict_separator_is_critical(tmp_path: Path) -> None:
     source = tmp_path / "service.py"
     source.write_text(
