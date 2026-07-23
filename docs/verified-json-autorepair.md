@@ -4,6 +4,22 @@
 
 A generated change is **not** considered successful merely because a file was modified. Amosclaud must validate the repaired file, rerun the relevant diagnostic checks, and reject or roll back any change that cannot be verified.
 
+## GitHub-native autonomous brain
+
+The Amosclaud GitHub Actions Bot is the primary runtime for autonomous repository work. It can operate when `amosclaud.com` is unavailable and does not require Railway or the website to plan, inspect, review, verify, repair, or learn.
+
+Before a GitHub task begins, the bot now builds one shared brain context from existing repository systems:
+
+- adaptive `AgentMemory` for successful, failed, partial, and unknown outcomes;
+- the `AutonomousLearningAcademy` for approved evidence-based lessons;
+- the Level 1–5000 `UniversalCurriculum`;
+- the five established agent roles for understanding, repository perception, planning, authorized action, and verification;
+- the existing approval, privacy, Doctor, Fixer, rollback, and pull-request gates.
+
+Previous experience is guidance only. It never becomes proof for the current task and never grants write authority. Every task must still inspect current repository evidence and pass current verification.
+
+The bot stores runtime brain data outside the tracked working tree by default under `.git/amosclaud-brain`. A persistent runner may set `AMOSCLAUD_BOT_BRAIN_HOME` to a protected storage location.
+
 ## Current capability: verified JSON autorepair
 
 Amosclaud-Fixer currently treats a narrow, well-defined class of malformed JSON as safely repairable:
@@ -20,13 +36,17 @@ Every automatic repair follows this sequence:
 
 1. **Detect** — Doctor runs strict JSON parsing and records the original failure.
 2. **Classify** — Amosclaud determines whether the failure matches a supported, deterministic repair pattern.
-3. **Protect** — The original file state is preserved for comparison and rollback.
-4. **Repair minimally** — Only supported comments and trailing commas outside quoted strings are removed.
-5. **Parse again** — The normalized content must pass strict JSON parsing.
-6. **Write canonically** — Fixer writes valid, consistently formatted JSON only after successful parsing.
-7. **Verify independently** — Doctor reruns against the repaired repository state.
-8. **Accept or roll back** — The repair is accepted only when all required verification checks pass. Otherwise, Amosclaud restores the original state.
-9. **Publish evidence** — A repair PR or success result must include the detected problem, changed file, verification outcome, and checks executed.
+3. **Retrieve guidance** — The GitHub Bot retrieves relevant proven memories, approved lessons, and known failed attempts without treating them as current proof.
+4. **Protect** — The original file state is preserved for comparison and rollback.
+5. **Repair minimally** — Only supported comments and trailing commas outside quoted strings are removed.
+6. **Parse again** — The normalized content must pass strict JSON parsing.
+7. **Write canonically** — Fixer writes valid, consistently formatted JSON only after successful parsing.
+8. **Verify independently** — Doctor reruns against the repaired repository state.
+9. **Accept or roll back** — The repair is accepted only when all required verification checks pass. Otherwise, Amosclaud restores the original state.
+10. **Record outcome** — The GitHub Bot records success, failure, partial, or unknown outcome in adaptive memory.
+11. **Publish evidence** — A repair PR or success result must include the detected problem, changed file, verification outcome, and checks executed.
+
+Only a properly structured, verified result may later become a candidate Academy lesson. Failed and rolled-back attempts remain warnings and cannot be promoted as approved lessons.
 
 ## Safety contract
 
@@ -39,7 +59,9 @@ Amosclaud AI Verified Repair guarantees that:
 - verification is performed after the file is written, not only against an in-memory candidate;
 - failed verification activates rollback and prevents publication of a repair PR;
 - ambiguous, destructive, or unsupported changes remain `CRITICAL` and require human review;
-- Amosclaud never reports `VERIFIED` without recorded verification evidence.
+- Amosclaud never reports `VERIFIED` without recorded verification evidence;
+- memory, lessons, intelligence levels, or prior success never bypass approval or current verification;
+- runtime memory files are isolated from tracked repository changes.
 
 ## Verification result states
 
@@ -90,9 +112,11 @@ A verified repair report should record:
 - repository and file path;
 - original diagnostic or parser error;
 - repair rule applied;
+- relevant prior guidance used, when any;
 - before-and-after content hash;
 - verification commands or checks executed;
 - verification status;
+- adaptive-memory outcome;
 - rollback status, when applicable;
 - commit or pull-request reference, when published.
 
