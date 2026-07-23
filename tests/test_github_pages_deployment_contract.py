@@ -41,6 +41,23 @@ def test_agent_issue_hub_is_token_free_and_connects_both_repositories() -> None:
     assert "sessionStorage" not in app
 
 
+def test_agent_issue_hub_is_the_primary_workflow_and_pr_launcher() -> None:
+    index = INDEX.read_text(encoding="utf-8")
+    app = APP.read_text(encoding="utf-8")
+    assert 'id="request-form"' in index
+    assert 'id="pr-form"' in index
+    assert "Pull request launcher" in index
+    assert "@amosclaud inspect" in app
+    assert "@amosclaud verify" in app
+    assert "@amosclaud fix" in app
+    assert "@amosclaud mission" in app
+    assert "/compare/" in app
+    assert "?expand=1" in app
+    assert "No PR is merged automatically" in index
+    assert "github_pat_" not in app
+    assert "ghp_" not in app
+
+
 def test_legacy_pages_report_still_requires_worker_authentication() -> None:
     source = DEPLOYMENTS.read_text(encoding="utf-8")
     assert "class GitHubPagesDeploymentReport" in source
