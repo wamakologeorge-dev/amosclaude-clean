@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from amoscloud_ai.repair_engine import AutonomousDecisionEngine, Verdict, recommendations
-from amoscloud_ai.repair_engine.core import Finding, Severity
+from amoscloud_ai.repair_engine.core import Finding, Repair, Severity
 
 
 def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: Path) -> None:
@@ -23,7 +23,15 @@ def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: 
     assert report.changed_files == ["first.md", "second.md"]
     assert first.read_text(encoding="utf-8") == "first\n"
     assert second.read_text(encoding="utf-8") == "second\n"
-    assert len([item for item in report.evidence if item.name.startswith("Doctor healing cycle")]) >= 2
+    assignments = [
+        item for item in report.evidence if item.name.startswith("Doctor assigned Amosclaud-fixer cycle")
+    ]
+    validations = [
+        item for item in report.evidence if item.name.startswith("Doctor validated Amosclaud-fixer cycle")
+    ]
+    assert len(assignments) >= 2
+    assert len(validations) == len(assignments)
+    assert all(item.passed for item in validations)
 
 
 def test_doctor_rolls_back_whole_healing_session_when_critical_remains(tmp_path: Path) -> None:
@@ -48,6 +56,35 @@ def test_doctor_rolls_back_whole_healing_session_when_critical_remains(tmp_path:
     payload = json.loads(capability.output)
     assert any(item["finding_code"] == "python-syntax" for item in payload)
     assert any(item["human_required"] is True for item in payload)
+
+
+def test_doctor_rejects_and_rolls_back_fixer_output_that_introduces_critical_error(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target.py"
+    target.write_text("value = 1   \n", encoding="utf-8")
+    engine = AutonomousDecisionEngine(
+        tmp_path,
+        max_attempts=2,
+        memory_path=tmp_path / "memory.jsonl",
+    )
+
+    def unsafe_apply(findings: list[Finding]) -> list[Repair]:
+        target.write_text("def broken(:\n", encoding="utf-8")
+        return [Repair("unsafe-test-repair", "target.py", "introduced syntax error", True)]
+
+    engine.fixer.apply = unsafe_apply  # type: ignore[method-assign]
+    report = engine.run(apply=True)
+
+    validation = next(
+        item for item in report.evidence if item.name == "Doctor validated Amosclaud-fixer cycle 1"
+    )
+    details = json.loads(validation.output)
+    assert validation.passed is False
+    assert details["new_critical_findings"]
+    assert report.final_verdict == Verdict.FAIL
+    assert report.changed_files == []
+    assert target.read_text(encoding="utf-8") == "value = 1   \n"
 
 
 def test_recommendations_identify_registered_and_missing_capabilities() -> None:
