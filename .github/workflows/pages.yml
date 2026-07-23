@@ -1,4 +1,4 @@
-name: Deploy static Amosclaud status page
+name: Deploy Amosclaud Agent Issue Hub
 
 on:
   push:
@@ -22,14 +22,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Verify Pages contains no application shell
+      - name: Verify Pages hub is static and token-free
         run: |
           set -Eeuo pipefail
           test -f pages-site/index.html
+          test -f pages-site/styles.css
+          test -f pages-site/app.js
           test ! -f pages-site/login.html
-          test ! -f pages-site/repositories.html
           test ! -f pages-site/account-access.js
           test ! -f pages-site/CNAME
+          ! grep -RIE "(github_pat_|ghp_|authorization:[[:space:]]*bearer|localStorage.*token|sessionStorage.*token)" pages-site
+          grep -q "Amosclaud Agent Issue Hub" pages-site/index.html
+          grep -q "issues/new" pages-site/app.js
       - name: Upload static Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
@@ -44,22 +48,15 @@ jobs:
     outputs:
       page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy static status page
+      - name: Deploy Agent Issue Hub
         id: deployment
         uses: actions/deploy-pages@v5
-      - name: Verify and report deployment to Amosclaud Autonomous
-        env:
-          AMOSCLAUD_DEPLOYMENT_WORKER_KEY: ${{ secrets.AMOSCLAUD_DEPLOYMENT_WORKER_KEY }}
+      - name: Verify deployed GitHub Page
         run: |
           set -Eeuo pipefail
-          curl --location --fail --retry 3 "${{ steps.deployment.outputs.page_url }}" -o deployment-evidence.json
-          jq -n --arg url "${{ steps.deployment.outputs.page_url }}" \
-            '{environment: "github-pages", verified: true, health_status: "healthy", rollback_ready: true, url: $url}' \
-            > deployment-report.json
-          curl --location --fail --request POST "${{ vars.AMOSCLAUD_API_URL }}/api/v1/deployments/github-pages/report" \
-            --header "X-API-Key: ${AMOSCLAUD_DEPLOYMENT_WORKER_KEY}" \
-            --header "Content-Type: application/json" --data @deployment-report.json
+          curl --location --fail --retry 3 "${{ steps.deployment.outputs.page_url }}" -o deployment-evidence.html
+          grep -q "Amosclaud Agent Issue Hub" deployment-evidence.html
       - uses: actions/upload-artifact@v4
         with:
-          name: deployment-evidence
-          path: deployment-evidence.json
+          name: agent-issue-hub-deployment-evidence
+          path: deployment-evidence.html
