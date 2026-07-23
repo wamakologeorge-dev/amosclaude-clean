@@ -57,8 +57,12 @@ class AgentMemory:
         return connection
 
     def _initialize(self) -> None:
+        # BEGIN IMMEDIATE serializes schema detection and ALTER TABLE statements
+        # across separate processes that open the same legacy database concurrently.
         with self._connect() as db:
-            db.executescript("""
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                """
                 CREATE TABLE IF NOT EXISTS memories (
                     id TEXT PRIMARY KEY,
                     created_at TEXT NOT NULL,
@@ -69,11 +73,16 @@ class AgentMemory:
                     importance REAL NOT NULL,
                     source_run_id TEXT,
                     content_hash TEXT NOT NULL UNIQUE
-                );
+                )
+                """
+            )
+            db.execute(
+                """
                 CREATE VIRTUAL TABLE IF NOT EXISTS memory_search USING fts5(
                     memory_id UNINDEXED, title, content, tags, tokenize='porter unicode61'
-                );
-            """)
+                )
+                """
+            )
             columns = {row["name"] for row in db.execute("PRAGMA table_info(memories)")}
             migrations = {
                 "project": "ALTER TABLE memories ADD COLUMN project TEXT NOT NULL DEFAULT ''",
@@ -113,12 +122,16 @@ class AgentMemory:
         if outcome not in VALID_OUTCOMES:
             raise ValueError(f"Outcome must be one of: {', '.join(sorted(VALID_OUTCOMES))}")
 
-        digest = hashlib.sha256(
-            json.dumps(
-                [clean_kind, clean_title, clean_content, clean_tags, clean_project],
-                sort_keys=True,
-            ).encode()
+        legacy_payload = [clean_kind, clean_title, clean_content, clean_tags]
+        legacy_digest = hashlib.sha256(
+            json.dumps(legacy_payload, sort_keys=True).encode()
         ).hexdigest()
+        scoped_digest = hashlib.sha256(
+            json.dumps([*legacy_payload, clean_project], sort_keys=True).encode()
+        ).hexdigest()
+        # Keep the legacy hash for global memories so a migrated v1 record and the
+        # same newly observed lesson collapse to one row. Scoped memories use v2.
+        digest = scoped_digest if clean_project else legacy_digest
         memory_id = f"mem_{digest[:20]}"
         record = {
             "id": memory_id,
@@ -138,6 +151,29 @@ class AgentMemory:
             "last_accessed_at": None,
         }
         with self._lock, self._connect() as db:
+            existing = None
+            if not clean_project:
+                existing = db.execute(
+                    """SELECT * FROM memories
+                       WHERE content_hash IN (?,?)
+                          OR (
+                              project='' AND kind=? AND title=? AND content=? AND tags=?
+                          )
+                       LIMIT 1""",
+                    (
+                        legacy_digest,
+                        scoped_digest,
+                        clean_kind,
+                        clean_title,
+                        clean_content,
+                        json.dumps(clean_tags),
+                    ),
+                ).fetchone()
+            if existing is not None:
+                result = self._row(existing)
+                result["stored"] = False
+                return result
+
             inserted = db.execute(
                 """INSERT OR IGNORE INTO memories
                    (id,created_at,kind,title,content,tags,importance,source_run_id,
