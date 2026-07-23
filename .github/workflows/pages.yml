@@ -27,13 +27,18 @@ jobs:
           set -Eeuo pipefail
           test -f pages-site/index.html
           test -f pages-site/styles.css
+          test -f pages-site/hub.css
           test -f pages-site/app.js
           test ! -f pages-site/login.html
           test ! -f pages-site/account-access.js
           test ! -f pages-site/CNAME
           ! grep -RIE "(github_pat_|ghp_|authorization:[[:space:]]*bearer|localStorage.*token|sessionStorage.*token)" pages-site
           grep -q "Amosclaud Agent Issue Hub" pages-site/index.html
+          grep -q "No GitHub token is collected or stored" pages-site/index.html
+          grep -q "wamakologeorge-dev/Amosclaud1" pages-site/app.js
+          grep -q "wamakologeorge-dev/amosclaude-clean" pages-site/app.js
           grep -q "issues/new" pages-site/app.js
+          grep -q "command-timeline" pages-site/index.html
       - name: Upload static Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
@@ -56,6 +61,7 @@ jobs:
           set -Eeuo pipefail
           curl --location --fail --retry 3 "${{ steps.deployment.outputs.page_url }}" -o deployment-evidence.html
           grep -q "Amosclaud Agent Issue Hub" deployment-evidence.html
+          grep -q "No GitHub token is collected or stored" deployment-evidence.html
       - uses: actions/upload-artifact@v4
         with:
           name: agent-issue-hub-deployment-evidence
