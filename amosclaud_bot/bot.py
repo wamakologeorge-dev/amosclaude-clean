@@ -340,6 +340,16 @@ class AmosclaudBot:
             metadata=metadata,
         )
 
+    def execute_operation(
+        self,
+        command: str,
+        objective: str,
+        *,
+        allow_writes: bool = False,
+    ) -> dict[str, Any]:
+        """Run the repository-local Bot/Autonomous core for a platform bucket task."""
+        return self._run_local(command, objective, allow_writes=allow_writes)
+
     def handle_comment(self, payload: dict[str, Any]) -> BotResponse:
         comment = payload.get("comment") or {}
         command, objective = parse_command(str(comment.get("body") or ""))
@@ -372,7 +382,8 @@ class AmosclaudBot:
             return BotResponse(
                 "### Amosclaud Autonomous Assistant — Status\n"
                 "- GitHub Actions runner: **ready**\n"
-                "- Website dependency: **none**\n"
+                "- Operation bucket bridge: **shared execution core enabled**\n"
+                "- Website dependency: **optional; GitHub mode remains independent**\n"
                 f"- Repository: `{self.repository}`\n"
                 f"- Target: {target}\n"
                 f"- Amosclaud Autonomous: **{status.get('status', 'unknown')}**\n"
