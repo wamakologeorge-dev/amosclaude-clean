@@ -99,11 +99,20 @@ def _current_user(
 
 
 def _validated_return_url(value: str) -> str:
-    parsed = urlparse(value)
-    origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
-    if parsed.scheme != "https" or origin not in _allowed_origins():
+    normalized = value.replace("\\", "/").strip()
+    parsed = urlparse(normalized)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise HTTPException(status_code=400, detail="Invalid website return URL")
-    return value
+
+    host = parsed.hostname.lower()
+    port = parsed.port
+    canonical_netloc = f"{host}:{port}" if port else host
+    origin = f"{parsed.scheme}://{canonical_netloc}"
+    if origin not in _allowed_origins():
+        raise HTTPException(status_code=400, detail="Invalid website return URL")
+
+    path = parsed.path if parsed.path.startswith("/") else f"/{parsed.path}"
+    return urlunparse((parsed.scheme, canonical_netloc, path, "", parsed.query, parsed.fragment))
 
 
 def _validate_origin(request: Request) -> None:
