@@ -24,7 +24,11 @@ _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _APPROVAL_ID_RE = re.compile(r"^(?:issue:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+:\d+|run:\d+)$")
 _ALLOWED_DECISIONS = {"approve", "deny"}
 _ALLOWED_SOURCE_TYPES = {"approval", "workflow"}
-_DEFAULT_WEBSITE_ORIGINS = {"https://wamakologeorge-dev.github.io"}
+_DEFAULT_WEBSITE_ORIGINS = {
+    "https://www.amosclaud.com",
+    "https://amosclaud.com",
+    "https://wamakologeorge-dev.github.io",
+}
 _COMMAND_REPOSITORY = os.getenv("AMOSCLAUD_COMMAND_REPOSITORY", "wamakologeorge-dev/Amosclaud1")
 _APPROVAL_COOKIE = "amos_approval_session"
 _APPROVAL_TOKEN_TTL_SECONDS = SESSION_DAYS * 86400
@@ -97,8 +101,7 @@ def _validated_return_url(value: str) -> str:
     port = parsed.port
     canonical_netloc = f"{host}:{port}" if port else host
     origin = f"{parsed.scheme}://{canonical_netloc}"
-    is_github_pages = host == "github.io" or host.endswith(".github.io")
-    if origin not in _allowed_origins() or not is_github_pages:
+    if origin not in _allowed_origins():
         raise HTTPException(status_code=400, detail="Invalid website return URL")
 
     path = parsed.path if parsed.path.startswith("/") else f"/{parsed.path}"
