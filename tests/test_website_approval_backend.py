@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "amoscloud_ai" / "api" / "routes" / "approvals_api.py"
 REVIEWS = ROOT / "amoscloud_ai" / "api" / "routes" / "reviews.py"
+SECURITY = ROOT / "amoscloud_ai" / "security.py"
 INDEX = ROOT / "pages-site" / "index.html"
 CONFIG = ROOT / "pages-site" / "control-api-config.js"
 QUEUE = ROOT / "pages-site" / "autonomous-approval-queue.js"
@@ -39,6 +40,7 @@ def test_approval_backend_records_authoritative_github_evidence() -> None:
 
 def test_cross_site_approval_session_is_httponly_and_origin_restricted() -> None:
     api = API.read_text(encoding="utf-8")
+    security = SECURITY.read_text(encoding="utf-8")
     assert '@router.get("/connect")' in api
     assert 'httponly=True' in api
     assert 'secure=True' in api
@@ -47,6 +49,9 @@ def test_cross_site_approval_session_is_httponly_and_origin_restricted() -> None
     assert "urlparse" in api
     assert 'host.endswith(".github.io")' in api or 'host == "github.io"' in api
     assert "Website origin is not authorized" in api
+    assert "AMOSCLAUD_WEBSITE_ORIGINS" in security
+    assert 'path.startswith("/api/v1/approvals/")' in security
+    assert "self.trusted_origins | self.approval_origins" in security
 
 
 def test_pages_loads_public_control_endpoint_without_browser_credentials() -> None:

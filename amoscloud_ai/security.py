@@ -47,6 +47,13 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         self.trusted_origins = {
             item.strip().rstrip("/") for item in configured.split(",") if item.strip()
         }
+        approval_origins = os.getenv(
+            "AMOSCLAUD_WEBSITE_ORIGINS",
+            "https://wamakologeorge-dev.github.io",
+        )
+        self.approval_origins = {
+            item.strip().rstrip("/") for item in approval_origins.split(",") if item.strip()
+        }
 
     def _client_host(self, request: Request) -> str:
         if self.trust_proxy_headers:
@@ -119,6 +126,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             bucket.append(now)
         return False
 
+    def _trusted_request_origins(self, path: str) -> set[str]:
+        if path.startswith("/api/v1/approvals/"):
+            return self.trusted_origins | self.approval_origins
+        return self.trusted_origins
+
     async def dispatch(self, request: Request, call_next):
         try:
             policy = AccessPolicy.from_environment()
@@ -152,7 +164,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get("amos_session"):
             origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") not in self.trusted_origins:
+            allowed_origins = self._trusted_request_origins(request.url.path)
+            if origin and origin.rstrip("/") not in allowed_origins:
                 return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
 
         response = await call_next(request)
