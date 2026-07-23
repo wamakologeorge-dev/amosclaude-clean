@@ -41,7 +41,8 @@ class TaskCreate(BaseModel):
 class RunnerCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     capabilities: list[str] = Field(
-        default_factory=lambda: ["ask", "build", "test", "review"], max_length=30
+        default_factory=lambda: ["ask", "build", "fix", "test", "review", "monitor"],
+        max_length=30
     )
     labels: list[str] = Field(default_factory=list, max_length=30)
 
