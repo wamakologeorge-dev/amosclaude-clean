@@ -6,8 +6,8 @@ import os
 import re
 import secrets
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse, urlunparse
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
@@ -46,8 +46,6 @@ def _allowed_origins() -> set[str]:
     return values or set(_DEFAULT_WEBSITE_ORIGINS)
 
 
-# This module is imported before the application installs CORS middleware.
-# Add only the explicitly configured Amosclaud website origins.
 for _origin in _allowed_origins():
     if _origin not in settings.allowed_hosts:
         settings.allowed_hosts.append(_origin)
@@ -61,20 +59,11 @@ def _cleanup_expired_approval_tokens() -> None:
 
 
 def _create_approval_token(amos_session: str) -> str:
-    normalized = value.replace("\\", "/").strip()
-    parsed = urlparse(normalized)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+    _cleanup_expired_approval_tokens()
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_APPROVAL_TOKEN_TTL_SECONDS)
     _approval_token_store[token] = (amos_session, expires_at)
-
-    host = parsed.hostname.lower()
-    port = parsed.port
-    canonical_netloc = f"{host}:{port}" if port else host
-    origin = f"{parsed.scheme}://{canonical_netloc}"
-    if origin not in _allowed_origins():
-        raise HTTPException(status_code=400, detail="Invalid website return URL")
-
-    path = parsed.path if parsed.path.startswith("/") else f"/{parsed.path}"
-    return urlunparse((parsed.scheme, canonical_netloc, path, "", parsed.query, parsed.fragment))
+    return token
 
 
 def _resolve_approval_token(token: str | None) -> str | None:
@@ -108,7 +97,8 @@ def _validated_return_url(value: str) -> str:
     port = parsed.port
     canonical_netloc = f"{host}:{port}" if port else host
     origin = f"{parsed.scheme}://{canonical_netloc}"
-    if origin not in _allowed_origins():
+    is_github_pages = host == "github.io" or host.endswith(".github.io")
+    if origin not in _allowed_origins() or not is_github_pages:
         raise HTTPException(status_code=400, detail="Invalid website return URL")
 
     path = parsed.path if parsed.path.startswith("/") else f"/{parsed.path}"
