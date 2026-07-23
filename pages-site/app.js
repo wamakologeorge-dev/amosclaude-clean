@@ -22,6 +22,46 @@
     mission: "@amosclaud mission",
   };
 
+  const plans = [
+    {
+      id: "community",
+      name: "Community",
+      price: "Free",
+      badge: "Start here",
+      description: "Public issue workflows for learning, triage, inspection, health, and verification.",
+      features: ["Public repositories", "Issue request builder", "Read-only agent workflows", "Community support"],
+      action: "Request Community access",
+    },
+    {
+      id: "builder",
+      name: "Builder",
+      price: "Paid plan",
+      badge: "Individuals",
+      description: "Install Amosclaud on repositories you select and run governed autonomous engineering missions.",
+      features: ["Selected repositories", "Verified repair and pull requests", "Mission ledger and checkpoints", "Usage and execution limits"],
+      action: "Join Builder early access",
+    },
+    {
+      id: "team",
+      name: "Team",
+      price: "Paid plan",
+      badge: "Recommended",
+      description: "Shared autonomous workflows for teams with role controls, repository health, and reusable lessons.",
+      features: ["Organization installation", "Team permission controls", "Cross-repository approved lessons", "Priority workflow capacity"],
+      action: "Join Team early access",
+      featured: true,
+    },
+    {
+      id: "enterprise",
+      name: "Enterprise",
+      price: "Custom",
+      badge: "Organizations",
+      description: "Private, governed deployment for larger organizations with stronger controls and support.",
+      features: ["Private repositories", "Custom execution budgets", "Audit and governance controls", "Dedicated onboarding"],
+      action: "Discuss Enterprise",
+    },
+  ];
+
   function commandText() {
     const objective = body.value.trim() || title.value.trim();
     const base = commandPrefix[type.value] || "@amosclaud inspect";
@@ -83,6 +123,69 @@
     window.location.href = `https://github.com/${repository}/issues/new?${params.toString()}`;
   });
 
+  function planIssueUrl(plan) {
+    const issueBody = [
+      "## Amosclaud plan and installation request",
+      "",
+      `**Selected package:** ${plan.name}`,
+      `**Plan type:** ${plan.price}`,
+      "",
+      "I want to install Amosclaud as a GitHub App on repositories I explicitly approve.",
+      "",
+      "### Requested safeguards",
+      "- GitHub App installation instead of a pasted personal access token",
+      "- Access limited to repositories selected during GitHub installation",
+      "- Minimum required permissions",
+      "- Short-lived installation tokens generated only on the secure backend",
+      "- Ability to revoke the installation from GitHub at any time",
+      "",
+      "> This request records interest only. Payment and installation become active after the Amosclaud GitHub App and billing service are registered.",
+    ].join("\n");
+    const params = new URLSearchParams({ title: `[Agent Hub Plan] ${plan.name}`, body: issueBody });
+    return `https://github.com/${repository}/issues/new?${params.toString()}`;
+  }
+
+  function renderPlans() {
+    const roles = document.querySelector("#roles");
+    if (!roles) return;
+
+    const section = document.createElement("section");
+    section.id = "plans";
+    section.className = "section plans-section";
+    section.innerHTML = `
+      <p class="eyebrow">Amosclaud packages</p>
+      <h2>Install the agent on repositories you approve.</h2>
+      <p class="plans-intro">Choose a package now and join early access. Paid activation will use a GitHub App and GitHub Marketplace or a secure billing backend—never a token pasted into this static page.</p>
+      <div class="plan-grid" id="plan-grid"></div>
+      <div class="install-explainer">
+        <strong>Secure installation path</strong>
+        <span>Choose plan → Pay through approved billing → Install GitHub App → Select repositories → Amosclaud receives limited, revocable access.</span>
+      </div>`;
+
+    const grid = section.querySelector("#plan-grid");
+    plans.forEach((plan) => {
+      const article = document.createElement("article");
+      article.className = `plan-card${plan.featured ? " plan-featured" : ""}`;
+      article.innerHTML = `
+        <span class="plan-badge">${plan.badge}</span>
+        <h3>${plan.name}</h3>
+        <p class="plan-price">${plan.price}</p>
+        <p>${plan.description}</p>
+        <ul>${plan.features.map((item) => `<li>${item}</li>`).join("")}</ul>
+        <a class="button ${plan.featured ? "" : "button-secondary"}" href="${planIssueUrl(plan)}">${plan.action}</a>`;
+      grid.append(article);
+    });
+
+    roles.before(section);
+    const nav = document.querySelector("nav");
+    if (nav) {
+      const link = document.createElement("a");
+      link.href = "#plans";
+      link.textContent = "Packages";
+      nav.insertBefore(link, nav.querySelector('a[href="#roles"]'));
+    }
+  }
+
   function escapeText(value) {
     return String(value ?? "");
   }
@@ -129,6 +232,7 @@
     }
   }
 
+  renderPlans();
   updatePreview();
   loadIssues();
 })();
