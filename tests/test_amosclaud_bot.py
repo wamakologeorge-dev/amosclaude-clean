@@ -154,6 +154,8 @@ def test_fix_from_trusted_collaborator_routes_to_fixer(monkeypatch):
     assert "Engine:** Amosclaud-Fixer" in response.body
     assert "Fixer repaired: CI failure" in response.body
     assert "`app.py`" in response.body
+    assert "Autonomous brain:" in response.body
+    assert "outcome recorded as success" in response.body
 
 
 def test_natural_language_create_from_owner_routes_to_fixer(monkeypatch):
