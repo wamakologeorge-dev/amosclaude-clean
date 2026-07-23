@@ -8,6 +8,7 @@ from .approval_gate import handle_approval_event
 from .autonomous_planning import announce_plan, resolve_continuation
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 from .comment_style import compact_public_comment
+from .intelligence_router import handle_intelligence_request
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
 from .status_board import handle_status_request
@@ -87,7 +88,7 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
 
 
 def run_dispatcher_from_environment() -> int:
-    """Route supported GitHub events through privacy, status, approval, planning, review, then base handling."""
+    """Route GitHub events through privacy, Brain v3 intelligence, status, approval, planning, review, and base handling."""
     _install_compact_comment_mode()
 
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
@@ -111,6 +112,10 @@ def run_dispatcher_from_environment() -> int:
             return privacy_result
         if privacy_only:
             return 0
+
+        intelligence_result = handle_intelligence_request(bot, payload)
+        if intelligence_result is not None:
+            return intelligence_result
 
         status_result = handle_status_request(bot, payload)
         if status_result is not None:
