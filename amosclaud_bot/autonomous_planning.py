@@ -169,7 +169,7 @@ def format_plan(
         + "\n".join(rendered)
         + brain
         + codex
-        + "\n\nProceeding through the existing privacy, approval, verification, rollback, commit, and pull-request gates.\n"
+        + "\n\nProceeding through the existing approval, privacy, verification, rollback, commit, and pull-request gates.\n"
         + encode_plan_marker(command, objective)
     )
 
