@@ -8,6 +8,7 @@
   <title>Amosclaud Agent Issue Hub</title>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./hub.css" />
+  <link rel="stylesheet" href="./control-plane-enhancements.css" />
 </head>
 <body>
   <header class="site-header">
@@ -25,7 +26,7 @@
         <div class="security-banner"><strong>🔒 No GitHub token is collected or stored.</strong><span>GitHub records identity and permissions. This static page never asks visitors to paste a personal access token.</span></div>
         <div class="status-row"><span><i class="dot dot-green"></i> GitHub Actions runtime</span><span><i class="dot dot-green"></i> Website-independent</span><span><i class="dot dot-green"></i> Permission-gated writes</span></div>
       </div>
-      <aside class="hero-panel"><p class="panel-label">Verified execution path</p><ol class="agent-path"><li><span>01</span><div><strong>Receive</strong><small>Website command card and GitHub identity</small></div></li><li><span>02</span><div><strong>Queue</strong><small>Command recorded through Amosclaud1</small></div></li><li><span>03</span><div><strong>Run</strong><small>Bot, Autonomous, or Fixer executes</small></div></li><li><span>04</span><div><strong>Verify</strong><small>Checks, Doctor, and evidence</small></div></li><li><span>05</span><div><strong>Return</strong><small>Status appears in the same website workspace</small></div></li></ol></aside>
+      <aside class="hero-panel"><p class="panel-label">Verified execution path</p><ol class="agent-path"><li><span>01</span><div><strong>Analyze</strong><small>Repository and failure evidence</small></div></li><li><span>02</span><div><strong>Plan</strong><small>Safe execution path</small></div></li><li><span>03</span><div><strong>Edit</strong><small>Approved repository changes</small></div></li><li><span>04</span><div><strong>Test</strong><small>Repository checks and diagnostics</small></div></li><li><span>05</span><div><strong>Verify</strong><small>Doctor and evidence gates</small></div></li><li><span>06</span><div><strong>Publish</strong><small>Commit, pull request, or rollback</small></div></li></ol></aside>
     </section>
     <section class="stats"><article><strong>Amosclaud1</strong><span>Command and audit bridge</span></article><article><strong>amosclaude-clean</strong><span>Autonomous execution engine</span></article><article><strong>Verified only</strong><span>UNKNOWN is never reported as PASS</span></article><article><strong>Token-free page</strong><span>No PAT collection or browser storage</span></article></section>
     <section id="submit" class="section split-section">
@@ -66,5 +67,6 @@
   <footer><div class="brand footer-brand"><span class="brand-mark">A</span><span><strong>Amosclaud</strong><small>GitHub-native autonomous engineering</small></span></div><p><strong>No GitHub token is collected or stored.</strong> This static hub grants no repository authority.</p><div><a href="#control-plane">Dashboard</a><a href="#submit">Commands</a><a href="#workspace">Workspace</a></div></footer>
   <script src="./app.js" defer></script>
   <script src="./control-plane.js" defer></script>
+  <script src="./control-plane-enhancements.js" defer></script>
 </body>
 </html>
