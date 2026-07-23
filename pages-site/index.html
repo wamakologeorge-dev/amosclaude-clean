@@ -9,11 +9,12 @@
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./hub.css" />
   <link rel="stylesheet" href="./control-plane-enhancements.css" />
+  <link rel="stylesheet" href="./settings-review-center.css" />
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="#top"><span class="brand-mark">A</span><span><strong>Amosclaud</strong><small>Agent Issue Hub</small></span></a>
-    <nav aria-label="Primary navigation"><a href="#control-plane">Dashboard</a><a href="#submit">Commands</a><a href="#activity">Live agent</a><a href="#workflows">Workflows</a><a href="#pull-request">Pull request</a><a href="#plans">Packages</a></nav>
+    <nav aria-label="Primary navigation"><a href="#control-plane">Dashboard</a><a href="#review-center">Reviews</a><a href="#submit">Commands</a><a href="#activity">Live agent</a><a href="#workflows">Workflows</a><a href="#pull-request">Pull request</a></nav>
     <a class="button button-small" href="#control-plane">Open dashboard</a>
   </header>
   <main id="top">
@@ -22,7 +23,7 @@
         <p class="eyebrow">GitHub-native autonomous engineering</p>
         <h1>One public hub for issues, workflows, missions, pull requests, and verified repairs.</h1>
         <p class="hero-text">Submit commands through <strong>Amosclaud1</strong>. The autonomous engine runs from <strong>amosclaude-clean</strong>, then returns progress and final evidence to the same GitHub issue.</p>
-        <div class="hero-actions"><a class="button" href="#control-plane">Open control plane</a><a class="button button-secondary" href="#submit">Create an agent request</a><a class="button button-secondary" href="#pull-request">Open a pull request</a></div>
+        <div class="hero-actions"><a class="button" href="#control-plane">Open control plane</a><a class="button button-secondary" href="#review-center">Open true reviews</a><a class="button button-secondary" href="#submit">Create an agent request</a></div>
         <div class="security-banner"><strong>🔒 No GitHub token is collected or stored.</strong><span>GitHub records identity and permissions. This static page never asks visitors to paste a personal access token.</span></div>
         <div class="status-row"><span><i class="dot dot-green"></i> GitHub Actions runtime</span><span><i class="dot dot-green"></i> Website-independent</span><span><i class="dot dot-green"></i> Permission-gated writes</span></div>
       </div>
@@ -64,9 +65,10 @@
     <section id="roles" class="section roles-section"><div><p class="eyebrow">Limited-role security</p><h2>Everyone can participate. Authority stays with GitHub.</h2><p>The page does not invent a new account system. GitHub identity and repository permissions remain the source of truth.</p></div><div class="role-grid"><article><strong>Public user</strong><span>View activity and request triage, health, inspection, planning, and verification.</span></article><article><strong>Contributor</strong><span>Provide evidence and discuss findings without automatic write authority.</span></article><article><strong>Trusted collaborator</strong><span>Authorized GitHub roles may request governed state changes.</span></article><article><strong>Doctor authority</strong><span>Verification and publication rules remain final.</span></article></div></section>
     <section id="issues" class="section"><div class="section-heading-row"><div><p class="eyebrow">Live public activity</p><h2>Recent Amosclaud1 issues</h2></div><a class="text-link" href="https://github.com/wamakologeorge-dev/Amosclaud1/issues" target="_blank" rel="noreferrer">Source records →</a></div><div id="issue-list" class="issue-list" aria-live="polite"><p class="loading">Loading public GitHub issues…</p></div></section>
   </main>
-  <footer><div class="brand footer-brand"><span class="brand-mark">A</span><span><strong>Amosclaud</strong><small>GitHub-native autonomous engineering</small></span></div><p><strong>No GitHub token is collected or stored.</strong> This static hub grants no repository authority.</p><div><a href="#control-plane">Dashboard</a><a href="#submit">Commands</a><a href="#workspace">Workspace</a></div></footer>
+  <footer><div class="brand footer-brand"><span class="brand-mark">A</span><span><strong>Amosclaud</strong><small>GitHub-native autonomous engineering</small></span></div><p><strong>No GitHub token is collected or stored.</strong> This static hub grants no repository authority.</p><div><a href="#control-plane">Dashboard</a><a href="#review-center">Reviews</a><a href="#submit">Commands</a><a href="#workspace">Workspace</a></div></footer>
   <script src="./app.js" defer></script>
   <script src="./control-plane.js" defer></script>
   <script src="./control-plane-enhancements.js" defer></script>
+  <script src="./settings-review-center.js" defer></script>
 </body>
 </html>
