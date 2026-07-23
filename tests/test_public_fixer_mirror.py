@@ -36,6 +36,14 @@ def test_public_fixer_mirror_shows_real_processing_lifecycle() -> None:
     assert "ROLLED_BACK" not in script or "rolled_back" in script
 
 
+def test_public_fixer_mirror_validates_github_json_responses() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'response.headers.get("content-type")' in script
+    assert 'includes("application/json")' in script
+    assert "JSON.parse(text)" in script
+    assert "response.json()" not in script
+
+
 def test_public_fixer_mirror_remains_token_free_and_safe() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     assert "localStorage" not in script
