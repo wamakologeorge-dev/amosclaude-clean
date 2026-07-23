@@ -1,9 +1,9 @@
 """GitHub-native brain context for the Amosclaud Actions bot.
 
 This module is deliberately an adapter, not another agent runtime. It connects the
-existing AgentMemory, Autonomous Learning Academy, Universal Curriculum, and agent
-roles to the repository-local GitHub bot. The website and external deployment
-services are not required.
+existing AgentMemory, Autonomous Learning Academy, Universal Curriculum, RollImage,
+and Autonomous connector capabilities to the repository-local GitHub bot. The
+website and external deployment services are not required.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from typing import Any
 
 from amoscloud_ai.agent_memory import AgentMemory
 from amoscloud_ai.autonomous_learning_academy import AGENT_ROLES, AutonomousLearningAcademy
+from src.agent.rollimage import RollImageEngine
+from src.amosclaud_os.intelligence.autonomous_connectors import AutonomousConnectorHub
 from src.foundation.curriculum import UniversalCurriculum
 
 COMMAND_AGENT_ROLES: dict[str, tuple[int, ...]] = {
@@ -21,6 +23,9 @@ COMMAND_AGENT_ROLES: dict[str, tuple[int, ...]] = {
     "review": (2, 5),
     "verify": (2, 5),
     "fix": (2, 3, 4, 5),
+    "triage": (1, 2, 3, 5),
+    "health": (2, 5),
+    "goal": (1, 2, 3, 5),
 }
 
 SUCCESS_STATES = {"success", "pass", "passed", "verified", "healthy", "completed"}
@@ -53,6 +58,8 @@ class GitHubAutonomousBrain:
         self.memory = AgentMemory(brain_root / "memory")
         self.academy = AutonomousLearningAcademy(brain_root / "autonomous-academy.db")
         self.curriculum = UniversalCurriculum()
+        self.rollimage = RollImageEngine()
+        self.connectors = AutonomousConnectorHub(self.workspace)
 
     @property
     def current_level(self) -> int:
@@ -84,6 +91,9 @@ class GitHubAutonomousBrain:
                     lessons.append(lesson)
                     seen_lessons.add(lesson_id)
 
+        evidence = [item.get("title", "") for item in successful[:5] if item.get("title")]
+        evidence.extend(item.get("title", "") for item in lessons[:5] if item.get("title"))
+        rollimage = self.rollimage.create(objective, evidence=evidence)
         level = self.current_level
         current_lesson = self.curriculum.lesson(level).to_dict()
         next_lesson = self.curriculum.next_lesson(level)
@@ -96,13 +106,21 @@ class GitHubAutonomousBrain:
             "current_level": level,
             "current_curriculum": current_lesson,
             "next_curriculum": next_lesson,
+            "rollimage": rollimage.to_dict(),
+            "connector_capabilities": self.connectors.capabilities(),
             "proven_memories": [self._memory_guidance(item) for item in successful],
             "failed_attempts_to_avoid": [self._memory_guidance(item) for item in failed],
             "approved_lessons": [self._lesson_guidance(item) for item in lessons[:5]],
+            "cross_repository_policy": [
+                "Repository-local memory stays scoped to its source repository.",
+                "Only evidence-approved Academy lessons may be reused across repositories.",
+                "Shared lessons provide guidance only and never transfer secrets or write authority.",
+                "Every target repository must verify the lesson against its own current state.",
+            ],
             "rules": [
                 "Use memory and lessons as guidance, never as proof for the current task.",
                 "Re-check the current repository and GitHub Actions evidence independently.",
-                "Do not let memory, curriculum, or lessons grant write authority.",
+                "Do not let memory, curriculum, connectors, or lessons grant write authority.",
                 "Do not report success without current verification evidence.",
             ],
         }
