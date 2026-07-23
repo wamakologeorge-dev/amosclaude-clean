@@ -71,7 +71,8 @@ def test_status_reports_repository_local_runtime(monkeypatch):
     response = bot.handle_comment(payload)
     assert response.should_comment is True
     assert "GitHub Actions runner: **ready**" in response.body
-    assert "Website dependency: **none**" in response.body
+    assert "Operation bucket bridge: **shared execution core enabled**" in response.body
+    assert "Website dependency: **optional; GitHub mode remains independent**" in response.body
     assert "Amosclaud Autonomous: **ready**" in response.body
     assert "Amosclaud-Fixer: **available" in response.body
     assert "Natural-language assistant mode: **enabled**" in response.body
