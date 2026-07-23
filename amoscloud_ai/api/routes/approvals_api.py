@@ -6,7 +6,7 @@ import os
 import re
 import secrets
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse, urlunparse
 from urllib.parse import urlparse
 
 import httpx
@@ -61,11 +61,20 @@ def _cleanup_expired_approval_tokens() -> None:
 
 
 def _create_approval_token(amos_session: str) -> str:
-    _cleanup_expired_approval_tokens()
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_APPROVAL_TOKEN_TTL_SECONDS)
+    normalized = value.replace("\\", "/").strip()
+    parsed = urlparse(normalized)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
     _approval_token_store[token] = (amos_session, expires_at)
-    return token
+
+    host = parsed.hostname.lower()
+    port = parsed.port
+    canonical_netloc = f"{host}:{port}" if port else host
+    origin = f"{parsed.scheme}://{canonical_netloc}"
+    if origin not in _allowed_origins():
+        raise HTTPException(status_code=400, detail="Invalid website return URL")
+
+    path = parsed.path if parsed.path.startswith("/") else f"/{parsed.path}"
+    return urlunparse((parsed.scheme, canonical_netloc, path, "", parsed.query, parsed.fragment))
 
 
 def _resolve_approval_token(token: str | None) -> str | None:
