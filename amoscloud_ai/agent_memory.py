@@ -52,7 +52,15 @@ class AgentMemory:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database, timeout=30)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA busy_timeout=30000")
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError as exc:
+            # Another worker may be changing the journal mode while this
+            # connection opens. Schema migration is serialized separately.
+            if "locked" not in str(exc).lower():
+                connection.close()
+                raise
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
