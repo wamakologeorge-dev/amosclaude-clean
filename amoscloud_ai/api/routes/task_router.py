@@ -15,10 +15,11 @@ from pydantic import BaseModel, Field
 from amoscloud_ai.agent_tokens import credit_tokens, debit_tokens
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
 from amoscloud_ai.api.routes.provider_api import _authenticate as authenticate_api_key
+from amoscloud_ai.api.routes.operation_buckets import ensure_bucket_schema, ensure_user_bucket
 
 router = APIRouter(tags=["global-task-router"])
 
-TaskMode = Literal["ask", "build", "test", "review", "deploy", "monitor"]
+TaskMode = Literal["ask", "build", "fix", "test", "review", "deploy", "monitor"]
 TaskDelivery = Literal["report", "patch", "pull_request"]
 ExecutionTarget = Literal["auto", "cloud", "self_hosted", "github"]
 TaskStatus = Literal[
@@ -57,6 +58,7 @@ class TaskCompletion(BaseModel):
     evidence: list[str] = Field(default_factory=list, max_length=200)
     artifacts: list[dict] = Field(default_factory=list, max_length=100)
     pull_request_url: str | None = Field(default=None, max_length=500)
+    verification_id: str | None = Field(default=None, min_length=8, max_length=200)
 
 
 def _now() -> str:
@@ -130,6 +132,7 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
         db.execute(
             "ALTER TABLE global_tasks ADD COLUMN execution_target TEXT NOT NULL DEFAULT 'auto'"
         )
+    ensure_bucket_schema(db)
     db.commit()
 
 
@@ -164,7 +167,7 @@ def _actor(
 
 
 def _task_cost(body: TaskCreate) -> int:
-    base = {"ask": 1, "test": 3, "review": 4, "build": 5, "monitor": 2, "deploy": 6}[
+    base = {"ask": 1, "test": 3, "review": 4, "build": 5, "fix": 5, "monitor": 2, "deploy": 6}[
         body.mode
     ]
     context = min(5, len(body.objective) // 2_000)
@@ -256,14 +259,16 @@ def create_task(
                 detail={"code": "agent_tokens_required", "purchase_url": "/api-access"},
             )
         status = "awaiting_approval" if body.require_approval else "queued"
+        bucket = ensure_user_bucket(db, user_id, commit=False)
         db.execute(
             """INSERT INTO global_tasks
-               (id,user_id,repository,objective,mode,delivery,status,execution_target,runner_id,
+               (id,user_id,bucket_id,repository,objective,mode,delivery,status,execution_target,runner_id,
                 require_approval,reserved_credits,metadata_json,created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 task_id,
                 user_id,
+                bucket["id"],
                 body.repository,
                 body.objective.strip(),
                 body.mode,
@@ -282,10 +287,24 @@ def create_task(
             task_id,
             "task.created",
             f"Task accepted in {status} state.",
-            {"credits_reserved": cost},
+            {"credits_reserved": cost, "bucket_id": bucket["id"]},
         )
         db.commit()
         row = db.execute("SELECT * FROM global_tasks WHERE id=?", (task_id,)).fetchone()
+    from amoscloud_ai.api.routes.webhooks import dispatch_webhook_event
+
+    dispatch_webhook_event(
+        user_id,
+        "task.created",
+        {
+            "task_id": task_id,
+            "bucket_id": bucket["id"],
+            "status": status,
+            "repository": body.repository,
+            "mode": body.mode,
+            "execution_target": execution_target,
+        },
+    )
     if status == "queued" and execution_target in {"cloud", "github"}:
         from amoscloud_ai.cloud_task_runner import dispatch_cloud_task
 
@@ -412,7 +431,12 @@ def cancel_task(
     dispatch_webhook_event(
         user_id,
         "task.cancelled",
-        {"task_id": task_id, "status": "cancelled", "summary": "Task cancelled."},
+        {
+            "task_id": task_id,
+            "bucket_id": row["bucket_id"],
+            "status": "cancelled",
+            "summary": "Task cancelled.",
+        },
     )
     return _task_dict(row)
 
@@ -552,6 +576,13 @@ def complete_task(
     body: TaskCompletion,
     authorization: str | None = Header(default=None),
 ) -> dict:
+    if body.status == "completed" and (
+        not body.verification_id or not body.evidence
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Completed tasks require a verification_id and evidence",
+        )
     with _connect() as db:
         _ensure_schema(db)
         runner = _runner_auth(db, runner_id, authorization)
@@ -566,13 +597,15 @@ def complete_task(
             raise HTTPException(status_code=409, detail="Task is not running")
         db.execute(
             """UPDATE global_tasks
-               SET status=?,summary=?,artifacts_json=?,pull_request_url=?,finished_at=?
+               SET status=?,summary=?,artifacts_json=?,pull_request_url=?,
+                   verification_id=?,finished_at=?
                WHERE id=?""",
             (
                 body.status,
                 body.summary.strip(),
                 _json(body.artifacts),
                 body.pull_request_url,
+                body.verification_id,
                 _now(),
                 task_id,
             ),
@@ -590,7 +623,11 @@ def complete_task(
             task_id,
             f"task.{body.status}",
             body.summary.strip(),
-            {"evidence": body.evidence, "artifacts": body.artifacts},
+            {
+                "evidence": body.evidence,
+                "artifacts": body.artifacts,
+                "verification_id": body.verification_id,
+            },
         )
         db.execute(
             "UPDATE task_runners SET status='online',last_seen_at=? WHERE id=?",
@@ -611,6 +648,8 @@ def complete_task(
             "summary": body.summary.strip(),
             "artifacts": body.artifacts,
             "pull_request_url": body.pull_request_url,
+            "verification_id": body.verification_id,
+            "bucket_id": row["bucket_id"],
         },
     )
     return _task_dict(updated)
