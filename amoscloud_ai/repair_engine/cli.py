@@ -5,7 +5,7 @@ import json
 import shlex
 from pathlib import Path
 
-from .core import Repair, RepairReport
+from .core import Doctor, Repair, RepairReport, Severity
 from .decision_engine import AutonomousDecisionEngine, objective_from_environment
 from .failure_strategy import apply_ci_failure_strategy
 
@@ -83,6 +83,37 @@ def objective_with_repair_scope(objective: str, repairs: list[Repair]) -> str:
     return f"{objective}\nVerify only the evidence-selected repair file(s): {scope}".strip()
 
 
+def objective_with_generic_safe_scope(
+    root: Path,
+    objective: str,
+    required_files: list[str],
+) -> str:
+    """Scope a generic repair request to every deterministic repairable file.
+
+    Without an explicit filename, the decision engine previously selected one
+    file but verified the whole repository. Any unrelated finding therefore
+    caused the safe edit to be rolled back and retried. Naming every low-risk
+    repairable file makes verification match the actual repair scope while
+    leaving critical findings untouched and deferred as evidence.
+    """
+    probe = AutonomousDecisionEngine(root, objective=objective, required_files=required_files)
+    if probe.target_paths:
+        return objective
+
+    paths = sorted(
+        {
+            finding.path
+            for finding in Doctor(root, required_files).diagnose()
+            if finding.severity == Severity.REPAIRABLE and finding.path
+        }
+    )
+    if not paths:
+        return objective
+
+    scope = " ".join(f"`{path}`" for path in paths)
+    return f"{objective}\nVerify all deterministic repair file(s): {scope}".strip()
+
+
 def main() -> None:
     args = parser().parse_args()
     root = Path(args.root).resolve()
@@ -99,6 +130,8 @@ def main() -> None:
 
     evidence_repairs = apply_ci_failure_strategy(root, failure_evidence) if args.apply else []
     scoped_objective = objective_with_repair_scope(objective, evidence_repairs)
+    if args.apply and not evidence_repairs:
+        scoped_objective = objective_with_generic_safe_scope(root, scoped_objective, args.required)
     engine = AutonomousDecisionEngine(
         root,
         objective=scoped_objective,
