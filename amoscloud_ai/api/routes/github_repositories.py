@@ -41,6 +41,12 @@ class GitHubSyncRequest(BaseModel):
     commit_message: str = Field(default="Sync changes from Amosclaud", min_length=1, max_length=200)
 
 
+class GitHubIssueCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=256)
+    body: str = Field(default="", max_length=60_000)
+    labels: list[str] = Field(default_factory=list, max_length=20)
+
+
 def _db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -459,3 +465,61 @@ def push_github_repository(
         db.execute("UPDATE repositories SET updated_at=?,github_last_sync_at=? WHERE id=?", (now, now, repository_id))
         db.commit()
     return {"repository_id": repository_id, "branch": branch, "commit": repo.head.commit.hexsha, "synced_at": now}
+
+@router.post("/repositories/{repository_id}/issues", status_code=201)
+async def create_github_issue(
+    repository_id: int,
+    body: GitHubIssueCreateRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
+    """Create a real issue only in the signed-in user's imported GitHub repository."""
+    with _db() as db:
+        repository = _owned_github_repository(db, repository_id, int(user["id"]))
+        connection = _connection(db, int(user["id"]))
+        token = _decrypt_token(connection["access_token_ciphertext"])
+
+    labels = []
+    for label in body.labels:
+        value = " ".join(str(label).split())
+        if not value or len(value) > 50:
+            raise HTTPException(status_code=422, detail="Issue labels must be 1-50 characters")
+        labels.append(value)
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"https://api.github.com/repos/{repository['github_full_name']}/issues",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json={
+                "title": body.title.strip(),
+                "body": body.body,
+                "labels": labels,
+            },
+        )
+    if response.status_code in {401, 403}:
+        raise HTTPException(
+            status_code=403,
+            detail="The connected GitHub account cannot create issues in this repository",
+        )
+    if response.status_code == 404:
+        raise HTTPException(
+            status_code=404,
+            detail="GitHub repository not found or Issues are disabled",
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="GitHub issue creation failed")
+
+    issue = response.json()
+    return {
+        "repository_id": repository_id,
+        "github_full_name": repository["github_full_name"],
+        "number": issue["number"],
+        "title": issue["title"],
+        "state": issue["state"],
+        "html_url": issue["html_url"],
+        "created_at": issue["created_at"],
+    }
+
