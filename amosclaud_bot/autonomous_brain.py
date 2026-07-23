@@ -41,10 +41,17 @@ class GitHubAutonomousBrain:
     def __init__(self, workspace: Path, repository: str) -> None:
         self.workspace = workspace.resolve()
         self.repository = repository.strip().lower()
-        self.memory = AgentMemory.for_repository(self.workspace)
-        self.academy = AutonomousLearningAcademy(
-            self.workspace / ".amosclaud" / "autonomous-academy.db"
-        )
+        configured = os.getenv("AMOSCLAUD_BOT_BRAIN_HOME", "").strip()
+        if configured:
+            brain_root = Path(configured).expanduser().resolve()
+        elif (self.workspace / ".git").exists():
+            brain_root = self.workspace / ".git" / "amosclaud-brain"
+        else:
+            brain_root = self.workspace / ".amosclaud" / "bot-brain"
+        brain_root.mkdir(parents=True, exist_ok=True)
+        self.brain_root = brain_root
+        self.memory = AgentMemory(brain_root / "memory")
+        self.academy = AutonomousLearningAcademy(brain_root / "autonomous-academy.db")
         self.curriculum = UniversalCurriculum()
 
     @property
