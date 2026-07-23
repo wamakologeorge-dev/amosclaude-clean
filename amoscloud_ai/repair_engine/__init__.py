@@ -35,6 +35,19 @@ _core_decide = AutonomousDecisionEngine.decide
 _core_run = AutonomousDecisionEngine.run
 
 
+def _has_conflict_block(lines: list[str], separator_index: int) -> bool:
+    """Return true only when an equals separator belongs to a full conflict block."""
+    has_opener = any(
+        line.strip() == "<<<<<<<" or line.strip().startswith("<<<<<<< ")
+        for line in lines[:separator_index]
+    )
+    has_closer = any(
+        line.strip() == ">>>>>>>" or line.strip().startswith(">>>>>>> ")
+        for line in lines[separator_index + 1 :]
+    )
+    return has_opener and has_closer
+
+
 def _precise_basic_text_checks(self: Doctor, path: Path) -> list[Finding]:
     """Ignore decorative separators while preserving real conflict markers."""
     findings = _core_basic_text_checks(self, path)
@@ -56,13 +69,10 @@ def _precise_basic_text_checks(self: Doctor, path: Path) -> list[Finding]:
             verified.append(finding)
             continue
         marker = lines[index].strip()
-        if (
-            marker == "<<<<<<<"
-            or marker.startswith("<<<<<<< ")
-            or marker == "======="
-            or marker == ">>>>>>>"
-            or marker.startswith(">>>>>>> ")
-        ):
+        is_opener = marker == "<<<<<<<" or marker.startswith("<<<<<<< ")
+        is_closer = marker == ">>>>>>>" or marker.startswith(">>>>>>> ")
+        is_separator = marker == "=======" and _has_conflict_block(lines, index)
+        if is_opener or is_closer or is_separator:
             verified.append(finding)
     return verified
 
