@@ -104,12 +104,13 @@
   async function submitDecision(card, record, decision) {
     const buttons = card.querySelectorAll("button[data-decision]");
     buttons.forEach((button) => { button.disabled = true; });
-    const verb = decision === "approve" ? "APPROVED" : "DENIED";
 
     if (!CONTROL_API) {
       showDecisionMessage(
         card,
-        `${verb} was not recorded. Connect the secure Amosclaud Control API to make website decisions authoritative.`,
+        decision === "approve"
+          ? "APPROVED was not recorded. Connect the secure Amosclaud Control API to make website decisions authoritative."
+          : "DENIED was not recorded. Connect the secure Amosclaud Control API to make website decisions authoritative.",
         "blocked",
       );
       buttons.forEach((button) => { button.disabled = false; });
