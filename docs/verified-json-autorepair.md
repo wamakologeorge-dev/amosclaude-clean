@@ -2,7 +2,7 @@
 
 **Amosclaud AI Verified Repair** is a safety-first repair workflow that detects a supported problem, applies the smallest safe correction, and proves that the result works before the repair is accepted or published.
 
-A generated change is **not** considered successful merely because a file was modified. Amosclaud must validate the repaired file, rerun the relevant diagnostic checks, and reject or roll back any change that cannot be verified.
+A generated change is **not** considered successful merely because a file was modified. Amosclaud must validate the repaired file, rerun the relevant diagnostic checks, and reject or roll back any change that cannot be verified through the protected `AutonomousDecisionEngine` workflow.
 
 ## GitHub-native autonomous brain
 
@@ -32,25 +32,27 @@ The implementation uses only Python's standard library. It does not require a ne
 
 ## Verified repair lifecycle
 
-Every automatic repair follows this sequence:
+Every protected automatic repair follows this sequence:
 
 1. **Detect** — Doctor runs strict JSON parsing and records the original failure.
 2. **Classify** — Amosclaud determines whether the failure matches a supported, deterministic repair pattern.
 3. **Retrieve guidance** — The GitHub Bot retrieves relevant proven memories, approved lessons, and known failed attempts without treating them as current proof.
-4. **Protect** — The original file state is preserved for comparison and rollback.
+4. **Protect** — `AutonomousDecisionEngine` preserves the original file state for comparison and rollback.
 5. **Repair minimally** — Only supported comments and trailing commas outside quoted strings are removed.
 6. **Parse again** — The normalized content must pass strict JSON parsing.
 7. **Write canonically** — Fixer writes valid, consistently formatted JSON only after successful parsing.
 8. **Verify independently** — Doctor reruns against the repaired repository state.
-9. **Accept or roll back** — The repair is accepted only when all required verification checks pass. Otherwise, Amosclaud restores the original state.
+9. **Accept or roll back** — In the protected Decision Engine path, the repair is accepted only when all required verification checks pass. Otherwise, Amosclaud restores the original state.
 10. **Record outcome** — The GitHub Bot records success, failure, partial, or unknown outcome in adaptive memory.
 11. **Publish evidence** — A repair PR or success result must include the detected problem, changed file, verification outcome, and checks executed.
 
 Only a properly structured, verified result may later become a candidate Academy lesson. Failed and rolled-back attempts remain warnings and cannot be promoted as approved lessons.
 
+The lower-level public `AutonomousRepairEngine` performs diagnosis and repair primitives but is not itself the publication-safe rollback boundary. GitHub Bot repairs and any workflow claiming verified rollback must use `AutonomousDecisionEngine`.
+
 ## Safety contract
 
-Amosclaud AI Verified Repair guarantees that:
+For GitHub Bot repairs routed through `AutonomousDecisionEngine`, Amosclaud AI Verified Repair guarantees that:
 
 - strict parsing is attempted before any normalization;
 - transformations never modify comment-like text or commas inside quoted strings;
@@ -71,7 +73,7 @@ Amosclaud AI Verified Repair guarantees that:
 | `REPAIRABLE` | The problem matches a supported deterministic repair rule. | No |
 | `REPAIRED` | A candidate repair was written successfully. | No |
 | `VERIFIED` | Post-repair diagnostics passed and evidence was recorded. | Yes, when repository policy allows it |
-| `ROLLED_BACK` | Verification failed and the original state was restored. | No |
+| `ROLLED_BACK` | Verification failed and the protected workflow restored the original state. | No |
 | `CRITICAL` | The problem is ambiguous, unsafe, or unsupported. | No |
 
 ## Example
