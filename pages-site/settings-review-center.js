@@ -13,9 +13,21 @@
   }
 
   async function githubJson(url) {
-    const response = await fetch(url, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+    const response = await fetch(url, {
+      headers: { Accept: "application/vnd.github+json" },
+      cache: "no-store",
+    });
     if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-    return response.json();
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+      throw new Error("GitHub returned a non-JSON response");
+    }
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error("GitHub returned invalid JSON");
+    }
   }
 
   function toneFor(value) {
@@ -26,20 +38,6 @@
     return "queued";
   }
 
-  function openSettings(drawer, backdrop, button) {
-    drawer.hidden = false;
-    backdrop.hidden = false;
-    button.setAttribute("aria-expanded", "true");
-    drawer.querySelector("button")?.focus();
-  }
-
-  function closeSettings(drawer, backdrop, button) {
-    drawer.hidden = true;
-    backdrop.hidden = true;
-    button.setAttribute("aria-expanded", "false");
-    button.focus();
-  }
-
   function createSettings() {
     const button = node("button", "settings-button", "⚙");
     button.type = "button";
@@ -48,7 +46,6 @@
 
     const backdrop = node("div", "settings-backdrop");
     backdrop.hidden = true;
-
     const drawer = node("aside", "settings-drawer");
     drawer.hidden = true;
     drawer.setAttribute("aria-label", "Amosclaud settings");
@@ -77,8 +74,8 @@
     const routing = node("section", "settings-section");
     routing.append(node("h3", "", "Command routing"));
     [
-      ["Command bridge", "Amosclaud1"],
-      ["Execution engine", "amosclaude-clean"],
+      ["Command bridge", commandRepository],
+      ["Execution engine", engineRepository],
       ["Repair agent", "Amosclaud Fixer"],
       ["Verification authority", "Doctor + GitHub checks"],
     ].forEach(([label, value]) => {
@@ -88,18 +85,30 @@
     });
 
     const capability = node("section", "settings-section");
-    capability.append(node("h3", "", "Current website capability"));
-    const capabilityText = node("p", "section-copy", "Public GitHub data, command preparation, review evidence, and approval visibility work from this static site. Direct private-repository writes and real-time Socket.IO require the secure GitHub App backend phase.");
-    capability.append(capabilityText);
-
+    capability.append(
+      node("h3", "", "Current website capability"),
+      node("p", "section-copy", "Public GitHub data, command preparation, review evidence, and approval visibility work from this static site. Direct private-repository writes and real-time Socket.IO require the secure GitHub App backend phase."),
+    );
     drawer.append(header, truth, routing, capability);
     document.body.append(button, backdrop, drawer);
 
-    button.addEventListener("click", () => openSettings(drawer, backdrop, button));
-    close.addEventListener("click", () => closeSettings(drawer, backdrop, button));
-    backdrop.addEventListener("click", () => closeSettings(drawer, backdrop, button));
+    const open = () => {
+      drawer.hidden = false;
+      backdrop.hidden = false;
+      button.setAttribute("aria-expanded", "true");
+      close.focus();
+    };
+    const shut = () => {
+      drawer.hidden = true;
+      backdrop.hidden = true;
+      button.setAttribute("aria-expanded", "false");
+      button.focus();
+    };
+    button.addEventListener("click", open);
+    close.addEventListener("click", shut);
+    backdrop.addEventListener("click", shut);
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !drawer.hidden) closeSettings(drawer, backdrop, button);
+      if (event.key === "Escape" && !drawer.hidden) shut();
     });
   }
 
@@ -123,6 +132,15 @@
     card.querySelector("span").textContent = detail;
   }
 
+  function latestRunsOnly(runs) {
+    const latest = new Map();
+    runs.forEach((run) => {
+      const key = `${run.workflow_id || run.name}:${run.head_branch || "default"}`;
+      if (!latest.has(key)) latest.set(key, run);
+    });
+    return [...latest.values()];
+  }
+
   async function loadReviewData() {
     const list = byId("review-feed-list");
     if (!list) return;
@@ -133,14 +151,15 @@
         githubJson(`https://api.github.com/repos/${engineRepository}/issues?state=open&per_page=30`),
         githubJson(`https://api.github.com/repos/${engineRepository}/pulls?state=open&per_page=20`),
       ]);
-      const runs = Array.isArray(runsPayload.workflow_runs) ? runsPayload.workflow_runs : [];
+      const rawRuns = Array.isArray(runsPayload.workflow_runs) ? runsPayload.workflow_runs : [];
+      const runs = latestRunsOnly(rawRuns);
       const approvalIssues = issues.filter((item) => !item.pull_request && /approval required|amosclaud approval/i.test(item.title || ""));
       const failedRuns = runs.filter((run) => ["failure", "timed_out", "cancelled"].includes(run.conclusion));
       const successfulRuns = runs.filter((run) => run.conclusion === "success");
       const activeRuns = runs.filter((run) => run.status !== "completed");
 
       setSummary("review-fixed", successfulRuns.length, "Recent checks completed successfully");
-      setSummary("review-needs-action", failedRuns.length + approvalIssues.length, "Failures or approvals need attention");
+      setSummary("review-needs-action", failedRuns.length + approvalIssues.length, "Current failures or approvals need attention");
       setSummary("review-active", activeRuns.length, "Checks currently queued or running");
 
       list.replaceChildren();
@@ -160,11 +179,12 @@
 
   function detectCommand(message) {
     const value = message.toLowerCase();
-    if (/\bfix|repair|resolve\b/.test(value)) return "fix";
-    if (/\bverify|check|prove\b/.test(value)) return "verify";
-    if (/\bhealth|status\b/.test(value)) return "health";
-    if (/\bmission|goal|plan\b/.test(value)) return "mission";
-    if (/\btriage|priority\b/.test(value)) return "triage";
+    if (/\b(?:fix|repair|resolve)\b/.test(value)) return "fix";
+    if (/\b(?:verify|check|prove)\b/.test(value)) return "verify";
+    if (/\b(?:health|status)\b/.test(value)) return "health";
+    if (/\bmission\b/.test(value)) return "mission";
+    if (/\b(?:goal|plan|planning)\b/.test(value)) return "goal";
+    if (/\b(?:triage|priority)\b/.test(value)) return "triage";
     return "inspect";
   }
 
