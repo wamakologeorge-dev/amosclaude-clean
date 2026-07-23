@@ -162,7 +162,15 @@ class Doctor:
         for number, line in enumerate(text.splitlines(), 1):
             if line.rstrip() != line:
                 findings.append(Finding("trailing-whitespace", "Trailing whitespace", Severity.REPAIRABLE, rel, number, "trim whitespace"))
-            if line.startswith("<<<<<<<") or line.startswith("=======") or line.startswith(">>>>>>>"):
+            stripped = line.strip()
+            is_conflict_marker = (
+                stripped.startswith("<<<<<<< ")
+                or stripped == "<<<<<<<"
+                or stripped == "======="
+                or stripped.startswith(">>>>>>> ")
+                or stripped == ">>>>>>>"
+            )
+            if is_conflict_marker:
                 findings.append(Finding("merge-conflict", "Unresolved merge conflict marker", Severity.CRITICAL, rel, number))
         if text and not text.endswith("\n"):
             findings.append(Finding("missing-final-newline", "File has no final newline", Severity.REPAIRABLE, rel, repair="add final newline"))
@@ -222,136 +230,37 @@ class Doctor:
         return findings
 
     def _local_assets(self, path: Path) -> list[Finding]:
-        rel = relative(path, self.root)
-        text = path.read_text(encoding="utf-8")
-        findings: list[Finding] = []
-        for asset in LOCAL_ASSET_PATTERN.findall(text):
-            target = (path.parent / asset).resolve()
-            try:
-                target.relative_to(self.root)
-            except ValueError:
-                findings.append(Finding("asset-outside-root", f"Local asset escapes repository root: {asset}", Severity.CRITICAL, rel))
-                continue
-            if not target.exists():
-                findings.append(Finding("missing-local-asset", f"Referenced local asset is missing: {asset}", Severity.CRITICAL, rel))
-        return findings
+        from .asset_checks import safer_local_assets
+
+        return safer_local_assets(self, path)
 
 
-class Fixer:
-    def __init__(self, root: Path) -> None:
-        self.root = root.resolve()
-
-    def apply(self, findings: Sequence[Finding]) -> list[Repair]:
-        by_path: dict[str, list[Finding]] = {}
-        for finding in findings:
-            if finding.path and finding.severity == Severity.REPAIRABLE:
-                by_path.setdefault(finding.path, []).append(finding)
-        repairs: list[Repair] = []
-        for rel, items in by_path.items():
-            path = self.root / rel
-            if not path.is_file():
-                continue
-            original = path.read_text(encoding="utf-8")
-            updated = original
-            codes = {item.code for item in items}
-            if "trailing-whitespace" in codes:
-                updated = "\n".join(line.rstrip() for line in updated.splitlines())
-                if original.endswith("\n"):
-                    updated += "\n"
-            if "missing-final-newline" in codes and updated and not updated.endswith("\n"):
-                updated += "\n"
-            if "yaml-tabs" in codes:
-                updated = updated.replace("\t", "  ")
-            for item in items:
-                if item.code == "unpinned-action" and item.repair:
-                    line = updated.splitlines()[item.line - 1] if item.line else ""
-                    match = ACTION_PATTERN.search(line)
-                    if match:
-                        updated = updated.replace(match.group(0), item.repair)
-            changed = updated != original
-            if changed:
-                path.write_text(updated, encoding="utf-8")
-            repairs.append(Repair("safe-static-repair", rel, ", ".join(sorted(codes)), changed))
-        return repairs
-
-
-class Verifier:
-    def __init__(self, root: Path, timeout: int = 300) -> None:
-        self.root = root.resolve()
-        self.timeout = timeout
-
-    def run(self, commands: Sequence[Sequence[str]]) -> list[Evidence]:
-        evidence: list[Evidence] = []
-        for command in commands:
-            started = time.monotonic()
-            try:
-                result = subprocess.run(
-                    list(command), cwd=self.root, capture_output=True, text=True,
-                    timeout=self.timeout, check=False,
-                )
-                output = ((result.stdout or "") + ("\n" + result.stderr if result.stderr else "")).strip()
-                evidence.append(Evidence(" ".join(shlex.quote(part) for part in command), result.returncode == 0, list(command), result.returncode, time.monotonic() - started, output[-12000:]))
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                evidence.append(Evidence(" ".join(command), False, list(command), None, time.monotonic() - started, str(exc)))
-        return evidence
-
-
-class RepairMemory:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-
-    def record(self, report: RepairReport) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(report.as_dict(), sort_keys=True) + "\n")
-
-
-class AutonomousRepairEngine:
-    def __init__(
-        self,
-        root: Path,
-        *,
-        required_files: Sequence[str] = (),
-        commands: Sequence[Sequence[str]] = (),
-        max_attempts: int = 2,
-        memory_path: Path | None = None,
-    ) -> None:
-        self.root = root.resolve()
-        self.doctor = Doctor(self.root, required_files)
-        self.fixer = Fixer(self.root)
-        self.verifier = Verifier(self.root)
-        self.commands = list(commands)
-        self.max_attempts = max(1, max_attempts)
-        self.memory = RepairMemory(memory_path or self.root / ".amosclaud" / "repair-memory.jsonl")
-
-    def run(self, apply: bool = False) -> RepairReport:
-        report = RepairReport(root=str(self.root), started_at=utc_now())
-        initial = self.doctor.diagnose()
-        report.findings = initial
-        report.diagnosis = self.doctor.classify(initial)
-        if apply:
-            for attempt in range(1, self.max_attempts + 1):
-                report.attempts = attempt
-                repairable = [item for item in report.findings if item.severity == Severity.REPAIRABLE]
-                if not repairable:
-                    break
-                repairs = self.fixer.apply(repairable)
-                report.repairs.extend(repairs)
-                report.changed_files = sorted({item.path for item in report.repairs if item.changed})
-                report.findings = self.doctor.diagnose()
-                if not any(item.severity == Severity.REPAIRABLE for item in report.findings):
-                    break
-        static_verdict = self.doctor.classify(report.findings)
-        static_ok = static_verdict == Verdict.HEALTHY
-        report.evidence.append(Evidence("Amosclaud Doctor static diagnosis", static_ok, output=static_verdict.value))
-        if static_ok and self.commands:
-            report.evidence.extend(self.verifier.run(self.commands))
-        if any(not item.passed for item in report.evidence):
-            report.final_verdict = Verdict.FAIL
-        elif report.evidence:
-            report.final_verdict = Verdict.PASS
-        else:
-            report.final_verdict = Verdict.UNKNOWN
-        report.finished_at = utc_now()
-        self.memory.record(report)
-        return report
+def run_command(command: Sequence[str], cwd: Path, timeout: int = 300) -> Evidence:
+    started = time.monotonic()
+    try:
+        process = subprocess.run(
+            list(command),
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        output = (process.stdout + "\n" + process.stderr).strip()
+        return Evidence(
+            name=shlex.join(command),
+            passed=process.returncode == 0,
+            command=list(command),
+            return_code=process.returncode,
+            duration_seconds=round(time.monotonic() - started, 3),
+            output=output[-12000:],
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return Evidence(
+            name=shlex.join(command),
+            passed=False,
+            command=list(command),
+            return_code=None,
+            duration_seconds=round(time.monotonic() - started, 3),
+            output=str(exc),
+        )
