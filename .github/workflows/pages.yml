@@ -69,8 +69,7 @@ jobs:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           set -Eeuo pipefail
-          curl \
-            --location \
+          curl --location \
             --fail \
             --retry 12 \
             --retry-delay 10 \
