@@ -56,6 +56,7 @@ from amoscloud_ai.api.routes import (
     model_server_folder,
     metadata_dashboard,
     organizations,
+    operation_buckets,
     openai_compat,
     passkey_signup,
     pipelines,
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
     app.include_router(github_repositories.router, prefix="/api/v1")
     app.include_router(repository_templates.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
+    app.include_router(operation_buckets.router, prefix="/api/v1")
     app.include_router(workspaces.router, prefix="/api/v1")
     app.include_router(local_workspace.router, prefix="/api/v1")
     app.include_router(storage.router, prefix="/api/v1")
