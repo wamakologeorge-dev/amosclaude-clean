@@ -108,13 +108,23 @@ def _recommendation_output(findings: Sequence[Finding]) -> str:
     return json.dumps([asdict(item) for item in recommendations(findings)], sort_keys=True)
 
 
+def _finding_key(finding: Finding) -> tuple[str, str | None, int | None]:
+    return finding.code, finding.path, finding.line
+
+
 def doctor_healing_run(
     original_run: Callable[..., RepairReport],
     engine: object,
     *,
     apply: bool = False,
 ) -> RepairReport:
-    """Run bounded cumulative healing, then verify once and rollback on failure."""
+    """Run Doctor and Amosclaud-fixer side by side with bounded rollback.
+
+    Doctor owns diagnosis, selection, per-cycle acceptance, and final verification.
+    Amosclaud-fixer remains the only component allowed to edit repository files.
+    Every Fixer cycle is immediately re-diagnosed by Doctor before another repair
+    can start, so unverified output can never silently accumulate or publish.
+    """
     if not apply:
         return original_run(engine, apply=False)
 
@@ -138,7 +148,7 @@ def doctor_healing_run(
         if report.diagnosis == Verdict.HEALTHY:
             break
 
-        signature = tuple(sorted((item.code, item.path, item.line) for item in current))
+        signature = tuple(sorted(_finding_key(item) for item in current))
         if signature in previous_signatures:
             report.evidence.append(
                 Evidence(
@@ -166,6 +176,10 @@ def doctor_healing_run(
             for item in current
             if item.severity == Severity.REPAIRABLE and item.path in decision.paths
         ]
+        selected_keys = {_finding_key(item) for item in selected}
+        critical_before = {
+            _finding_key(item) for item in current if item.severity == Severity.CRITICAL
+        }
         for rel in decision.paths:
             path = root / rel
             if path.is_file() and rel not in snapshots:
@@ -173,7 +187,7 @@ def doctor_healing_run(
 
         report.evidence.append(
             Evidence(
-                f"Doctor healing cycle {attempt}: {', '.join(decision.paths)}",
+                f"Doctor assigned Amosclaud-fixer cycle {attempt}: {', '.join(decision.paths)}",
                 True,
                 output=(
                     f"confidence={decision.confidence}% risk={decision.risk}; "
@@ -189,11 +203,37 @@ def doctor_healing_run(
         if not newly_changed:
             report.evidence.append(
                 Evidence(
-                    "Doctor healing strategy produced a change",
+                    "Amosclaud-fixer produced a repository change",
                     False,
                     output=_recommendation_output(current),
                 )
             )
+            break
+
+        after_cycle = engine.diagnose()
+        after_keys = {_finding_key(item) for item in after_cycle}
+        unresolved_selected = sorted(selected_keys & after_keys)
+        new_critical = sorted(
+            _finding_key(item)
+            for item in after_cycle
+            if item.severity == Severity.CRITICAL and _finding_key(item) not in critical_before
+        )
+        doctor_accepted = not unresolved_selected and not new_critical
+        details = {
+            "changed_files": sorted(newly_changed),
+            "new_critical_findings": new_critical,
+            "unresolved_assigned_findings": unresolved_selected,
+        }
+        report.evidence.append(
+            Evidence(
+                f"Doctor validated Amosclaud-fixer cycle {attempt}",
+                doctor_accepted,
+                output=json.dumps(details, sort_keys=True),
+            )
+        )
+        report.findings = after_cycle
+        report.diagnosis = doctor.classify(after_cycle)
+        if not doctor_accepted:
             break
 
     final_findings = engine.diagnose()
@@ -217,8 +257,6 @@ def doctor_healing_run(
                     output=rolled_back,
                 )
             )
-            # Keep the established evidence contract used by callers and older
-            # tests while also exposing the more specific session-level event.
             report.evidence.append(
                 Evidence(
                     "Rollback unverified repair",
