@@ -38,6 +38,16 @@ def test_review_center_uses_github_evidence_and_required_actions() -> None:
     assert "Review data unavailable" in script
 
 
+def test_review_center_validates_json_and_ignores_superseded_runs() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'response.headers.get("content-type")' in script
+    assert 'includes("application/json")' in script
+    assert "JSON.parse(text)" in script
+    assert "latestRunsOnly" in script
+    assert "workflow_id || run.name" in script
+    assert "if (!latest.has(key))" in script
+
+
 def test_chat_prepares_governed_command_without_false_execution_claim() -> None:
     script = SCRIPT.read_text(encoding="utf-8")
     assert "Chat with Amosclaud Bot" in script
@@ -51,3 +61,11 @@ def test_chat_prepares_governed_command_without_false_execution_claim() -> None:
     assert "sessionStorage" not in script
     assert "github_pat_" not in script
     assert "ghp_" not in script
+
+
+def test_chat_routes_read_only_planning_and_complete_keywords_safely() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'if (/\\bmission\\b/.test(value)) return "mission"' in script
+    assert 'return "goal"' in script
+    assert '/\\b(?:fix|repair|resolve)\\b/' in script
+    assert '/\\b(?:verify|check|prove)\\b/' in script
