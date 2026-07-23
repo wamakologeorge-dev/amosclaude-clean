@@ -9,11 +9,13 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
+from amoscloud_ai.api.routes.auth import DB_PATH, SESSION_DAYS, get_user_from_session
 from amoscloud_ai.api.routes.github_repositories import _connection, _db as github_db, _decrypt_token
+from amoscloud_ai.config import settings
 
 router = APIRouter(prefix="/approvals", tags=["website-approvals"])
 
@@ -23,6 +25,7 @@ _ALLOWED_DECISIONS = {"approve", "deny"}
 _ALLOWED_SOURCE_TYPES = {"approval", "workflow"}
 _DEFAULT_WEBSITE_ORIGINS = {"https://wamakologeorge-dev.github.io"}
 _COMMAND_REPOSITORY = os.getenv("AMOSCLAUD_COMMAND_REPOSITORY", "wamakologeorge-dev/Amosclaud1")
+_APPROVAL_COOKIE = "amos_approval_session"
 
 
 class ApprovalDecisionRequest(BaseModel):
@@ -34,25 +37,41 @@ class ApprovalDecisionRequest(BaseModel):
     single_use: bool
 
 
-def _current_user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Row:
-    user = get_user_from_session(amos_session)
-    if not user:
-        raise HTTPException(status_code=401, detail="Sign in to Amosclaud before approving work")
-    return user
-
-
 def _allowed_origins() -> set[str]:
     configured = os.getenv("AMOSCLAUD_WEBSITE_ORIGINS", "")
     values = {item.strip().rstrip("/") for item in configured.split(",") if item.strip()}
     return values or set(_DEFAULT_WEBSITE_ORIGINS)
 
 
-def _validate_origin(request: Request, decision_header: str | None) -> None:
+# This module is imported before the application installs CORS middleware.
+# Add only the explicitly configured Amosclaud website origins.
+for _origin in _allowed_origins():
+    if _origin not in settings.allowed_hosts:
+        settings.allowed_hosts.append(_origin)
+
+
+def _current_user(
+    amos_session: str | None = Cookie(default=None),
+    amos_approval_session: str | None = Cookie(default=None),
+) -> sqlite3.Row:
+    user = get_user_from_session(amos_approval_session or amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to Amosclaud before approving work")
+    return user
+
+
+def _validated_return_url(value: str) -> str:
+    parsed = urlparse(value)
+    origin = f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    if parsed.scheme != "https" or origin not in _allowed_origins():
+        raise HTTPException(status_code=400, detail="Invalid website return URL")
+    return value
+
+
+def _validate_origin(request: Request) -> None:
     origin = (request.headers.get("origin") or "").rstrip("/")
     if origin not in _allowed_origins():
         raise HTTPException(status_code=403, detail="Website origin is not authorized")
-    if decision_header != "website-v1":
-        raise HTTPException(status_code=403, detail="Missing Amosclaud decision confirmation header")
 
 
 def _decision_db() -> sqlite3.Connection:
@@ -205,14 +224,39 @@ async def _record_on_github(token: str, body: ApprovalDecisionRequest) -> str:
         return str(command_issue.get("html_url") or body.evidence_url)
 
 
+@router.get("/connect")
+def connect_website_approval_session(
+    return_to: str,
+    amos_session: str | None = Cookie(default=None),
+) -> RedirectResponse:
+    if not amos_session or not get_user_from_session(amos_session):
+        raise HTTPException(status_code=401, detail="Sign in to Amosclaud before connecting website approvals")
+    destination = _validated_return_url(return_to)
+    response = RedirectResponse(destination, status_code=302)
+    response.set_cookie(
+        _APPROVAL_COOKIE,
+        amos_session,
+        max_age=SESSION_DAYS * 86400,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/api/v1/approvals",
+    )
+    return response
+
+
+@router.get("/status")
+def approval_status(user: sqlite3.Row = Depends(_current_user)) -> dict:
+    return {"connected": True, "user": {"name": user["name"], "email": user["email"]}}
+
+
 @router.post("/decision")
 async def decide_approval(
     body: ApprovalDecisionRequest,
     request: Request,
     user: sqlite3.Row = Depends(_current_user),
-    x_amosclaud_decision: str | None = Header(default=None),
 ) -> dict:
-    _validate_origin(request, x_amosclaud_decision)
+    _validate_origin(request)
     _validate_payload(body)
 
     with _decision_db() as db:
