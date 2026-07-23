@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -26,6 +27,8 @@ _ALLOWED_SOURCE_TYPES = {"approval", "workflow"}
 _DEFAULT_WEBSITE_ORIGINS = {"https://wamakologeorge-dev.github.io"}
 _COMMAND_REPOSITORY = os.getenv("AMOSCLAUD_COMMAND_REPOSITORY", "wamakologeorge-dev/Amosclaud1")
 _APPROVAL_COOKIE = "amos_approval_session"
+_APPROVAL_TOKEN_TTL_SECONDS = SESSION_DAYS * 86400
+_approval_token_store: dict[str, tuple[str, datetime]] = {}
 
 
 class ApprovalDecisionRequest(BaseModel):
@@ -50,11 +53,37 @@ for _origin in _allowed_origins():
         settings.allowed_hosts.append(_origin)
 
 
+def _cleanup_expired_approval_tokens() -> None:
+    now = datetime.now(timezone.utc)
+    expired = [token for token, (_, expires_at) in _approval_token_store.items() if expires_at <= now]
+    for token in expired:
+        _approval_token_store.pop(token, None)
+
+
+def _create_approval_token(amos_session: str) -> str:
+    _cleanup_expired_approval_tokens()
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=_APPROVAL_TOKEN_TTL_SECONDS)
+    _approval_token_store[token] = (amos_session, expires_at)
+    return token
+
+
+def _resolve_approval_token(token: str | None) -> str | None:
+    if not token:
+        return None
+    _cleanup_expired_approval_tokens()
+    stored = _approval_token_store.get(token)
+    if not stored:
+        return None
+    return stored[0]
+
+
 def _current_user(
     amos_session: str | None = Cookie(default=None),
     amos_approval_session: str | None = Cookie(default=None),
 ) -> sqlite3.Row:
-    user = get_user_from_session(amos_approval_session or amos_session)
+    session_for_auth = _resolve_approval_token(amos_approval_session) or amos_session
+    user = get_user_from_session(session_for_auth)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in to Amosclaud before approving work")
     return user
@@ -232,10 +261,11 @@ def connect_website_approval_session(
     if not amos_session or not get_user_from_session(amos_session):
         raise HTTPException(status_code=401, detail="Sign in to Amosclaud before connecting website approvals")
     destination = _validated_return_url(return_to)
+    approval_token = _create_approval_token(amos_session)
     response = RedirectResponse(destination, status_code=302)
     response.set_cookie(
         _APPROVAL_COOKIE,
-        amos_session,
+        approval_token,
         max_age=SESSION_DAYS * 86400,
         httponly=True,
         secure=True,
