@@ -18,16 +18,7 @@
       cache: "no-store",
     });
     if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.toLowerCase().includes("application/json")) {
-      throw new Error("GitHub returned a non-JSON response");
-    }
-    const text = await response.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error("GitHub returned invalid JSON");
-    }
+    return response.json();
   }
 
   function statusTone(status) {
@@ -116,7 +107,8 @@
 
     const path = node("ol", "fixer-stage-path");
     ["ANALYZE", "PLAN", "EDIT", "TEST", "VERIFY", "PUBLISH"].forEach((stage) => {
-      path.append(node("li", stage === record.stage ? "current" : "", stage));
+      const item = node("li", stage === record.stage ? "current" : "", stage);
+      path.append(item);
     });
 
     const facts = node("dl", "fixer-facts");
@@ -148,7 +140,7 @@
       try {
         const comments = await githubJson(`https://api.github.com/repos/${commandRepository}/issues/${issue.number}/comments?per_page=100`);
         return comments.map((comment) => parseRepairComment(comment, issue)).filter(Boolean);
-      } catch {
+      } catch (_) {
         return [];
       }
     }));
