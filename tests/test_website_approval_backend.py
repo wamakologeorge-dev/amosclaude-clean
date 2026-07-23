@@ -44,7 +44,8 @@ def test_cross_site_approval_session_is_httponly_and_origin_restricted() -> None
     assert 'secure=True' in api
     assert 'samesite="none"' in api
     assert "AMOSCLAUD_WEBSITE_ORIGINS" in api
-    assert "https://wamakologeorge-dev.github.io" in api
+    assert "urlparse" in api
+    assert 'host.endswith(".github.io")' in api or 'host == "github.io"' in api
     assert "Website origin is not authorized" in api
 
 
