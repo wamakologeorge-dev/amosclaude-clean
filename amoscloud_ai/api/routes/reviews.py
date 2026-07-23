@@ -8,11 +8,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.api.routes import approvals_api
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.api.routes.pipelines import _get, trigger_pipeline
 from amoscloud_ai.models import PipelineTrigger
 
-router = APIRouter(prefix="/reviews", tags=["reviews"])
+router = APIRouter(tags=["reviews"])
+router.include_router(approvals_api.router)
 
 
 class ReviewCreate(BaseModel):
@@ -73,7 +75,7 @@ def _user(amos_session: str | None = Cookie(default=None)):
     return user
 
 
-@router.get("/{pipeline_id}")
+@router.get("/reviews/{pipeline_id}")
 def list_reviews(pipeline_id: str) -> list[dict]:
     if not _get(pipeline_id):
         raise HTTPException(status_code=404, detail="Pipeline not found")
@@ -86,7 +88,7 @@ def list_reviews(pipeline_id: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-@router.post("/{pipeline_id}", status_code=201)
+@router.post("/reviews/{pipeline_id}", status_code=201)
 def create_review(pipeline_id: str, body: ReviewCreate, user=Depends(_user)) -> dict:
     if not _get(pipeline_id):
         raise HTTPException(status_code=404, detail="Pipeline not found")
@@ -122,7 +124,7 @@ def create_review(pipeline_id: str, body: ReviewCreate, user=Depends(_user)) -> 
     }
 
 
-@router.post("/{pipeline_id}/fix", status_code=202)
+@router.post("/reviews/{pipeline_id}/fix", status_code=202)
 async def ask_agent_to_fix(pipeline_id: str, body: AgentFixRequest, user=Depends(_user)) -> dict:
     source = _get(pipeline_id)
     if not source:
