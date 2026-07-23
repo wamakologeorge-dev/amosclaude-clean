@@ -21,7 +21,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out main project
+        uses: actions/checkout@v7
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
       - name: Verify Pages hub is static and token-free
         run: |
           set -Eeuo pipefail
@@ -39,7 +45,8 @@ jobs:
           grep -q "wamakologeorge-dev/amosclaude-clean" pages-site/app.js
           grep -q "issues/new" pages-site/app.js
           grep -q "command-timeline" pages-site/index.html
-      - name: Upload static Pages artifact
+
+      - name: Upload main Agent Issue Hub
         uses: actions/upload-pages-artifact@v5
         with:
           path: ./pages-site
@@ -56,13 +63,26 @@ jobs:
       - name: Deploy Agent Issue Hub
         id: deployment
         uses: actions/deploy-pages@v5
+
       - name: Verify deployed GitHub Page
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           set -Eeuo pipefail
-          curl --location --fail --retry 3 "${{ steps.deployment.outputs.page_url }}" -o deployment-evidence.html
+          curl --location \
+            --fail \
+            --retry 12 \
+            --retry-delay 10 \
+            --retry-all-errors \
+            --connect-timeout 15 \
+            --max-time 30 \
+            "$PAGE_URL" \
+            -o deployment-evidence.html
           grep -q "Amosclaud Agent Issue Hub" deployment-evidence.html
           grep -q "No GitHub token is collected or stored" deployment-evidence.html
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload deployment evidence
+        uses: actions/upload-artifact@v4
         with:
           name: agent-issue-hub-deployment-evidence
           path: deployment-evidence.html
