@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import platform
 import subprocess
@@ -42,7 +44,7 @@ def _headers(token: str) -> dict[str, str]:
 def _heartbeat(client: httpx.Client, api_url: str, runner_id: str, token: str) -> None:
     model_url = os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
     model_status = {"ready": False}
-    capabilities = ["ask", "build", "test", "review", "monitor"]
+    capabilities = ["ask", "build", "fix", "test", "review", "monitor"]
     if model_url:
         try:
             health = client.get(f"{model_url}/ready", headers=_model_headers(), timeout=30)
@@ -128,7 +130,7 @@ def _serve_model_request(client: httpx.Client, api_url: str, runner_id: str, tok
 
 def _test_workspace(workspace: Path) -> tuple[str, list[str]]:
     if not (workspace / "tests").is_dir():
-        return "No tests directory was found.", ["No test command was executed."]
+        raise RuntimeError("No tests directory was found")
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q"],
         cwd=workspace,
@@ -149,7 +151,7 @@ def _execute(task: dict, workspace: Path) -> dict:
         summary, evidence = _test_workspace(workspace)
         return {"status": "completed", "summary": summary, "evidence": evidence}
 
-    apply_changes = mode in {"build", "deploy"}
+    apply_changes = mode in {"build", "deploy", "fix"}
     run = run_engineering_agent(
         workspace,
         task["objective"],
@@ -166,6 +168,14 @@ def _execute(task: dict, workspace: Path) -> dict:
             ],
         }
 
+    evidence = [
+        *run.evidence,
+        *[
+            f"{check.get('name', 'check')}: passed"
+            for check in run.checks
+            if check.get("passed", False)
+        ],
+    ]
     artifacts: list[dict] = []
     git_dir = workspace / ".git"
     if git_dir.exists():
@@ -188,9 +198,30 @@ def _execute(task: dict, workspace: Path) -> dict:
     return {
         "status": "completed",
         "summary": run.summary,
-        "evidence": run.evidence,
+        "evidence": evidence,
         "artifacts": artifacts,
     }
+
+
+def _verification_id(task_id: str, workspace: Path, evidence: list[str]) -> str:
+    revision = "workspace"
+    if (workspace / ".git").exists():
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            revision = result.stdout.strip()
+    payload = json.dumps(
+        {"task_id": task_id, "revision": revision, "evidence": evidence},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return "verify_" + hashlib.sha256(payload).hexdigest()[:32]
 
 
 def run_once(
@@ -220,6 +251,20 @@ def run_once(
             "summary": f"Self-hosted execution stopped safely: {type(exc).__name__}",
             "evidence": [],
         }
+
+    if result["status"] == "completed":
+        evidence = [str(item) for item in result.get("evidence") or [] if str(item)]
+        if evidence:
+            result["evidence"] = evidence
+            result["verification_id"] = _verification_id(
+                task["id"], workspace, evidence
+            )
+        else:
+            result = {
+                "status": "failed",
+                "summary": "Self-hosted completion blocked: verification evidence is missing.",
+                "evidence": [],
+            }
 
     completed = client.post(
         f"{api_url}/api/v1/runners/{runner_id}/tasks/{task['id']}/complete",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -25,6 +27,7 @@ from amoscloud_ai.api.routes.github_repositories import (
 )
 from amoscloud_ai.api.routes.task_router import _ensure_schema, _event, _json, _now
 from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
+from amosclaud_bot.bot import AmosclaudBot
 
 
 def _finish(
@@ -35,7 +38,13 @@ def _finish(
     artifacts=None,
     pull_request_url=None,
     evidence=None,
+    verification_id: str | None = None,
 ) -> None:
+    if status == "completed" and (not verification_id or not evidence):
+        status = "failed"
+        summary = (
+            "Completion blocked: a verification_id and real evidence are required."
+        )
     with _connect() as db:
         _ensure_schema(db)
         task = db.execute(
@@ -45,13 +54,15 @@ def _finish(
             return
         db.execute(
             """UPDATE global_tasks
-               SET status=?,summary=?,artifacts_json=?,pull_request_url=?,finished_at=?
+               SET status=?,summary=?,artifacts_json=?,pull_request_url=?,
+                   verification_id=?,finished_at=?
                WHERE id=?""",
             (
                 status,
                 summary[:20_000],
                 _json(artifacts or []),
                 pull_request_url,
+                verification_id,
                 _now(),
                 task_id,
             ),
@@ -69,7 +80,11 @@ def _finish(
             task_id,
             f"task.{status}",
             summary[:20_000],
-            {"evidence": (evidence or [])[:200], "artifacts": (artifacts or [])[:100]},
+            {
+                "evidence": (evidence or [])[:200],
+                "artifacts": (artifacts or [])[:100],
+                "verification_id": verification_id,
+            },
         )
         db.commit()
     from amoscloud_ai.api.routes.webhooks import dispatch_webhook_event
@@ -83,6 +98,8 @@ def _finish(
             "summary": summary[:20_000],
             "artifacts": artifacts or [],
             "pull_request_url": pull_request_url,
+            "verification_id": verification_id,
+            "bucket_id": task["bucket_id"],
         },
     )
 
@@ -163,7 +180,18 @@ def _run_tests(root: Path) -> list[str]:
     return [output]
 
 
-def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
+def _verification_id(task_id: str, commit_sha: str, evidence: list[str]) -> str:
+    payload = json.dumps(
+        {"task_id": task_id, "commit_sha": commit_sha, "evidence": evidence},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return "verify_" + hashlib.sha256(payload).hexdigest()[:32]
+
+
+def _github_work(
+    task: dict,
+) -> tuple[str, list[dict], str | None, list[str], str]:
     repository = _repository(task)
     tempdir = Path(tempfile.mkdtemp(prefix=f"amosclaud-{task['id']}-"))
     token = repository.pop("token")
@@ -189,23 +217,96 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
         )
         repo.git.checkout("-b", branch)
 
-        if task["mode"] in {"ask", "review", "monitor"}:
-            run = run_engineering_agent(tempdir, task["objective"], apply_changes=False)
-        elif task["mode"] == "test":
+        if task["mode"] == "test":
             test_output = _run_tests(tempdir)
-            return "Repository tests completed successfully.", [], None, test_output
-        else:
-            run = run_engineering_agent(tempdir, task["objective"], apply_changes=True)
-
-        evidence.extend(run.evidence)
-        evidence.extend(
-            f"{check['name']}: {'passed' if check.get('passed') else 'failed'}"
-            for check in run.checks
-        )
-        if any(not check.get("passed", False) for check in run.checks):
-            raise RuntimeError(
-                "Verification failed after applying the proposed changes"
+            evidence.extend(test_output)
+            commit_sha = repo.head.commit.hexsha
+            verification_id = _verification_id(task["id"], commit_sha, evidence)
+            return (
+                "Repository tests completed successfully.",
+                [],
+                None,
+                evidence,
+                verification_id,
             )
+
+        if task["mode"] in {"fix", "review", "monitor"}:
+            command = {
+                "fix": "fix",
+                "review": "review",
+                "monitor": "inspect",
+            }[task["mode"]]
+            result = AmosclaudBot(
+                repository["github_full_name"],
+                token,
+                tempdir,
+            ).execute_operation(
+                command,
+                task["objective"],
+                allow_writes=task["mode"] == "fix",
+            )
+            if str(result.get("status") or "").lower() in {
+                "failed",
+                "blocked",
+                "error",
+            }:
+                raise RuntimeError("Amosclaud Bot stopped the operation safely")
+            summary = str(
+                result.get("summary")
+                or result.get("message")
+                or f"Amosclaud Bot completed {command}."
+            )
+            evidence.extend(str(item) for item in result.get("evidence") or [])
+            checks = list(result.get("checks") or [])
+            evidence.extend(
+                f"{check.get('name', 'check')}: "
+                f"{check.get('status', 'unknown')}"
+                for check in checks
+            )
+            if any(
+                str(check.get("status") or "").lower()
+                in {"failed", "failure", "error"}
+                or check.get("passed") is False
+                for check in checks
+            ):
+                raise RuntimeError(
+                    "Doctor verification failed after the Bot operation"
+                )
+        else:
+            run = run_engineering_agent(
+                tempdir,
+                task["objective"],
+                apply_changes=task["mode"] in {"build", "deploy"},
+            )
+            summary = run.summary
+            evidence.extend(run.evidence)
+            evidence.extend(
+                f"{check['name']}: "
+                f"{'passed' if check.get('passed') else 'failed'}"
+                for check in run.checks
+            )
+            if any(not check.get("passed", False) for check in run.checks):
+                raise RuntimeError(
+                    "Verification failed after applying the proposed changes"
+                )
+
+        if task["mode"] in {"build", "deploy", "fix"} and repo.is_dirty(
+            untracked_files=True
+        ):
+            diff_check = subprocess.run(
+                ["git", "diff", "--check"],
+                cwd=tempdir,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if diff_check.returncode:
+                raise RuntimeError(
+                    "Doctor verification rejected whitespace or conflict markers"
+                )
+            evidence.append("Doctor: git diff --check passed.")
+            evidence.extend(_run_tests(tempdir))
 
         diff = repo.git.diff("--", ".")
         if diff:
@@ -244,6 +345,7 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
                     "base": base,
                     "body": (
                         "Requested through the Amosclaud Global Task Router.\n\n"
+                        f"Bucket: {task['bucket_id']}\n"
                         f"Task: {task['id']}\n\n"
                         "Verification evidence is available in the Amosclaud task log."
                     ),
@@ -254,7 +356,16 @@ def _github_work(task: dict) -> tuple[str, list[dict], str | None, list[str]]:
             pull_request_url = response.json()["html_url"]
             artifacts.append({"type": "pull_request", "url": pull_request_url})
 
-        return run.summary, artifacts, pull_request_url, evidence
+        commit_sha = repo.head.commit.hexsha
+        verification_id = _verification_id(task["id"], commit_sha, evidence)
+        artifacts.append(
+            {
+                "type": "verification",
+                "verification_id": verification_id,
+                "commit_sha": commit_sha,
+            }
+        )
+        return summary, artifacts, pull_request_url, evidence, verification_id
     except (GitCommandError, httpx.HTTPError, EngineeringAgentError) as exc:
         raise RuntimeError(
             f"Connected GitHub execution failed safely: {type(exc).__name__}"
@@ -270,9 +381,26 @@ def execute_cloud_task(task_id: str) -> None:
     try:
         if task["execution_target"] == "cloud" and not task.get("repository"):
             summary, evidence = _ask_only(task)
-            _finish(task_id, "completed", summary, evidence=evidence)
+            verification_id = _verification_id(
+                task_id,
+                "conversation",
+                evidence,
+            )
+            _finish(
+                task_id,
+                "completed",
+                summary,
+                evidence=evidence,
+                verification_id=verification_id,
+            )
             return
-        summary, artifacts, pull_request_url, evidence = _github_work(task)
+        (
+            summary,
+            artifacts,
+            pull_request_url,
+            evidence,
+            verification_id,
+        ) = _github_work(task)
         _finish(
             task_id,
             "completed",
@@ -280,6 +408,7 @@ def execute_cloud_task(task_id: str) -> None:
             artifacts=artifacts,
             pull_request_url=pull_request_url,
             evidence=evidence,
+            verification_id=verification_id,
         )
     except Exception as exc:
         _finish(

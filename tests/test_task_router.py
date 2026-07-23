@@ -102,11 +102,52 @@ def test_task_approval_runner_claim_and_completion(monkeypatch, tmp_path):
             "status": "completed",
             "summary": "Tests fixed and verified.",
             "evidence": ["pytest: passed"],
+            "verification_id": "verify_test_12345678",
             "pull_request_url": "https://github.com/owner/project/pull/1",
         },
     )
     assert completed.status_code == 200
     assert completed.json()["status"] == "completed"
+    assert completed.json()["verification_id"] == "verify_test_12345678"
+
+
+def test_completed_task_requires_verification_evidence(monkeypatch, tmp_path):
+    _account(monkeypatch, tmp_path)
+    runner = request(
+        "POST",
+        "/api/v1/runners",
+        json={"name": "Verification runner"},
+        cookies={"amos_session": "test"},
+    ).json()
+    created = request(
+        "POST",
+        "/api/v1/tasks",
+        json={
+            "objective": "Produce a verified result",
+            "mode": "fix",
+            "execution_target": "self_hosted",
+            "runner_id": runner["id"],
+            "require_approval": False,
+        },
+        cookies={"amos_session": "test"},
+    ).json()
+    request(
+        "POST",
+        f"/api/v1/runners/{runner['id']}/claim",
+        headers={"Authorization": f"Bearer {runner['runner_token']}"},
+    )
+    rejected = request(
+        "POST",
+        f"/api/v1/runners/{runner['id']}/tasks/{created['id']}/complete",
+        headers={"Authorization": f"Bearer {runner['runner_token']}"},
+        json={
+            "status": "completed",
+            "summary": "Claimed without verification.",
+            "evidence": [],
+        },
+    )
+    assert rejected.status_code == 422
+    assert "verification_id" in str(rejected.json()["detail"])
 
 
 def test_cancel_refunds_reserved_credits(monkeypatch, tmp_path):
