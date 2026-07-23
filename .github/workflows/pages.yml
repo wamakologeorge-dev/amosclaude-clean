@@ -64,7 +64,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v5
 
-      - name: Wait for and verify deployed GitHub Page
+      - name: Verify deployed GitHub Page
         env:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
