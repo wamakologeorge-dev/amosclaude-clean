@@ -30,7 +30,7 @@ if not any(getattr(route, "path", "") == "/agent-mission-control" for route in a
             "<main><h1>Amosclaud Autonomous Mission Control</h1>"
             "<p>This compatibility surface is connected to the canonical "
             "Amosclaud platform, Agent, Fixer, repository, and pipeline APIs.</p>"
-            "<p><a href='/autonomous'>Open Amosclaud Autonomous</a></p>"
+            "<p><a href='/cloud/agent'>Open Amosclaud Autonomous</a></p>"
             "</main></body></html>"
         )
 
