@@ -37,6 +37,8 @@ jobs:
       - name: Compile platform, CLI, and compatibility adapters
         run: |
           python -m compileall -q amoscloud_ai amosclaud_serverless app cli cmood shared src
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
       - name: Verify Amosclaud CLI contract
         env:
