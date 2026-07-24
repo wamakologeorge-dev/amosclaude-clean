@@ -306,6 +306,12 @@ def create_app() -> FastAPI:
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "repositories.html")
 
+    @app.get("/command-center", include_in_schema=False)
+    async def command_center_page(request: Request):
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "command-center.html")
+
     @app.get("/admin", include_in_schema=False)
     async def admin_page(request: Request):
         user = get_user_from_session(request.cookies.get("amos_session"))
