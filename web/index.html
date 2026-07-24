@@ -24,9 +24,18 @@
         <p>One real action command surface with one identity: Amosclaud-bot receives the request, Codex-style planning selects the workflow, Amosclaud Autonomous execution performs approved work, Amosclaud Doctor diagnoses the system, and Amosclaud Fixer verification proves the result.</p>
       </header>
 
+      <section class="agent-project-context" aria-label="Active Amosclaud project context">
+        <strong>Active project</strong>
+        <p><span>Workspace: </span><b id="active-workspace-name">Resolving…</b></p>
+        <p><span>Repository: </span><b id="active-repository-name">Select a repository</b></p>
+        <p><span>Branch: </span><b id="active-branch-name">main</b></p>
+        <p><span>Authorization: </span><b id="active-owner-authorization">Signed-in session</b></p>
+        <small>Every command automatically receives repository_id, selected workspace/repository, branch, and owner authorization from Amosclaud.com.</small>
+      </section>
+
       <section class="agent-command-contract" aria-label="Unified agent command path">
         <strong>Command path</strong>
-        <p>Command → inspect → diagnose → plan → act → test → fix → verify → report</p>
+        <p>Command → resolve context → authorize → inspect → diagnose → plan → act → test → fix → verify → report</p>
         <small>Repository writes require owner permission. Every completed action returns verification evidence and a final result.</small>
       </section>
 
@@ -70,6 +79,24 @@
   <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
   <script src="/static/unified-agent-runtime.js"></script>
+  <script>
+    (() => {
+      function renderContext(context = {}) {
+        const set = (id, value) => {
+          const node = document.getElementById(id);
+          if (node) node.textContent = value;
+        };
+        set('active-workspace-name', context.workspace_name || context.selected_workspace || 'Personal workspace');
+        set('active-repository-name', context.repository_name || context.selected_repository || 'Select a repository');
+        set('active-branch-name', context.branch || 'main');
+        set('active-owner-authorization', context.repository_role === 'owner' ? 'Owner verified' : 'Signed-in session');
+      }
+      window.addEventListener('amosclaud:project-context', (event) => renderContext(event.detail));
+      document.addEventListener('DOMContentLoaded', () => {
+        if (window.AmosclaudProjectContext) renderContext(window.AmosclaudProjectContext.get());
+      });
+    })();
+  </script>
   <script src="/static/amomodel-controls.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/single-autonomous-dock.js"></script>
