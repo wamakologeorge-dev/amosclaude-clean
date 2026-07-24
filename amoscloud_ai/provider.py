@@ -217,12 +217,23 @@ def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
 
 def status() -> dict[str, object]:
     from amoscloud_ai.model_network import network_status
+    from src.agent.model import load_model_config
+
+    selection = load_model_config()
     return {
         "provider": "amosclaud",
         "response_contract": "model_api_response.v1",
         "amosclaud_api_configured": bool(os.getenv("AMOSCLAUD_API_URL", "").strip() and os.getenv("AMOSCLAUD_API_KEY", "").strip()),
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
+        "openai_configured": bool(os.getenv("OPENAI_API_KEY", "").strip()),
+        "anthropic_configured": bool(os.getenv("ANTHROPIC_API_KEY", "").strip()),
         "model": os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1"),
+        "autonomous_selection": {
+            "provider": selection.provider,
+            "model": selection.model,
+            "configured": bool(selection.endpoint),
+            "external": selection.provider in {"openai", "anthropic"},
+        },
         "model_network": network_status(),
     }
