@@ -29,8 +29,26 @@
       document.querySelectorAll('[data-profile-avatar]').forEach(element => { element.textContent = initials(displayName); });
       document.querySelectorAll('[data-profile-role]').forEach(element => { element.textContent = user.is_admin ? 'Administrator' : 'Member'; });
       document.querySelectorAll('[data-admin-only]').forEach(element => { element.hidden = !user.is_admin; });
+      loadDomainStatus();
     } catch (error) {
       document.querySelectorAll('[data-profile-status]').forEach(element => { element.textContent = error.message; });
+    }
+  }
+
+  async function loadDomainStatus() {
+    const targets = document.querySelectorAll('[data-domain-status]');
+    if (!targets.length) return;
+    try {
+      const response = await fetch('/api/v1/account/domains', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Domain status unavailable');
+      const payload = await response.json();
+      const domains = payload.domains || [];
+      const text = domains.length
+        ? domains.map(d => `${d.domain} — ${d.https ? 'verified (HTTPS)' : 'HTTP only'}${d.active ? ' · active' : ''}`).join(' | ')
+        : 'No custom domains configured.';
+      targets.forEach(element => { element.textContent = text; });
+    } catch (error) {
+      targets.forEach(element => { element.textContent = error.message; });
     }
   }
 
