@@ -43,10 +43,19 @@ def _configured_domains() -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     for host in hosts:
+        host = host.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0].strip().lower()
         if host and host not in ("*", "localhost", "127.0.0.1", "testserver") and host not in seen:
             seen.add(host)
             ordered.append(host)
     return ordered
+
+
+def _is_admin(user) -> bool:
+    """Read is_admin from either a dict or a sqlite3.Row session user."""
+    try:
+        return bool(user["is_admin"])
+    except (KeyError, IndexError, TypeError):
+        return False
 
 
 @router.get("/settings")
@@ -70,7 +79,7 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
             "available": bool(_configured_domains()),
             "href": "/api/v1/account/domains",
         },
-        "is_admin": bool(user.get("is_admin")) if isinstance(user, dict) else False,
+        "is_admin": _is_admin(user),
     }
 
 
