@@ -50,6 +50,7 @@ amosclaud-tamper-server = "Amosclaud.api.path.byte.server.router.folder.cb.chapt
 include = [
   "Amosclaud*",
   "amoscloud_ai*",
+  "amosclaud_os*",
   "amosclaud_agent_sdk*",
   "amosclaud_language*",
   "amosclaud_model*",
