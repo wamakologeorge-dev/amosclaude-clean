@@ -156,7 +156,7 @@
     if (!command.actionRequested) return original;
     if (/\b(do not|don't|show only|explain only|in chat only)\b/i.test(original)) return original;
     const target = context.repository_name ? ` in the selected repository ${context.repository_name}` : '';
-    return `${original}. Execute this authorized engineering command now${target}. Make the requested real changes, use the signed-in owner's authorization, run the required checks, and verify the final result.`;
+    return `${original}. Execute this action now${target} as an authorized engineering command. Make the requested real changes, use the signed-in owner's authorization, run the required checks, and verify the final result.`;
   }
 
   window.AmosclaudProjectContext = {
