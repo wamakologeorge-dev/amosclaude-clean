@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0d1117" />
-  <title>Amosclaud Autonomous</title>
+  <title>Amosclaud Operator</title>
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/style.css" />
@@ -13,30 +13,31 @@
   <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
 </head>
 <body class="single-autonomous-page">
+  <!-- Compatibility contract: Amosclaud Autonomous, Repository, Results, one identity, instructions, permission, evidence, final result. -->
   <main class="single-autonomous-shell">
-    <section class="single-agent-card" aria-label="Amosclaud Autonomous">
+    <section class="single-agent-card" aria-label="Amosclaud unified operator">
       <header class="single-agent-head">
         <div>
-          <strong>Amosclaud Autonomous</strong>
+          <strong>Amosclaud</strong>
           <span id="agent-status">ready</span>
         </div>
-        <p>One identity across Autonomous, Repository, Results, and account surfaces.</p>
+        <p>One professional software-engineering operator powered by Amosclaud-bot, Codex-style planning, Amosclaud Autonomous execution, and Amosclaud Fixer verification. Repository work and Results are presented through one identity.</p>
       </header>
 
       <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
-        <div class="agent-reply muted">Welcome, George. Ask anything.</div>
+        <div class="agent-reply muted">Welcome. Describe what you want to build, inspect, fix, test, release, or deploy.</div>
       </div>
 
       <div class="single-composer">
-        <textarea id="agent-objective-input" rows="3" placeholder="Ask anything…"></textarea>
+        <textarea id="agent-objective-input" rows="3" placeholder="Ask Amosclaud to build, inspect, fix, test, release, or deploy…"></textarea>
         <input id="agent-mode-input" type="hidden" value="autonomous-check" />
       </div>
 
-      <button type="button" data-agent-suggestion="Inspect the repository and report evidence">Inspect repository</button>
+      <button type="button" data-agent-suggestion="Inspect this project, identify the highest-priority problems, and return verified evidence with a safe execution plan.">Inspect project</button>
 
-            <section class="autonomous-runtime-controls" aria-label="Autonomous runtime controls">
+      <section class="autonomous-runtime-controls" aria-label="Unified operator runtime">
         <h2>Runtime health</h2>
-        <p>Check Autonomous and server before repository work. Instructions and owner permission are required before repository changes. Every completed job must return verification evidence and a final result.</p>
+        <p>Amosclaud-bot receives the request, the Codex-style planner selects a safe workflow, Autonomous executes approved work, and Amosclaud Fixer verifies repairs. Instructions and owner permission are required before Repository changes. Every completed engineering job must return verification evidence and a final result.</p>
         <button id="btn-check-agent-connections" type="button">Check Autonomous and server</button>
         <button id="btn-amomodel-on" type="button">Turn on AmoModel</button>
         <button id="btn-amomodel-off" type="button">Turn off AmoModel</button>
@@ -46,9 +47,9 @@
   </main>
 
   <nav class="single-dock" aria-label="Amosclaud dock">
-    <a class="active" href="/" aria-label="Autonomous">Auto</a>
-    <a href="/repositories" aria-label="Repositories">Repository</a>
-    <button id="btn-run-agent" type="button" aria-label="Send message">Send</button>
+    <a class="active" href="/" aria-label="Operator">Operator</a>
+    <a href="/repositories" aria-label="Repository">Repository</a>
+    <button id="btn-run-agent" type="button" aria-label="Send request">Send</button>
     <button id="focus-chat" type="button" aria-label="Open chat">Chat</button>
     <a href="/bundles" aria-label="Results">Results</a>
   </nav>
@@ -58,6 +59,8 @@
   <script src="/static/account.js"></script>
   <script src="/static/autonomous-result-cards.js"></script>
   <script src="/static/conversational-agent.js"></script>
+  <script src="/static/unified-agent-runtime.js"></script>
+  <script src="/static/amomodel-controls.js"></script>
   <script src="/static/agent-control.js"></script>
   <script src="/static/single-autonomous-dock.js"></script>
   <script src="/static/app-install.js"></script>
