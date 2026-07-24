@@ -6,6 +6,9 @@
   <title>Repository · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/workspace.css" />
+  <style>
+    .ws-settings-summary button{width:100%;padding:12px;text-align:left;border:1px solid #30363d;border-radius:9px;background:#0b1119;color:#e6edf3;cursor:pointer}.ws-settings-summary button:hover{background:#161b22;border-color:#58a6ff}.ws-settings-summary button strong,.ws-settings-summary button span{display:block}.ws-settings-summary button span{margin-top:5px;color:#8b949e;font-size:.8rem;line-height:1.45}.ws-tool-form{display:flex;gap:8px;flex-wrap:wrap}.ws-tool-form button,.ws-tool-list button{border:1px solid #30363d;border-radius:7px;background:#21262d;color:#e6edf3;padding:9px 12px;font-weight:700;cursor:pointer}.ws-tool-list{border:1px solid #30363d;border-radius:10px;background:#0b1119;overflow:hidden}.ws-tool-item{padding:14px 16px;border-bottom:1px solid #21262d}.ws-tool-item:last-child{border-bottom:0}.ws-tool-item strong,.ws-tool-item span{display:block}.ws-tool-item span{margin-top:5px;color:#8b949e;font-size:.82rem}.ws-tool-item-actions{margin-top:10px}.ws-agent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ws-agent-grid button{min-height:54px}.ws-agent-output{margin-top:14px;white-space:pre-wrap;min-height:120px;padding:14px;border:1px solid #30363d;border-radius:10px;background:#050a10;color:#c9d1d9}@media(max-width:700px){.ws-agent-grid{grid-template-columns:1fr 1fr}.ws-tool-form{display:grid;grid-template-columns:1fr 1fr}.ws-tool-form button{min-height:52px}}
+  </style>
 </head>
 <body>
   <header class="ws-topbar">
@@ -19,17 +22,27 @@
   <aside id="account-drawer" class="ws-account-drawer" hidden aria-label="Profile and settings">
     <section class="ws-account-profile"><div class="ws-profile-avatar" data-profile-avatar>A</div><div><strong data-profile-name>Loading profile…</strong><span data-profile-email></span><span data-profile-role></span></div></section>
     <nav><a href="/">Home</a><a class="active" href="/repositories">Repositories</a><a href="/feed">Public results</a><a href="/api/v1/github/connect">Connect GitHub</a></nav>
-    <section class="ws-settings-summary"><h2>Repository settings</h2><div><strong>Visibility and access</strong><span>Shown from the repository’s real backend record.</span></div><div><strong>Branches and commits</strong><span>Changes are committed manually to the selected branch.</span></div><div><strong>Pull requests and issues</strong><span>Unavailable here until verified repository routes are connected.</span></div><div><strong>Autonomous execution</strong><span>Not shown in Repository because real execution is not connected.</span></div></section>
+    <section class="ws-settings-summary">
+      <h2>Repository settings</h2>
+      <button type="button" data-open-tab="code"><strong>Visibility and access</strong><span>View this repository’s real backend record and source files.</span></button>
+      <button type="button" data-open-tab="commits"><strong>Branches and commits</strong><span>Open real branch controls and commit history.</span></button>
+      <button type="button" data-open-tab="pull-requests"><strong>Pull requests and issues</strong><span>Create, review, and merge native Amosclaud work items.</span></button>
+      <button type="button" data-open-tab="autonomous"><strong>Autonomous execution</strong><span>Run build, test, review, or deployment operations.</span></button>
+    </section>
     <button data-account-logout class="ws-drawer-signout" type="button">Sign out</button>
   </aside>
 
-  <nav class="ws-tabs" aria-label="Repository navigation"><button class="ws-tab active" data-tab="code" type="button">Code</button><button class="ws-tab" data-tab="commits" type="button">Commits</button></nav>
+  <nav class="ws-tabs" aria-label="Repository navigation">
+    <button class="ws-tab active" data-tab="code" type="button">Code</button>
+    <button class="ws-tab" data-tab="commits" type="button">Commits</button>
+    <button class="ws-tab" data-tab="issues" type="button">Issues</button>
+    <button class="ws-tab" data-tab="pull-requests" type="button">Pull requests</button>
+    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous</button>
+  </nav>
 
   <main class="ws-main">
     <section id="ws-not-found" class="ws-editor-empty" hidden>
-      <strong>Repository not found</strong>
-      <span>This repository does not exist, was deleted, or your account does not have access.</span>
-      <a class="btn-primary" href="/repositories">Back to repositories</a>
+      <strong>Repository not found</strong><span>This repository does not exist, was deleted, or your account does not have access.</span><a class="btn-primary" href="/repositories">Back to repositories</a>
     </section>
     <section class="ws-panel active" data-panel="code">
       <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" /><button id="ws-new-folder" type="button">New folder</button><button id="ws-new-file" type="button">New file</button></div></div>
@@ -40,27 +53,18 @@
       </div>
     </section>
     <section class="ws-panel" data-panel="commits"><div class="ws-section-head"><div><h2>Commit history</h2><p>Real commits recorded on the selected branch.</p></div></div><div id="ws-commits" class="ws-commit-list">Loading…</div></section>
+    <section class="ws-panel" data-panel="issues"><div class="ws-section-head"><div><h2>Issues</h2><p>Native Amosclaud repository issues.</p></div><div class="ws-tool-form"><button id="ws-new-issue" type="button">New issue</button><button id="ws-refresh-issues" type="button">Refresh</button></div></div><div id="ws-issues" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load issues.</div></div></section>
+    <section class="ws-panel" data-panel="pull-requests"><div class="ws-section-head"><div><h2>Pull requests</h2><p>Create and merge changes between repository branches.</p></div><div class="ws-tool-form"><button id="ws-new-pr" type="button">New pull request</button><button id="ws-refresh-prs" type="button">Refresh</button></div></div><div id="ws-pull-requests" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load pull requests.</div></div></section>
+    <section class="ws-panel" data-panel="autonomous"><div class="ws-section-head"><div><h2>Autonomous execution</h2><p>Run real repository operations through the connected agent route.</p></div></div><div class="ws-agent-grid"><button id="ws-agent-build" type="button">Build</button><button id="ws-agent-test" type="button">Test</button><button id="ws-agent-review" type="button">Review</button><button id="ws-agent-deploy" type="button">Deploy</button></div><pre id="ws-agent-output" class="ws-agent-output">Choose an operation.</pre></section>
   </main>
 
   <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
-  <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script src="/static/workspace.js"></script><script src="/static/workspace-tools.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
   <script>
     (() => {
-      const status = document.getElementById('ws-status');
-      const notFound = document.getElementById('ws-not-found');
-      const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file');
-      const panels = document.querySelectorAll('.ws-panel');
-      const tabs = document.querySelector('.ws-tabs');
-      const showNotFound = () => {
-        if (!/repository not found/i.test(status?.textContent || '')) return;
-        document.getElementById('ws-repo-meta').textContent = 'Unavailable';
-        controls.forEach(control => { control.disabled = true; });
-        panels.forEach(panel => { panel.hidden = true; });
-        if (tabs) tabs.hidden = true;
-        if (notFound) notFound.hidden = false;
-      };
-      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true });
-      showNotFound();
+      const status = document.getElementById('ws-status'); const notFound = document.getElementById('ws-not-found'); const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file'); const panels = document.querySelectorAll('.ws-panel'); const tabs = document.querySelector('.ws-tabs');
+      const showNotFound = () => { if (!/repository not found/i.test(status?.textContent || '')) return; document.getElementById('ws-repo-meta').textContent = 'Unavailable'; controls.forEach(control => { control.disabled = true; }); panels.forEach(panel => { panel.hidden = true; }); if (tabs) tabs.hidden = true; if (notFound) notFound.hidden = false; };
+      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true }); showNotFound();
     })();
   </script>
 </body>
