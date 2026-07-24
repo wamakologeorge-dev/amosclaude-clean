@@ -15,7 +15,7 @@
     <button id="account-menu-button" class="ws-menu-button" type="button" aria-label="Open profile and settings" aria-expanded="false">☰</button>
     <a href="/repositories" class="ws-brand" aria-label="Back to repositories">A</a>
     <div class="ws-repo-identity"><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
-    <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch"></select><button id="ws-new-branch" type="button">New branch</button></div>
+    <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch" disabled></select><button id="ws-new-branch" type="button" disabled>New branch</button></div>
   </header>
 
   <div id="account-drawer-backdrop" class="ws-account-backdrop" hidden></div>
@@ -45,7 +45,7 @@
       <strong>Repository not found</strong><span>This repository does not exist, was deleted, or your account does not have access.</span><a class="btn-primary" href="/repositories">Back to repositories</a>
     </section>
     <section class="ws-panel active" data-panel="code">
-      <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" /><button id="ws-new-folder" type="button">New folder</button><button id="ws-new-file" type="button">New file</button></div></div>
+      <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" disabled /><button id="ws-new-folder" type="button" disabled>New folder</button><button id="ws-new-file" type="button" disabled>New file</button></div></div>
       <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
       <div class="ws-code-grid">
         <section class="ws-browser" aria-label="Repository files"><div class="ws-browser-head"><strong>Name</strong><span>Size</span></div><div id="ws-tree" class="ws-tree">Loading files…</div></section>
@@ -59,12 +59,43 @@
   </main>
 
   <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
-  <script src="/static/workspace.js"></script><script src="/static/workspace-tools.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
   <script>
     (() => {
-      const status = document.getElementById('ws-status'); const notFound = document.getElementById('ws-not-found'); const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file'); const panels = document.querySelectorAll('.ws-panel'); const tabs = document.querySelector('.ws-tabs');
-      const showNotFound = () => { if (!/repository not found/i.test(status?.textContent || '')) return; document.getElementById('ws-repo-meta').textContent = 'Unavailable'; controls.forEach(control => { control.disabled = true; }); panels.forEach(panel => { panel.hidden = true; }); if (tabs) tabs.hidden = true; if (notFound) notFound.hidden = false; };
-      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true }); showNotFound();
+      const parts = location.pathname.split('/').filter(Boolean);
+      const repositoryId = parts.length === 2 && parts[0] === 'workspace' ? parts[1] : '';
+      if (!/^\d+$/.test(repositoryId) || Number(repositoryId) < 1) {
+        sessionStorage.setItem('amosclaud-workspace-error', 'Invalid repository link');
+        location.replace('/repositories');
+      }
+    })();
+  </script>
+  <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script>
+    (() => {
+      const status = document.getElementById('ws-status');
+      const notFound = document.getElementById('ws-not-found');
+      const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file');
+      const panels = document.querySelectorAll('.ws-panel');
+      const tabs = document.querySelector('.ws-tabs');
+      let loaded = false;
+
+      const showNotFound = () => {
+        const message = status?.textContent || '';
+        if (/repository not found|does not exist|not have access|invalid repository/i.test(message)) {
+          document.getElementById('ws-repo-meta').textContent = 'Unavailable';
+          controls.forEach(control => { control.disabled = true; });
+          panels.forEach(panel => { panel.hidden = true; });
+          if (tabs) tabs.hidden = true;
+          if (notFound) notFound.hidden = false;
+          return;
+        }
+        if (!loaded && message && !/loading/i.test(message)) {
+          loaded = true;
+          controls.forEach(control => { control.disabled = false; });
+        }
+      };
+      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true });
+      showNotFound();
     })();
   </script>
 </body>
