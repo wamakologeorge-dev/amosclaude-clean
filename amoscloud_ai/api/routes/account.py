@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import sqlite3
 from pathlib import Path
 
-from fastapi import APIRouter, Cookie, HTTPException, Response
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import (
@@ -20,6 +22,84 @@ from amoscloud_ai.api.routes.repositories import REPOSITORY_ROOT
 from amoscloud_ai.api.routes.storage import STORAGE_ROOT
 
 router = APIRouter(prefix="/account", tags=["account"])
+
+
+def _configured_domains() -> list[str]:
+    """Read the domains this deployment is configured to serve."""
+    raw = os.getenv("ALLOWED_HOSTS", "").strip()
+    hosts: list[str] = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                hosts = [str(item).strip() for item in parsed]
+        except (ValueError, TypeError):
+            hosts = [part.strip() for part in raw.split(",")]
+    public_url = os.getenv("AMOSCLAUD_PUBLIC_URL", "").strip()
+    if public_url:
+        host = public_url.split("://", 1)[-1].split("/", 1)[0]
+        if host:
+            hosts.append(host)
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for host in hosts:
+        host = host.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0].strip().lower()
+        if host and host not in ("*", "localhost", "127.0.0.1", "testserver") and host not in seen:
+            seen.add(host)
+            ordered.append(host)
+    return ordered
+
+
+def _is_admin(user) -> bool:
+    """Read is_admin from either a dict or a sqlite3.Row session user."""
+    try:
+        return bool(user["is_admin"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+@router.get("/settings")
+def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
+    """Report which account tools are available on this deployment."""
+    user = get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    billing_ready = bool(os.getenv("STRIPE_SECRET_KEY"))
+    github_ready = bool(os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET"))
+    return {
+        "profile": {"available": True},
+        "github_connection": {"available": github_ready, "href": "/api/v1/github/connect"},
+        "api_keys": {
+            "available": True,
+            "admin_only": True,
+            "href": "/admin/service-keys",
+        },
+        "billing": {"available": billing_ready, "href": "/plans"},
+        "domain_verification": {
+            "available": bool(_configured_domains()),
+            "href": "/api/v1/account/domains",
+        },
+        "is_admin": _is_admin(user),
+    }
+
+
+@router.get("/domains")
+def account_domains(request: Request, amos_session: str | None = Cookie(default=None)) -> dict:
+    """Domain verification status for this deployment."""
+    user = get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    current_host = (request.headers.get("host") or request.url.netloc or "").split(":", 1)[0]
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    domains = [
+        {
+            "domain": host,
+            "active": host == current_host,
+            "https": forwarded_proto == "https",
+        }
+        for host in _configured_domains()
+    ]
+    return {"domains": domains, "current_host": current_host}
 
 
 class AccountDeleteRequest(BaseModel):
