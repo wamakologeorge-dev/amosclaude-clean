@@ -1,6 +1,7 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const CONTEXT_KEY = 'amosclaud.activeProjectContext';
+  const NATIVE_EXECUTION_ENDPOINT = '/api/v1/core/os/execute';
 
   function isAgentRun(input) {
     const url = typeof input === 'string' ? input : input?.url || '';
@@ -81,7 +82,7 @@
         }),
       });
     } catch (_error) {
-      // Local context remains available when the backend is temporarily unreachable.
+      // The server remains authoritative; this only preserves the last UI selection.
     }
   }
 
@@ -120,43 +121,69 @@
     const text = String(objective || '').toLowerCase();
     const repairRequested = /\b(fix|repair|broken|failure|failing|error|bug|regression)\b/.test(text);
     const diagnoseRequested = /\b(inspect|diagnose|doctor|health|audit|analyze|analyse|investigate)\b/.test(text);
-    const testRequested = /\b(test|ci|verify|check|lint|build check|big ci)\b/.test(text);
+    const testRequested = /\b(run|execute|start)?\s*(test|tests|ci|verify|lint|build check|big ci)\b/.test(text);
     const releaseRequested = /\b(deploy|publish|release|ship|package)\b/.test(text);
-    const issueRequested = /\b(issue|issues|ticket|tickets)\b/.test(text);
-    const writeRequested = /\b(build|create|implement|change|edit|write|move|rename|delete|commit|merge|branch|file|folder|repository|issue)\b/.test(text);
-    const actionRequested = repairRequested || diagnoseRequested || testRequested || releaseRequested || writeRequested;
+    const issueRequested = /\b(create|open|add|file)\b.*\b(issue|ticket)\b/.test(text);
+    const repositoryCreateRequested = /\b(create|initialize|start|make)\b.*\brepository\b/.test(text);
+    const writeRequested = /\b(build|implement|change|edit|write|move|rename|delete|commit|merge|add|remove)\b/.test(text);
+    const explicitNoAction = /\b(do not|don't|show only|explain only|in chat only)\b/.test(text);
+    const actionRequested = !explicitNoAction && (
+      repairRequested || diagnoseRequested || testRequested || releaseRequested ||
+      issueRequested || repositoryCreateRequested || writeRequested
+    );
 
     let mode = 'autonomous-check';
     if (repairRequested) mode = 'fix';
     else if (releaseRequested) mode = 'deploy';
     else if (testRequested) mode = 'test';
-    else if (writeRequested) mode = 'build';
+    else if (issueRequested || repositoryCreateRequested || writeRequested) mode = 'build';
     else if (diagnoseRequested) mode = 'inspect';
 
-    return { mode, actionRequested, repairRequested, diagnoseRequested, testRequested, releaseRequested, issueRequested, writeRequested };
+    return {
+      mode,
+      actionRequested,
+      repairRequested,
+      diagnoseRequested,
+      testRequested,
+      releaseRequested,
+      issueRequested,
+      repositoryCreateRequested,
+      writeRequested,
+    };
   }
 
   function issueDetails(objective, command) {
     if (!command.issueRequested) return {};
     const cleaned = String(objective || '')
       .replace(/^@?amosclaud\s*/i, '')
-      .replace(/\b(create|open|add|new)\b/gi, '')
-      .replace(/\b(an?|the)?\s*issues?\b/gi, '')
+      .replace(/\b(create|open|add|file|new)\b/gi, '')
+      .replace(/\b(an?|the)?\s*(issue|ticket)s?\b/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
     return {
-      issue_title: cleaned ? cleaned.slice(0, 120) : null,
+      issue_title: cleaned ? cleaned.slice(0, 200) : null,
       issue_description: String(objective || '').trim(),
       operation: 'create_issue',
+    };
+  }
+
+  function repositoryDetails(objective, command) {
+    if (!command.repositoryCreateRequested) return {};
+    const match = String(objective || '').match(
+      /\brepository(?:\s+(?:named|called))?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9._-]{0,99})/i,
+    );
+    return {
+      operation: 'create_repository',
+      new_repository_name: match?.[1] || null,
+      repository_description: String(objective || '').trim(),
     };
   }
 
   function authorizeObjective(objective, command, context) {
     const original = String(objective || '').trim();
     if (!command.actionRequested) return original;
-    if (/\b(do not|don't|show only|explain only|in chat only)\b/i.test(original)) return original;
     const target = context.repository_name ? ` in the selected repository ${context.repository_name}` : '';
-    return `${original}. Execute this action now${target} as an authorized engineering command. Make the requested real changes, use the signed-in owner's authorization, run the required checks, and verify the final result.`;
+    return `${original}. Execute this action now${target} as an authorized engineering command. Make only real changes, run actual checks, and return exact evidence.`;
   }
 
   window.AmosclaudProjectContext = {
@@ -179,12 +206,13 @@
       const payload = JSON.parse(init.body);
       const originalObjective = String(payload.objective || '').trim();
       const command = classifyCommand(originalObjective);
+      if (!command.actionRequested) return nativeFetch(input, init);
+
       const [context, operatorMemory] = await Promise.all([
         resolveProjectContext(),
         loadOperatorMemory(),
       ]);
       const {
-        actionRequested,
         repairRequested,
         diagnoseRequested,
         testRequested,
@@ -198,31 +226,25 @@
         ...(payload.metadata || {}),
         ...operatorMemory,
         ...context,
+        ...repositoryDetails(originalObjective, command),
         ...issueDetails(originalObjective, command),
         original_objective: originalObjective,
-        original_follow_up: payload.objective,
-        source: 'amosclaud-platform-unified-operator',
-        operator: 'amosclaud-bot',
-        planner: 'codex-style',
-        execution_engine: 'amosclaud-autonomous',
-        doctor_engine: 'amosclaud-doctor',
-        repair_engine: 'amosclaud-fixer',
-        command_pipeline: ['receive', 'resolve-context', 'remember-plan', 'authorize', 'inspect', 'diagnose', 'plan', 'act', 'test', 'fix', 'verify', 'report'],
-        unified_agent_identity: true,
-        autonomous_runtime: true,
-        autonomous_mode_selection: true,
-        use_agent: actionRequested,
-        apply_changes: actionRequested,
+        source: 'amosclaud-os-command-surface',
+        execution_contract: 'native-or-truthful-blocker',
+        use_agent: true,
+        apply_changes: true,
         run_doctor: diagnoseRequested || repairRequested || testRequested,
         run_tests: testRequested || repairRequested || writeRequested,
         run_fixer: repairRequested,
         require_owner_permission: writeRequested || repairRequested || releaseRequested,
         require_verification: true,
         return_evidence: true,
-        bypass_explain_or_edit_loop: actionRequested,
       };
 
-      return nativeFetch(input, { ...init, body: JSON.stringify(payload) });
+      return nativeFetch(NATIVE_EXECUTION_ENDPOINT, {
+        ...init,
+        body: JSON.stringify(payload),
+      });
     } catch (_error) {
       return nativeFetch(input, init);
     }
