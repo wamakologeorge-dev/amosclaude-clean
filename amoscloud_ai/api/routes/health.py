@@ -78,8 +78,12 @@ async def readiness() -> dict[str, object]:
             and (state.get("openai_configured") or state.get("anthropic_configured"))
         )
     )
+    # Configuration alone is not readiness: the cached candidate preflight
+    # tells us whether any model route is actually reachable right now.
+    runtime = state.get("model_runtime") or {}
+    reachable = runtime.get("reachable") if isinstance(runtime, dict) else None
     return {
-        "status": "ready" if configured else "degraded",
+        "status": "ready" if configured and reachable is not False else "degraded",
         "web": {"ready": True},
         "autonomous_api": {
             "ready": True,
