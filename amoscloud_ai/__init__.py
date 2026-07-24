@@ -56,9 +56,10 @@ __version__ = "1.0.1"
 __author__ = "Amosclaud Team"
 __email__ = "support@amosclaud.com"
 
-# Importing the operator registers /api/v1/operator/requests on the shared task
-# router before the FastAPI application mounts that router.
+# Register the single operator and the project/issue/result routes on the shared
+# task router before the FastAPI application mounts that router.
 from amoscloud_ai import operator as _operator  # noqa: E402,F401
+from amoscloud_ai import project_platform as _project_platform  # noqa: E402,F401
 
 __all__ = [
     "CANONICAL_AUTONOMOUS_PATH",
