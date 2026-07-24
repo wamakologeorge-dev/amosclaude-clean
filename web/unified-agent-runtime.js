@@ -6,6 +6,25 @@
     return url.includes('/api/v1/agent/run');
   }
 
+  function classifyCommand(objective) {
+    const text = String(objective || '').toLowerCase();
+    const repairRequested = /\b(fix|repair|broken|failure|failing|error|bug|regression)\b/.test(text);
+    const diagnoseRequested = /\b(inspect|diagnose|doctor|health|audit|analyze|analyse|investigate)\b/.test(text);
+    const testRequested = /\b(test|ci|verify|check|lint|build check|big ci)\b/.test(text);
+    const releaseRequested = /\b(deploy|publish|release|ship|package)\b/.test(text);
+    const writeRequested = /\b(build|create|implement|change|edit|write|move|rename|delete|commit|merge|branch|file|folder|repository)\b/.test(text);
+    const actionRequested = repairRequested || diagnoseRequested || testRequested || releaseRequested || writeRequested;
+
+    let mode = 'autonomous-check';
+    if (repairRequested) mode = 'fix';
+    else if (releaseRequested) mode = 'deploy';
+    else if (testRequested) mode = 'test';
+    else if (writeRequested) mode = 'build';
+    else if (diagnoseRequested) mode = 'inspect';
+
+    return { mode, actionRequested, repairRequested, diagnoseRequested, testRequested, releaseRequested, writeRequested };
+  }
+
   window.fetch = async (input, init = {}) => {
     if (!isAgentRun(input) || String(init.method || 'GET').toUpperCase() !== 'POST' || !init.body) {
       return nativeFetch(input, init);
@@ -13,21 +32,25 @@
 
     try {
       const payload = JSON.parse(init.body);
-      const objective = String(payload.objective || '').toLowerCase();
-      const actionRequested = /\b(build|create|fix|repair|change|edit|test|run|deploy|publish|release|commit|implement)\b/.test(objective);
-      const repairRequested = /\b(fix|repair|error|failure|broken|failing)\b/.test(objective);
-
-      payload.mode = repairRequested ? 'fix' : actionRequested ? 'build' : (payload.mode || 'autonomous-check');
+      const command = classifyCommand(payload.objective);
+      payload.mode = command.mode;
       payload.metadata = {
         ...(payload.metadata || {}),
-        source: 'amosclaud-platform-unified-operator',
+        source: 'amosclaud-platform-command-agent',
         operator: 'amosclaud-bot',
-        planner: 'codex-style',
+        planner: 'amosclaud-autonomous',
+        doctor_engine: 'amosclaud-doctor',
         repair_engine: 'amosclaud-fixer',
+        command_pipeline: ['receive', 'inspect', 'diagnose', 'plan', 'act', 'test', 'fix', 'verify', 'report'],
+        unified_agent_identity: true,
         autonomous_runtime: true,
         autonomous_mode_selection: true,
-        use_agent: actionRequested,
-        apply_changes: actionRequested,
+        use_agent: command.actionRequested,
+        apply_changes: command.writeRequested || command.repairRequested || command.releaseRequested,
+        run_doctor: command.diagnoseRequested || command.repairRequested || command.testRequested,
+        run_tests: command.testRequested || command.repairRequested || command.writeRequested,
+        run_fixer: command.repairRequested,
+        require_owner_permission: command.writeRequested || command.repairRequested || command.releaseRequested,
         require_verification: true,
         return_evidence: true,
       };
