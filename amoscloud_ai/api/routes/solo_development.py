@@ -133,7 +133,8 @@ def _pr_dict(row: sqlite3.Row) -> dict:
 def create_issue(repository_id: int, body: IssueCreate, user: sqlite3.Row = Depends(_current_user)) -> dict:
     with _db() as db:
         _ensure_tables(db)
-        _access(db, repository_id, user["id"])
+        access = _access(db, repository_id, user["id"])
+        _require_write(access)
         now = _now()
         cursor = db.execute(
             "INSERT INTO native_issues(repository_id,author_id,title,body,labels_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
