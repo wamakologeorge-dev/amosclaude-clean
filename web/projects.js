@@ -6,7 +6,13 @@
     const response = await fetch(path, {credentials:'same-origin', ...options, headers:{...(options.body?{'Content-Type':'application/json'}:{}), ...(options.headers||{})}});
     if (response.status === 401) { location.assign('/login'); throw new Error('Sign in required'); }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+    if (!response.ok) {
+      const detail = data.detail || data;
+      if (response.status === 402 && detail && detail.code === 'agent_tokens_required') {
+        throw new Error('Amosclaud-bot execution is not enabled for this account yet. The issue was not created. An administrator can enable execution access from API Access.');
+      }
+      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    }
     return data;
   }
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
