@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>Settings · Amosclaud</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/repositories.css" />
+  <link rel="stylesheet" href="/static/repositories-page.css" />
+</head>
+<body class="repo-page-body">
+  <header class="repo-topbar">
+    <a class="repo-brand" href="/" aria-label="Home">A</a>
+    <div><strong>Account settings</strong><div id="settings-user" class="muted">Loading account…</div></div>
+    <a class="btn-ghost compact-button" href="/repositories">Repositories</a>
+  </header>
+  <main class="repo-shell" style="display:block;max-width:960px;margin:0 auto;padding:24px;">
+    <section class="repo-main">
+      <div class="repo-page-heading"><div><h1>Profile and account</h1><p>Live controls connected to your authenticated Amosclaud account.</p></div></div>
+      <div id="settings-message" class="repository-empty" hidden></div>
+      <div class="github-repository-list">
+        <article id="profile" class="repository-card"><h2>Profile</h2><p id="profile-summary">Loading…</p><a class="repo-new-button" href="/repositories">View account workspace</a></article>
+        <article id="visibility" class="repository-card"><h2>Repository visibility</h2><p>Choose public or private when creating a real repository.</p><a class="repo-new-button" href="/repositories">Create or manage repositories</a></article>
+        <article id="github" class="repository-card"><h2>GitHub connection</h2><p id="github-status">Checking connection availability…</p><a id="github-action" class="repo-new-button" href="/api/v1/github/connect">Connect GitHub</a></article>
+        <article id="api-keys" class="repository-card"><h2>API and service keys</h2><p id="keys-status">Checking access…</p><a id="keys-action" class="repo-new-button" href="/admin/service-keys">Open service keys</a></article>
+        <article id="billing" class="repository-card"><h2>Credits and billing</h2><p id="billing-status">Checking billing availability…</p><a id="billing-action" class="repo-new-button" href="/plans">Open plans and billing</a></article>
+        <article id="domains" class="repository-card"><h2>Domain verification</h2><p id="domain-status">Checking domain status…</p><button id="refresh-domains" class="repo-new-button" type="button">Refresh domain status</button></article>
+        <article id="admin" class="repository-card" hidden><h2>Admin Hub</h2><p>Manage platform-level operations and services.</p><a class="repo-new-button" href="/admin">Open Admin Hub</a></article>
+      </div>
+    </section>
+  </main>
+  <script src="/static/settings.js"></script>
+</body>
+</html>
