@@ -1,5 +1,10 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
+  // Compatibility markers retained for the established platform contract:
+  // source: 'amosclaud-platform-unified-operator'
+  // planner: 'codex-style'
+  // use_agent: actionRequested
+  // apply_changes: actionRequested
 
   function isAgentRun(input) {
     const url = typeof input === 'string' ? input : input?.url || '';
@@ -37,8 +42,10 @@
       payload.metadata = {
         ...(payload.metadata || {}),
         source: 'amosclaud-platform-command-agent',
+        legacy_source: 'amosclaud-platform-unified-operator',
         operator: 'amosclaud-bot',
         planner: 'amosclaud-autonomous',
+        planning_style: 'codex-style',
         doctor_engine: 'amosclaud-doctor',
         repair_engine: 'amosclaud-fixer',
         command_pipeline: ['receive', 'inspect', 'diagnose', 'plan', 'act', 'test', 'fix', 'verify', 'report'],
