@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes import auth as auth_routes
@@ -14,6 +14,9 @@ from amoscloud_ai.core.access import AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
 from amoscloud_ai.core.vault import AmosclaudVault, VaultError
 from amoscloud_ai.logger import log
+from amosclaud_os.agent.memory import FocusUpdate, OperatorMemoryService
+from amosclaud_os.kernel.runtime import AmosclaudOSRuntime
+from amosclaud_os.workspace.context import ProjectContextSelection, ProjectContextService
 
 router = APIRouter(prefix="/core", tags=["amosclaud-core"])
 
@@ -85,7 +88,9 @@ def owner_identity(user) -> dict:
     founder_match = bool(user["is_admin"]) and email in FOUNDER_OWNER_EMAILS
     env_match = bool(user["is_admin"]) and email in _configured_owner_emails()
     with _owner_db() as db:
-        row = db.execute("SELECT user_id,claimed_at,recognition_source FROM platform_owner WHERE singleton=1").fetchone()
+        row = db.execute(
+            "SELECT user_id,claimed_at,recognition_source FROM platform_owner WHERE singleton=1"
+        ).fetchone()
     db_match = bool(row and int(row["user_id"]) == int(user["id"]))
     recognized = bool(founder_match or env_match or db_match)
     source = (
@@ -111,8 +116,18 @@ def owner_identity(user) -> dict:
 def _owner_user(admin=Depends(_admin_user)):
     identity = owner_identity(admin)
     if not identity["recognized"]:
-        raise HTTPException(status_code=403, detail="Amosclaud owner access required. Open /owner to verify the owner identity.")
+        raise HTTPException(
+            status_code=403,
+            detail="Amosclaud owner access required. Open /owner to verify the owner identity.",
+        )
     return admin
+
+
+def _signed_in_user(amos_session: str | None = Cookie(default=None)):
+    user = auth_routes.get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in to Amosclaud.com")
+    return user
 
 
 @router.get("/owner/status")
@@ -125,8 +140,24 @@ def owner_status(admin=Depends(_admin_user)) -> dict:
     return {
         **identity,
         "claim_available": existing is None and not identity["recognized"],
-        "persistent_owner": ({"user_id": int(existing["user_id"]), "name": existing["name"], "email": existing["email"], "claimed_at": existing["claimed_at"], "source": existing["recognition_source"]} if existing else None),
-        "autonomous_recognition": "founder-owner" if identity["source"] == "founder-account" else "owner" if identity["recognized"] else "administrator-only",
+        "persistent_owner": (
+            {
+                "user_id": int(existing["user_id"]),
+                "name": existing["name"],
+                "email": existing["email"],
+                "claimed_at": existing["claimed_at"],
+                "source": existing["recognition_source"],
+            }
+            if existing
+            else None
+        ),
+        "autonomous_recognition": (
+            "founder-owner"
+            if identity["source"] == "founder-account"
+            else "owner"
+            if identity["recognized"]
+            else "administrator-only"
+        ),
     }
 
 
@@ -137,14 +168,23 @@ def claim_owner(body: OwnerClaim, admin=Depends(_admin_user)) -> dict:
     with _owner_db() as db:
         existing = db.execute("SELECT user_id FROM platform_owner WHERE singleton=1").fetchone()
         if existing and int(existing["user_id"]) != int(admin["id"]):
-            raise HTTPException(status_code=409, detail="A different platform owner is already registered. Owner transfer requires a controlled database migration.")
+            raise HTTPException(
+                status_code=409,
+                detail="A different platform owner is already registered. Owner transfer requires a controlled database migration.",
+            )
         now = datetime.now(timezone.utc).isoformat()
         db.execute(
             "INSERT INTO platform_owner(singleton,user_id,claimed_at,recognition_source) VALUES(1,?,?,?) ON CONFLICT(singleton) DO UPDATE SET user_id=excluded.user_id,claimed_at=excluded.claimed_at,recognition_source=excluded.recognition_source",
             (int(admin["id"]), now, "owner-page"),
         )
         db.commit()
-    return {"recognized": True, "role": "owner", "user_id": int(admin["id"]), "email": str(admin["email"]), "message": "Autonomous and Runtime now recognize this signed-in administrator as the platform owner."}
+    return {
+        "recognized": True,
+        "role": "owner",
+        "user_id": int(admin["id"]),
+        "email": str(admin["email"]),
+        "message": "Autonomous and Runtime now recognize this signed-in administrator as the platform owner.",
+    }
 
 
 @router.get("/access")
@@ -199,8 +239,14 @@ def remove_service(name: str, owner=Depends(_owner_user)) -> dict:
 async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
     del owner
     registry = _registry()
-    endpoint = registry.resolve("amos://model") or _vault().get("AMOSCLAUD_MODEL_URL") or os.getenv("AMOSCLAUD_MODEL_URL", "http://model:8091")
-    model = _vault().get("AMOSCLAUD_MODEL") or os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
+    endpoint = (
+        registry.resolve("amos://model")
+        or _vault().get("AMOSCLAUD_MODEL_URL")
+        or os.getenv("AMOSCLAUD_MODEL_URL", "http://model:8091")
+    )
+    model = _vault().get("AMOSCLAUD_MODEL") or os.getenv(
+        "AMOSCLAUD_MODEL", "amosclaud-folder-v1"
+    )
     timeout = float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "15"))
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -216,5 +262,68 @@ async def model_diagnostics(owner=Depends(_owner_user)) -> dict:
             "error_code": "model_service_unreachable",
             "recommended_action": "Start or register the Amosclaud model service, then retry.",
         }
-    available = [item.get("name", "") for item in payload.get("models", []) if isinstance(item, dict)]
-    return {"status": "connected", "model": model, "model_available": model in available, "available_models": available}
+    available = [
+        item.get("name", "") for item in payload.get("models", []) if isinstance(item, dict)
+    ]
+    return {
+        "status": "connected",
+        "model": model,
+        "model_available": model in available,
+        "available_models": available,
+    }
+
+
+@router.get("/os/status")
+def os_status(user=Depends(_signed_in_user)) -> dict:
+    """Return the installed Amosclaud OS mission and active service registry."""
+
+    status = AmosclaudOSRuntime().status()
+    memory = OperatorMemoryService().resolve(int(user["id"]))
+    return {
+        **status.__dict__,
+        "signed_in_user_id": int(user["id"]),
+        "current_focus": memory.current_focus,
+        "operator_installed": True,
+    }
+
+
+@router.get("/os/context")
+def os_context(user=Depends(_signed_in_user)) -> dict:
+    """Resolve the user's active workspace and repository automatically."""
+
+    return ProjectContextService().resolve(int(user["id"])).model_dump()
+
+
+@router.put("/os/context")
+def select_os_context(
+    body: ProjectContextSelection,
+    user=Depends(_signed_in_user),
+) -> dict:
+    """Persist the active project used by every engineering command."""
+
+    return ProjectContextService().select(int(user["id"]), body).model_dump()
+
+
+@router.get("/os/operator")
+def os_operator(user=Depends(_signed_in_user)) -> dict:
+    """Return the permanent mission, roadmap, and current engineering focus."""
+
+    memory = OperatorMemoryService().resolve(int(user["id"]))
+    context = ProjectContextService().resolve(int(user["id"]))
+    return {
+        **memory.model_dump(),
+        "project_context": context.model_dump(),
+        "agent_metadata": {
+            **memory.as_agent_metadata(),
+            **context.as_agent_metadata(),
+        },
+    }
+
+
+@router.put("/os/operator/focus")
+def remember_os_focus(body: FocusUpdate, user=Depends(_signed_in_user)) -> dict:
+    """Remember the owner's current milestone across sessions and devices."""
+
+    return OperatorMemoryService().remember_focus(
+        int(user["id"]), body.current_focus
+    ).model_dump()

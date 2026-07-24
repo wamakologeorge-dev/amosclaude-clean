@@ -1,0 +1,1 @@
+"""Native repository service adapters."""
