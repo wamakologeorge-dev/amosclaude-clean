@@ -124,3 +124,7 @@ def _register_operator_route() -> None:
 
 
 _register_operator_route()
+
+# Register persistent projects, issues, and verified result routes on the same
+# already-mounted task router. This keeps one database, identity, and task brain.
+from amoscloud_ai import project_platform as _project_platform  # noqa: E402,F401
