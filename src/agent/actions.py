@@ -5,14 +5,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .engineering_loop import AutonomousEngineeringLoop, LoopOutcome
-from .model import AutonomousModelGateway
-from .react_integration import AutonomousReactController
-from .react_loop import ReactOutcome
+from amosclaud_os.agent.runtime_bridge import (
+    run_native_coding_if_requested,
+)
 from src.foundation import AgentsPracticeStation, IntelligentFoundation
 from src.services.code_analyzer import CodeAnalyzer
 from src.services.file_manager import SafeFileManager
 from src.services.runtime_exec import RuntimeExecutor
+
+from .engineering_loop import AutonomousEngineeringLoop, LoopOutcome
+from .model import AutonomousModelGateway
+from .react_integration import AutonomousReactController
+from .react_loop import ReactOutcome
 
 
 @dataclass
@@ -113,10 +117,21 @@ def run_autonomous(
     workspace: str = ".",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    prepared = dict(metadata or {})
+    native_result = run_native_coding_if_requested(
+        objective=objective,
+        mode=mode,
+        authorized_writes=authorized_writes,
+        workspace=workspace,
+        metadata=prepared,
+    )
+    if native_result is not None:
+        return native_result
+
     task = AutonomousTask(
         objective=objective,
         mode=mode,
         authorized_writes=authorized_writes,
-        metadata=dict(metadata or {}),
+        metadata=prepared,
     )
     return AutonomousOrchestrator(Path(workspace)).run(task).to_dict()

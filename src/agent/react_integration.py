@@ -108,7 +108,10 @@ class AutonomousReactController:
         if not observations:
             return ReactDecision(
                 kind="act",
-                reason="Inspect verified workspace evidence before deciding completion.",
+                reason=(
+                    "Inspect verified workspace evidence before deciding "
+                    "completion."
+                ),
                 action=ActionRequest(
                     tool="inspect_workspace",
                     purpose=f"Establish evidence for objective: {objective}",
@@ -139,7 +142,10 @@ class AutonomousReactController:
             return ReactDecision(
                 kind="blocked",
                 reason=f"Model API failure: {type(exc).__name__}: {exc}",
-                answer="The verified tools completed, but the model API response failed.",
+                answer=(
+                    "The verified tools completed, but the model API response "
+                    "failed."
+                ),
             )
 
         return ReactDecision(

@@ -28,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -50,17 +50,46 @@ jobs:
 
       - name: Lint ReAct boundary
         run: |
-          flake8 src/agent tests/test_autonomous_react_loop.py \
+          react_files=(
+            src/agent/actions.py
+            src/agent/model.py
+            src/agent/observations.py
+            src/agent/react_integration.py
+            src/agent/react_loop.py
+            src/agent/reasoning.py
+            src/agent/tool_registry.py
+            tests/test_autonomous_react_loop.py
+          )
+          set +e
+          flake8 "${react_files[@]}" \
             --count \
             --select=E9,F63,F7,F82 \
             --show-source \
-            --statistics
-          flake8 src/agent tests/test_autonomous_react_loop.py \
+            --statistics > flake8-critical.txt 2>&1
+          critical_status=$?
+          flake8 "${react_files[@]}" \
             --count \
             --max-complexity=12 \
             --max-line-length=88 \
             --show-source \
-            --statistics
+            --statistics > flake8-style.txt 2>&1
+          style_status=$?
+          cat flake8-critical.txt
+          cat flake8-style.txt
+          if [ "$critical_status" -ne 0 ] || [ "$style_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload ReAct lint report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: react-lint-${{ matrix.python-version }}
+          path: |
+            flake8-critical.txt
+            flake8-style.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run focused ReAct tests
         run: pytest tests/test_autonomous_react_loop.py -vv --tb=long
