@@ -78,3 +78,15 @@ def test_domains_tolerates_comma_separated_hosts(as_admin, monkeypatch):
     response = request("GET", "/api/v1/account/domains")
     body = response.json()
     assert [d["domain"] for d in body["domains"]] == ["www.amosclaud.com", "amosclaud.com"]
+
+
+def test_domains_normalises_scheme_port_and_duplicates(as_admin, monkeypatch):
+    monkeypatch.setenv(
+        "ALLOWED_HOSTS",
+        '["https://www.amosclaud.com", "https://amosclaud.com", '
+        '"http://www.amosclaud.com", "http://localhost", "http://localhost:8000", '
+        '"www.amosclaud.com"]',
+    )
+    response = request("GET", "/api/v1/account/domains")
+    body = response.json()
+    assert [d["domain"] for d in body["domains"]] == ["www.amosclaud.com", "amosclaud.com"]
