@@ -225,6 +225,14 @@ def create_app() -> FastAPI:
     if web_dir.exists():
         app.mount("/static", StaticFiles(directory=web_dir), name="static")
 
+    hub_dir = project_dir / "pages-site"
+    if hub_dir.exists():
+        app.mount(
+            "/hub",
+            StaticFiles(directory=hub_dir, html=True),
+            name="hub",
+        )
+
     @app.get("/service-worker.js", include_in_schema=False)
     async def service_worker():
         return FileResponse(
