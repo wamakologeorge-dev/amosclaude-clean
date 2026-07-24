@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Command Center · Amosclaud</title>
+  <link rel="stylesheet" href="/static/command-center.css">
+</head>
+<body>
+  <header class="topbar"><a href="/cloud/agent" class="brand">Amosclaud</a><nav aria-label="Primary"><a href="/repositories">Repositories</a><a href="/cloud/agent">Agent</a></nav></header>
+  <main>
+    <header class="page-heading"><p class="eyebrow">Authenticated workspace</p><h1>Command Center</h1><p>Choose a repository, record an issue, or request an agent task with that repository as context.</p></header>
+    <p id="notice" class="notice" role="status" aria-live="polite">Loading repositories…</p>
+    <section class="grid" aria-label="Repository controls">
+      <article class="panel"><h2>Repository</h2><label for="repository-select">Selected repository</label><select id="repository-select" disabled><option>Loading…</option></select><dl id="repository-details" class="details"></dl><form id="repository-form"><h3>Create repository</h3><label>Name<input id="repository-name" required maxlength="100" pattern="[A-Za-z0-9][A-Za-z0-9._-]*"></label><label>Description<input id="repository-description" maxlength="500"></label><button type="submit">Create repository</button></form></article>
+      <article class="panel"><h2>Issues</h2><div id="issue-list" class="issue-list" aria-live="polite">Select a repository to load issues.</div><form id="issue-form"><h3>Record an issue</h3><label>Title<input id="issue-title" required maxlength="200"></label><label>Description<textarea id="issue-body" maxlength="50000"></textarea></label><button type="submit">Create issue</button></form></article>
+    </section>
+    <section class="panel agent-panel"><h2>Agent request</h2><p>The request is queued with repository context. This page does not promise file changes, commits, or pull requests.</p><form id="agent-form"><label>Objective<textarea id="agent-objective" required maxlength="12000" placeholder="Inspect the selected repository and report the next safe step."></textarea></label><button type="submit">Request agent task</button></form><pre id="agent-result" hidden></pre></section>
+  </main>
+  <script src="/static/command-center.js"></script>
+</body>
+</html>

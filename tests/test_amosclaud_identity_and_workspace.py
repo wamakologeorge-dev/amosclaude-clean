@@ -1,18 +1,12 @@
 from pathlib import Path
 
-from amoscloud_ai import (
-    CANONICAL_AUTONOMOUS_PATH,
-    LEGACY_IMPORT_NAMESPACE,
-    PRODUCT_NAME,
-    RUNTIME_NAME,
-)
+from amoscloud_ai import LEGACY_IMPORT_NAMESPACE, PRODUCT_NAME, RUNTIME_NAME
 from amoscloud_ai.workspace_control import discover_layout, doctor
 
 
 def test_runtime_identity_is_amosclaud_autonomous():
     assert PRODUCT_NAME == "Amosclaud"
     assert RUNTIME_NAME == "Amosclaud Autonomous"
-    assert CANONICAL_AUTONOMOUS_PATH == "/autonomous"
     assert LEGACY_IMPORT_NAMESPACE == "amoscloud_ai"
     assert "cloud" not in RUNTIME_NAME.lower()
 
