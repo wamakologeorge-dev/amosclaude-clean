@@ -1,8 +1,9 @@
-"""Autonomous Codex configuration and skill discovery API."""
+"""Autonomous Codex configuration, skill discovery, and codex memory API."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
+from amoscloud_ai import codex_memory
 from amoscloud_ai.api.routes.agent import _authenticated_user
 from amoscloud_ai.autonomous_codex_config import (
     get_autonomous_codex_configuration,
@@ -65,6 +66,74 @@ async def tools(request: Request) -> dict:
             for tool in config.tools
         ]
     }
+
+
+@router.get("/memory", summary="Search or browse the agent codex memory")
+async def memory_search(
+    request: Request,
+    query: str | None = None,
+    scope: str | None = None,
+    kind: str | None = None,
+    limit: int = 20,
+) -> dict:
+    _require_user(request)
+    try:
+        if query and query.strip():
+            entries = codex_memory.search(
+                query,
+                scope=scope,
+                kinds=[kind] if kind else None,
+                limit=limit,
+            )
+        else:
+            entries = codex_memory.recent(scope=scope, limit=limit)
+            if kind:
+                wanted = codex_memory.normalise_kind(kind)
+                entries = [entry for entry in entries if entry.get("kind") == wanted]
+    except codex_memory.CodexMemoryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"entries": entries, "count": len(entries)}
+
+
+@router.post("/memory", summary="Store a codex memory entry")
+async def memory_store(request: Request, body: dict) -> dict:
+    _require_user(request)
+    try:
+        entry = codex_memory.store_entry(
+            scope=body.get("scope"),
+            kind=str(body.get("kind") or ""),
+            title=str(body.get("title") or ""),
+            content=str(body.get("content") or ""),
+            tags=[str(tag) for tag in (body.get("tags") or []) if str(tag).strip()],
+            importance=float(body.get("importance", 0.5)),
+            source=str(body.get("source") or "") or None,
+            outcome=str(body.get("outcome") or "unknown"),
+        )
+    except codex_memory.CodexMemoryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"stored": True, "entry": entry}
+
+
+@router.get("/memory/volumes", summary="List codex memory volumes")
+async def memory_volumes(request: Request) -> dict:
+    _require_user(request)
+    return {"volumes": codex_memory.volumes()}
+
+
+@router.get("/memory/digest", summary="Get a chaptered codex digest for a volume")
+async def memory_digest(
+    request: Request, scope: str | None = None, per_chapter: int = 6
+) -> dict:
+    _require_user(request)
+    return codex_memory.digest(scope, per_chapter=per_chapter)
+
+
+@router.get("/memory/stats", summary="Codex memory statistics")
+async def memory_stats(request: Request) -> dict:
+    _require_user(request)
+    return codex_memory.stats()
 
 
 @router.post("/select-skill", summary="Resolve the skill for an objective")

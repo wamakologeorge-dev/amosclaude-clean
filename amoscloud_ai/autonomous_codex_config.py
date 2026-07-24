@@ -67,6 +67,7 @@ TOOLS = (
     ToolDefinition("deployment.prepare", "Prepare a deployment plan and rollback criteria.", "deployment", True, True),
     ToolDefinition("memory.recall", "Recall relevant repository lessons and prior outcomes.", "memory"),
     ToolDefinition("memory.store", "Store concise verified lessons from completed work.", "memory", True),
+    ToolDefinition("github.app", "Read GitHub App events (pushes, pull requests, issues) recorded by the platform.", "integration"),
     ToolDefinition("web.research", "Research public technical documentation when enabled.", "research"),
 )
 
