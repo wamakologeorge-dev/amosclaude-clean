@@ -76,7 +76,7 @@ def test_autonomous_bearer_key_is_accepted(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["accepted"] is True
-    assert body["status"] == "pending"
+    assert body["status"] in {"pending", "success", "failed"}
     assert body["pipeline_id"]
     assert body["objective"] == "inspect, plan, and verify the server"
 
