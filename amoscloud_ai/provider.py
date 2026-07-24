@@ -3,17 +3,23 @@ from __future__ import annotations
 
 import os
 import time
+from typing import Any
 
 import httpx
 
+from amoscloud_ai import model_runtime
 from amoscloud_ai.model_api_response import ModelApiResponse, normalize_model_api_response
 
 # Backward-compatible name used by the engineering agent and existing tests.
 ProviderResult = ModelApiResponse
 
 
+PROBE_INSTRUCTION = "Reply with exactly: AMOSCLAUD_AGENT_READY"
+PROBE_TOKEN = "AMOSCLAUD_AGENT_READY"
+
+
 def _external_adapters_enabled() -> bool:
-    return os.getenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "false").strip().lower() in {"1", "true", "yes", "on"}
+    return model_runtime.external_adapters_enabled()
 
 
 def _model_endpoint() -> str:
@@ -42,13 +48,25 @@ def _model_headers() -> dict[str, str]:
     return headers
 
 
-def _timeout() -> httpx.Timeout:
+def _timeout(connect: float | None = None) -> httpx.Timeout:
     total = max(30.0, float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")))
-    return httpx.Timeout(total, connect=min(20.0, total), read=total, write=min(60.0, total), pool=min(20.0, total))
+    connect_timeout = min(connect or 20.0, total)
+    return httpx.Timeout(
+        total, connect=connect_timeout, read=total, write=min(60.0, total),
+        pool=min(20.0, total),
+    )
 
 
-def _post_with_retry(url: str, *, headers: dict[str, str], json: dict) -> httpx.Response:
-    attempts = max(1, min(int(os.getenv("AMOSCLAUD_MODEL_RETRIES", "2")), 4))
+def _post_with_retry(
+    url: str,
+    *,
+    headers: dict[str, str],
+    json: dict,
+    attempts: int | None = None,
+) -> httpx.Response:
+    if attempts is None:
+        attempts = int(os.getenv("AMOSCLAUD_MODEL_RETRIES", "2"))
+    attempts = max(1, min(attempts, 4))
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
@@ -60,7 +78,12 @@ def _post_with_retry(url: str, *, headers: dict[str, str], json: dict) -> httpx.
             if attempt + 1 < attempts:
                 time.sleep(min(2 ** attempt, 4))
     assert last_error is not None
-    raise RuntimeError(f"Amosclaud model endpoint did not answer after {attempts} attempt(s): {type(last_error).__name__}: {last_error}") from last_error
+    raise RuntimeError(
+        model_runtime.redact(
+            f"Amosclaud model endpoint did not answer after {attempts} "
+            f"attempt(s): {type(last_error).__name__}"
+        )
+    ) from last_error
 
 
 def _require_ready(result: ModelApiResponse, label: str) -> ModelApiResponse:
@@ -69,7 +92,12 @@ def _require_ready(result: ModelApiResponse, label: str) -> ModelApiResponse:
     return result
 
 
-def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+def _amosclaud_api_reply(
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    attempts: int | None = None,
+) -> ProviderResult | None:
     endpoint = os.getenv("AMOSCLAUD_API_URL", "").strip().rstrip("/")
     api_key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
     if not endpoint or not api_key:
@@ -80,6 +108,7 @@ def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> P
         f"{endpoint}/{path.lstrip('/')}",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         json={"model": model, "messages": [{"role": "system", "content": system_prompt}, *history]},
+        attempts=attempts,
     )
     return _require_ready(
         normalize_model_api_response(response.json(), runtime="amosclaud-api", provider="amosclaud", model=model),
@@ -87,7 +116,12 @@ def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> P
     )
 
 
-def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+def _self_hosted_reply(
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    attempts: int | None = None,
+) -> ProviderResult | None:
     endpoint = _model_endpoint()
     if not endpoint:
         return None
@@ -101,6 +135,7 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
             "temperature": 0.2,
             "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "1200")),
         },
+        attempts=attempts,
     )
     return _require_ready(
         normalize_model_api_response(response.json(), runtime="self-hosted", provider="amosclaud", model=model),
@@ -108,45 +143,119 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
     )
 
 
-def probe() -> dict[str, object]:
-    from amoscloud_ai.model_network import network_status, request_inference
+def _model_network_reply(
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    timeout: float | None = None,
+) -> ProviderResult | None:
+    """Ask the outbound model-network stations for one inference."""
+    from amoscloud_ai.model_network import request_inference
 
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
-    network = network_status()
-    if network.get("ready"):
-        result = request_inference(
-            [{"role": "user", "content": "Reply with exactly: AMOSCLAUD_AGENT_READY"}],
-            "You are the Amosclaud readiness probe. Follow the exact response instruction.",
-            timeout=20,
+    result = request_inference(history, system_prompt, timeout=timeout)
+    if not result:
+        return None
+    return normalize_model_api_response(
+        result,
+        runtime=f"model-network:{result.get('runtime', 'station')}",
+        provider="amosclaud",
+        model=model,
+    )
+
+
+def _network_status() -> dict[str, Any]:
+    return model_runtime.network_state()
+
+
+def _invoke_candidate(
+    candidate: model_runtime.Candidate,
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    attempts: int | None = None,
+    timeout: float | None = None,
+) -> ProviderResult | None:
+    """Call exactly one resolved candidate; never fabricate a reply."""
+    if candidate.key == "model-network":
+        return _model_network_reply(history, system_prompt, timeout=timeout)
+    if candidate.key == "amosclaud-api":
+        return _amosclaud_api_reply(history, system_prompt, attempts=attempts)
+    if candidate.key == "self-hosted":
+        return _self_hosted_reply(history, system_prompt, attempts=attempts)
+    return _external_adapter_reply(history, system_prompt)
+
+
+def probe() -> dict[str, object]:
+    """Report readiness from the cached resolution path without stalling."""
+    model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
+    network = _network_status()
+    active = model_runtime.plan(network)
+    history = [{"role": "user", "content": PROBE_INSTRUCTION}]
+    system_prompt = (
+        "You are the Amosclaud readiness probe. Follow the exact response instruction."
+    )
+    for health in active.order:
+        if not health.candidate.first_party or not health.reachable:
+            continue
+        try:
+            result = _invoke_candidate(
+                health.candidate, history, system_prompt, attempts=1, timeout=20
+            )
+        except Exception as exc:
+            model_runtime.record_failure(
+                health.candidate, model_runtime.classify(exc, health.candidate)
+            )
+            continue
+        reply_text = (result.reply or "").strip() if result else ""
+        if result and PROBE_TOKEN in reply_text:
+            return {
+                "ready": True,
+                "provider": "amosclaud",
+                "runtime": result.runtime,
+                "model": result.model or model,
+                "stations": int(network.get("ready_stations") or 0),
+                "detail": reply_text[:200],
+                "candidate": health.candidate.key,
+                "model_runtime": model_runtime.health_report(network),
+            }
+        model_runtime.record_failure(
+            health.candidate,
+            model_runtime.diagnose(
+                model_runtime.BAD_RESPONSE,
+                "the readiness probe did not return AMOSCLAUD_AGENT_READY",
+                health.candidate,
+            ),
         )
-        normalized = normalize_model_api_response(
-            result or {}, runtime=f"model-network:{(result or {}).get('runtime', 'station')}", provider="amosclaud", model=model
-        )
-        if "AMOSCLAUD_AGENT_READY" in normalized.reply:
-            return {"ready": True, "provider": "amosclaud", "runtime": normalized.runtime, "model": normalized.model or model, "stations": network.get("ready_stations", 0), "detail": normalized.reply[:200]}
-    if not _model_endpoint():
-        return {"ready": False, "provider": "amosclaud", "runtime": "unconfigured", "model": model, "detail": "No ready model station and AMOSCLAUD_MODEL_URL is not configured"}
-    try:
-        result = _self_hosted_reply(
-            [{"role": "user", "content": "Reply with exactly: AMOSCLAUD_AGENT_READY"}],
-            "You are the local Amosclaud readiness probe. Follow the user's exact response instruction.",
-        )
-        reply_text = result.reply.strip() if result else ""
-        return {"ready": "AMOSCLAUD_AGENT_READY" in reply_text, "provider": "amosclaud", "runtime": result.runtime if result else "unconfigured", "model": result.model if result and result.model else model, "detail": reply_text[:200]}
-    except Exception as exc:
-        return {"ready": False, "provider": "amosclaud", "runtime": "self-hosted", "model": model, "detail": f"{type(exc).__name__}: {exc}"}
+    report = model_runtime.health_report(network)
+    diagnosis = model_runtime.blocker(model_runtime.plan(network))
+    runtime = next(
+        (
+            health.candidate.runtime
+            for health in active.order
+            if health.candidate.first_party and health.candidate.configured
+        ),
+        "unconfigured",
+    )
+    return {
+        "ready": False,
+        "provider": "amosclaud",
+        "runtime": (
+            "unconfigured" if diagnosis.code == model_runtime.UNCONFIGURED else runtime
+        ),
+        "model": model,
+        "stations": int(network.get("ready_stations") or 0),
+        "detail": f"[{diagnosis.code}] {diagnosis.remediation}"[:400],
+        "blocker": diagnosis.to_dict(),
+        "model_runtime": report,
+    }
 
 
 def is_configured() -> bool:
     """Whether the shared provider policy has a route it may safely attempt."""
-    from amoscloud_ai.model_network import network_status
-
-    if network_status().get("ready") or _model_endpoint():
-        return True
-    if os.getenv("AMOSCLAUD_API_URL", "").strip() and os.getenv("AMOSCLAUD_API_KEY", "").strip():
-        return True
-    return _external_adapters_enabled() and bool(
-        os.getenv("ANTHROPIC_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip()
+    return any(
+        candidate.configured and candidate.available is not False
+        for candidate in model_runtime.resolve_candidates()
     )
 
 
@@ -194,60 +303,65 @@ def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -
 
 
 def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
-    from amoscloud_ai.model_network import network_status, request_inference
-
-    errors: list[str] = []
+    """Answer through the first usable candidate in the resolution path."""
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
-    network = network_status()
-    if network.get("ready"):
+    network = _network_status()
+    active = model_runtime.plan(network)
+    errors: list[str] = []
+    adapter_attempted = False
+    for health in active.order:
+        candidate = health.candidate
+        if not candidate.first_party:
+            if adapter_attempted:
+                continue
+            adapter_attempted = True
+        # A candidate the preflight already reported unreachable still gets one
+        # bounded attempt, but never a long retry loop.
+        attempts = None if health.reachable else 1
         try:
-            network_result = request_inference(history, system_prompt)
-            if network_result:
-                normalized = normalize_model_api_response(
-                    network_result,
-                    runtime=f"model-network:{network_result.get('runtime', 'station')}",
-                    provider="amosclaud",
-                    model=model,
-                )
-                if normalized.ok:
-                    return normalized
-                errors.append(normalized.error or "model-network returned no reply")
-            else:
-                errors.append("model-network returned no result")
+            result = _invoke_candidate(
+                candidate, history, system_prompt, attempts=attempts
+            )
         except Exception as exc:
-            errors.append(f"model-network {type(exc).__name__}: {exc}")
+            diagnosis = model_runtime.record_failure(
+                candidate, model_runtime.classify(exc, candidate)
+            )
+            errors.append(f"{candidate.label}: [{diagnosis.code}] {diagnosis.detail}")
+            continue
+        if result is None:
+            errors.append(
+                f"{candidate.label}: [{model_runtime.UNCONFIGURED}] no usable route"
+            )
+            continue
+        if result.ok:
+            return result
+        diagnosis = model_runtime.record_failure(
+            candidate,
+            model_runtime.diagnose(
+                model_runtime.BAD_RESPONSE,
+                result.error or "the model returned an empty reply",
+                candidate,
+            ),
+        )
+        errors.append(f"{candidate.label}: [{diagnosis.code}] {diagnosis.detail}")
 
-    for factory in (_amosclaud_api_reply, _self_hosted_reply):
-        try:
-            result = factory(history, system_prompt)
-            if result:
-                return result
-        except Exception as exc:
-            errors.append(f"{type(exc).__name__}: {exc}")
-
-    try:
-        adapted = _external_adapter_reply(history, system_prompt)
-        if adapted:
-            return adapted
-    except Exception as exc:
-        errors.append(f"external adapter {type(exc).__name__}: {exc}")
-
-    detail = "; ".join(errors)[-500:] if errors else "No model runtime is connected"
+    diagnosis = model_runtime.blocker(model_runtime.plan(network))
+    detail = "; ".join(errors)[-500:] if errors else diagnosis.detail
     return ProviderResult(
-        reply=f"Amosclaud model runtime is not connected. {detail}",
+        reply=model_runtime.blocker_message(diagnosis),
         runtime="unconfigured",
         status="degraded",
         provider="amosclaud",
         model=model,
-        error=detail,
+        error=model_runtime.redact(f"[{diagnosis.code}] {detail}"),
     )
 
 
 def status() -> dict[str, object]:
-    from amoscloud_ai.model_network import network_status
     from src.agent.model import load_model_config
 
     selection = load_model_config()
+    network = _network_status()
     return {
         "provider": "amosclaud",
         "response_contract": "model_api_response.v1",
@@ -263,5 +377,6 @@ def status() -> dict[str, object]:
             "configured": bool(selection.endpoint),
             "external": selection.provider in {"openai", "anthropic"},
         },
-        "model_network": network_status(),
+        "model_network": network,
+        "model_runtime": model_runtime.health_report(network),
     }
