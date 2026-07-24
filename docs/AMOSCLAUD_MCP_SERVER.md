@@ -23,10 +23,12 @@ The server also publishes the `amosclaud://status` resource and an
 ## Install
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[mcp]"
 ```
 
-The package installs the `amosclaud-mcp` command.
+The optional `mcp` extra installs the official MCP Python SDK and the package
+installs the `amosclaud-mcp` command. The Railway web runtime does not need this
+extra unless the MCP server will run inside that container.
 
 ## Required configuration
 
