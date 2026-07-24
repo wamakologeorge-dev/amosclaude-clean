@@ -6,6 +6,12 @@
   <meta name="description" content="Amosclaud Agent Issue Hub — GitHub-native issues, workflows, missions, pull requests, and verified repairs." />
   <meta name="color-scheme" content="dark" />
   <title>Amosclaud Agent Issue Hub</title>
+  <script>
+    // Unified hub: the GitHub Pages mirror forwards to the live platform.
+    if (location.hostname.endsWith("github.io")) {
+      location.replace("https://www.amosclaud.com/hub/" + location.search + location.hash);
+    }
+  </script>
   <link rel="stylesheet" href="./styles.css" />
   <link rel="stylesheet" href="./hub.css" />
   <link rel="stylesheet" href="./control-plane-enhancements.css" />

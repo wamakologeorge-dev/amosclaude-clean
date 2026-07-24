@@ -62,6 +62,19 @@ jobs:
                 ;;
             esac
           done < /tmp/amosclaud-changed-files.txt
+          # HTML in the scope references deployed assets (e.g. /static/*.css -> web/).
+          # Copy those supporting assets so the Doctor can resolve them; they are
+          # never copied back because only changed files are restored afterwards.
+          if [[ -d /tmp/amosclaud-scope/web && -d web ]]; then
+            find web -maxdepth 1 -type f \
+              \( -name '*.css' -o -name '*.js' -o -name '*.mjs' -o -name '*.webmanifest' -o -name '*.json' -o -name '*.ico' -o -name '*.png' -o -name '*.svg' \) \
+              -exec cp -n {} /tmp/amosclaud-scope/web/ \;
+          fi
+          if [[ -d /tmp/amosclaud-scope/pages-site && -d pages-site ]]; then
+            find pages-site -maxdepth 1 -type f \
+              \( -name '*.css' -o -name '*.js' -o -name '*.webmanifest' -o -name '*.json' \) \
+              -exec cp -n {} /tmp/amosclaud-scope/pages-site/ \;
+          fi
 
       - name: Doctor diagnose and Fixer repair
         id: guardian
