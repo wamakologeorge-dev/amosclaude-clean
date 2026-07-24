@@ -15,6 +15,7 @@ def test_agent_surface_shows_native_project_context() -> None:
     assert 'id="active-owner-authorization"' in html
     assert "repository_id" in html
     assert "selected workspace/repository" in html
+    assert "server" in html.lower()
 
 
 def test_agent_commands_receive_authenticated_repository_context() -> None:
@@ -28,8 +29,11 @@ def test_agent_commands_receive_authenticated_repository_context() -> None:
     assert "issue_title:" in source
     assert "issue_description:" in source
     assert "operation: 'create_issue'" in source
+    assert "operation: 'create_repository'" in source
     assert "Execute this action now" in source
-    assert "use_agent: actionRequested" in source
-    assert "apply_changes: actionRequested" in source
+    assert "/api/v1/core/os/execute" in source
+    assert "execution_contract: 'native-or-truthful-blocker'" in source
+    assert "use_agent: true" in source
+    assert "apply_changes: true" in source
     assert "require_verification: true" in source
     assert "return_evidence: true" in source
