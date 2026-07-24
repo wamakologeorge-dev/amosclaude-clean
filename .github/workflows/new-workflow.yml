@@ -12,6 +12,8 @@ permissions:
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
 
     steps:
       - name: Checkout code
@@ -37,6 +39,8 @@ jobs:
       - name: Compile platform, CLI, and compatibility adapters
         run: |
           python -m compileall -q amoscloud_ai amosclaud_serverless app cli cmood shared src
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
       - name: Verify Amosclaud CLI contract
         env:
@@ -77,6 +81,11 @@ jobs:
           grep -q '^AMOSCLAUD_REQUIRE_VERIFICATION=true$' authentication/railway.env.example
           grep -q 'replace-in-railway' authentication/railway.env.example
           ! grep -q '^PASSKEY_ORIGIN=https://amosclaud.com$' authentication/railway.env.example
+
+      - name: Remove generated Python bytecode before tests
+        run: |
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
 
       - name: Run platform tests
         env:
