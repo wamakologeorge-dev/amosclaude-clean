@@ -50,14 +50,24 @@ jobs:
 
       - name: Lint ReAct boundary
         run: |
+          react_files=(
+            src/agent/actions.py
+            src/agent/model.py
+            src/agent/observations.py
+            src/agent/react_integration.py
+            src/agent/react_loop.py
+            src/agent/reasoning.py
+            src/agent/tool_registry.py
+            tests/test_autonomous_react_loop.py
+          )
           set +e
-          flake8 src/agent tests/test_autonomous_react_loop.py \
+          flake8 "${react_files[@]}" \
             --count \
             --select=E9,F63,F7,F82 \
             --show-source \
             --statistics > flake8-critical.txt 2>&1
           critical_status=$?
-          flake8 src/agent tests/test_autonomous_react_loop.py \
+          flake8 "${react_files[@]}" \
             --count \
             --max-complexity=12 \
             --max-line-length=88 \
