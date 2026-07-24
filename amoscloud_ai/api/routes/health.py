@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from amomodel.api import router as amomodel_router
 from amomodel.api import status as amomodel_status
 from amoscloud_ai import provider
+from amoscloud_ai.railway_health import status as railway_health_status
 from amoscloud_ai.agent.preflight import run_preflight
 from amoscloud_ai.api.routes import (
     autonomous_codex,
@@ -87,6 +88,7 @@ async def readiness() -> dict[str, object]:
             "authentication": ["session", "Authorization: Bearer <autonomous-key>"],
         },
         "provider": state,
+        "railway": railway_health_status(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
