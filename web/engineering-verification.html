@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#050816" />
+  <title>Engineering Verification · Amosclaud</title>
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/metadata.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/admin"><span>A</span><strong>Engineering Verification</strong></a>
+    <nav><a href="/static/metadata.html">Metadata</a><a href="/admin">Admin</a><button id="run" type="button">Run verification</button></nav>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">EVIDENCE BEFORE COMPLETION</p><h1>No engineering claim without proof.</h1><p class="lede">Compilation, server contracts, tests, retained reports, and every first-parent merge are visible here.</p></div>
+      <div id="verification-state" class="state pending">Not checked</div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Latest engineering report</h2><p id="report-meta">No retained verification report yet.</p></div><button id="refresh" type="button">Refresh</button></div>
+      <div id="checks" class="capability-grid"></div>
+      <pre id="verification-output" style="white-space:pre-wrap;overflow:auto;max-height:24rem"></pre>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><h2>Merge results ledger</h2><p>Older merges without a retained report remain labelled historical-unverified. They are never silently marked verified.</p></div></div>
+      <div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Merge / commit</th><th>Result</th><th>Files</th><th>Date</th></tr></thead><tbody id="merges"><tr><td colspan="4">Loading merge history…</td></tr></tbody></table></div>
+    </section>
+    <p id="error" class="error" hidden></p>
+  </main>
+  <script src="/static/engineering-verification.js"></script>
+</body>
+</html>

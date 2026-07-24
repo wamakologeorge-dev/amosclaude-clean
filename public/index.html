@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-amosclaud-head="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Amosclaud Autonomous</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #070b14; color: #f8fafc; font-family: Inter, system-ui, sans-serif; }
+    main { width: min(94vw, 1080px); margin: 0 auto; padding: 32px 0 56px; }
+    header, section { background: #0f172a; border: 1px solid #263244; border-radius: 18px; padding: 24px; margin-bottom: 18px; }
+    h1, h2 { margin-top: 0; }
+    h1 { font-size: clamp(2rem, 7vw, 3.4rem); }
+    p { color: #cbd5e1; line-height: 1.6; }
+    nav, .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+    a, button { border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    a { color: #e2e8f0; background: #1e293b; }
+    button { color: #04130a; background: #22c55e; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+    .card { border: 1px solid #2b3a55; border-radius: 14px; padding: 16px; background: #111c31; }
+    pre { max-height: 300px; overflow: auto; background: #050914; border-radius: 12px; padding: 16px; color: #dbeafe; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p><strong>One identity across every page</strong></p>
+      <h1>Amosclaud Autonomous</h1>
+      <p>This public head uses the same Autonomous, Repository, Results, permissions, job tracking, evidence, and learning-test rules as the main application.</p>
+      <nav aria-label="Amosclaud product areas">
+        <a href="/">Autonomous</a>
+        <a href="/repositories">Repository</a>
+        <a href="/bundles">Results</a>
+      </nav>
+    </header>
+
+    <section>
+      <h2>Active job contract</h2>
+      <div class="grid">
+        <div class="card"><strong>Read</strong><p>Load full repository instructions before work begins.</p></div>
+        <div class="card"><strong>Continue</strong><p>Preserve the chat brief while moving between pages.</p></div>
+        <div class="card"><strong>Authorize</strong><p>Require repository-owner permission before writes or deployment.</p></div>
+        <div class="card"><strong>Execute</strong><p>Create, build, fix, test, and deploy from start to finish.</p></div>
+        <div class="card"><strong>Prove</strong><p>Show evidence, work proof, final location, and usage instructions.</p></div>
+        <div class="card"><strong>Learn safely</strong><p>Track useful learning and execute tests before activation.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Runtime results</h2>
+      <p id="runtime-status">Checking the Amosclaud runtime…</p>
+      <pre id="runtime-proof">No runtime evidence loaded yet.</pre>
+      <div class="actions"><button id="refresh" type="button">Refresh evidence</button></div>
+    </section>
+  </main>
+  <script>
+    const statusEl = document.getElementById('runtime-status');
+    const proofEl = document.getElementById('runtime-proof');
+    async function refresh() {
+      statusEl.textContent = 'Checking the Amosclaud runtime…';
+      try {
+        const response = await fetch('/health', { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+        statusEl.textContent = 'Amosclaud Autonomous is reachable.';
+        proofEl.textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        statusEl.textContent = 'Runtime evidence is unavailable.';
+        proofEl.textContent = String(error.message || error);
+      }
+    }
+    document.getElementById('refresh').addEventListener('click', refresh);
+    refresh();
+  </script>
+</body>
+</html>

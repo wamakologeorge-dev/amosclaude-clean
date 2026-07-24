@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Start Amosclaud Agent Server</title>
+<style>
+:root{color-scheme:dark;--bg:#070b15;--panel:#11192b;--line:#273450;--text:#f6f8ff;--muted:#a9b5cc;--brand:#7586ff;--green:#55d6a3}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -10%,#2a3769,transparent 42%),var(--bg);color:var(--text);font:16px/1.55 Inter,system-ui,sans-serif}.shell{max-width:1000px;margin:auto;padding:42px 22px}.brand{display:flex;align-items:center;gap:13px;font-weight:850;font-size:22px}.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:var(--brand)}header{text-align:center;padding:70px 0 45px}h1{font-size:clamp(40px,7vw,70px);line-height:1.02;margin:14px 0}.lead{max-width:720px;margin:auto;color:var(--muted);font-size:19px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}.card{background:linear-gradient(145deg,#141e35,#0d1425);border:1px solid var(--line);border-radius:20px;padding:25px}.number{color:var(--green);font-weight:900;letter-spacing:.1em}.card h2{margin:8px 0}.card p{color:var(--muted)}code{background:#070b15;border:1px solid var(--line);border-radius:8px;padding:3px 7px}.command{display:block;padding:13px;margin-top:13px;overflow:auto}.footer{text-align:center;color:var(--muted);padding:42px 0}@media(max-width:700px){.grid{grid-template-columns:1fr}header{padding-top:45px}}
+</style></head>
+<body><div class="shell"><div class="brand"><span class="mark">A</span>Amosclaud Agent Server</div>
+<header><div class="number">PORTABLE · SELF-HOSTED · FOLDER-FIRST</div><h1>Your agent platform lives here.</h1><p class="lead">This folder contains the application, server, workspace, repositories, model-provider configuration, and persistent data layout.</p></header>
+<main class="grid">
+<article class="card"><div class="number">WINDOWS</div><h2>Start the application</h2><p>Double-click <code>start-windows.bat</code>. Amosclaud prepares its private Python environment on the first run.</p></article>
+<article class="card"><div class="number">LINUX · macOS</div><h2>Start from Terminal</h2><p>Open this folder in Terminal and run:</p><code class="command">chmod +x start-local.sh &amp;&amp; ./start-local.sh</code></article>
+<article class="card"><div class="number">OPEN</div><h2>Use the workspace</h2><p>After the server starts, open <code>http://localhost:8000</code> in your browser.</p></article>
+<article class="card"><div class="number">CONFIGURE</div><h2>Connect the agent model</h2><p>Purchase Amosclaud agent credits, create an installation key, then place <code>AMOSCLAUD_API_KEY</code> in <code>.env</code>. Owner provider secrets are never distributed.</p></article>
+</main><p class="footer">Keep the <code>data</code> folder backed up. It contains your local Amosclaud state.</p></div></body></html>

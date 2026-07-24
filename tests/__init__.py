@@ -1,1 +1,1 @@
-"""Test suite for Amoscloud AI"""
+"""Test suite for Amosclaud AI"""

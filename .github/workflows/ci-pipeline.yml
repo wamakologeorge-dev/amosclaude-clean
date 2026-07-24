@@ -1,94 +1,63 @@
-name: 🚀 Amoscloud AI - CI Pipeline
+name: Amosclaud CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - '**'
   pull_request:
-    branches: [main, develop]
-  schedule:
-    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  code-quality:
+  autonomous-validation:
     runs-on: ubuntu-latest
-    name: Code Quality & Linting
-    
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-      
-      - run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: black --check . || true
-      - run: isort --check-only . || true
-      - run: flake8 . --count --show-source --statistics --max-line-length=120 || true
 
-  test:
-    runs-on: ubuntu-latest
-    name: Tests & Coverage
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: amoscloud_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      
-      - run: |
+      - name: Install Architecture Dependencies
+        run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing || true
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/amoscloud_test
-          REDIS_URL: redis://localhost:6379/0
-      
-      - uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install pytest pytest-asyncio
 
-  security:
-    runs-on: ubuntu-latest
-    name: Security Scanning
-    
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-      
-      - run: pip install bandit safety
-      - run: bandit -r src/ -f json -o bandit-report.json || true
-      - run: safety check --json || true
+      - name: Run Guardrail and Boundary Validation
+        id: run_guardrails
+        continue-on-error: true
+        run: |
+          echo "Executing compile-time guardrail analysis under Amosclaud..."
+          set +e
+          python main.py --test-guardrails
+          exit_code=$?
+          echo "exit_code=${exit_code}" >> "$GITHUB_OUTPUT"
+          exit "${exit_code}"
+
+      - name: Verify Amosclaud Platform Handoff
+        if: steps.run_guardrails.outcome == 'success'
+        run: |
+          echo "Deployment safety threshold cleared. Verifying Amosclaud platform readiness..."
+          python -m amosclaud_platform doctor
+
+      - name: Report Success to Repository
+        if: steps.run_guardrails.outcome == 'success'
+        run: |
+          echo "Amosclaud guardrails and platform readiness checks passed."
+          if [ -f report_bot.py ]; then python report_bot.py --status success; fi
+
+      - name: Report Failure to Repository
+        if: steps.run_guardrails.outcome == 'failure'
+        run: |
+          echo "Amosclaud guardrail validation failed with exit code ${{ steps.run_guardrails.outputs.exit_code }}."
+          if [ -f report_bot.py ]; then python report_bot.py --status failure; fi
+          exit 1

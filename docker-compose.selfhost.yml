@@ -1,0 +1,88 @@
+services:
+  model:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - amosclaud-models:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  model-init:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      until ollama list >/dev/null 2>&1; do sleep 2; done;
+      ollama pull "$${AMOSCLAUD_MODEL}"
+    depends_on:
+      model:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      ENVIRONMENT: production
+      AMOSCLAUD_ACCESS_MODE: ${AMOSCLAUD_ACCESS_MODE:-local}
+      AMOSCLAUD_TRUST_CONTAINER_GATEWAY: "true"
+      AMOSCLAUD_WORKSPACE: /workspace
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_DB_PATH: /data/auth.db
+      REPOSITORY_STORAGE_PATH: /data/repositories
+      STORAGE_PATH: /data/storage
+      AMOSCLAUD_CORE_DB: /data/amosclaud-core.db
+      AMOSCLAUD_MODEL_URL: http://model:11434
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
+      AMOSCLAUD_EXTERNAL_GITHUB: "false"
+      AMOSCLAUD_EXTERNAL_AI_KEYS: "false"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - amosclaud-data:/data
+      - ${AMOSCLAUD_WORKSPACE_PATH:-./AmosclaudWorkspace}:/workspace
+    depends_on:
+      model:
+        condition: service_healthy
+      model-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 20s
+
+  runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["connected-runner"]
+    restart: unless-stopped
+    env_file:
+      - .env.runner
+    environment:
+      AMOSCLAUD_RUNNER_WORKSPACE: /runner-workspace
+    volumes:
+      - ${AMOSCLAUD_RUNNER_WORKSPACE:-./AmosclaudWorkspace}:/runner-workspace
+    command: ["python", "-m", "amoscloud_ai.runner_client"]
+
+volumes:
+  amosclaud-data:
+  amosclaud-models:

@@ -1,0 +1,94 @@
+.agent-replies {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.agent-reply,
+.chat-message,
+.agent-presence {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.agent-presence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-style: italic;
+}
+
+.agent-presence::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 0 rgba(37, 99, 235, .45);
+  animation: amosclaud-presence 1.2s ease-in-out infinite;
+}
+
+.agent-presence-executing::before {
+  background: #16a34a;
+}
+
+@keyframes amosclaud-presence {
+  50% {
+    opacity: .45;
+    transform: scale(.72);
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
+}
+
+@media (max-width: 600px) {
+  .agent-controls-stack,
+  .agent-replies,
+  .agent-compose,
+  .agent-reply,
+  .chat-message {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .agent-replies {
+    max-height: min(48vh, 430px);
+    padding-inline: 0;
+  }
+
+  .agent-compose {
+    box-sizing: border-box;
+    position: relative;
+    bottom: auto;
+    margin: 0;
+  }
+
+  .agent-suggestions {
+    width: 100%;
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+
+  .agent-compose textarea,
+  .agent-compose .btn-primary {
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  #install-amosclaud-app {
+    right: 10px !important;
+    bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+    max-width: calc(100vw - 20px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-presence::before {
+    animation: none;
+  }
+}

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Repository · Amosclaud</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/workspace.css" />
+  <style>
+    .ws-settings-summary button{width:100%;padding:12px;text-align:left;border:1px solid #30363d;border-radius:9px;background:#0b1119;color:#e6edf3;cursor:pointer}.ws-settings-summary button:hover{background:#161b22;border-color:#58a6ff}.ws-settings-summary button strong,.ws-settings-summary button span{display:block}.ws-settings-summary button span{margin-top:5px;color:#8b949e;font-size:.8rem;line-height:1.45}.ws-tool-form{display:flex;gap:8px;flex-wrap:wrap}.ws-tool-form button,.ws-tool-list button{border:1px solid #30363d;border-radius:7px;background:#21262d;color:#e6edf3;padding:9px 12px;font-weight:700;cursor:pointer}.ws-tool-list{border:1px solid #30363d;border-radius:10px;background:#0b1119;overflow:hidden}.ws-tool-item{padding:14px 16px;border-bottom:1px solid #21262d}.ws-tool-item:last-child{border-bottom:0}.ws-tool-item strong,.ws-tool-item span{display:block}.ws-tool-item span{margin-top:5px;color:#8b949e;font-size:.82rem}.ws-tool-item-actions{margin-top:10px}.ws-agent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ws-agent-grid button{min-height:54px}.ws-agent-output{margin-top:14px;white-space:pre-wrap;min-height:120px;padding:14px;border:1px solid #30363d;border-radius:10px;background:#050a10;color:#c9d1d9}@media(max-width:700px){.ws-agent-grid{grid-template-columns:1fr 1fr}.ws-tool-form{display:grid;grid-template-columns:1fr 1fr}.ws-tool-form button{min-height:52px}}
+  </style>
+</head>
+<body>
+  <header class="ws-topbar">
+    <button id="account-menu-button" class="ws-menu-button" type="button" aria-label="Open profile and settings" aria-expanded="false">☰</button>
+    <a href="/repositories" class="ws-brand" aria-label="Back to repositories">A</a>
+    <div class="ws-repo-identity"><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
+    <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch" disabled></select><button id="ws-new-branch" type="button" disabled>New branch</button></div>
+  </header>
+
+  <div id="account-drawer-backdrop" class="ws-account-backdrop" hidden></div>
+  <aside id="account-drawer" class="ws-account-drawer" hidden aria-label="Profile and settings">
+    <section class="ws-account-profile"><div class="ws-profile-avatar" data-profile-avatar>A</div><div><strong data-profile-name>Loading profile…</strong><span data-profile-email></span><span data-profile-role></span></div></section>
+    <nav><a href="/">Home</a><a class="active" href="/repositories">Repositories</a><a href="/feed">Public results</a><a href="/api/v1/github/connect">Connect GitHub</a></nav>
+    <section class="ws-settings-summary">
+      <h2>Repository settings</h2>
+      <button type="button" data-open-tab="code"><strong>Visibility and access</strong><span>View this repository’s real backend record and source files.</span></button>
+      <button type="button" data-open-tab="commits"><strong>Branches and commits</strong><span>Open real branch controls and commit history.</span></button>
+      <button type="button" data-open-tab="pull-requests"><strong>Pull requests and issues</strong><span>Create, review, and merge native Amosclaud work items.</span></button>
+      <button type="button" data-open-tab="autonomous"><strong>Autonomous execution</strong><span>Run build, test, review, or deployment operations.</span></button>
+    </section>
+    <button data-account-logout class="ws-drawer-signout" type="button">Sign out</button>
+  </aside>
+
+  <nav class="ws-tabs" aria-label="Repository navigation">
+    <button class="ws-tab active" data-tab="code" type="button">Code</button>
+    <button class="ws-tab" data-tab="commits" type="button">Commits</button>
+    <button class="ws-tab" data-tab="issues" type="button">Issues</button>
+    <button class="ws-tab" data-tab="pull-requests" type="button">Pull requests</button>
+    <button class="ws-tab" data-tab="autonomous" type="button">Autonomous</button>
+  </nav>
+
+  <main class="ws-main">
+    <section id="ws-not-found" class="ws-editor-empty" hidden>
+      <strong>Repository not found</strong><span>This repository does not exist, was deleted, or your account does not have access.</span><a class="btn-primary" href="/repositories">Back to repositories</a>
+    </section>
+    <section class="ws-panel active" data-panel="code">
+      <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" disabled /><button id="ws-new-folder" type="button" disabled>New folder</button><button id="ws-new-file" type="button" disabled>New file</button></div></div>
+      <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
+      <div class="ws-code-grid">
+        <section class="ws-browser" aria-label="Repository files"><div class="ws-browser-head"><strong>Name</strong><span>Size</span></div><div id="ws-tree" class="ws-tree">Loading files…</div></section>
+        <section class="ws-editor-pane"><div class="ws-editor-empty" id="ws-editor-empty"><strong>Select a file to view or edit</strong><span>Folders are clickable. Changes are committed manually to the selected branch.</span></div><div id="ws-editor-shell" hidden><div class="ws-editor-toolbar"><span id="ws-current-file">Select a file</span><div><button id="ws-rename" type="button" disabled>Rename or move</button><button id="ws-delete" type="button" disabled>Delete</button></div></div><textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea><div class="ws-commit-box"><label for="ws-commit-message">Commit message</label><input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" /><button id="ws-save" type="button" disabled>Commit changes</button></div></div></section>
+      </div>
+    </section>
+    <section class="ws-panel" data-panel="commits"><div class="ws-section-head"><div><h2>Commit history</h2><p>Real commits recorded on the selected branch.</p></div></div><div id="ws-commits" class="ws-commit-list">Loading…</div></section>
+    <section class="ws-panel" data-panel="issues"><div class="ws-section-head"><div><h2>Issues</h2><p>Native Amosclaud repository issues.</p></div><div class="ws-tool-form"><button id="ws-new-issue" type="button">New issue</button><button id="ws-refresh-issues" type="button">Refresh</button></div></div><div id="ws-issues" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load issues.</div></div></section>
+    <section class="ws-panel" data-panel="pull-requests"><div class="ws-section-head"><div><h2>Pull requests</h2><p>Create and merge changes between repository branches.</p></div><div class="ws-tool-form"><button id="ws-new-pr" type="button">New pull request</button><button id="ws-refresh-prs" type="button">Refresh</button></div></div><div id="ws-pull-requests" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load pull requests.</div></div></section>
+    <section class="ws-panel" data-panel="autonomous"><div class="ws-section-head"><div><h2>Autonomous execution</h2><p>Run real repository operations through the connected agent route.</p></div></div><div class="ws-agent-grid"><button id="ws-agent-build" type="button">Build</button><button id="ws-agent-test" type="button">Test</button><button id="ws-agent-review" type="button">Review</button><button id="ws-agent-deploy" type="button">Deploy</button></div><pre id="ws-agent-output" class="ws-agent-output">Choose an operation.</pre></section>
+  </main>
+
+  <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
+  <script>
+    (() => {
+      const parts = location.pathname.split('/').filter(Boolean);
+      const repositoryId = parts.length === 2 && parts[0] === 'workspace' ? parts[1] : '';
+      if (!/^\d+$/.test(repositoryId) || Number(repositoryId) < 1) {
+        sessionStorage.setItem('amosclaud-workspace-error', 'Invalid repository link');
+        location.replace('/repositories');
+      }
+    })();
+  </script>
+  <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script>
+    (() => {
+      const status = document.getElementById('ws-status');
+      const notFound = document.getElementById('ws-not-found');
+      const controls = document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file');
+      const panels = document.querySelectorAll('.ws-panel');
+      const tabs = document.querySelector('.ws-tabs');
+      let loaded = false;
+
+      const showNotFound = () => {
+        const message = status?.textContent || '';
+        if (/repository not found|does not exist|not have access|invalid repository/i.test(message)) {
+          document.getElementById('ws-repo-meta').textContent = 'Unavailable';
+          controls.forEach(control => { control.disabled = true; });
+          panels.forEach(panel => { panel.hidden = true; });
+          if (tabs) tabs.hidden = true;
+          if (notFound) notFound.hidden = false;
+          return;
+        }
+        if (!loaded && message && !/loading/i.test(message)) {
+          loaded = true;
+          controls.forEach(control => { control.disabled = false; });
+        }
+      };
+      if (status) new MutationObserver(showNotFound).observe(status, { childList: true, characterData: true, subtree: true });
+      showNotFound();
+    })();
+  </script>
+</body>
+</html>

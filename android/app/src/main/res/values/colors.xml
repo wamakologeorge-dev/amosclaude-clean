@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand colours -->
+    <color name="primary">#5B5EF4</color>
+    <color name="primary_dark">#4346D6</color>
+    <color name="primary_light">#E9E9FE</color>
+    <color name="accent">#00D4AA</color>
+
+    <!-- Surfaces -->
+    <color name="background">#F4F5FB</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F0F1F8</color>
+
+    <!-- Text -->
+    <color name="text_primary">#1A1B2E</color>
+    <color name="text_secondary">#6B7080</color>
+
+    <!-- Chat bubbles -->
+    <color name="bubble_user_bg">#5B5EF4</color>
+    <color name="bubble_user_text">#FFFFFF</color>
+    <color name="bubble_assistant_bg">#FFFFFF</color>
+    <color name="bubble_assistant_text">#1A1B2E</color>
+
+    <!-- Status -->
+    <color name="success">#22C55E</color>
+    <color name="error">#EF4444</color>
+    <color name="warning">#F59E0B</color>
+</resources>

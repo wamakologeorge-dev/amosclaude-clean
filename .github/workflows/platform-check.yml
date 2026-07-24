@@ -1,0 +1,78 @@
+name: 🏗️ Platform Build Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    name: Build & verify Docker image
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Docker image
+        run: docker build -t amoscloud-ai:test .
+
+      - name: Start container
+        run: |
+          docker run -d --name amoscloud_test \
+            -e DATABASE_URL=sqlite:///./amoscloud.db \
+            -e SECRET_KEY=test-secret-for-platform-check-only \
+            -e AUTH_COOKIE_SECURE=false \
+            -e AMOSCLAUD_ACCESS_MODE=local \
+            -e AMOSCLAUD_TRUST_CONTAINER_GATEWAY=true \
+            -p 8000:8000 \
+            amoscloud-ai:test
+
+      - name: Wait for container health
+        id: health
+        run: |
+          ready=false
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:8000/health; then
+              echo "✅ Container is healthy!"
+              ready=true
+              break
+            fi
+            echo "Waiting... attempt $i"
+            sleep 3
+          done
+          if [ "$ready" != "true" ]; then
+            docker logs amoscloud_test > platform-container.log 2>&1 || true
+            exit 1
+          fi
+
+      - name: Upload platform diagnostics
+        if: failure() && steps.health.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-container-diagnostics
+          path: platform-container.log
+          if-no-files-found: warn
+
+      - name: Verify secured dashboard flow
+        run: |
+          ROOT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/)
+          ROOT_LOCATION=$(curl -s -D - -o /dev/null http://localhost:8000/ | tr -d '\r' | awk 'tolower($1)=="location:" {print $2}')
+          LOGIN_STATUS=$(curl -s -o /tmp/login.html -w "%{http_code}" http://localhost:8000/login)
+          echo "Root HTTP status: $ROOT_STATUS"
+          echo "Root redirect: $ROOT_LOCATION"
+          echo "Login HTTP status: $LOGIN_STATUS"
+          [ "$ROOT_STATUS" = "302" ]
+          [ "$ROOT_LOCATION" = "/login" ]
+          [ "$LOGIN_STATUS" = "200" ]
+          grep -q "Amosclaud" /tmp/login.html
+          echo "✅ Secured dashboard and login page are live!"
+
+      - name: Show health
+        run: curl -s http://localhost:8000/health | python3 -m json.tool
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f amoscloud_test || true

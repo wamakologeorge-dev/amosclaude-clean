@@ -1,0 +1,49 @@
+{
+  "schema": "amosclaud.platform.requirements/v1",
+  "platform": "Amosclaud",
+  "canonical_url": "http://www.amosclaud.com/",
+  "source_of_truth": "amosclaud-native-repository",
+  "external_repository_required": false,
+  "head_repository": {
+    "name": "Amosclaud",
+    "purpose": "Template and operating standard for all user repositories",
+    "required_directories": ["src", "tests", ".amosclaud"],
+    "required_files": [
+      "README.md",
+      ".amosclaud/workflow.yml",
+      ".amosclaud/deployment.json"
+    ]
+  },
+  "repository_capabilities": [
+    "create",
+    "edit-files",
+    "create-folders",
+    "branches",
+    "commits",
+    "issues",
+    "pull-requests",
+    "merge",
+    "tests",
+    "ci-jobs",
+    "deployment-settings",
+    "collaborators"
+  ],
+  "autonomous_capabilities": [
+    "inspect",
+    "plan",
+    "repair",
+    "verify",
+    "open-issue",
+    "open-pull-request",
+    "merge-after-verification"
+  ],
+  "profile": {
+    "read_endpoint": "/api/v1/profile/me",
+    "update_endpoint": "/api/v1/profile/me",
+    "required_fields": ["id", "name", "email", "is_admin", "provider"]
+  },
+  "shell": {
+    "entrypoint": "scripts/amosclaud-shell",
+    "python_module": "amoscloud_ai.solo_shell"
+  }
+}

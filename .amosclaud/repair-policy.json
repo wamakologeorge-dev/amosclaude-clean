@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "mode": "evidence-first",
+  "max_attempts": 2,
+  "automatic_repairs": [
+    "trailing-whitespace",
+    "missing-final-newline",
+    "yaml-tabs",
+    "known-action-pin"
+  ],
+  "approval_required": [
+    "business-logic-change",
+    "dependency-major-upgrade",
+    "database-migration",
+    "deployment-change",
+    "infrastructure-change",
+    "secret-or-permission-change",
+    "destructive-operation"
+  ],
+  "truthfulness": {
+    "pass_requires_all_evidence": true,
+    "unknown_is_not_pass": true,
+    "record_command_return_codes": true
+  }
+}

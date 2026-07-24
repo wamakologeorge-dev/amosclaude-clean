@@ -1,0 +1,28 @@
+{
+  "name": "Amosclaud",
+  "short_name": "Amosclaud",
+  "description": "Amosclaud workspace, repositories, mail, storage, community, build, test, and deployment tools.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#111827",
+  "categories": ["developer", "productivity", "business"],
+  "icons": [
+    {
+      "src": "/static/amosclaud-app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {"name": "Workspace", "short_name": "Workspace", "url": "/"},
+    {"name": "Repositories", "short_name": "Repos", "url": "/repositories"},
+    {"name": "Amos Mail", "short_name": "Mail", "url": "/mail"},
+    {"name": "Community", "short_name": "Community", "url": "/community"}
+  ]
+}

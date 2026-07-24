@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amosclaud-os"
+version = "2.0.0a1"
+description = "Native engineering operating system for Amosclaud.com"
+requires-python = ">=3.11"
+dependencies = ["fastapi", "pydantic"]

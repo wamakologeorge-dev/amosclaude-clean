@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>Administrator Dashboard · Amosclaud</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body class="admin-body">
+  <header class="admin-topbar">
+    <div><a class="admin-brand" href="/">A</a><strong>Administrator Dashboard</strong></div>
+    <nav><a href="/">Workspace</a><a href="/repositories">Repositories</a><a href="/admin/service-keys">Service Keys</a><a href="/static/owner.html">Owner Identity</a><button id="admin-refresh" type="button">Refresh</button></nav>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-hero">
+      <div><span class="admin-eyebrow">AMOSCLAUD CONTROL CENTER</span><h1>Platform administration</h1><p>Monitor usage, manage accounts, oversee repositories, and review administrator actions.</p></div>
+      <div><div id="admin-health" class="admin-health" role="status">Checking system…</div><small id="admin-last-updated" class="admin-updated">Waiting for live data</small></div>
+    </section>
+
+    <section id="admin-metrics" class="admin-metrics" aria-label="Platform metrics"></section>
+
+    <section class="admin-panel" id="runtime-control-center" data-runtime-state="loading">
+      <div class="admin-panel-head">
+        <div><h2>Autonomous Runtime Control Center</h2><p>Production status for access, execution engine, active model, registered services, and encrypted configuration.</p></div>
+        <span id="owner-runtime-state" class="admin-badge pending" role="status">Connecting</span>
+      </div>
+      <div id="owner-runtime" class="admin-metrics" aria-label="Owner runtime status">
+        <article class="admin-metric" data-field="access_mode"><span>Access mode</span><strong>Checking</strong><small>Owner authorization</small></article>
+        <article class="admin-metric" data-field="model_runtime"><span>Execution engine</span><strong>Checking</strong><small>Runtime availability</small></article>
+        <article class="admin-metric" data-field="active_model"><span>Active model</span><strong>Checking</strong><small>Configured inference target</small></article>
+        <article class="admin-metric" data-field="registered_services"><span>Registered services</span><strong>Checking</strong><small>Healthy service count</small></article>
+      </div>
+      <div id="owner-runtime-message" class="runtime-message" aria-live="polite">Connecting to production runtime services…</div>
+      <div class="admin-table-wrap"><table aria-label="Runtime services"><thead><tr><th>Service</th><th>Type</th><th>Status</th><th>Last seen</th></tr></thead><tbody id="owner-services-body"><tr><td colspan="4">Checking service registry…</td></tr></tbody></table></div>
+      <script id="autonomous-runtime-snapshot" type="application/json">{"schema":"amosclaud.runtime.v1","state":"loading","services":[]}</script>
+      <div class="admin-panel-head"><div><h3>Encrypted Vault</h3><p>Values remain masked in the browser. Only the owner account can read this list or change settings.</p></div></div>
+      <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Value</th><th>Secret</th><th>Updated</th></tr></thead><tbody id="owner-settings-body"><tr><td colspan="4">Checking Vault settings…</td></tr></tbody></table></div>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head"><div><h2>Users</h2><p>Promote administrators, suspend accounts, and review activity.</p></div><input id="admin-user-search" type="search" placeholder="Search users" /></div>
+      <div class="admin-table-wrap"><table><thead><tr><th>User</th><th>Provider</th><th>Repositories</th><th>Sessions</th><th>Status</th><th>Actions</th></tr></thead><tbody id="admin-users-body"><tr><td colspan="6">Loading users…</td></tr></tbody></table></div>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head"><div><h2>Repositories</h2><p>View all platform repositories and their owners.</p></div></div>
+      <div class="admin-table-wrap"><table><thead><tr><th>Repository</th><th>Owner</th><th>Visibility</th><th>Storage</th><th>Updated</th><th>Action</th></tr></thead><tbody id="admin-repositories-body"><tr><td colspan="6">Loading repositories…</td></tr></tbody></table></div>
+    </section>
+
+    <section class="admin-panel">
+      <div class="admin-panel-head"><div><h2>Audit log</h2><p>Recent administrator actions.</p></div></div>
+      <div id="admin-audit" class="admin-audit"><div class="admin-empty">No administrator activity yet.</div></div>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="assertive"></div>
+  <script src="/static/admin.js"></script>
+  <script src="/static/app-install.js"></script>
+</body>
+</html>

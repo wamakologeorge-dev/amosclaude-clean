@@ -1,0 +1,92 @@
+/* public/style.css */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f7f6;
+    color: #333;
+    line-height: 1.6;
+}
+.container {
+    max-width: 900px;
+    margin: 20px auto;
+    background-color: #ffffff;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+h1 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 30px;
+    font-size: 2.2em;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 15px;
+}
+h2 {
+    color: #34495e;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-top: 30px;
+    font-size: 1.5em;
+}
+.section {
+    margin-bottom: 25px;
+    padding: 20px;
+    background-color: #fdfdfd;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+.status-grid {
+    display: grid;
+    grid-template-columns: 1fr; /* Single column for simplicity, can be 2 columns on larger screens */
+    gap: 10px;
+}
+.status-item, .watcher-item, .endpoint-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px dotted #f0f0f0;
+}
+.status-item:last-child, .watcher-item:last-child, .endpoint-item:last-child {
+    border-bottom: none;
+}
+.label {
+    font-weight: bold;
+    color: #555;
+    flex-basis: 60%; /* Adjust label width */
+}
+.value {
+    color: #007bff; /* Blue for active/working status */
+    font-weight: 600;
+    text-align: right;
+    flex-basis: 40%; /* Adjust value width */
+}
+.value.working {
+    color: #28a745; /* Green for 'Working' */
+}
+.value.error {
+    color: #dc3545; /* Red for 'Error' */
+}
+#logs-output {
+    background-color: #2d2d2d;
+    color: #f8f8f2;
+    padding: 15px;
+    border-radius: 5px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+    height: 250px;
+    overflow-y: scroll;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    border: 1px solid #444;
+}
+.endpoint-method {
+    font-weight: bold;
+    color: #007bff; /* Blue for methods */
+    margin-right: 10px;
+    min-width: 60px; /* Ensure method text aligns */
+}
+.endpoint-path {
+    color: #6c757d;
+}

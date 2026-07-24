@@ -1,0 +1,11 @@
+> chunk validate
+Using sidecar for remote commands
+Synchronising local CircleCI-Public/chunk-cli to remote: /home/user/chunk-cli...
+✓ Synced
+Running test (remote): task test
+✓ internal/anthropic (cached)
+✓ internal/config (cached)
+∅ internal/envspec
+✓ acceptance (17.511s)
+ 
+DONE 975 tests, 2 skipped in 19.078s

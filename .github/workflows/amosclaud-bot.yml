@@ -1,0 +1,377 @@
+name: Amosclaud Bot
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: amosclaud-bot-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  pre-ci-guardian:
+    name: Amosclaud Pre-CI Guardian
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out pull request branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted Guardian runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -e . pytest
+
+      - name: Run approval and safety dispatcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m amosclaud_bot.dispatcher
+
+      - name: Prepare changed-file scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/amosclaud-scope
+          mkdir -p /tmp/amosclaud-scope
+          git diff --name-only --diff-filter=ACMR "$BASE_SHA...HEAD" > /tmp/amosclaud-changed-files.txt
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "$file" ]] && continue
+            case "$file" in
+              *.py|*.js|*.mjs|*.cjs|*.json|*.yml|*.yaml|*.sh|*.html|*.css|*.md|*.toml)
+                mkdir -p "/tmp/amosclaud-scope/$(dirname "$file")"
+                cp "$file" "/tmp/amosclaud-scope/$file"
+                ;;
+            esac
+          done < /tmp/amosclaud-changed-files.txt
+          # HTML in the scope references deployed assets (e.g. /static/*.css -> web/).
+          # Copy those supporting assets so the Doctor can resolve them; they are
+          # never copied back because only changed files are restored afterwards.
+          if [[ -d /tmp/amosclaud-scope/web && -d web ]]; then
+            find web -maxdepth 1 -type f \
+              \( -name '*.css' -o -name '*.js' -o -name '*.mjs' -o -name '*.webmanifest' -o -name '*.json' -o -name '*.ico' -o -name '*.png' -o -name '*.svg' \) \
+              -exec cp -n {} /tmp/amosclaud-scope/web/ \;
+          fi
+          if [[ -d /tmp/amosclaud-scope/pages-site && -d pages-site ]]; then
+            find pages-site -maxdepth 1 -type f \
+              \( -name '*.css' -o -name '*.js' -o -name '*.webmanifest' -o -name '*.json' \) \
+              -exec cp -n {} /tmp/amosclaud-scope/pages-site/ \;
+          fi
+
+      - name: Doctor diagnose and Fixer repair
+        id: guardian
+        run: |
+          set +e
+          python -m amoscloud_ai.repair_engine.cli \
+            /tmp/amosclaud-scope \
+            --apply \
+            --memory /tmp/amosclaud-repair-memory.jsonl \
+            --json /tmp/amosclaud-repair-report.json \
+            --markdown /tmp/amosclaud-repair-report.md
+          guardian_status=$?
+          set -e
+          while IFS= read -r file; do
+            [[ -z "$file" || ! -f "/tmp/amosclaud-scope/$file" ]] && continue
+            cp "/tmp/amosclaud-scope/$file" "$file"
+          done < /tmp/amosclaud-changed-files.txt
+          echo "exit_code=$guardian_status" >> "$GITHUB_OUTPUT"
+          if [[ -f /tmp/amosclaud-repair-report.json ]]; then
+            cat /tmp/amosclaud-repair-report.json
+          fi
+
+      - name: Verify Guardian package
+        run: |
+          set -euo pipefail
+          python -m compileall -q amoscloud_ai/repair_engine amosclaud_bot
+          python -m pytest -q tests/test_repair_engine.py
+
+      - name: Commit safe deterministic repairs
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No safe deterministic repair was required."
+            exit 0
+          fi
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: apply Amosclaud Pre-CI Guardian repairs"
+          git push
+
+      - name: Enforce unified Guardian result
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.guardian.outputs.exit_code }}" != "0" ]]; then
+            echo "Doctor found a blocking issue that the safe Fixer could not repair."
+            exit 1
+          fi
+
+      - name: Publish Guardian report
+        if: always()
+        run: |
+          if [[ -f /tmp/amosclaud-repair-report.md ]]; then
+            cat /tmp/amosclaud-repair-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Amosclaud Pre-CI Guardian report unavailable" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  respond:
+    if: github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out trusted repository base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted Amosclaud repository runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run protected privacy preflight
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMOSCLAUD_PRIVATE_REPOSITORY: ${{ vars.AMOSCLAUD_PRIVATE_REPOSITORY }}
+          AMOSCLAUD_PRIVATE_TOKEN: ${{ secrets.AMOSCLAUD_PRIVATE_TOKEN }}
+          AMOSCLAUD_PRIVACY_ONLY: '1'
+        run: python -m amosclaud_bot.dispatcher
+
+      - name: Classify Amosclaud issue request
+        id: classify
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from amosclaud_bot.bot import parse_command
+
+          payload = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          body = str((payload.get("comment") or {}).get("body") or "")
+          command, objective = parse_command(body)
+          Path("/tmp/amosclaud-objective.txt").write_text(objective or "Repository engineering task", encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"write_request={'true' if command == 'fix' else 'false'}\n")
+          PY
+
+      - name: Check out pull request head
+        if: github.event.issue.pull_request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Protected/private request stopped before PR-head checkout."
+            exit 0
+          fi
+          gh pr checkout "${{ github.event.issue.number }}"
+
+      - name: Prepare repair branch for issue
+        if: >-
+          !github.event.issue.pull_request &&
+          steps.classify.outputs.write_request == 'true' &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        run: |
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Protected/private request does not create a public repair branch."
+            exit 0
+          fi
+          git switch -c "amosclaud-bot/fix-${{ github.event.issue.number }}-${{ github.run_id }}"
+
+      - name: Start live execution dashboard
+        if: >-
+          steps.classify.outputs.write_request == 'true' &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ -f /tmp/amosclaud-private-routed ]; then exit 0; fi
+          python -m amosclaud_bot.execution_dashboard \
+            --stage edit \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --branch "$(git branch --show-current)"
+
+      - name: Run Amosclaud Bot dispatcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m amosclaud_bot.dispatcher
+
+      - name: Verify real repair before publishing
+        if: >-
+          steps.classify.outputs.write_request == 'true' &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -Eeuo pipefail
+
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Private work was routed away from this public workflow output."
+            exit 0
+          fi
+
+          report_failure() {
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          cards = [
+              {"name": "Python compilation", "status": "failed", "detail": "Compilation or test execution failed"},
+              {"name": "Targeted pytest", "status": "failed", "detail": "See the GitHub Actions log for exact failure evidence"},
+              {"name": "Truth gate", "status": "passed", "detail": "No successful repair was claimed"},
+          ]
+          Path("/tmp/amosclaud-tests.json").write_text(json.dumps(cards), encoding="utf-8")
+          PY
+            python -m amosclaud_bot.execution_dashboard \
+              --stage test --outcome failed \
+              --objective "$(cat /tmp/amosclaud-objective.txt)" \
+              --files /tmp/amosclaud-changed-files.txt \
+              --tests-json /tmp/amosclaud-tests.json \
+              --branch "$(git branch --show-current)" || true
+            gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud — Verification failed\n\n🟥 **Result:** FAILED\n\nThe requested repository change did not pass real verification. No successful repair is being claimed.\n\nDetails: see GitHub Actions."
+          }
+          trap report_failure ERR
+
+          if git diff --quiet && git diff --cached --quiet; then
+            trap - ERR
+            gh issue comment "$ISSUE_NUMBER" --body "### Amosclaud — No change produced\n\n⬜ **Result:** NO CHANGES\n\nNo repository files were modified, so no repair or creation is being claimed."
+            exit 1
+          fi
+
+          git diff --name-only > /tmp/amosclaud-changed-files.txt
+          FILE_COUNT=$(wc -l < /tmp/amosclaud-changed-files.txt | tr -d ' ')
+
+          python -m compileall -q amosclaud_bot src 2>&1 | tee /tmp/amosclaud-compile.log
+          python -m pytest -q \
+            tests/test_amosclaud_bot.py \
+            tests/test_amosclaud_professional_review.py \
+            tests/test_amosclaud_approval_gate.py \
+            tests/test_amosclaud_privacy_gate.py \
+            tests/test_amosclaud_comment_style.py \
+            tests/test_amosclaud_status_board.py \
+            tests/test_autonomous_planning.py \
+            tests/test_execution_dashboard.py \
+            2>&1 | tee /tmp/amosclaud-pytest.log
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pytest_tail = Path("/tmp/amosclaud-pytest.log").read_text(encoding="utf-8").splitlines()[-1]
+          cards = [
+              {"name": "Python compilation", "status": "passed", "detail": "amosclaud_bot and src compiled successfully"},
+              {"name": "Targeted pytest", "status": "passed", "detail": pytest_tail},
+              {"name": "Dashboard integrity", "status": "passed", "detail": "Live-card regression tests passed"},
+              {"name": "Approval & privacy gates", "status": "passed", "detail": "Protected workflow tests passed"},
+              {"name": "Truth gate", "status": "passed", "detail": "PASS is emitted only after commands return successfully"},
+          ]
+          Path("/tmp/amosclaud-tests.json").write_text(json.dumps(cards), encoding="utf-8")
+          PY
+
+          python -m amosclaud_bot.execution_dashboard \
+            --stage verify --outcome passed \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --files /tmp/amosclaud-changed-files.txt \
+            --tests-json /tmp/amosclaud-tests.json \
+            --branch "$(git branch --show-current)"
+
+          trap - ERR
+          {
+            echo "### Amosclaud — Verified result"
+            echo
+            echo "🟩 **Result:** PASSED"
+            echo "🟩 **Compilation:** PASSED"
+            echo "🟩 **Tests:** PASSED"
+            echo "**Files changed:** ${FILE_COUNT}"
+            head -n 8 /tmp/amosclaud-changed-files.txt | sed 's/^/- `/' | sed 's/$/`/'
+            if [ "$FILE_COUNT" -gt 8 ]; then
+              echo "- ...and $((FILE_COUNT - 8)) more"
+            fi
+          } > /tmp/amosclaud-real-results.md
+
+      - name: Commit and publish Amosclaud-Fixer changes
+        if: >-
+          steps.classify.outputs.write_request == 'true' &&
+          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          if [ -f /tmp/amosclaud-private-routed ]; then
+            echo "Private work was routed away from public commit/PR publishing."
+            exit 0
+          fi
+
+          if git diff --quiet && git diff --cached --quiet; then
+            exit 1
+          fi
+
+          git config user.name "amosclaud-bot"
+          git config user.email "amosclaud-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: Amosclaud-Fixer repair for #${{ github.event.issue.number }}"
+          REPAIR_SHA=$(git rev-parse --short HEAD)
+          PR_DISPLAY=""
+
+          if [ "${{ github.event.issue.pull_request != null }}" = "true" ]; then
+            git push
+            PR_DISPLAY="#${{ github.event.issue.number }}"
+            {
+              cat /tmp/amosclaud-real-results.md
+              echo "**Commit:** \`${REPAIR_SHA}\`"
+              echo "**Pull request:** ${PR_DISPLAY}"
+            } > /tmp/amosclaud-published-result.md
+            gh pr comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
+          else
+            git push -u origin HEAD
+            PR_URL=$(gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "$(git branch --show-current)" \
+              --title "Amosclaud-Fixer: repair issue #${{ github.event.issue.number }}" \
+              --body "Automated repair created by Amosclaud Bot through the repository-local Amosclaud Autonomous and Amosclaud-Fixer pipeline. The branch was only published after compilation and targeted bot verification tests passed.\n\nCloses #${{ github.event.issue.number }}")
+            PR_DISPLAY="${PR_URL}"
+            {
+              cat /tmp/amosclaud-real-results.md
+              echo "**Commit:** \`${REPAIR_SHA}\`"
+              echo "**Pull request:** ${PR_URL}"
+            } > /tmp/amosclaud-published-result.md
+            gh issue comment "${{ github.event.issue.number }}" --body-file /tmp/amosclaud-published-result.md
+          fi
+
+          python -m amosclaud_bot.execution_dashboard \
+            --stage publish --outcome passed \
+            --objective "$(cat /tmp/amosclaud-objective.txt)" \
+            --files /tmp/amosclaud-changed-files.txt \
+            --tests-json /tmp/amosclaud-tests.json \
+            --commit "${REPAIR_SHA}" \
+            --pull-request "${PR_DISPLAY}" \
+            --branch "$(git branch --show-current)"

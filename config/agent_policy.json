@@ -1,0 +1,21 @@
+{
+  "name": "Amosclaud Futuristic Autonomous Agent",
+  "version": 1,
+  "execution": {
+    "default_mode": "plan",
+    "require_verification": true,
+    "require_authorization_for_writes": true,
+    "max_steps": 20,
+    "command_timeout_seconds": 120
+  },
+  "safety": {
+    "protected_paths": [".git", ".env", "data", "secrets"],
+    "blocked_commands": ["rm -rf /", "git push --force", "git reset --hard"],
+    "never_modify_user_data": true
+  },
+  "learning": {
+    "record_verified_lessons": true,
+    "reject_unverified_lessons": true,
+    "academy_max_level": 5000
+  }
+}

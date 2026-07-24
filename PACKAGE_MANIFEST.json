@@ -1,0 +1,16 @@
+{
+  "product": "Amosclaud Agent Server",
+  "edition": "Portable",
+  "version_source": "release-tag",
+  "architecture": "folder-first-self-hosted",
+  "entrypoints": {
+    "windows": "start-windows.bat",
+    "linux_macos": "start-local.sh",
+    "web": "http://localhost:8000"
+  },
+  "runtime_directories": ["data", "data/repositories", "data/storage"],
+  "configuration": ".env",
+  "configuration_template": ".env.example",
+  "documentation": ["START_HERE.html", "PORTABLE_SERVER.md"],
+  "integrity": "SHA256SUMS.txt"
+}

@@ -1,4 +1,4 @@
-"""Database modules for Amoscloud AI"""
+"""Database modules for Amosclaud AI"""
 
 from src.database.db_manager import DatabaseManager
 

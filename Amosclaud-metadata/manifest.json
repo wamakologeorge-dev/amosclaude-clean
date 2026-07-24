@@ -1,0 +1,43 @@
+{
+  "project": "Amosclaud-metadata",
+  "display_name": "Amosclaud Metadata",
+  "schema_version": "1.0.0",
+  "authority": {
+    "system": "Amosclaud OS",
+    "driver": "Amosclaud Autonomous",
+    "owner_scope": "founder-governed"
+  },
+  "record_types": [
+    "repository",
+    "workspace",
+    "commit",
+    "mission",
+    "pipeline",
+    "deployment",
+    "runtime",
+    "model",
+    "service",
+    "repair",
+    "health",
+    "learning",
+    "administrator"
+  ],
+  "verification_states": [
+    "observed",
+    "pending_verification",
+    "verified",
+    "failed",
+    "archived"
+  ],
+  "security": {
+    "store_secrets": false,
+    "append_only_verified_history": true,
+    "atomic_writes": true,
+    "workspace_boundary_required": true
+  },
+  "paths": {
+    "schema": "schemas/metadata.schema.json",
+    "package": "src/amosclaud_metadata",
+    "tests": "tests"
+  }
+}

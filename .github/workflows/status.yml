@@ -1,0 +1,20 @@
+name: Amosclaud-ai Status
+
+on:
+  # Triggers the workflow manually or can be changed to 'push'
+  workflow_dispatch:
+
+jobs:
+  report-status:
+    name: 🐦 Amosclaud-ai Status
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Report Agent Activity
+        run: |
+          echo "================================================================"
+          echo "====================="
+          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "====================="
+          echo "🟢 Live & Active"
+        shell: bash

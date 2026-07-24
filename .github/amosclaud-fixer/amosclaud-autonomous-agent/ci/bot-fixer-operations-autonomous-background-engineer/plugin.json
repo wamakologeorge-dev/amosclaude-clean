@@ -1,0 +1,36 @@
+{
+  "name": "amosclaud-autonomous-background-engineer",
+  "version": "1.0.0",
+  "owner": "Amosclaud",
+  "entrypoint": "bot.py",
+  "instruction_book": "../../../../../docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md",
+  "fixer": "../../../../scripts/amosclaud_fixer.py",
+  "capabilities": [
+    "inspect-ci-failures",
+    "classify-python-errors",
+    "generate-constrained-patches",
+    "run-python-compilation",
+    "run-pytest",
+    "open-verified-repair-pull-requests"
+  ],
+  "permissions": {
+    "repository_contents": "write-on-repair-branch",
+    "pull_requests": "write",
+    "issues": "write",
+    "actions": "read",
+    "secrets": "read-named-secret-only"
+  },
+  "safety": {
+    "direct_main_writes": false,
+    "requires_verification": true,
+    "max_attempts": 3,
+    "protected_paths": [
+      ".git/",
+      ".github/workflows/",
+      ".github/actions/",
+      ".env",
+      "credentials.json",
+      "secrets.json"
+    ]
+  }
+}

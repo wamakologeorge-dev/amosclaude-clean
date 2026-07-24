@@ -1,0 +1,253 @@
+name: Amosclaud Review Receiver
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: Repository sending the command
+        required: true
+        type: string
+      action:
+        description: Review action
+        required: true
+        type: string
+      target_repository:
+        description: Repository containing the pull request
+        required: true
+        type: string
+      objective:
+        description: Review request, ideally including PR number
+        required: true
+        type: string
+      request_id:
+        description: Unique request identifier
+        required: true
+        type: string
+      command_issue:
+        description: Amosclaud1 issue receiving the result
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: amosclaud-review-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+env:
+  COMMAND_REPOSITORY: wamakologeorge-dev/Amosclaud1
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate trusted review request
+        env:
+          SOURCE: ${{ inputs.source_repository }}
+          ACTION: ${{ inputs.action }}
+          TARGET: ${{ inputs.target_repository }}
+          OBJECTIVE: ${{ inputs.objective }}
+          ISSUE: ${{ inputs.command_issue }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          test "$SOURCE" = "wamakologeorge-dev/Amosclaud1"
+          test "$ACTION" = "review"
+          case "$TARGET" in
+            wamakologeorge-dev/amosclaude-clean|wamakologeorge-dev/workspace|wamakologeorge-dev/starter-workflows|wamakologeorge-dev/Amosclaud1) ;;
+            *) echo "Target is not allowlisted" >&2; exit 1 ;;
+          esac
+          test -n "$OBJECTIVE"
+          test -n "$REQUEST_ID"
+          [[ "$ISSUE" =~ ^[0-9]+$ ]]
+
+      - name: Acknowledge review
+        env:
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
+          ISSUE: ${{ inputs.command_issue }}
+          TARGET: ${{ inputs.target_repository }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/running.md <<EOF
+          ### Amosclaud review started
+
+          🟠 **Status:** REVIEWING
+
+          - Request: \`$REQUEST_ID\`
+          - Repository: \`$TARGET\`
+
+          Amosclaud is examining pull-request metadata, changed files, patches, and recorded GitHub checks. No approval or merge decision is being made automatically.
+          EOF
+          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/running.md
+
+      - name: Review pull request and return evidence
+        env:
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_ENGINE_TOKEN }}
+          ISSUE: ${{ inputs.command_issue }}
+          TARGET: ${{ inputs.target_repository }}
+          OBJECTIVE: ${{ inputs.objective }}
+          REQUEST_ID: ${{ inputs.request_id }}
+        run: |
+          set -euo pipefail
+
+          pr_number="$(python - <<'PY'
+          import os, re
+          text = os.environ['OBJECTIVE']
+          match = re.search(r'(?:PR\s*#?|pull request\s*#?)\s*(\d+)', text, re.I)
+          print(match.group(1) if match else '')
+          PY
+          )"
+
+          if [[ -z "$pr_number" ]]; then
+            pr_number="$(gh api "repos/$TARGET/pulls?state=open&sort=updated&direction=desc&per_page=1" --jq '.[0].number // empty')"
+          fi
+          if [[ -z "$pr_number" ]]; then
+            cat > /tmp/no-pr.md <<EOF
+          ### Amosclaud review result
+
+          ⚪ **Verdict:** NO OPEN PULL REQUEST
+
+          - Request: \`$REQUEST_ID\`
+          - Repository: \`$TARGET\`
+
+          Include a pull request number, for example: \`@Amosclaud review PR #123\`.
+          EOF
+            gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/no-pr.md
+            exit 0
+          fi
+
+          pr="$(gh api "repos/$TARGET/pulls/$pr_number")"
+          title="$(jq -r '.title' <<<"$pr")"
+          state="$(jq -r '.state' <<<"$pr")"
+          draft="$(jq -r '.draft' <<<"$pr")"
+          mergeable="$(jq -r '.mergeable // "unknown"' <<<"$pr")"
+          additions="$(jq -r '.additions' <<<"$pr")"
+          deletions="$(jq -r '.deletions' <<<"$pr")"
+          changed_files="$(jq -r '.changed_files' <<<"$pr")"
+          head_sha="$(jq -r '.head.sha' <<<"$pr")"
+          html_url="$(jq -r '.html_url' <<<"$pr")"
+
+          files="$(gh api --paginate "repos/$TARGET/pulls/$pr_number/files?per_page=100")"
+          checks="$(gh api -H 'Accept: application/vnd.github+json' "repos/$TARGET/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"check_runs":[]}')"
+          export FILES_JSON="$files"
+          export CHECKS_JSON="$checks"
+
+          review_json="$(python - <<'PY'
+          import json, os, re
+
+          files = json.loads(os.environ['FILES_JSON'])
+          checks = json.loads(os.environ['CHECKS_JSON']).get('check_runs', [])
+
+          findings = []
+          risky = []
+          sensitive_patterns = (
+              '.github/workflows/', 'Dockerfile', 'docker-compose', '.env',
+              'requirements', 'pyproject.toml', 'package.json', 'package-lock.json',
+              'terraform', 'migrations/', 'security', 'auth', 'billing'
+          )
+          secret_re = re.compile(r'(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*["\'][^"\']+["\']')
+
+          for item in files:
+              name = item.get('filename', '')
+              patch = item.get('patch') or ''
+              if any(pattern.lower() in name.lower() for pattern in sensitive_patterns):
+                  risky.append(name)
+              if '<<<<<<<' in patch or '>>>>>>>' in patch:
+                  findings.append(('HIGH', name, 'Unresolved merge-conflict marker appears in the patch.'))
+              if secret_re.search(patch):
+                  findings.append(('HIGH', name, 'Patch may contain a hard-coded credential or secret-like value.'))
+              if re.search(r'(?m)^\+.*\b(eval|exec)\s*\(', patch):
+                  findings.append(('MEDIUM', name, 'New dynamic code execution requires careful review.'))
+              if re.search(r'(?m)^\+.*shell\s*=\s*True', patch):
+                  findings.append(('MEDIUM', name, 'New subprocess shell execution may introduce injection risk.'))
+              if re.search(r'(?m)^\+.*except\s+Exception\s*:\s*(pass)?\s*$', patch):
+                  findings.append(('LOW', name, 'Broad exception handling may hide failures.'))
+
+          latest = {}
+          for check in sorted(checks, key=lambda c: c.get('started_at') or c.get('completed_at') or ''):
+              latest[check.get('name', 'unnamed')] = check
+          failed = [c for c in latest.values() if c.get('conclusion') in {'failure','timed_out','cancelled','action_required','startup_failure'}]
+          pending = [c for c in latest.values() if c.get('status') != 'completed' or c.get('conclusion') is None]
+
+          if failed:
+              verdict = 'CHANGES REQUIRED'
+              reason = 'One or more latest GitHub checks are failing.'
+          elif any(level == 'HIGH' for level, _, _ in findings):
+              verdict = 'CHANGES REQUIRED'
+              reason = 'A high-severity deterministic review finding was detected.'
+          elif pending:
+              verdict = 'WAIT FOR CHECKS'
+              reason = 'GitHub verification is still running.'
+          elif findings or risky:
+              verdict = 'REVIEW ADVISED'
+              reason = 'No blocking evidence was found, but the listed changes need human attention.'
+          else:
+              verdict = 'NO BLOCKING FINDINGS'
+              reason = 'The deterministic review found no blocking pattern and latest checks are not failing.'
+
+          print(json.dumps({
+              'verdict': verdict,
+              'reason': reason,
+              'findings': findings,
+              'risky': risky[:20],
+              'failed': [{'name': c.get('name'), 'conclusion': c.get('conclusion')} for c in failed],
+              'pending': [{'name': c.get('name'), 'status': c.get('status')} for c in pending],
+              'check_count': len(latest),
+          }))
+          PY
+          )"
+
+          verdict="$(jq -r '.verdict' <<<"$review_json")"
+          reason="$(jq -r '.reason' <<<"$review_json")"
+          findings="$(jq -r '.findings[]? | "- **" + .[0] + "** `" + .[1] + "`: " + .[2]' <<<"$review_json")"
+          risky="$(jq -r '.risky[]? | "- `" + . + "`"' <<<"$review_json")"
+          failed="$(jq -r '.failed[]? | "- **" + .name + "**: " + (.conclusion // "unknown")' <<<"$review_json")"
+          pending="$(jq -r '.pending[]? | "- " + .name + ": " + (.status // "pending")' <<<"$review_json")"
+          check_count="$(jq -r '.check_count' <<<"$review_json")"
+
+          case "$verdict" in
+            "CHANGES REQUIRED") icon='🔴' ;;
+            "WAIT FOR CHECKS") icon='🟡' ;;
+            "REVIEW ADVISED") icon='🟠' ;;
+            *) icon='🟢' ;;
+          esac
+
+          cat > /tmp/review.md <<EOF
+          ### Amosclaud pull request review
+
+          $icon **Verdict:** $verdict
+
+          - Request: \`$REQUEST_ID\`
+          - Repository: \`$TARGET\`
+          - Pull request: [#$pr_number — $title]($html_url)
+          - State: \`$state\`
+          - Draft: \`$draft\`
+          - Mergeable: \`$mergeable\`
+          - Changed files: \`$changed_files\`
+          - Additions/deletions: \`+$additions / -$deletions\`
+          - Latest unique checks examined: \`$check_count\`
+
+          **Reason:** $reason
+
+          #### Deterministic findings
+          ${findings:-None detected.}
+
+          #### Sensitive or high-impact files
+          ${risky:-None detected.}
+
+          #### Failed checks
+          ${failed:-None.}
+
+          #### Pending checks
+          ${pending:-None.}
+
+          #### Review limits
+          This is an evidence-based automated review of pull-request metadata, visible patches, risk patterns, and GitHub checks. It does not claim full semantic correctness, security proof, or human approval. A clean report means **no blocking finding was detected**, not that the code is guaranteed defect-free.
+          EOF
+
+          gh issue comment "$ISSUE" --repo "$COMMAND_REPOSITORY" --body-file /tmp/review.md

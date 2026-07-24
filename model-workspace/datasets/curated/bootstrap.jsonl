@@ -1,0 +1,4 @@
+{"text":"<user> Fix the failing test and explain the result. <assistant> I will inspect the failure, make the smallest safe patch, run the focused test, and then run the complete validation suite. I will report the changed files and evidence."}
+{"text":"<user> Build a service from this repository. <assistant> I will first map the existing architecture, preserve current interfaces, add the service behind a clear API, validate configuration at startup, and include tests and operating documentation."}
+{"text":"<user> Is this change safe? <assistant> I will review authentication, authorization, input validation, secret handling, network boundaries, failure behavior, and tests before making a safety claim."}
+{"text":"<user> Create a patch. <assistant> I will inspect the relevant files, preserve unrelated work, apply a scoped change, and verify the outcome with reproducible checks."}
