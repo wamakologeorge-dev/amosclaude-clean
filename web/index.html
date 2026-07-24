@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="/static/single-autonomous-dock.css" />
 </head>
 <body class="single-autonomous-page">
-  <!-- Compatibility contract: Amosclaud Operator, Amosclaud Autonomous, Repository, Results, one identity, instructions, permission, evidence, final result. -->
+  <!-- Compatibility contract: Amosclaud Operator, Amosclaud Autonomous, Repository, Results, one identity, instructions, owner permission, verification evidence, final result. -->
   <main class="single-autonomous-shell">
     <section class="single-agent-card" aria-label="Amosclaud unified command agent">
       <header class="single-agent-head">
@@ -21,7 +21,7 @@
           <strong>Amosclaud Agent</strong>
           <span id="agent-status">ready</span>
         </div>
-        <p>One real action command surface with one identity: Amosclaud-bot receives the request, Codex-style planning selects the workflow, Amosclaud Autonomous execution performs approved work, Amosclaud Doctor diagnoses the system, and Amosclaud Fixer verification proves the result.</p>
+        <p>Real native execution is active for repositories, issues, supplied files, branches, and commits. Model-generated code changes run only when an Amosclaud model service is actually connected; otherwise the platform returns a clear blocker instead of pretending work was completed.</p>
       </header>
 
       <section class="agent-project-context" aria-label="Active Amosclaud project context">
@@ -30,17 +30,17 @@
         <p><span>Repository: </span><b id="active-repository-name">Select a repository</b></p>
         <p><span>Branch: </span><b id="active-branch-name">main</b></p>
         <p><span>Authorization: </span><b id="active-owner-authorization">Signed-in session</b></p>
-        <small>Every command automatically receives repository_id, selected workspace/repository, branch, and owner authorization from Amosclaud.com.</small>
+        <small>The server resolves repository_id and the selected workspace/repository, then verifies owner permission, branch, and repository role before any write.</small>
       </section>
 
       <section class="agent-command-contract" aria-label="Unified agent command path">
-        <strong>Command path</strong>
-        <p>Command → resolve context → authorize → inspect → diagnose → plan → act → test → fix → verify → report</p>
-        <small>Repository writes require owner permission. Every completed action returns verification evidence and a final result.</small>
+        <strong>Execution path</strong>
+        <p>Instructions → server authorization → native repository operation → Git/database write → verification evidence → final result</p>
+        <small>Amosclaud never uses its own platform source as a substitute when no project is selected.</small>
       </section>
 
       <div id="agent-replies" class="agent-replies single-conversation" aria-live="polite">
-        <div class="agent-reply muted">Tell Amosclaud what to build, inspect, diagnose, fix, test, release, or deploy.</div>
+        <div class="agent-reply muted">Create a native repository, create an issue, inspect a selected project, or request a verified code change.</div>
       </div>
 
       <div class="single-composer agent-compose">
@@ -49,14 +49,15 @@
       </div>
 
       <div class="agent-command-actions" aria-label="Common Amosclaud commands">
-        <button type="button" data-agent-suggestion="Inspect this project, run Amosclaud Doctor, identify the highest-priority problems, and return verified evidence with a safe execution plan.">Inspect and diagnose</button>
-        <button type="button" data-agent-suggestion="Run the full test suite, diagnose every failure, repair verified problems with Amosclaud Fixer, rerun tests, and return the final evidence.">Test and fix</button>
+        <button type="button" data-agent-suggestion="Inspect the selected repository and report verified findings without changing files.">Inspect repository</button>
+        <button type="button" data-agent-suggestion="Create a repository named starter-project">Create repository</button>
+        <button type="button" data-agent-suggestion="Create an issue for the login failure">Create issue</button>
         <button type="button" data-agent-suggestion="Review this repository, implement the requested work safely, commit the changes on a branch, verify them, and prepare the result for review.">Build and verify</button>
       </div>
 
       <section class="autonomous-runtime-controls" aria-label="Unified operator runtime">
         <h2>Runtime health</h2>
-        <p>Amosclaud-bot, Amosclaud Autonomous, Amosclaud Doctor, and Amosclaud Fixer operate as one professional agent identity. Instructions and owner permission are required before Repository changes. Every completed engineering job must return verification evidence and a final result.</p>
+        <p>Native repository actions do not require a model key. General code generation requires a reachable Amosclaud model endpoint and will fail truthfully when that runtime is unavailable.</p>
         <button id="btn-check-agent-connections" type="button">Check Autonomous and server</button>
         <button id="btn-amomodel-on" type="button">Turn on AmoModel</button>
         <button id="btn-amomodel-off" type="button">Turn off AmoModel</button>
