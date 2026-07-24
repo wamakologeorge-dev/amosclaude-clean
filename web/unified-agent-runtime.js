@@ -42,6 +42,14 @@
       const payload = JSON.parse(init.body);
       const originalObjective = String(payload.objective || '').trim();
       const command = classifyCommand(originalObjective);
+      const {
+        actionRequested,
+        repairRequested,
+        diagnoseRequested,
+        testRequested,
+        releaseRequested,
+        writeRequested,
+      } = command;
       payload.objective = authorizeObjective(originalObjective, command);
       payload.mode = command.mode;
       payload.metadata = {
@@ -58,12 +66,12 @@
         unified_agent_identity: true,
         autonomous_runtime: true,
         autonomous_mode_selection: true,
-        use_agent: command.actionRequested,
-        apply_changes: command.writeRequested || command.repairRequested || command.releaseRequested,
-        run_doctor: command.diagnoseRequested || command.repairRequested || command.testRequested,
-        run_tests: command.testRequested || command.repairRequested || command.writeRequested,
-        run_fixer: command.repairRequested,
-        require_owner_permission: command.writeRequested || command.repairRequested || command.releaseRequested,
+        use_agent: actionRequested,
+        apply_changes: actionRequested,
+        run_doctor: diagnoseRequested || repairRequested || testRequested,
+        run_tests: testRequested || repairRequested || writeRequested,
+        run_fixer: repairRequested,
+        require_owner_permission: writeRequested || repairRequested || releaseRequested,
         require_verification: true,
         return_evidence: true,
       };
