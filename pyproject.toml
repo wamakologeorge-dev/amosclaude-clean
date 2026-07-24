@@ -25,6 +25,9 @@ classifiers = [
 ]
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.27,<2"]
+
 [project.urls]
 Homepage = "http://www.amosclaud.com/"
 Repository = "http://www.amosclaud.com/repositories"
@@ -43,6 +46,7 @@ amosclaud-repair = "amoscloud_ai.repair_engine.cli:main"
 amosclaud-workspace = "amoscloud_ai.workspace_control:main"
 amosclaud-model = "amosclaud_model.cli:main"
 amosclaud-metrics = "amosclaud_metrics.server:main"
+amosclaud-mcp = "amosclaud_mcp.server:main"
 amcl = "amosclaud_language.cli:main"
 amosclaud-tamper-server = "Amosclaud.api.path.byte.server.router.folder.cb.chapter.core.system.py:main"
 
@@ -55,6 +59,7 @@ include = [
   "amosclaud_language*",
   "amosclaud_model*",
   "amosclaud_metrics*",
+  "amosclaud_mcp*",
 ]
 
 [tool.setuptools.dynamic]
