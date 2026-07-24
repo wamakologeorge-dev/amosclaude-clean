@@ -48,7 +48,7 @@
         ...(payload.metadata || {}),
         original_objective: originalObjective,
         original_follow_up: payload.objective,
-        source: 'amosclaud-platform-command-agent',
+        source: 'amosclaud-platform-unified-operator',
         operator: 'amosclaud-bot',
         planner: 'amosclaud-autonomous',
         doctor_engine: 'amosclaud-doctor',
