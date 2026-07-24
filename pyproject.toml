@@ -25,6 +25,9 @@ classifiers = [
 ]
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.27,<2"]
+
 [project.urls]
 Homepage = "http://www.amosclaud.com/"
 Repository = "http://www.amosclaud.com/repositories"
