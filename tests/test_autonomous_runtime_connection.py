@@ -51,3 +51,30 @@ def test_agent_page_uses_real_runtime_readiness():
     assert "/api/v1/amomodel/model/status" in script
     assert "/api/v1/core/os/context" in script
     assert "Autonomous blocker:" in script
+
+
+def test_autonomous_gateway_delegates_to_shared_native_provider(monkeypatch):
+    from amoscloud_ai.model_api_response import ModelApiResponse
+    from src.agent import model as autonomous_model
+
+    captured = {}
+
+    def native_reply(history, system_prompt):
+        captured["history"] = history
+        captured["system_prompt"] = system_prompt
+        return ModelApiResponse(
+            reply='{"plan": [], "changes": [], "commit_message": "none"}',
+            runtime="self-hosted",
+            status="ready",
+            provider="amosclaud",
+            model="amosclaud-coder",
+        )
+
+    monkeypatch.setattr(autonomous_model.native_provider, "reply", native_reply)
+    gateway = autonomous_model.AutonomousModelGateway()
+
+    response = gateway.complete("Update the selected repository", ["Repository tree inspected"])
+
+    assert response.startswith('{"plan"')
+    assert captured["history"][0]["role"] == "user"
+    assert "Update the selected repository" in captured["history"][0]["content"]

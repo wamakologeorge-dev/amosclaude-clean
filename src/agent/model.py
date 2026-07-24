@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+from amoscloud_ai import provider as native_provider
 
 from .prompts import SYSTEM_PROMPT
 
@@ -29,40 +29,36 @@ def _first_value(*names: str) -> str:
     return ""
 
 
-def _enabled(name: str, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def load_model_config() -> ModelConfig:
-    """Load one reachable model provider for Autonomous engineering work.
+    """Describe the native route selected by Amosclaud's shared provider policy.
 
-    The dedicated Amosclaud model endpoint remains the preferred runtime. The
-    Railway ``amosclaud-bot`` service and the first-party Amosclaud API are also
-    accepted so the web platform and bot can share one real execution model.
-    External adapters remain opt-in.
+    Selection itself lives in :mod:`amoscloud_ai.provider`, which tries native
+    Amosclaud model routes before considering explicitly enabled adapters.
     """
-
     endpoint = _first_value(
         "AMOSCLAUD_MODEL_ENDPOINT",
         "AMOSCLAUD_MODEL_URL",
         "AMOSCLAUD_BOT_URL",
     ).rstrip("/")
     provider = "amosclaud-model"
-    completions_path = _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
-    model = _first_value(
-        "AMOSCLAUD_MODEL",
-        "AMOSCLAUD_API_MODEL",
-    ) or "amosclaud-agent"
-    api_key = _first_value(
-        "AMOSCLAUD_MODEL_TOKEN",
-        "AMOSCLAUD_API_KEY",
-        "EXTERNAL_API_KEY",
-    ) or None
+    completions_path = (
+        _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
+    )
+    model = (
+        _first_value("AMOSCLAUD_MODEL", "AMOSCLAUD_API_MODEL")
+        or "amosclaud-folder-v1"
+    )
+    api_key = _first_value("AMOSCLAUD_MODEL_TOKEN") or None
 
-    if not endpoint:
+    if endpoint == _first_value("AMOSCLAUD_BOT_URL").rstrip("/") and endpoint:
+        provider = "amosclaud-bot"
+        completions_path = (
+            _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH") or completions_path
+        )
+        api_key = (
+            _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
+        )
+    elif not endpoint:
         api_endpoint = _first_value("AMOSCLAUD_API_URL").rstrip("/")
         api_token = _first_value("AMOSCLAUD_API_KEY")
         if api_endpoint and api_token:
@@ -73,34 +69,6 @@ def load_model_config() -> ModelConfig:
                 or "/api/v1/provider/chat/completions"
             )
             api_key = api_token
-
-    if not endpoint and _enabled("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS"):
-        openai_key = _first_value("OPENAI_API_KEY")
-        anthropic_key = _first_value("ANTHROPIC_API_KEY")
-        if openai_key:
-            endpoint = _first_value("OPENAI_BASE_URL") or "https://api.openai.com"
-            provider = "openai"
-            completions_path = "/v1/chat/completions"
-            model = _first_value("OPENAI_MODEL") or "gpt-4o-mini"
-            api_key = openai_key
-        elif anthropic_key:
-            endpoint = "https://api.anthropic.com"
-            provider = "anthropic"
-            completions_path = "/v1/messages"
-            model = _first_value("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest"
-            api_key = anthropic_key
-
-    if endpoint == _first_value("AMOSCLAUD_BOT_URL").rstrip("/") and endpoint:
-        provider = "amosclaud-bot"
-        completions_path = (
-            _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH")
-            or completions_path
-        )
-        api_key = _first_value(
-            "AMOSCLAUD_BOT_TOKEN",
-            "AMOSCLAUD_MODEL_TOKEN",
-            "AMOSCLAUD_API_KEY",
-        ) or api_key
 
     timeout_raw = _first_value("AMOSCLAUD_MODEL_TIMEOUT") or "90"
     try:
@@ -122,13 +90,13 @@ def load_model_config() -> ModelConfig:
 
 
 class AutonomousModelGateway:
-    """One HTTP gateway for planning, debugging, review, and repair prompts."""
+    """Shared-provider gateway for planning, debugging, review, and repair prompts."""
 
     def __init__(self, config: ModelConfig | None = None) -> None:
         self.config = config or load_model_config()
 
     def available(self) -> bool:
-        return bool(self.config.endpoint and self.config.model)
+        return native_provider.is_configured()
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -142,72 +110,21 @@ class AutonomousModelGateway:
             "timeout_seconds": self.config.timeout_seconds,
         }
 
-    def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self.config.api_key:
-            if self.config.provider == "anthropic":
-                headers["x-api-key"] = self.config.api_key
-                headers["anthropic-version"] = "2023-06-01"
-            else:
-                headers["Authorization"] = f"Bearer {self.config.api_key}"
-        return headers
-
     def complete(self, objective: str, evidence: list[str]) -> str:
-        if not self.available():
-            raise RuntimeError(
-                "No Amosclaud execution model is configured. Set "
-                "AMOSCLAUD_MODEL_URL, AMOSCLAUD_MODEL_ENDPOINT, "
-                "AMOSCLAUD_BOT_URL, or AMOSCLAUD_API_URL."
-            )
-
+        """Generate through the shared native-first Amosclaud provider policy."""
         user_content = (
             f"Objective: {objective}\nVerified evidence:\n"
             + "\n".join(evidence)
         )
-        if self.config.provider == "anthropic":
-            payload = {
-                "model": self.config.model,
-                "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": user_content}],
-                "temperature": 0.1,
-                "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")),
-            }
-        else:
-            payload = {
-                "model": self.config.model,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                "temperature": 0.1,
-                "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")),
-            }
-
-        response = httpx.post(
-            f"{self.config.endpoint}{self.config.completions_path}",
-            headers=self._headers(),
-            json=payload,
-            timeout=self.config.timeout_seconds,
+        result = native_provider.reply(
+            [{"role": "user", "content": user_content}],
+            SYSTEM_PROMPT,
         )
-        response.raise_for_status()
-        response_payload = response.json()
-
-        try:
-            if self.config.provider == "anthropic":
-                content = "".join(
-                    str(item.get("text") or "")
-                    for item in response_payload.get("content", [])
-                    if isinstance(item, dict)
-                )
-            else:
-                content = response_payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError("Model API returned an invalid chat response") from exc
-
-        answer = str(content).strip()
-        if not answer:
-            raise RuntimeError("Model API returned an empty response")
-        return answer
+        if not result.ok:
+            raise RuntimeError(
+                result.error or "Amosclaud execution model is not configured"
+            )
+        return result.reply
 
     def plan(self, objective: str, evidence: list[str]) -> list[str]:
         """Return a stable plan while all model access stays behind this gateway."""

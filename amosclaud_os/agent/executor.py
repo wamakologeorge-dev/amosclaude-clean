@@ -266,10 +266,11 @@ def execute_native_operation(
         # A general build or repair requires a genuine model endpoint. It executes
         # against the selected native repository, never against the platform source.
         from src.agent.actions import run_autonomous
-        from src.agent.model import load_model_config
+        from src.agent.model import AutonomousModelGateway
 
-        config = load_model_config()
-        if not config.endpoint:
+        model_gateway = AutonomousModelGateway()
+        config = model_gateway.config
+        if not model_gateway.available():
             return _failure(
                 "model-backed-engineering",
                 "Real code generation is unavailable because no Amosclaud model endpoint is connected.",
