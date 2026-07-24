@@ -41,14 +41,23 @@ def load_model_config() -> ModelConfig:
         "AMOSCLAUD_BOT_URL",
     ).rstrip("/")
     provider = "amosclaud-model"
-    completions_path = _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
-    model = _first_value("AMOSCLAUD_MODEL", "AMOSCLAUD_API_MODEL") or "amosclaud-folder-v1"
+    completions_path = (
+        _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
+    )
+    model = (
+        _first_value("AMOSCLAUD_MODEL", "AMOSCLAUD_API_MODEL")
+        or "amosclaud-folder-v1"
+    )
     api_key = _first_value("AMOSCLAUD_MODEL_TOKEN") or None
 
     if endpoint == _first_value("AMOSCLAUD_BOT_URL").rstrip("/") and endpoint:
         provider = "amosclaud-bot"
-        completions_path = _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH") or completions_path
-        api_key = _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
+        completions_path = (
+            _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH") or completions_path
+        )
+        api_key = (
+            _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
+        )
     elif not endpoint:
         api_endpoint = _first_value("AMOSCLAUD_API_URL").rstrip("/")
         api_token = _first_value("AMOSCLAUD_API_KEY")
@@ -112,7 +121,9 @@ class AutonomousModelGateway:
             SYSTEM_PROMPT,
         )
         if not result.ok:
-            raise RuntimeError(result.error or "Amosclaud execution model is not configured")
+            raise RuntimeError(
+                result.error or "Amosclaud execution model is not configured"
+            )
         return result.reply
 
     def plan(self, objective: str, evidence: list[str]) -> list[str]:
