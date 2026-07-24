@@ -152,7 +152,7 @@ async function loadRepositories() {
       || validRepositories[0];
     rememberRepository(remembered);
     repositoryGrid.innerHTML = validRepositories.map(repository => `
-      <article class="repository-card" data-repository-id="${repository.id}" tabindex="0" role="link" aria-label="Open ${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">
+      <article class="repository-card" data-repository-id="${repository.id}" data-repository-role="${escapeHtml(repository.role)}" tabindex="0" role="link" aria-label="Open ${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">
         <div class="repository-card-header"><h3>${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}</h3><span class="badge badge-default ${repository.visibility === 'public' ? 'visibility-public' : 'visibility-private'}">${escapeHtml(repository.visibility)}</span></div>
         <p>${escapeHtml(repository.description || 'No description yet.')}</p>
         <div class="repository-meta"><span>Branch: ${escapeHtml(repository.default_branch)}</span><span>Role: ${escapeHtml(repository.role)}</span><span>Updated: ${fmtDate(repository.updated_at)}</span></div>
@@ -176,7 +176,7 @@ function openWorkspace(repositoryId, name = '') {
     id: Number(repositoryId),
     name: repositoryName,
     default_branch: card?.querySelector('[data-action="new-file"]')?.dataset.branch || 'main',
-    role: 'owner',
+    role: card?.dataset.repositoryRole || 'viewer',
   });
   window.location.assign(`/workspace/${encodeURIComponent(repositoryId)}`);
 }
