@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import socket
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -37,27 +39,32 @@ def _enabled(name: str, default: bool = False) -> bool:
 
 
 def load_model_config() -> ModelConfig:
-    """Load one reachable model provider for Autonomous engineering work.
+    """Load one model provider for Autonomous engineering work.
 
-    The dedicated Amosclaud model endpoint remains the preferred runtime. The
-    Railway ``amosclaud-bot`` service and the first-party Amosclaud API are also
-    accepted so the web platform and bot can share one real execution model.
-    External adapters remain opt-in.
+    The Railway bot URL is checked first so a stale Docker-only model hostname
+    cannot silently override the service that the operator explicitly connected.
     """
 
-    endpoint = _first_value(
+    bot_endpoint = _first_value(
+        "AMOSCLAUD_BOT_URL",
+        "AMOSCLAUD_BOT_PUBLIC_URL",
+    ).rstrip("/")
+    endpoint = bot_endpoint or _first_value(
         "AMOSCLAUD_MODEL_ENDPOINT",
         "AMOSCLAUD_MODEL_URL",
-        "AMOSCLAUD_BOT_URL",
     ).rstrip("/")
-    provider = "amosclaud-model"
-    completions_path = _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
+    provider = "amosclaud-bot" if bot_endpoint else "amosclaud-model"
+    completions_path = (
+        _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH")
+        if bot_endpoint
+        else _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH")
+    ) or "/v1/chat/completions"
     model = _first_value(
         "AMOSCLAUD_MODEL",
         "AMOSCLAUD_API_MODEL",
     ) or "amosclaud-agent"
     api_key = _first_value(
-        "AMOSCLAUD_MODEL_TOKEN",
+        "AMOSCLAUD_BOT_TOKEN" if bot_endpoint else "AMOSCLAUD_MODEL_TOKEN",
         "AMOSCLAUD_API_KEY",
         "EXTERNAL_API_KEY",
     ) or None
@@ -89,18 +96,6 @@ def load_model_config() -> ModelConfig:
             completions_path = "/v1/messages"
             model = _first_value("ANTHROPIC_MODEL") or "claude-3-5-sonnet-latest"
             api_key = anthropic_key
-
-    if endpoint == _first_value("AMOSCLAUD_BOT_URL").rstrip("/") and endpoint:
-        provider = "amosclaud-bot"
-        completions_path = (
-            _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH")
-            or completions_path
-        )
-        api_key = _first_value(
-            "AMOSCLAUD_BOT_TOKEN",
-            "AMOSCLAUD_MODEL_TOKEN",
-            "AMOSCLAUD_API_KEY",
-        ) or api_key
 
     timeout_raw = _first_value("AMOSCLAUD_MODEL_TIMEOUT") or "90"
     try:
@@ -142,6 +137,72 @@ class AutonomousModelGateway:
             "timeout_seconds": self.config.timeout_seconds,
         }
 
+    def connectivity(self, timeout_seconds: float = 2.0) -> dict[str, Any]:
+        """Verify that the configured model host resolves and accepts TCP traffic."""
+
+        if not self.available():
+            return {
+                "configured": False,
+                "reachable": False,
+                "code": "model_not_configured",
+                "detail": (
+                    "Set AMOSCLAUD_BOT_URL, AMOSCLAUD_MODEL_URL, "
+                    "AMOSCLAUD_MODEL_ENDPOINT, or AMOSCLAUD_API_URL."
+                ),
+            }
+
+        parsed = urlparse(self.config.endpoint)
+        hostname = parsed.hostname
+        if not hostname or parsed.scheme not in {"http", "https"}:
+            return {
+                "configured": True,
+                "reachable": False,
+                "code": "invalid_model_url",
+                "detail": "The configured model URL must be a valid HTTP or HTTPS URL.",
+            }
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+        try:
+            socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            detail = "The configured model hostname cannot be resolved from this service."
+            if hostname.endswith(".railway.internal"):
+                detail += (
+                    " Railway private DNS works only when both services are in "
+                    "the same project and environment; otherwise use the bot's "
+                    "public HTTPS URL."
+                )
+            return {
+                "configured": True,
+                "reachable": False,
+                "code": "model_dns_failed",
+                "detail": detail,
+            }
+
+        try:
+            with socket.create_connection(
+                (hostname, port),
+                timeout=max(0.25, float(timeout_seconds)),
+            ):
+                pass
+        except OSError as exc:
+            return {
+                "configured": True,
+                "reachable": False,
+                "code": "model_connection_failed",
+                "detail": (
+                    "The model hostname resolves, but its service port cannot be "
+                    f"reached ({type(exc).__name__})."
+                ),
+            }
+
+        return {
+            "configured": True,
+            "reachable": True,
+            "code": "ready",
+            "detail": "The configured model service is reachable.",
+        }
+
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
@@ -153,12 +214,9 @@ class AutonomousModelGateway:
         return headers
 
     def complete(self, objective: str, evidence: list[str]) -> str:
-        if not self.available():
-            raise RuntimeError(
-                "No Amosclaud execution model is configured. Set "
-                "AMOSCLAUD_MODEL_URL, AMOSCLAUD_MODEL_ENDPOINT, "
-                "AMOSCLAUD_BOT_URL, or AMOSCLAUD_API_URL."
-            )
+        connection = self.connectivity()
+        if not connection["reachable"]:
+            raise RuntimeError(str(connection["detail"]))
 
         user_content = (
             f"Objective: {objective}\nVerified evidence:\n"
@@ -170,7 +228,9 @@ class AutonomousModelGateway:
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_content}],
                 "temperature": 0.1,
-                "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")),
+                "max_tokens": int(
+                    os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")
+                ),
             }
         else:
             payload = {
@@ -180,7 +240,9 @@ class AutonomousModelGateway:
                     {"role": "user", "content": user_content},
                 ],
                 "temperature": 0.1,
-                "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")),
+                "max_tokens": int(
+                    os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "4096")
+                ),
             }
 
         response = httpx.post(
@@ -211,8 +273,10 @@ class AutonomousModelGateway:
 
     def plan(self, objective: str, evidence: list[str]) -> list[str]:
         """Return a stable plan while all model access stays behind this gateway."""
-        if not self.available():
-            raise RuntimeError("Amosclaud execution model is not configured")
+
+        connection = self.connectivity()
+        if not connection["reachable"]:
+            raise RuntimeError(str(connection["detail"]))
         plan = [
             "Understand the objective and success criteria",
             "Inspect repository evidence and dependency impact",
