@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,8 +15,11 @@ from amoscloud_ai.core.access import AccessPolicy
 from amoscloud_ai.core.registry import ServiceRegistry
 from amoscloud_ai.core.vault import AmosclaudVault, VaultError
 from amoscloud_ai.logger import log
+from amoscloud_ai.models import AutonomousAgentRunRequest, PipelineStatus
+from amosclaud_os.agent.executor import execute_native_operation
 from amosclaud_os.agent.memory import FocusUpdate, OperatorMemoryService
 from amosclaud_os.kernel.runtime import AmosclaudOSRuntime
+from amosclaud_os.repository.issues import NativeIssueService
 from amosclaud_os.workspace.context import ProjectContextSelection, ProjectContextService
 
 router = APIRouter(prefix="/core", tags=["amosclaud-core"])
@@ -284,6 +288,7 @@ def os_status(user=Depends(_signed_in_user)) -> dict:
         "signed_in_user_id": int(user["id"]),
         "current_focus": memory.current_focus,
         "operator_installed": True,
+        "execution_endpoint": "/api/v1/core/os/execute",
     }
 
 
@@ -327,3 +332,56 @@ def remember_os_focus(body: FocusUpdate, user=Depends(_signed_in_user)) -> dict:
     return OperatorMemoryService().remember_focus(
         int(user["id"]), body.current_focus
     ).model_dump()
+
+
+@router.post("/os/execute")
+def execute_os_command(
+    body: AutonomousAgentRunRequest,
+    user=Depends(_signed_in_user),
+) -> dict:
+    """Execute a real native operation or return a truthful runtime blocker."""
+
+    started_at = datetime.now(timezone.utc)
+    run_id = str(uuid.uuid4())
+    result = execute_native_operation(
+        user=user,
+        objective=str(body.objective or ""),
+        mode=body.mode.strip().lower(),
+        metadata=body.metadata,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=422,
+            detail="This endpoint accepts engineering actions; ordinary conversation belongs in Chat.",
+        )
+    status = PipelineStatus.SUCCESS if result.succeeded else PipelineStatus.FAILED
+    return {
+        "accepted": True,
+        "run_id": run_id,
+        "mode": body.mode,
+        "objective": str(body.objective or ""),
+        "reply": result.summary,
+        "pipeline_id": f"native-{run_id}",
+        "status": status.value,
+        "started_at": started_at.isoformat(),
+        "checks": [result.check()],
+        "logs": [
+            f"Operation: {result.operation}",
+            *result.logs,
+            *[f"Evidence: {item}" for item in result.evidence],
+        ],
+        "resource": result.resource,
+        "execution_source": "amosclaud-os-native-executor",
+    }
+
+
+@router.get("/os/repositories/{repository_id}/issues")
+def list_native_repository_issues(
+    repository_id: int,
+    state: str | None = None,
+    user=Depends(_signed_in_user),
+) -> dict:
+    """List issues stored inside the native Amosclaud repository platform."""
+
+    items = NativeIssueService().list(user=user, repository_id=repository_id, state=state)
+    return {"repository_id": repository_id, "count": len(items), "items": items}
