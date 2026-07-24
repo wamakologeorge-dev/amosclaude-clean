@@ -41,6 +41,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "click>=8.1,<9" \
         "requests>=2.31,<3" \
         "httpx>=0.27,<1" \
+        "mcp>=1.27,<2" \
         "stripe>=11,<15" \
         "aiofiles>=23.2,<25" \
         "python-dotenv>=1.0,<2" \
