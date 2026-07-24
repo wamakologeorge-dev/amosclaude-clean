@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BIG CI · Amosclaud</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body{margin:0;background:#07101d;color:#edf4ff;font-family:system-ui,sans-serif}.shell{max-width:1200px;margin:auto;padding:24px}.top{display:flex;justify-content:space-between;gap:16px;align-items:center}.top a{color:#9fc5ff}.panel{background:#0d1a2b;border:1px solid #263d5a;border-radius:18px;padding:20px;margin-top:18px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}label{display:grid;gap:7px;color:#a9b7ca}input,select,button{font:inherit;border-radius:10px;border:1px solid #365274;background:#091523;color:#edf4ff;padding:11px}button{cursor:pointer;background:#2878ee;border-color:#2878ee;font-weight:750}.run{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.runs{display:grid;gap:12px}.run-card{border:1px solid #263d5a;border-radius:14px;padding:16px;background:#091523}.status{font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.08em}.completed{color:#67dc9b}.failed{color:#ff7b86}.running,.queued,.awaiting_approval{color:#ffd36e}.meta{color:#a9b7ca;font-size:14px}.logs{white-space:pre-wrap;background:#050b13;border-radius:12px;padding:14px;max-height:360px;overflow:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.secondary{background:#13243b;border-color:#365274}.empty{color:#a9b7ca;padding:18px 0}@media(max-width:700px){.top{align-items:flex-start;flex-direction:column}.run>*{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top"><div><p class="meta">Amosclaud testing product</p><h1>BIG CI</h1><p class="meta">Run complete repository verification and view every result without leaving Amosclaud.</p></div><nav><a href="/repositories">Repositories</a> · <a href="/static/projects.html">Projects</a> · <a href="/static/operator-products.html">Products</a></nav></header>
+    <section class="panel">
+      <h2>Start a CI run</h2>
+      <form id="ci-form" class="run">
+        <label>Repository<select id="repository" required><option value="">Loading repositories…</option></select></label>
+        <label>Branch<input id="branch" value="main" required /></label>
+        <label>Test level<select id="level"><option value="quick">Quick check</option><option value="standard">Standard CI</option><option value="big" selected>BIG CI</option><option value="custom">Custom CI</option></select></label>
+        <label>Execution<select id="target"><option value="github">GitHub Actions</option><option value="cloud">Amosclaud cloud</option><option value="auto">Automatic</option></select></label>
+        <button type="submit">Run BIG CI</button>
+      </form>
+      <p id="message" class="meta" role="status"></p>
+    </section>
+    <section class="panel"><div class="top"><div><h2>CI history</h2><p class="meta">Live task state, evidence, artifacts, pull requests, and execution logs.</p></div><button id="refresh" class="secondary">Refresh</button></div><div id="runs" class="runs"><p class="empty">Loading CI runs…</p></div></section>
+    <section id="detail" class="panel" hidden><div class="top"><h2 id="detail-title">Run details</h2><button id="close-detail" class="secondary">Close</button></div><div id="detail-body"></div><h3>Execution timeline</h3><pre id="logs" class="logs">Loading logs…</pre></section>
+  </main>
+  <script src="/static/big-ci.js"></script>
+</body>
+</html>
