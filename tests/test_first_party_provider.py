@@ -61,6 +61,30 @@ def test_self_hosted_runtime_is_primary(monkeypatch):
     assert captured["json"]["model"] == "amosclaud-coder"
 
 
+def test_native_model_is_attempted_before_opted_in_external_adapter(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_MODEL_ENDPOINT", "http://native-model.internal")
+    monkeypatch.setenv("AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "external-key")
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Native reply."}}]}
+
+    def native_post(url, **_kwargs):
+        assert url == "http://native-model.internal/v1/chat/completions"
+        return Response()
+
+    monkeypatch.setattr(provider.httpx, "post", native_post)
+
+    result = provider.reply([{"role": "user", "content": "Hello"}], "System")
+
+    assert result.reply == "Native reply."
+    assert result.runtime == "self-hosted"
+
+
 def test_provider_status_requires_owner_key(monkeypatch):
     monkeypatch.setenv("AMOSCLAUD_OWNER_KEY", "owner-key")
     unauthorized = request("GET", "/api/provider/status")

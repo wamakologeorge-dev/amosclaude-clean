@@ -17,12 +17,26 @@ def _external_adapters_enabled() -> bool:
 
 
 def _model_endpoint() -> str:
-    return os.getenv("AMOSCLAUD_MODEL_URL", "").strip().rstrip("/")
+    """Resolve the first-party model endpoint used by every Amosclaud workflow."""
+    for name in ("AMOSCLAUD_MODEL_ENDPOINT", "AMOSCLAUD_MODEL_URL", "AMOSCLAUD_BOT_URL"):
+        endpoint = os.getenv(name, "").strip().rstrip("/")
+        if endpoint:
+            return endpoint
+    return ""
+
+
+def _model_completions_path() -> str:
+    path = os.getenv("AMOSCLAUD_MODEL_COMPLETIONS_PATH", "").strip()
+    if not path and _model_endpoint() == os.getenv("AMOSCLAUD_BOT_URL", "").strip().rstrip("/"):
+        path = os.getenv("AMOSCLAUD_BOT_COMPLETIONS_PATH", "").strip()
+    return f"/{path.lstrip('/')}" if path else "/v1/chat/completions"
 
 
 def _model_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     token = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
+    if not token and _model_endpoint() == os.getenv("AMOSCLAUD_BOT_URL", "").strip().rstrip("/"):
+        token = os.getenv("AMOSCLAUD_BOT_TOKEN", "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
@@ -61,8 +75,9 @@ def _amosclaud_api_reply(history: list[dict[str, str]], system_prompt: str) -> P
     if not endpoint or not api_key:
         return None
     model = os.getenv("AMOSCLAUD_API_MODEL", "amosclaud-agent")
+    path = os.getenv("AMOSCLAUD_API_COMPLETIONS_PATH", "/api/v1/provider/chat/completions").strip()
     response = _post_with_retry(
-        f"{endpoint}/api/v1/provider/chat/completions",
+        f"{endpoint}/{path.lstrip('/')}",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         json={"model": model, "messages": [{"role": "system", "content": system_prompt}, *history]},
     )
@@ -78,7 +93,7 @@ def _self_hosted_reply(history: list[dict[str, str]], system_prompt: str) -> Pro
         return None
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     response = _post_with_retry(
-        f"{endpoint}/v1/chat/completions",
+        f"{endpoint}{_model_completions_path()}",
         headers=_model_headers(),
         json={
             "model": model,
@@ -120,6 +135,19 @@ def probe() -> dict[str, object]:
         return {"ready": "AMOSCLAUD_AGENT_READY" in reply_text, "provider": "amosclaud", "runtime": result.runtime if result else "unconfigured", "model": result.model if result and result.model else model, "detail": reply_text[:200]}
     except Exception as exc:
         return {"ready": False, "provider": "amosclaud", "runtime": "self-hosted", "model": model, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+def is_configured() -> bool:
+    """Whether the shared provider policy has a route it may safely attempt."""
+    from amoscloud_ai.model_network import network_status
+
+    if network_status().get("ready") or _model_endpoint():
+        return True
+    if os.getenv("AMOSCLAUD_API_URL", "").strip() and os.getenv("AMOSCLAUD_API_KEY", "").strip():
+        return True
+    return _external_adapters_enabled() and bool(
+        os.getenv("ANTHROPIC_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip()
+    )
 
 
 def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
