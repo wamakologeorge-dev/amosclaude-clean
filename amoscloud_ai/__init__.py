@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 PRODUCT_NAME = "Amosclaud"
 RUNTIME_NAME = "Amosclaud Autonomous"
 LEGACY_IMPORT_NAMESPACE = "amoscloud_ai"
-CANONICAL_AUTONOMOUS_PATH = "/autonomous"
 
 
 def _configure_persistent_auth_storage() -> None:
@@ -62,7 +61,6 @@ from amoscloud_ai import operator as _operator  # noqa: E402,F401
 from amoscloud_ai import project_platform as _project_platform  # noqa: E402,F401
 
 __all__ = [
-    "CANONICAL_AUTONOMOUS_PATH",
     "LEGACY_IMPORT_NAMESPACE",
     "PRODUCT_NAME",
     "RUNTIME_NAME",
