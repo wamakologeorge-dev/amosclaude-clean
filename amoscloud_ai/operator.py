@@ -1,13 +1,16 @@
-"""Central operator contract for Amosclaud-bot.
+"""Central operator contract and API for Amosclaud-bot.
 
-The platform, GitHub App, CLI, and internal workers should translate user intent
-through this module before creating a global task. This keeps one public operator
-while specialized agents remain implementation details.
+Every public entry point translates user intent through this module before work
+is submitted to the global task router. Specialized agents remain internal
+workers; Amosclaud-bot is the single operator visible to users.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from fastapi import Cookie, Header
+from pydantic import BaseModel, Field
 
 OperatorMode = Literal["ask", "build", "fix", "test", "review", "deploy", "monitor"]
 
@@ -23,6 +26,18 @@ class OperatorRequest:
     source: str = "amosclaud-platform"
     conversation_id: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+class OperatorSubmit(BaseModel):
+    """HTTP request accepted from the platform, CLI, SDK, or GitHub adapter."""
+
+    objective: str = Field(min_length=3, max_length=20_000)
+    repository: str | None = Field(default=None, max_length=300)
+    mode: OperatorMode | None = None
+    require_approval: bool = True
+    source: str = Field(default="amosclaud-platform", max_length=100)
+    conversation_id: str | None = Field(default=None, max_length=200)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 _MODE_TERMS: tuple[tuple[OperatorMode, tuple[str, ...]], ...] = (
@@ -46,11 +61,7 @@ def infer_mode(objective: str) -> OperatorMode:
 
 
 def normalize_operator_request(request: OperatorRequest) -> dict[str, Any]:
-    """Convert an operator request into the shared global-task payload.
-
-    The returned shape matches ``task_router.TaskCreate`` without importing the
-    API layer, so web, GitHub App, CLI, and worker packages can share it safely.
-    """
+    """Convert an operator request into the shared global-task payload."""
 
     objective = request.objective.strip()
     if len(objective) < 3:
@@ -76,3 +87,40 @@ def normalize_operator_request(request: OperatorRequest) -> dict[str, Any]:
         "require_approval": request.require_approval,
         "metadata": metadata,
     }
+
+
+def _register_operator_route() -> None:
+    """Attach the operator endpoint to the already-mounted global task router."""
+
+    from amoscloud_ai.api.routes import task_router
+
+    if any(getattr(route, "path", "") == "/operator/requests" for route in task_router.router.routes):
+        return
+
+    @task_router.router.post("/operator/requests", status_code=202, tags=["amosclaud-operator"])
+    def submit_operator_request(
+        body: OperatorSubmit,
+        amos_session: str | None = Cookie(default=None),
+        authorization: str | None = Header(default=None),
+    ) -> dict:
+        normalized = normalize_operator_request(
+            OperatorRequest(
+                objective=body.objective,
+                repository=body.repository,
+                mode=body.mode,
+                require_approval=body.require_approval,
+                source=body.source,
+                conversation_id=body.conversation_id,
+                metadata=body.metadata,
+            )
+        )
+        task = task_router.create_task(
+            task_router.TaskCreate.model_validate(normalized),
+            amos_session=amos_session,
+            authorization=authorization,
+        )
+        task["operator"] = "Amosclaud-bot"
+        return task
+
+
+_register_operator_route()
