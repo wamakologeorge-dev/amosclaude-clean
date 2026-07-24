@@ -50,17 +50,36 @@ jobs:
 
       - name: Lint ReAct boundary
         run: |
+          set +e
           flake8 src/agent tests/test_autonomous_react_loop.py \
             --count \
             --select=E9,F63,F7,F82 \
             --show-source \
-            --statistics
+            --statistics > flake8-critical.txt 2>&1
+          critical_status=$?
           flake8 src/agent tests/test_autonomous_react_loop.py \
             --count \
             --max-complexity=12 \
             --max-line-length=88 \
             --show-source \
-            --statistics
+            --statistics > flake8-style.txt 2>&1
+          style_status=$?
+          cat flake8-critical.txt
+          cat flake8-style.txt
+          if [ "$critical_status" -ne 0 ] || [ "$style_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload ReAct lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-lint-${{ matrix.python-version }}
+          path: |
+            flake8-critical.txt
+            flake8-style.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run focused ReAct tests
         run: pytest tests/test_autonomous_react_loop.py -vv --tb=long
