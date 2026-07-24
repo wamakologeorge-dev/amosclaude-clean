@@ -3,7 +3,7 @@
   if (integrationLink) integrationLink.href = '/static/github-setup.html';
 
   const main = document.querySelector('.repo-main');
-  if (!main) return;
+  if (!main || document.querySelector('.github-import-panel')) return;
 
   const section = document.createElement('section');
   section.className = 'github-import-panel';
@@ -39,8 +39,13 @@
   }
 
   function toast(text, isError = false) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.setAttribute('aria-live', 'assertive');
+      document.body.appendChild(container);
+    }
     const item = document.createElement('div');
     item.className = `toast${isError ? ' error' : ''}`;
     item.textContent = text;
@@ -66,6 +71,43 @@
     return response.json();
   }
 
+  async function activateRepository(repository, fullName = '') {
+    const repositoryId = Number(repository.id || repository.imported_repository_id);
+    if (!Number.isInteger(repositoryId) || repositoryId < 1) return;
+    const name = repository.name || fullName.split('/').pop() || 'Repository';
+    const branch = repository.default_branch || 'main';
+    const context = {
+      workspace_id: null,
+      workspace_name: 'Personal workspace',
+      repository_id: repositoryId,
+      repository_name: name,
+      selected_workspace: 'Personal workspace',
+      selected_repository: name,
+      branch,
+      repository_role: 'owner',
+      owner_authorization: 'session-owner',
+      owner_authorized: true,
+      repository_provider: 'github',
+      github_full_name: fullName || repository.github_full_name || null,
+      project_context_source: 'github-import',
+    };
+    localStorage.setItem('amosclaud.activeProjectContext', JSON.stringify(context));
+    localStorage.setItem('amosclaud-last-repository-id', String(repositoryId));
+    localStorage.setItem(
+      'amosclaud-last-repository-name',
+      fullName || repository.github_full_name || name,
+    );
+    window.dispatchEvent(new CustomEvent('amosclaud:project-context', { detail: context }));
+    await api('/api/v1/core/os/context', {
+      method: 'PUT',
+      body: JSON.stringify({
+        repository_id: repositoryId,
+        workspace_id: null,
+        branch,
+      }),
+    });
+  }
+
   async function importRepository(fullName, button) {
     button.disabled = true;
     button.textContent = 'Importing…';
@@ -74,7 +116,8 @@
         method: 'POST',
         body: JSON.stringify({ full_name: fullName }),
       });
-      toast(`${fullName} imported into Amosclaud`);
+      await activateRepository(imported, fullName);
+      toast(`${fullName} imported and selected for Amosclaud Agent`);
       button.textContent = 'Open workspace';
       button.disabled = false;
       button.dataset.workspace = imported.workspace_url;
@@ -95,7 +138,7 @@
     grid.innerHTML = repositories.map(repo => {
       const imported = repo.imported_repository_id;
       const action = imported
-        ? `<a class="repo-dashboard-link" href="/workspace/${Number(imported)}">Open workspace</a>`
+        ? `<button class="repo-dashboard-link github-open-imported" type="button" data-repository-id="${Number(imported)}" data-full-name="${escapeHtml(repo.full_name)}" data-name="${escapeHtml(repo.name)}" data-branch="${escapeHtml(repo.default_branch)}">Use in Agent</button>`
         : `<button class="btn-primary compact-button github-import-button" data-full-name="${escapeHtml(repo.full_name)}" type="button">Import</button>`;
       return `
         <article class="repository-card">
@@ -117,6 +160,26 @@
     grid.querySelectorAll('.github-import-button').forEach(button => {
       button.addEventListener('click', () => importRepository(button.dataset.fullName, button));
     });
+    grid.querySelectorAll('.github-open-imported').forEach(button => {
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await activateRepository(
+            {
+              id: Number(button.dataset.repositoryId),
+              name: button.dataset.name,
+              default_branch: button.dataset.branch,
+            },
+            button.dataset.fullName,
+          );
+          toast(`${button.dataset.fullName} selected for Amosclaud Agent`);
+          window.location.href = `/workspace/${encodeURIComponent(button.dataset.repositoryId)}`;
+        } catch (error) {
+          toast(error.message, true);
+          button.disabled = false;
+        }
+      });
+    });
   }
 
   async function loadGitHubRepositories() {
@@ -132,7 +195,7 @@
       }
       connectButton.textContent = 'GitHub settings';
       connectButton.hidden = false;
-      message.textContent = `Connected as @${status.connection.github_login}. Select a repository to import.`;
+      message.textContent = `Connected as @${status.connection.github_login}. Import a repository or select one for the Agent.`;
       grid.innerHTML = '<div class="repository-empty">Loading GitHub repositories…</div>';
       const repositories = await api('/api/v1/github/repositories');
       renderRepositories(repositories);

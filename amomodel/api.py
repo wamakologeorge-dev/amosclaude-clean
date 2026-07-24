@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import get_user_from_session
+from src.agent.model import AutonomousModelGateway
 
 from .runtime import get_runtime
 
@@ -46,7 +47,10 @@ def _admin(request: Request) -> Any:
     except (KeyError, TypeError, IndexError):
         authorized = False
     if not authorized:
-        raise HTTPException(status_code=403, detail="AmoModel lifecycle operations require an administrator")
+        raise HTTPException(
+            status_code=403,
+            detail="AmoModel lifecycle operations require an administrator",
+        )
     return user
 
 
@@ -54,6 +58,27 @@ def _admin(request: Request) -> Any:
 async def status(request: Request) -> dict[str, Any]:
     _user(request)
     return get_runtime().status()
+
+
+@router.get("/model/status")
+async def model_status(request: Request) -> dict[str, Any]:
+    """Return the exact model connection used by Autonomous coding work."""
+
+    _user(request)
+    gateway = AutonomousModelGateway()
+    available = gateway.available()
+    return {
+        "available": available,
+        **gateway.describe(),
+        "required_action": (
+            None
+            if available
+            else (
+                "Set AMOSCLAUD_BOT_URL, AMOSCLAUD_MODEL_URL, "
+                "AMOSCLAUD_MODEL_ENDPOINT, or AMOSCLAUD_API_URL."
+            )
+        ),
+    }
 
 
 @router.post("/power/on")

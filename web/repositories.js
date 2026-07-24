@@ -1,43 +1,315 @@
 const repositoryGrid = document.getElementById('repository-grid');
 const repositoryCount = document.getElementById('repository-count');
 
-function escapeHtml(value){return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function fmtDate(value){if(!value)return '—';try{return new Date(value).toLocaleString()}catch{return value}}
-function openModal(id){document.getElementById('modal-backdrop')?.classList.remove('hidden');document.getElementById(id)?.classList.remove('hidden')}
-function closeModals(){document.getElementById('modal-backdrop')?.classList.add('hidden');document.querySelectorAll('.modal').forEach(modal=>modal.classList.add('hidden'))}
-function showToast(message,type='info'){const container=document.getElementById('toast-container');if(!container)return;const toast=document.createElement('div');toast.className=`toast toast--${type}`;toast.textContent=message;container.appendChild(toast);setTimeout(()=>toast.remove(),5000)}
-function validRepositoryId(value){return /^\d+$/.test(String(value||''))&&Number(value)>0}
-function rememberRepository(repository){if(!repository||!validRepositoryId(repository.id))return;localStorage.setItem('amosclaud-last-repository-id',String(repository.id));localStorage.setItem('amosclaud-last-repository-name',`${repository.owner_name}/${repository.name}`)}
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
-document.getElementById('modal-backdrop')?.addEventListener('click',closeModals);
+function fmtDate(value) {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
 
-async function apiRequest(path,options={}){const response=await fetch(path,{credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});if(response.status===401){if(path!=='/api/v1/github/status')window.location.assign('/login');throw new Error('Authentication or GitHub authorization is required')}const text=await response.text();let data=null;try{data=text?JSON.parse(text):null}catch{data={detail:text}}if(!response.ok)throw new Error(data?.detail||`Request failed (${response.status})`);return data}
+function openModal(id) {
+  document.getElementById('modal-backdrop')?.classList.remove('hidden');
+  document.getElementById(id)?.classList.remove('hidden');
+}
 
-async function loadCurrentUser(){try{const user=await apiRequest('/api/v1/auth/me');const label=document.getElementById('current-user');if(label)label.textContent=user.name||user.email}catch(error){console.error('[Current user]',error)}}
+function closeModals() {
+  document.getElementById('modal-backdrop')?.classList.add('hidden');
+  document.querySelectorAll('.modal').forEach(modal => modal.classList.add('hidden'));
+}
 
-async function loadRepositories(){if(!repositoryGrid||!repositoryCount)return;try{const repositories=await apiRequest('/api/v1/repositories');repositoryCount.textContent=`${repositories.length} ${repositories.length===1?'repository':'repositories'}`;if(!repositories.length){repositoryGrid.innerHTML='<div class="repository-empty">No repositories yet. Connect GitHub, then create your first real repository.</div>';return}const validRepositories=repositories.filter(repository=>validRepositoryId(repository.id));if(!validRepositories.length){repositoryGrid.innerHTML='<div class="repository-empty">No valid repository records were returned. Reconnect GitHub or create a repository.</div>';repositoryCount.textContent='0 repositories';return}const savedId=localStorage.getItem('amosclaud-last-repository-id');const remembered=validRepositories.find(repository=>String(repository.id)===savedId)||validRepositories[0];rememberRepository(remembered);repositoryGrid.innerHTML=validRepositories.map(repository=>`
-<article class="repository-card" data-repository-id="${repository.id}" tabindex="0" role="link" aria-label="Open ${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">
-  <div class="repository-card-header"><h3>${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}</h3><span class="badge badge-default ${repository.visibility==='public'?'visibility-public':'visibility-private'}">${escapeHtml(repository.visibility)}</span></div>
-  <p>${escapeHtml(repository.description||'No description yet.')}</p>
-  <div class="repository-meta"><span>Branch: ${escapeHtml(repository.default_branch)}</span><span>Role: ${escapeHtml(repository.role)}</span><span>Updated: ${fmtDate(repository.updated_at)}</span></div>
-  <div class="repository-actions"><button class="btn-primary" type="button" data-action="open-workspace" data-repository-id="${repository.id}" data-repository-name="${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">Open workspace</button><button class="btn-ghost" type="button" data-action="new-file" data-repository-id="${repository.id}" data-branch="${escapeHtml(repository.default_branch)}">Create real file</button></div>
-</article>`).join('')}catch(error){repositoryGrid.innerHTML=`<div class="repository-empty">${escapeHtml(error.message)}</div>`}}
+function toastContainer() {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.setAttribute('aria-live', 'assertive');
+    document.body.appendChild(container);
+  }
+  return container;
+}
 
-function openWorkspace(repositoryId,name=''){if(!validRepositoryId(repositoryId)){showToast('This repository link is invalid. Choose a real repository from the list.','error');return}localStorage.setItem('amosclaud-last-repository-id',String(repositoryId));if(name)localStorage.setItem('amosclaud-last-repository-name',name);window.location.assign(`/workspace/${encodeURIComponent(repositoryId)}`)}
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast toast--${type}`;
+  toast.textContent = message;
+  toastContainer().appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
 
-async function pushIfRemote(repositoryId,branch,commitMessage){const status=await apiRequest(`/api/v1/repositories/${repositoryId}/real-status`);if(!status.remote_created)return null;return apiRequest(`/api/v1/github/repositories/${repositoryId}/push`,{method:'POST',body:JSON.stringify({branch,commit_message:commitMessage})})}
+function validRepositoryId(value) {
+  return /^\d+$/.test(String(value || '')) && Number(value) > 0;
+}
 
-repositoryGrid?.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(button){const repositoryId=button.dataset.repositoryId;if(!validRepositoryId(repositoryId)){showToast('Invalid repository record','error');return}if(button.dataset.action==='open-workspace'){openWorkspace(repositoryId,button.dataset.repositoryName);return}document.getElementById('file-repository-id').value=repositoryId;document.getElementById('file-branch-input').value=button.dataset.branch||'main';document.getElementById('file-path-input').value='';document.getElementById('file-content-input').value='';document.getElementById('file-commit-input').value='Create file';openModal('modal-file');return}const card=event.target.closest('.repository-card');if(card)openWorkspace(card.dataset.repositoryId)});
-repositoryGrid?.addEventListener('keydown',event=>{if(event.key!=='Enter')return;const card=event.target.closest('.repository-card');if(card)openWorkspace(card.dataset.repositoryId)});
+function projectContext(repository) {
+  if (!repository || !validRepositoryId(repository.id)) return null;
+  const name = repository.name || String(repository.github_full_name || '').split('/').pop();
+  const branch = repository.default_branch || 'main';
+  return {
+    workspace_id: null,
+    workspace_name: 'Personal workspace',
+    repository_id: Number(repository.id),
+    repository_name: name,
+    selected_workspace: 'Personal workspace',
+    selected_repository: name,
+    branch,
+    repository_role: repository.role || 'owner',
+    owner_authorization: repository.role === 'owner' ? 'session-owner' : 'session',
+    owner_authorized: repository.role === 'owner',
+    repository_provider: repository.github_full_name ? 'github' : 'native',
+    project_context_source: 'repository-page',
+  };
+}
 
-document.getElementById('btn-create-repository')?.addEventListener('click',()=>openModal('modal-repository'));
-document.getElementById('btn-cancel-repository')?.addEventListener('click',closeModals);
-document.getElementById('btn-cancel-file')?.addEventListener('click',closeModals);
+function persistProjectContext(repository) {
+  const context = projectContext(repository);
+  if (!context) return;
+  localStorage.setItem('amosclaud.activeProjectContext', JSON.stringify(context));
+  window.dispatchEvent(new CustomEvent('amosclaud:project-context', { detail: context }));
+  fetch('/api/v1/core/os/context', {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      repository_id: context.repository_id,
+      workspace_id: null,
+      branch: context.branch,
+    }),
+  }).catch(error => console.warn('[Project context]', error));
+}
 
-document.getElementById('btn-confirm-repository')?.addEventListener('click',async()=>{const name=document.getElementById('repository-name-input').value.trim();if(!name)return showToast('Repository name is required','error');const button=document.getElementById('btn-confirm-repository');button.disabled=true;button.textContent='Creating real repository…';try{const github=await apiRequest('/api/v1/github/status');if(!github.connected)throw new Error('Connect GitHub before creating a real repository');const repository=await apiRequest('/api/v1/repositories/create-real',{method:'POST',body:JSON.stringify({name,description:document.getElementById('repository-description-input').value.trim(),visibility:document.getElementById('repository-visibility-input').value,initialize_readme:document.getElementById('repository-readme-input').checked,initialize_gitignore:document.getElementById('repository-gitignore-input').checked,license:document.getElementById('repository-license-input').value})});if(!validRepositoryId(repository.id))throw new Error('The server created an invalid repository record');closeModals();rememberRepository(repository);showToast(`Created and pushed ${repository.github_full_name} with real CI`,'success');window.location.assign(repository.workspace_url||`/workspace/${repository.id}`)}catch(error){showToast(error.message,'error')}finally{button.disabled=false;button.textContent='Create real repository'}});
+function rememberRepository(repository) {
+  if (!repository || !validRepositoryId(repository.id)) return;
+  localStorage.setItem('amosclaud-last-repository-id', String(repository.id));
+  const owner = repository.owner_name ? `${repository.owner_name}/` : '';
+  localStorage.setItem('amosclaud-last-repository-name', `${owner}${repository.name}`);
+  persistProjectContext(repository);
+}
 
-document.getElementById('btn-confirm-file')?.addEventListener('click',async()=>{const repositoryId=document.getElementById('file-repository-id').value;if(!validRepositoryId(repositoryId))return showToast('Select a valid repository','error');const path=document.getElementById('file-path-input').value.trim();if(!path)return showToast('File path is required','error');const branch=document.getElementById('file-branch-input').value.trim()||'main';const commitMessage=document.getElementById('file-commit-input').value.trim()||'Update file';const button=document.getElementById('btn-confirm-file');button.disabled=true;button.textContent='Committing and pushing…';try{const result=await apiRequest(`/api/v1/repositories/${repositoryId}/files`,{method:'PUT',body:JSON.stringify({path,content:document.getElementById('file-content-input').value,branch,commit_message:commitMessage})});const pushed=await pushIfRemote(repositoryId,branch,commitMessage);closeModals();showToast(pushed?`Committed and pushed ${path} (${result.commit.slice(0,7)})`:`Committed ${path} locally (${result.commit.slice(0,7)})`,'success');loadRepositories()}catch(error){showToast(error.message,'error')}finally{button.disabled=false;button.textContent='Commit file'}});
+document.getElementById('modal-backdrop')?.addEventListener('click', closeModals);
 
-document.getElementById('btn-logout')?.addEventListener('click',async()=>{try{await apiRequest('/api/v1/auth/logout',{method:'POST'})}finally{window.location.assign('/login')}});
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'same-origin',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (response.status === 401) {
+    if (path !== '/api/v1/github/status') window.location.assign('/login');
+    throw new Error('Authentication or GitHub authorization is required');
+  }
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { detail: text };
+  }
+  if (!response.ok) throw new Error(data?.detail || `Request failed (${response.status})`);
+  return data;
+}
 
-loadCurrentUser();loadRepositories();
+async function loadCurrentUser() {
+  try {
+    const user = await apiRequest('/api/v1/auth/me');
+    const label = document.getElementById('current-user');
+    if (label) label.textContent = user.name || user.email;
+  } catch (error) {
+    console.error('[Current user]', error);
+  }
+}
+
+async function loadRepositories() {
+  if (!repositoryGrid || !repositoryCount) return;
+  try {
+    const repositories = await apiRequest('/api/v1/repositories');
+    repositoryCount.textContent = `${repositories.length} ${repositories.length === 1 ? 'repository' : 'repositories'}`;
+    if (!repositories.length) {
+      repositoryGrid.innerHTML = '<div class="repository-empty">No repositories yet. Connect GitHub, then import or create your first real repository.</div>';
+      return;
+    }
+    const validRepositories = repositories.filter(repository => validRepositoryId(repository.id));
+    if (!validRepositories.length) {
+      repositoryGrid.innerHTML = '<div class="repository-empty">No valid repository records were returned. Reconnect GitHub or create a repository.</div>';
+      repositoryCount.textContent = '0 repositories';
+      return;
+    }
+    const savedId = localStorage.getItem('amosclaud-last-repository-id');
+    const remembered = validRepositories.find(repository => String(repository.id) === savedId)
+      || validRepositories[0];
+    rememberRepository(remembered);
+    repositoryGrid.innerHTML = validRepositories.map(repository => `
+      <article class="repository-card" data-repository-id="${repository.id}" data-repository-role="${escapeHtml(repository.role)}" tabindex="0" role="link" aria-label="Open ${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">
+        <div class="repository-card-header"><h3>${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}</h3><span class="badge badge-default ${repository.visibility === 'public' ? 'visibility-public' : 'visibility-private'}">${escapeHtml(repository.visibility)}</span></div>
+        <p>${escapeHtml(repository.description || 'No description yet.')}</p>
+        <div class="repository-meta"><span>Branch: ${escapeHtml(repository.default_branch)}</span><span>Role: ${escapeHtml(repository.role)}</span><span>Updated: ${fmtDate(repository.updated_at)}</span></div>
+        <div class="repository-actions"><button class="btn-primary" type="button" data-action="open-workspace" data-repository-id="${repository.id}" data-repository-name="${escapeHtml(repository.owner_name)}/${escapeHtml(repository.name)}">Open workspace</button><button class="btn-ghost" type="button" data-action="new-file" data-repository-id="${repository.id}" data-branch="${escapeHtml(repository.default_branch)}">Create real file</button></div>
+      </article>`).join('');
+  } catch (error) {
+    repositoryGrid.innerHTML = `<div class="repository-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function openWorkspace(repositoryId, name = '') {
+  if (!validRepositoryId(repositoryId)) {
+    showToast('This repository link is invalid. Choose a real repository from the list.', 'error');
+    return;
+  }
+  localStorage.setItem('amosclaud-last-repository-id', String(repositoryId));
+  if (name) localStorage.setItem('amosclaud-last-repository-name', name);
+  const card = repositoryGrid?.querySelector(`[data-repository-id="${repositoryId}"]`);
+  const repositoryName = name.split('/').pop() || card?.querySelector('h3')?.textContent?.split('/').pop();
+  persistProjectContext({
+    id: Number(repositoryId),
+    name: repositoryName,
+    default_branch: card?.querySelector('[data-action="new-file"]')?.dataset.branch || 'main',
+    role: card?.dataset.repositoryRole || 'viewer',
+  });
+  window.location.assign(`/workspace/${encodeURIComponent(repositoryId)}`);
+}
+
+async function pushIfRemote(repositoryId, branch, commitMessage) {
+  const status = await apiRequest(`/api/v1/repositories/${repositoryId}/real-status`);
+  if (!status.remote_created) return null;
+  return apiRequest(`/api/v1/github/repositories/${repositoryId}/push`, {
+    method: 'POST',
+    body: JSON.stringify({ branch, commit_message: commitMessage }),
+  });
+}
+
+repositoryGrid?.addEventListener('click', event => {
+  const button = event.target.closest('button[data-action]');
+  if (button) {
+    const repositoryId = button.dataset.repositoryId;
+    if (!validRepositoryId(repositoryId)) {
+      showToast('Invalid repository record', 'error');
+      return;
+    }
+    if (button.dataset.action === 'open-workspace') {
+      openWorkspace(repositoryId, button.dataset.repositoryName);
+      return;
+    }
+    document.getElementById('file-repository-id').value = repositoryId;
+    document.getElementById('file-branch-input').value = button.dataset.branch || 'main';
+    document.getElementById('file-path-input').value = '';
+    document.getElementById('file-content-input').value = '';
+    document.getElementById('file-commit-input').value = 'Create file';
+    openModal('modal-file');
+    return;
+  }
+  const card = event.target.closest('.repository-card');
+  if (card) openWorkspace(card.dataset.repositoryId);
+});
+
+repositoryGrid?.addEventListener('keydown', event => {
+  if (event.key !== 'Enter') return;
+  const card = event.target.closest('.repository-card');
+  if (card) openWorkspace(card.dataset.repositoryId);
+});
+
+document.getElementById('btn-create-repository')?.addEventListener('click', () => openModal('modal-repository'));
+document.getElementById('btn-cancel-repository')?.addEventListener('click', closeModals);
+document.getElementById('btn-cancel-file')?.addEventListener('click', closeModals);
+
+document.getElementById('btn-confirm-repository')?.addEventListener('click', async () => {
+  const name = document.getElementById('repository-name-input').value.trim();
+  if (!name) return showToast('Repository name is required', 'error');
+  const button = document.getElementById('btn-confirm-repository');
+  button.disabled = true;
+  button.textContent = 'Creating real repository…';
+  try {
+    const github = await apiRequest('/api/v1/github/status');
+    if (!github.connected) throw new Error('Connect GitHub before creating a real repository');
+    const repository = await apiRequest('/api/v1/repositories/create-real', {
+      method: 'POST',
+      body: JSON.stringify({
+        name,
+        description: document.getElementById('repository-description-input').value.trim(),
+        visibility: document.getElementById('repository-visibility-input').value,
+        initialize_readme: document.getElementById('repository-readme-input').checked,
+        initialize_gitignore: document.getElementById('repository-gitignore-input').checked,
+        license: document.getElementById('repository-license-input').value,
+      }),
+    });
+    if (!validRepositoryId(repository.id)) throw new Error('The server created an invalid repository record');
+    closeModals();
+    rememberRepository(repository);
+    showToast(`Created and pushed ${repository.github_full_name} with real CI`, 'success');
+    window.location.assign(repository.workspace_url || `/workspace/${repository.id}`);
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Create real repository';
+  }
+});
+
+document.getElementById('btn-confirm-file')?.addEventListener('click', async () => {
+  const repositoryId = document.getElementById('file-repository-id').value;
+  if (!validRepositoryId(repositoryId)) return showToast('Select a valid repository', 'error');
+  const path = document.getElementById('file-path-input').value.trim();
+  if (!path) return showToast('File path is required', 'error');
+  const branch = document.getElementById('file-branch-input').value.trim() || 'main';
+  const commitMessage = document.getElementById('file-commit-input').value.trim() || 'Update file';
+  const button = document.getElementById('btn-confirm-file');
+  button.disabled = true;
+  button.textContent = 'Committing and pushing…';
+  try {
+    const result = await apiRequest(`/api/v1/repositories/${repositoryId}/files`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        path,
+        content: document.getElementById('file-content-input').value,
+        branch,
+        commit_message: commitMessage,
+      }),
+    });
+    const pushed = await pushIfRemote(repositoryId, branch, commitMessage);
+    closeModals();
+    showToast(
+      pushed
+        ? `Committed and pushed ${path} (${result.commit.slice(0, 7)})`
+        : `Committed ${path} locally (${result.commit.slice(0, 7)})`,
+      'success',
+    );
+    loadRepositories();
+  } catch (error) {
+    showToast(error.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Commit file';
+  }
+});
+
+document.getElementById('btn-logout')?.addEventListener('click', async () => {
+  try {
+    await apiRequest('/api/v1/auth/logout', { method: 'POST' });
+  } finally {
+    window.location.assign('/login');
+  }
+});
+
+function loadGitHubRepositoryPanel() {
+  if (document.querySelector('script[data-github-repositories]')) return;
+  const script = document.createElement('script');
+  script.src = '/static/github-repositories.js';
+  script.dataset.githubRepositories = 'true';
+  document.body.appendChild(script);
+}
+
+loadCurrentUser();
+loadRepositories();
+loadGitHubRepositoryPanel();
