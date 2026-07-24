@@ -91,6 +91,21 @@ def _issue_dict(row) -> dict[str, Any]:
     return item
 
 
+def _reserve_admin_task_credits(db, user_id: int, task_body, issue_id: str) -> None:
+    """Keep owner/admin operation unblocked without changing paid-user rules."""
+    user = db.execute("SELECT is_admin FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user or not bool(user["is_admin"]):
+        return
+    cost = task_router._task_cost(task_body)
+    task_router.credit_tokens(
+        db,
+        user_id,
+        cost,
+        reference=f"admin-project-issue:{issue_id}",
+    )
+    db.commit()
+
+
 def register_project_routes() -> None:
     router = task_router.router
     if any(getattr(route, "path", "") == "/projects" for route in router.routes):
@@ -165,22 +180,24 @@ def register_project_routes() -> None:
             task_id = None
             if body.start_work:
                 objective = f"Issue: {body.title.strip()}\n\n{body.body.strip()}"
+                task_body = task_router.TaskCreate(
+                    objective=objective,
+                    repository=project["repository"],
+                    mode=body.mode,
+                    delivery="pull_request",
+                    execution_target="github" if project["repository"] else "cloud",
+                    require_approval=body.require_approval,
+                    metadata={
+                        "operator": "Amosclaud-bot",
+                        "single_brain": True,
+                        "source": "amosclaud-project-issue",
+                        "project_id": project_id,
+                        "issue_id": issue_id,
+                    },
+                )
+                _reserve_admin_task_credits(db, user_id, task_body, issue_id)
                 task = task_router.create_task(
-                    task_router.TaskCreate(
-                        objective=objective,
-                        repository=project["repository"],
-                        mode=body.mode,
-                        delivery="pull_request",
-                        execution_target="github" if project["repository"] else "cloud",
-                        require_approval=body.require_approval,
-                        metadata={
-                            "operator": "Amosclaud-bot",
-                            "single_brain": True,
-                            "source": "amosclaud-project-issue",
-                            "project_id": project_id,
-                            "issue_id": issue_id,
-                        },
-                    ),
+                    task_body,
                     amos_session=amos_session,
                     authorization=authorization,
                 )
