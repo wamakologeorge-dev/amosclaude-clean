@@ -15,8 +15,10 @@ It never substitutes the Amosclaud platform source when a project is missing.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -201,8 +203,13 @@ class AutonomousCodingRuntime:
                 blocker = str(failures[0].get("summary") or "Verification failed")
                 raise RuntimeError(f"Verification failed: {blocker}")
 
-            repo.git.add(A=True)
-            if not repo.is_dirty(untracked_files=True):
+            repo.index.add(result.changed_files)
+            staged = [
+                line.strip()
+                for line in repo.git.diff("--cached", "--name-only").splitlines()
+                if line.strip()
+            ]
+            if not staged:
                 raise ValueError(
                     "The proposed content matches the repository; no commit was created"
                 )
@@ -421,15 +428,32 @@ class AutonomousCodingRuntime:
             }
         ]
 
-        python_paths = [change.path for change in changes if Path(change.path).suffix == ".py"]
-        if python_paths:
-            checks.append(
-                self._run_check(
-                    "python-syntax",
-                    [sys.executable, "-m", "py_compile", *python_paths],
-                    timeout=90,
-                )
-            )
+        for change in changes:
+            if Path(change.path).suffix == ".py":
+                try:
+                    ast.parse(change.content, filename=change.path)
+                except SyntaxError as exc:
+                    checks.append(
+                        {
+                            "name": f"python-syntax:{change.path}",
+                            "passed": False,
+                            "exit_code": 1,
+                            "summary": (
+                                f"Syntax error at line {exc.lineno}: {exc.msg}"
+                            ),
+                            "output": str(exc),
+                        }
+                    )
+                else:
+                    checks.append(
+                        {
+                            "name": f"python-syntax:{change.path}",
+                            "passed": True,
+                            "exit_code": 0,
+                            "summary": "Python source parsed successfully.",
+                            "output": "",
+                        }
+                    )
 
         for change in changes:
             if Path(change.path).suffix.lower() == ".json":
@@ -480,7 +504,14 @@ class AutonomousCodingRuntime:
             checks.append(
                 self._run_check(
                     "pytest",
-                    [sys.executable, "-m", "pytest", "-q"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        "-q",
+                        "-p",
+                        "no:cacheprovider",
+                    ],
                     timeout=180,
                 )
             )
@@ -502,6 +533,8 @@ class AutonomousCodingRuntime:
 
     def _run_check(self, name: str, command: list[str], *, timeout: int) -> dict[str, Any]:
         try:
+            env = dict(os.environ)
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
             completed = subprocess.run(
                 command,
                 cwd=self.workspace,
@@ -509,6 +542,7 @@ class AutonomousCodingRuntime:
                 capture_output=True,
                 check=False,
                 timeout=timeout,
+                env=env,
             )
             output = (completed.stdout + "\n" + completed.stderr).strip()[-12_000:]
             return {
