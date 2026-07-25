@@ -82,7 +82,7 @@ jobs:
           grep -q "No GitHub token is collected or stored" deployment-evidence.html
 
       - name: Upload deployment evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: agent-issue-hub-deployment-evidence
           path: deployment-evidence.html
