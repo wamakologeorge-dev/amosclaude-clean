@@ -32,7 +32,7 @@ class ModelEngine:
     """
 
     def __init__(self) -> None:
-        self.model = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:3b")
+        self.model = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:1.5b")
         self.endpoint = os.getenv("AMOSCLAUD_MODEL_URL", "").strip()
 
     def configuration(self) -> dict[str, Any]:
@@ -42,7 +42,9 @@ class ModelEngine:
             "owner": "src.amosclaud_os.kernel.AutonomousKernel",
         }
 
-    def respond(self, prompt: str, *, context: dict[str, Any] | None = None) -> ModelResult:
+    def respond(
+        self, prompt: str, *, context: dict[str, Any] | None = None
+    ) -> ModelResult:
         prompt = prompt.strip()
         if not prompt:
             return ModelResult(

@@ -41,7 +41,7 @@ services:
     image: ollama/ollama:latest
     environment:
       OLLAMA_HOST: http://amosclaud-model:11434
-      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:1.5b}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -64,7 +64,7 @@ services:
       AUTH_COOKIE_SECURE: "false"
       PORT: "8000"
       AMOSCLAUD_MODEL_URL: http://amosclaud-model:11434
-      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:1.5b}
       AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
     ports:
       - "8000:8000"

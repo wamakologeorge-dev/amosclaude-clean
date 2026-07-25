@@ -23,7 +23,7 @@ if (-not (Test-Path ".env")) {
         "AMOSCLAUD_MASTER_KEY=$key"
         "AMOSCLAUD_ADMIN_EMAIL=$owner"
         "AMOSCLAUD_ACCESS_MODE=local"
-        "AMOSCLAUD_MODEL=qwen2.5-coder:3b"
+        "AMOSCLAUD_MODEL=qwen2.5-coder:1.5b"
     ) | Set-Content -Encoding UTF8 ".env"
 }
 $workspace = (Resolve-Path (Join-Path $InstallRoot $WorkspaceRelative)).Path

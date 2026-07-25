@@ -28,7 +28,7 @@ if not exist ".env" (
     pause
     exit /b 1
   )
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$key=[Convert]::ToBase64String((1..48|ForEach-Object{Get-Random -Maximum 256})); @('AMOSCLAUD_MASTER_KEY='+$key,'AMOSCLAUD_ADMIN_EMAIL=%AMOS_OWNER_EMAIL%','AMOSCLAUD_ACCESS_MODE=local','AMOSCLAUD_MODEL=qwen2.5-coder:3b') | Set-Content -Encoding UTF8 .env"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$key=[Convert]::ToBase64String((1..48|ForEach-Object{Get-Random -Maximum 256})); @('AMOSCLAUD_MASTER_KEY='+$key,'AMOSCLAUD_ADMIN_EMAIL=%AMOS_OWNER_EMAIL%','AMOSCLAUD_ACCESS_MODE=local','AMOSCLAUD_MODEL=qwen2.5-coder:1.5b') | Set-Content -Encoding UTF8 .env"
   echo Created a private local configuration for %AMOS_OWNER_EMAIL%.
 )
 

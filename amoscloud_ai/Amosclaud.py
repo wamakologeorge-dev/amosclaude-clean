@@ -29,7 +29,11 @@ class AmosclaudDashboard:
     def _disk(path: Path) -> dict[str, int]:
         target = path if path.exists() else path.parent
         usage = shutil.disk_usage(target)
-        return {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free}
+        return {
+            "total_bytes": usage.total,
+            "used_bytes": usage.used,
+            "free_bytes": usage.free,
+        }
 
     @staticmethod
     def _configured_environment() -> list[str]:
@@ -38,7 +42,8 @@ class AmosclaudDashboard:
             upper = name.upper()
             if not value or any(marker in upper for marker in SENSITIVE_MARKERS):
                 continue
-            if upper.startswith(("AMOSCLAUD_", "AUTH_", "PASSKEY_", "STORAGE_", "REPOSITORY_")):
+            prefixes = ("AMOSCLAUD_", "AUTH_", "PASSKEY_", "STORAGE_", "REPOSITORY_")
+            if upper.startswith(prefixes):
                 visible.append(name)
         return sorted(visible)
 
@@ -68,9 +73,11 @@ class AmosclaudDashboard:
                 "name": "Amosclaud Autonomous Server",
                 "language": "Amo Runtime",
                 "language_version": "amo 1",
-                "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:3b"),
+                "model": os.getenv("AMOSCLAUD_MODEL", "qwen2.5-coder:1.5b"),
                 "model_endpoint_configured": bool(os.getenv("AMOSCLAUD_MODEL_URL")),
-                "external_ai_keys_enabled": os.getenv("AMOSCLAUD_EXTERNAL_AI_KEYS", "false").lower() == "true",
+                "external_ai_keys_enabled": (
+                    os.getenv("AMOSCLAUD_EXTERNAL_AI_KEYS", "false").lower() == "true"
+                ),
             },
             "workspace": workspace,
             "storage": {
@@ -82,7 +89,8 @@ class AmosclaudDashboard:
                 "port": settings.port,
                 "access_mode": os.getenv("AMOSCLAUD_ACCESS_MODE", "local"),
                 "public_domain": os.getenv("AMOSCLAUD_PUBLIC_DOMAIN", "amosclaud.com"),
-                "https_expected": settings.environment.lower() in {"production", "prod"},
+                "https_expected": settings.environment.lower()
+                in {"production", "prod"},
             },
             "capabilities": {
                 "folder_first_workspace": True,
