@@ -230,7 +230,7 @@ curl http://ollama:11434/api/tags
 
 ```bash
 ollama list
-ollama pull qwen2.5-coder:3b
+ollama pull qwen2.5-coder:1.5b
 ```
 
 Example Docker Compose configuration:
@@ -241,7 +241,7 @@ services:
     build: .
     environment:
       AMOSCLAUD_MODEL_URL: http://ollama:11434/v1/chat/completions
-      AMOSCLAUD_MODEL_NAME: qwen2.5-coder:3b
+      AMOSCLAUD_MODEL_NAME: qwen2.5-coder:1.5b
       AMOSCLAUD_MODEL_ATTEMPTS: "2"
     depends_on:
       - ollama

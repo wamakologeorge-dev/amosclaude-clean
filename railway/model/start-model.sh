@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-MODEL="${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}"
+MODEL="${AMOSCLAUD_MODEL:-qwen2.5-coder:1.5b}"
 
 ollama serve &
 SERVER_PID=$!

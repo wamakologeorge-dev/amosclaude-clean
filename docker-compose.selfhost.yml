@@ -19,7 +19,7 @@ services:
     image: ollama/ollama:latest
     environment:
       OLLAMA_HOST: http://model:11434
-      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:1.5b}
     entrypoint: ["/bin/sh", "-c"]
     command: >-
       until ollama list >/dev/null 2>&1; do sleep 2; done;
@@ -48,7 +48,7 @@ services:
       STORAGE_PATH: /data/storage
       AMOSCLAUD_CORE_DB: /data/amosclaud-core.db
       AMOSCLAUD_MODEL_URL: http://model:11434
-      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:3b}
+      AMOSCLAUD_MODEL: ${AMOSCLAUD_MODEL:-qwen2.5-coder:1.5b}
       AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: "false"
       AMOSCLAUD_EXTERNAL_GITHUB: "false"
       AMOSCLAUD_EXTERNAL_AI_KEYS: "false"

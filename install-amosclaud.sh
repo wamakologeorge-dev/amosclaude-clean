@@ -19,7 +19,7 @@ if [[ ! -f .env ]]; then
   key="$(python3 -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(48)).decode())')"
   umask 077
   printf '%s\n' "AMOSCLAUD_MASTER_KEY=$key" "AMOSCLAUD_ADMIN_EMAIL=$owner" \
-    "AMOSCLAUD_ACCESS_MODE=local" "AMOSCLAUD_MODEL=qwen2.5-coder:3b" > .env
+    "AMOSCLAUD_ACCESS_MODE=local" "AMOSCLAUD_MODEL=qwen2.5-coder:1.5b" > .env
 fi
 grep -q '^AMOSCLAUD_WORKSPACE_PATH=' .env || printf '%s\n' \
   "AMOSCLAUD_WORKSPACE_PATH=$workspace" >> .env

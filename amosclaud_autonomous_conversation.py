@@ -119,7 +119,7 @@ class HttpModelClient:
     def __init__(self) -> None:
         self.url = os.getenv("AMOSCLAUD_MODEL_URL", "").strip()
         self.api_key = os.getenv("AMOSCLAUD_MODEL_API_KEY", "").strip()
-        self.model = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:3b")
+        self.model = os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:1.5b")
         self.timeout = float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT_SECONDS", "30"))
         self.attempts = max(1, int(os.getenv("AMOSCLAUD_MODEL_ATTEMPTS", "2")))
 
@@ -526,7 +526,7 @@ async def health() -> Dict[str, Any]:
     return {
         "status": "ready",
         "service": "conversation-engine",
-        "model": os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:3b"),
+        "model": os.getenv("AMOSCLAUD_MODEL_NAME", "qwen2.5-coder:1.5b"),
         "model_url_configured": bool(os.getenv("AMOSCLAUD_MODEL_URL")),
     }
 

@@ -1,7 +1,7 @@
 FROM ollama/ollama:latest
 
 ENV OLLAMA_HOST=0.0.0.0:11434 \
-    AMOSCLAUD_MODEL=qwen2.5-coder:3b
+    AMOSCLAUD_MODEL=qwen2.5-coder:1.5b
 
 COPY start-model.sh /usr/local/bin/start-model.sh
 RUN chmod 0755 /usr/local/bin/start-model.sh
