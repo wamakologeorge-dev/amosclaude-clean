@@ -158,30 +158,31 @@ for _route in real_repositories.router.routes:
 
 from amoscloud_ai.api.routes import profile as profile
 from amoscloud_ai.api.routes import repositories as repositories
+from amoscloud_ai.api.routes import repository_history as repository_history
 from amoscloud_ai.api.routes import solo_development as solo_development
 from repository import git_server as native_git
 
-# De-duplicate by (path, method): a path may legitimately expose several
-# methods (e.g. GET list + POST create on the same collection). Keying on the
-# path alone silently dropped sibling handlers such as the GET issue and GET
-# pull-request listings, which then surfaced to the browser as a raw
-# "Method Not Allowed" (HTTP 405). Keep every distinct path+method pair.
-def _route_keys(route):
-    path = getattr(route, "path", None)
-    methods = getattr(route, "methods", None) or [None]
-    return {(path, method) for method in methods}
+
+def _route_key(route: Any) -> tuple[Any, frozenset[str]]:
+    """Identify a route by path *and* HTTP methods.
+
+    Keying on the path alone silently dropped the second handler whenever a
+    path exposed two verbs (for example ``GET`` and ``POST`` on
+    ``/repositories/{id}/issues``), which made those reads return 405. Keying on
+    (path, methods) keeps every distinct handler.
+    """
+    return (
+        getattr(route, "path", None),
+        frozenset(getattr(route, "methods", None) or ()),
+    )
 
 
-_native_keys = set()
-for _route in repositories.router.routes:
-    _native_keys |= _route_keys(_route)
-for _module in (solo_development, profile, native_git):
+_native_keys = {_route_key(route) for route in repositories.router.routes}
+for _module in (solo_development, profile, native_git, repository_history):
     for _route in _module.router.routes:
-        _keys = _route_keys(_route)
-        if _keys & _native_keys:
-            continue
-        repositories.router.routes.append(_route)
-        _native_keys |= _keys
+        if _route_key(_route) not in _native_keys:
+            repositories.router.routes.append(_route)
+            _native_keys.add(_route_key(_route))
 
 # Keep account creation and recovery under the one canonical authentication
 # router. This avoids a second app while making the routes visible to tools.
