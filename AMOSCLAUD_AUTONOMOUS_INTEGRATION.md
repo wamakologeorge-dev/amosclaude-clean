@@ -22,28 +22,28 @@ The agent then asks only the questions required to understand the objective, sum
 
 ## Conversation lifecycle
 
-1. **Intake**  
+1. **Intake**
    Accept a quick action or free-form request.
 
-2. **Objective detection**  
+2. **Objective detection**
    Classify the request as Create, Fix, Deploy, Monitor, or Unknown.
 
-3. **Clarifying questions**  
+3. **Clarifying questions**
    Ask one useful question at a time.
 
-4. **Plan ready**  
+4. **Plan ready**
    Summarize the objective and implementation plan.
 
-5. **Approval gate**  
+5. **Approval gate**
    Do not execute until the user replies `Proceed`.
 
-6. **Controlled execution**  
+6. **Controlled execution**
    Send the plan to the appropriate repository, coding, deployment, or monitoring adapter.
 
-7. **Verification**  
+7. **Verification**
    Run tests, health checks, build checks, or endpoint checks.
 
-8. **Evidence response**  
+8. **Evidence response**
    Return successful evidence and any blocking checks.
 
 ## Installation
