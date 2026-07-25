@@ -79,6 +79,10 @@ class CollaboratorRequest(BaseModel):
     role: Literal["developer", "viewer"] = "developer"
 
 
+class VisibilityUpdateRequest(BaseModel):
+    visibility: Literal["private", "public"]
+
+
 def _db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -294,6 +298,31 @@ def list_repositories(user: sqlite3.Row = Depends(_current_user)) -> list[Reposi
 @router.get("/{repository_id}", response_model=RepositoryResponse)
 def get_repository(repository_id: int, user: sqlite3.Row = Depends(_current_user)) -> RepositoryResponse:
     with _db() as db:
+        return _response(_access(db, repository_id, user["id"]))
+
+
+@router.patch("/{repository_id}/visibility", response_model=RepositoryResponse)
+def update_visibility(
+    repository_id: int,
+    body: VisibilityUpdateRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> RepositoryResponse:
+    """Publish or unpublish a repository. Owner only, enforced server-side.
+
+    ``_access`` already hides private repositories from users who cannot see
+    them (404), and ``_require_owner`` rejects collaborators and readers of
+    public repositories (403). The client is never trusted: the role is
+    recomputed from the database on every call.
+    """
+    with _db() as db:
+        row = _access(db, repository_id, user["id"])
+        _require_owner(row)
+        now = datetime.now(timezone.utc).isoformat()
+        db.execute(
+            "UPDATE repositories SET visibility = ?, updated_at = ? WHERE id = ?",
+            (body.visibility, now, repository_id),
+        )
+        db.commit()
         return _response(_access(db, repository_id, user["id"]))
 
 

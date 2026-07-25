@@ -15,6 +15,7 @@
     <button id="account-menu-button" class="ws-menu-button" type="button" aria-label="Open profile and settings" aria-expanded="false">☰</button>
     <a href="/repositories" class="ws-brand" aria-label="Back to repositories">A</a>
     <div class="ws-repo-identity"><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
+    <div id="ws-visibility" class="ws-visibility" hidden><span id="ws-visibility-state" class="ws-visibility-state is-private">Private</span><button id="ws-visibility-toggle" type="button">Publish</button></div>
     <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch" disabled></select><button id="ws-new-branch" type="button" disabled>New branch</button></div>
   </header>
 
@@ -58,7 +59,6 @@
     <section class="ws-panel" data-panel="autonomous"><div class="ws-section-head"><div><h2>Autonomous execution</h2><p>Run real repository operations through the connected agent route.</p></div></div><div class="ws-agent-grid"><button id="ws-agent-build" type="button">Build</button><button id="ws-agent-test" type="button">Test</button><button id="ws-agent-review" type="button">Review</button><button id="ws-agent-deploy" type="button">Deploy</button></div><pre id="ws-agent-output" class="ws-agent-output">Choose an operation.</pre></section>
   </main>
 
-  <div hidden aria-hidden="true"><div id="ws-output"></div><button id="ws-build" type="button"></button><button id="ws-test" type="button"></button><button id="ws-review" type="button"></button><button id="ws-deploy" type="button"></button></div>
   <footer class="ws-powered-by"><span>Powered by</span><a href="/" aria-label="Amosclaud home">Amosclaud</a></footer>
   <script>
     (() => {
@@ -70,6 +70,6 @@
       }
     })();
   </script>
-  <script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script src="/static/highlight.js"></script><script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
 </body>
 </html>
