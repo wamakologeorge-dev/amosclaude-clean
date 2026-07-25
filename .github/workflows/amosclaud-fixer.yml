@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout failing revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.decide.outputs.target_sha }}
           fetch-depth: 0
