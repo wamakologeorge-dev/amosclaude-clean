@@ -20,6 +20,7 @@ MODEL_ENV = (
     "AMOSCLAUD_MODEL_TOKEN",
     "AMOSCLAUD_BOT_TOKEN",
     "AMOSCLAUD_API_URL",
+    "AMOSCLAUD_PROVIDER_API_URL",
     "AMOSCLAUD_API_KEY",
     "AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS",
     "OPENAI_API_KEY",
@@ -411,3 +412,35 @@ def test_ready_route_downgrades_when_no_candidate_is_reachable(monkeypatch):
     assert runtime_state["reachable"] is False
     assert runtime_state["blocker"]["code"] == model_runtime.DNS_UNRESOLVED
     assert "AMOSCLAUD_MODEL_URL" in runtime_state["blocker"]["remediation"]
+
+
+# --------------------------------------------------------------------------
+# AMOSCLAUD_API_URL conflation fix: the model endpoint has its own variable.
+# --------------------------------------------------------------------------
+def test_dedicated_provider_api_url_is_preferred_for_model_endpoint(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_PROVIDER_API_URL", "https://model.example:8443")
+    monkeypatch.setenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/")
+    monkeypatch.setenv("AMOSCLAUD_API_KEY", "key")
+    candidate = _candidate("amosclaud-api")
+    assert candidate.sanitized_endpoint == "https://model.example:8443"
+    assert candidate.endpoint_env == "AMOSCLAUD_PROVIDER_API_URL"
+
+
+def test_legacy_api_url_still_works_as_backward_compatible_fallback(monkeypatch):
+    monkeypatch.delenv("AMOSCLAUD_PROVIDER_API_URL", raising=False)
+    monkeypatch.setenv("AMOSCLAUD_API_URL", "https://legacy.example:9000")
+    monkeypatch.setenv("AMOSCLAUD_API_KEY", "key")
+    candidate = _candidate("amosclaud-api")
+    assert candidate.sanitized_endpoint == "https://legacy.example:9000"
+    assert candidate.endpoint_env == "AMOSCLAUD_API_URL"
+
+
+def test_provider_uses_dedicated_endpoint_over_platform_url(monkeypatch):
+    # The platform base URL must never be treated as the model endpoint when
+    # the dedicated variable is present.
+    monkeypatch.setenv("AMOSCLAUD_PROVIDER_API_URL", "https://model.example")
+    monkeypatch.setenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/")
+    monkeypatch.setenv("AMOSCLAUD_API_KEY", "key")
+    assert provider.status()["amosclaud_api_configured"] is True
+    candidate = _candidate("amosclaud-api")
+    assert "amosclaud.com" not in candidate.sanitized_endpoint
