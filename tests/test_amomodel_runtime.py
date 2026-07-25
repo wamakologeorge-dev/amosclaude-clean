@@ -104,9 +104,14 @@ def test_amomodel_never_accepts_empty_objective(tmp_path: Path):
         raise AssertionError("empty objective must be rejected")
 
 
-def test_dashboard_exposes_amomodel_power_controls():
+def test_legacy_hub_still_exposes_amomodel_power_controls():
+    """The AmoModel hub moved to /cloud/agent/legacy; it was not removed."""
+    source = Path("amoscloud_ai/main.py").read_text(encoding="utf-8")
+    legacy = source.split('@app.get("/cloud/agent/legacy"', 1)[1]
+    legacy = legacy.split('@app.get("/"', 1)[0]
     html = Path("web/index.html").read_text(encoding="utf-8")
     script = Path("web/amomodel-controls.js").read_text(encoding="utf-8")
+    assert 'return FileResponse(web_dir / "index.html")' in legacy
     assert "Turn on AmoModel" in html
     assert "Turn off AmoModel" in html
     assert "/api/v1/amomodel/status" in script

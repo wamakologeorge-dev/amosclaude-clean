@@ -371,6 +371,24 @@ def create_app() -> FastAPI:
 
     @app.get("/cloud/agent", include_in_schema=False)
     async def cloud_agent_page(request: Request):
+        """Primary signed-in workspace: the Command Center.
+
+        To revert to the legacy AmoModel settings hub, change the single
+        filename below back to ``index.html``. Nothing else has to move:
+        the legacy page, its scripts, and its backend runtime are all
+        still present and are still served at ``/cloud/agent/legacy``.
+        """
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "command-center.html")
+
+    @app.get("/cloud/agent/legacy", include_in_schema=False)
+    async def cloud_agent_legacy_page(request: Request):
+        """Retired AmoModel settings hub, kept reachable and unchanged.
+
+        Gated exactly like ``/cloud/agent`` so legacy access never becomes
+        a weaker door into the workspace.
+        """
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "index.html")

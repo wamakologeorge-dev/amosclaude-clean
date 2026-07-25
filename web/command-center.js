@@ -29,8 +29,114 @@
     renderRepository(); await loadIssues();
     notice.textContent = repositories.length ? `${repositories.length} ${repositories.length === 1 ? 'repository' : 'repositories'} available.` : 'Create a repository to begin.';
   }
-  repositorySelect.addEventListener('change', () => { renderRepository(); loadIssues().catch(showError); });
+  repositorySelect.addEventListener('change', () => { renderRepository(); loadIssues().catch(showError); loadEvidence().catch(() => {}); });
   function showError(error) { notice.textContent = error.message || 'Request failed.'; }
+
+  // ---------------------------------------------------------------------
+  // Runtime status: honest diagnostics instead of raw on/off model toggles.
+  // Reads the existing readiness endpoint and the existing diagnostic codes.
+  // ---------------------------------------------------------------------
+  async function loadRuntimeStatus() {
+    const recheck = $('runtime-recheck');
+    if (recheck) recheck.disabled = true;
+    try {
+      const ready = await fetch('/ready', { credentials: 'same-origin', cache: 'no-store' }).then((response) => response.json());
+      renderRuntime(window.AmosclaudRuntimeStatus.summarize(ready));
+    } catch (error) {
+      renderRuntime(window.AmosclaudRuntimeStatus.summarize(null));
+      $('runtime-remediation').hidden = false;
+      $('runtime-remediation').textContent = `Amosclaud could not read its readiness report: ${error.message}`;
+    } finally {
+      if (recheck) recheck.disabled = false;
+    }
+  }
+
+  function renderRuntime(summary) {
+    const panel = $('runtime-panel');
+    panel.dataset.reachable = String(summary.reachable);
+    panel.dataset.code = summary.code || '';
+    $('runtime-indicator').textContent = summary.reachable ? '●' : '▲';
+    $('runtime-headline').textContent = summary.headline;
+    const codeBadge = $('runtime-code');
+    codeBadge.hidden = !summary.code;
+    codeBadge.textContent = summary.code;
+    $('runtime-provider').textContent = `${summary.activePath} — ${summary.activePathState}`;
+    $('runtime-reachable').textContent = summary.reachable ? 'Reachable' : 'Not reachable';
+    const remediation = $('runtime-remediation');
+    remediation.hidden = !summary.remediation;
+    remediation.textContent = summary.remediation ? `What to do: ${summary.remediation}` : '';
+    $('runtime-native-note').textContent = summary.nativeNote;
+    $('runtime-key-note').textContent = summary.noKeyNote;
+    $('runtime-candidate-list').innerHTML = summary.candidates.map((candidate) => {
+      const state = candidate.reachable ? 'reachable' : candidate.configured ? `not reachable (${candidate.code || 'unknown'})` : 'not configured';
+      return `<li><strong>${escapeHtml(candidate.label)}</strong> — ${escapeHtml(candidate.firstParty ? 'first-party' : 'external adapter')} — ${escapeHtml(state)}</li>`;
+    }).join('') || '<li>No model candidates were reported.</li>';
+  }
+
+  // ---------------------------------------------------------------------
+  // Task status, logs, verification checks, and real repository evidence.
+  // ---------------------------------------------------------------------
+  const TERMINAL = ['success', 'failed', 'cancelled'];
+
+  function renderTask(task) {
+    $('task-status').hidden = false;
+    $('task-id').textContent = task.pipeline_id || task.id || '—';
+    $('task-state').textContent = task.status || 'unknown';
+    const checks = Array.isArray(task.checks) ? task.checks : [];
+    $('task-checks').innerHTML = checks.length
+      ? checks.map((check) => `<div class="task-check"><strong>${escapeHtml(check.name)}</strong><span>${escapeHtml(check.status)}</span><p>${escapeHtml(check.summary || '')}</p></div>`).join('')
+      : 'No verification checks were returned.';
+    const logs = Array.isArray(task.logs) ? task.logs : [];
+    $('task-logs').textContent = logs.length ? logs.join('\n') : 'No logs were returned.';
+  }
+
+  function flatten(pipeline, previous) {
+    const jobs = Array.isArray(pipeline.jobs) ? pipeline.jobs : [];
+    return {
+      pipeline_id: pipeline.id || previous.pipeline_id,
+      status: pipeline.status || previous.status,
+      reply: pipeline.copilot_reply || pipeline.message || previous.reply,
+      checks: previous.checks || [],
+      logs: jobs.flatMap((job) => (Array.isArray(job.logs) ? job.logs : [])),
+    };
+  }
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function followTask(initial) {
+    let latest = initial;
+    const id = String(initial.pipeline_id || '');
+    if (!id || id.startsWith('conversation-')) return latest;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (TERMINAL.includes(String(latest.status || '').toLowerCase())) return latest;
+      await wait(1000);
+      const pipeline = await request(`/api/v1/pipelines/${encodeURIComponent(id)}`);
+      latest = flatten(pipeline, latest);
+      renderTask(latest);
+    }
+    return latest;
+  }
+
+  function listItems(node, items, empty) {
+    node.innerHTML = items.length ? items.join('') : `<li class="muted">${escapeHtml(empty)}</li>`;
+  }
+
+  async function loadEvidence() {
+    const repository = selectedRepository();
+    const panel = $('task-evidence');
+    if (!repository) { panel.hidden = true; return; }
+    const branch = repository.default_branch || 'main';
+    const [branches, commits, pullRequests] = await Promise.all([
+      request(`/api/v1/repositories/${repository.id}/branches`).catch(() => []),
+      request(`/api/v1/repositories/${repository.id}/commits?branch=${encodeURIComponent(branch)}&limit=5`).catch(() => []),
+      request(`/api/v1/repositories/${repository.id}/pull-requests`).catch(() => []),
+    ]);
+    panel.hidden = false;
+    const workspace = `/workspace/${repository.id}`;
+    listItems($('evidence-branches'), (branches || []).map((name) => `<li><a href="${escapeHtml(workspace)}">${escapeHtml(name)}</a></li>`), 'The backend returned no branches.');
+    listItems($('evidence-commits'), (commits || []).map((commit) => `<li><code>${escapeHtml(String(commit.sha).slice(0, 10))}</code> ${escapeHtml(commit.message)}</li>`), 'The backend returned no commits.');
+    listItems($('evidence-pull-requests'), (pullRequests || []).map((pull) => `<li><a href="${escapeHtml(workspace)}">#${escapeHtml(pull.id)} ${escapeHtml(pull.title)}</a> — ${escapeHtml(pull.state)} (${escapeHtml(pull.head_branch)} → ${escapeHtml(pull.base_branch)})</li>`), 'The backend returned no pull requests.');
+  }
 
   $('repository-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -42,7 +148,21 @@
   });
   $('agent-form').addEventListener('submit', async (event) => {
     event.preventDefault(); const repository = selectedRepository(); if (!repository) return showError(new Error('Choose a repository first.'));
-    try { const result = await request('/api/v1/agent/run', { method: 'POST', body: JSON.stringify({ mode: 'autonomous-check', objective: $('agent-objective').value.trim(), branch: repository.default_branch, metadata: { repository_id: repository.id, repository_name: repository.name, source: 'command-center' } }) }); const output = $('agent-result'); output.hidden = false; output.textContent = result.reply || `Task ${result.status || 'accepted'}.`; notice.textContent = `Agent task ${result.status || 'accepted'}.`; } catch (error) { showError(error); }
+    try {
+      const result = await request('/api/v1/agent/run', { method: 'POST', body: JSON.stringify({ mode: 'autonomous-check', objective: $('agent-objective').value.trim(), branch: repository.default_branch, metadata: { repository_id: repository.id, repository_name: repository.name, source: 'command-center' } }) });
+      const output = $('agent-result');
+      output.hidden = false;
+      output.textContent = result.reply || `Task ${result.status || 'accepted'}.`;
+      renderTask(result);
+      notice.textContent = `Agent task ${result.status || 'accepted'}.`;
+      const finished = await followTask(result);
+      renderTask(finished);
+      output.textContent = finished.reply || output.textContent;
+      notice.textContent = `Agent task ${finished.status || 'accepted'}.`;
+      await loadEvidence();
+    } catch (error) { showError(error); }
   });
-  loadRepositories().catch(showError);
+  $('runtime-recheck').addEventListener('click', () => { loadRuntimeStatus(); });
+  loadRuntimeStatus();
+  loadRepositories().then(() => loadEvidence()).catch(showError);
 })();
