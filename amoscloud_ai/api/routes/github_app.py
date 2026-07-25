@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from amoscloud_ai import codex_memory
+from amoscloud_ai import codex_memory, github_issue_commands
 from amoscloud_ai.api.routes.agent import _authenticated_user
 
 router = APIRouter(prefix="/agent/github", tags=["github-app"])
@@ -193,7 +193,20 @@ async def receive_webhook(request: Request) -> dict:
         importance=0.6 if event in {"push", "pull_request"} else 0.4,
         source=record["delivery_id"] or None,
     )
-    return {"ok": True, "handled": event in HANDLED_EVENTS, "event_id": record["id"]}
+    response = {
+        "ok": True,
+        "handled": event in HANDLED_EVENTS,
+        "event_id": record["id"],
+    }
+    if event in {"issues", "issue_comment"}:
+        command = github_issue_commands.handle_issue_event(
+            event=event,
+            payload=payload,
+            delivery_id=record["delivery_id"],
+        )
+        if command:
+            response["issue_command"] = command
+    return response
 
 
 @router.get("/events", summary="List recent GitHub App events")
@@ -224,6 +237,32 @@ async def list_events(
     return {"events": [dict(row) for row in rows], "count": len(rows)}
 
 
+@router.get("/issue-commands", summary="List issue-driven Amosclaud tasks")
+async def list_issue_commands(
+    request: Request,
+    repository: str | None = None,
+    limit: int = 30,
+) -> dict:
+    user = _authenticated_user(request)
+    if not user:
+        raise HTTPException(
+            status_code=401, detail="Sign in to view issue-driven Amosclaud tasks"
+        )
+    items = github_issue_commands.recent_issue_commands(
+        limit=limit, repository=repository
+    )
+    return {
+        "issue_commands": items,
+        "count": len(items),
+        "pending_relays": github_issue_commands.pending_relays(),
+        "commands": sorted(github_issue_commands.COMMANDS),
+        "labels": [
+            f"{github_issue_commands.LABEL_PREFIX}{name}"
+            for name in github_issue_commands.LABEL_COMMANDS
+        ],
+    }
+
+
 @router.get("/app", summary="GitHub App integration status")
 async def app_status(request: Request) -> dict:
     user = _authenticated_user(request)
@@ -240,4 +279,12 @@ async def app_status(request: Request) -> dict:
         "events_recorded": row["events"],
         "last_event_at": row["last_event_at"],
         "handled_events": sorted(HANDLED_EVENTS),
+        "issue_commands": {
+            "commands": sorted(github_issue_commands.COMMANDS),
+            "mentions": list(github_issue_commands.MENTIONS),
+            "labels": [
+                f"{github_issue_commands.LABEL_PREFIX}{name}"
+                for name in github_issue_commands.LABEL_COMMANDS
+            ],
+        },
     }
