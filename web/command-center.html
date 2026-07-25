@@ -7,16 +7,54 @@
   <link rel="stylesheet" href="/static/command-center.css">
 </head>
 <body>
-  <header class="topbar"><a href="/cloud/agent" class="brand">Amosclaud</a><nav aria-label="Primary"><a href="/repositories">Repositories</a><a href="/cloud/agent">Agent</a></nav></header>
+  <header class="topbar"><a href="/cloud/agent" class="brand">Amosclaud</a><nav aria-label="Primary"><a href="/repositories">Repositories</a><a href="/cloud/agent">Agent</a><a href="/cloud/agent/legacy" class="legacy-link">Legacy hub</a></nav></header>
   <main>
     <header class="page-heading"><p class="eyebrow">Authenticated workspace</p><h1>Command Center</h1><p>Choose a repository, record an issue, or request an agent task with that repository as context.</p></header>
     <p id="notice" class="notice" role="status" aria-live="polite">Loading repositories…</p>
+
+    <section id="runtime-panel" class="panel runtime-panel" aria-label="Model runtime status">
+      <h2>Runtime status</h2>
+      <p class="runtime-headline"><span id="runtime-indicator" class="runtime-indicator" aria-hidden="true">•</span><strong id="runtime-headline">Checking the Amosclaud model runtime…</strong><span id="runtime-code" class="runtime-code" hidden></span></p>
+      <dl class="details">
+        <dt>Provider path</dt><dd id="runtime-provider">Checking…</dd>
+        <dt>Model runtime</dt><dd id="runtime-reachable">Checking…</dd>
+      </dl>
+      <p id="runtime-remediation" class="runtime-remediation" hidden></p>
+      <p id="runtime-native-note" class="runtime-note">Native Amosclaud repository actions do not depend on a model runtime.</p>
+      <p id="runtime-key-note" class="runtime-note">No OpenAI or other external API key is required.</p>
+      <details class="runtime-candidates"><summary>Resolution path</summary><ul id="runtime-candidate-list"></ul></details>
+      <button id="runtime-recheck" type="button">Recheck runtime</button>
+    </section>
+
     <section class="grid" aria-label="Repository controls">
       <article class="panel"><h2>Repository</h2><label for="repository-select">Selected repository</label><select id="repository-select" disabled><option>Loading…</option></select><dl id="repository-details" class="details"></dl><form id="repository-form"><h3>Create repository</h3><label>Name<input id="repository-name" required maxlength="100" pattern="[A-Za-z0-9][A-Za-z0-9._-]*"></label><label>Description<input id="repository-description" maxlength="500"></label><button type="submit">Create repository</button></form></article>
       <article class="panel"><h2>Issues</h2><div id="issue-list" class="issue-list" aria-live="polite">Select a repository to load issues.</div><form id="issue-form"><h3>Record an issue</h3><label>Title<input id="issue-title" required maxlength="200"></label><label>Description<textarea id="issue-body" maxlength="50000"></textarea></label><button type="submit">Create issue</button></form></article>
     </section>
-    <section class="panel agent-panel"><h2>Agent request</h2><p>The request is queued with repository context. This page does not promise file changes, commits, or pull requests.</p><form id="agent-form"><label>Objective<textarea id="agent-objective" required maxlength="12000" placeholder="Inspect the selected repository and report the next safe step."></textarea></label><button type="submit">Request agent task</button></form><pre id="agent-result" hidden></pre></section>
+    <section class="panel agent-panel"><h2>Agent request</h2><p>The request is queued with repository context. This page does not promise file changes, commits, or pull requests.</p><form id="agent-form"><label>Objective<textarea id="agent-objective" required maxlength="12000" placeholder="Inspect the selected repository and report the next safe step."></textarea></label><button type="submit">Request agent task</button></form><pre id="agent-result" hidden></pre>
+      <div id="task-status" class="task-status" aria-live="polite" hidden>
+        <h3>Task status</h3>
+        <dl class="details">
+          <dt>Task</dt><dd id="task-id">—</dd>
+          <dt>State</dt><dd id="task-state">—</dd>
+        </dl>
+        <h4>Verification checks</h4>
+        <div id="task-checks" class="task-checks">No verification checks were returned.</div>
+        <h4>Logs</h4>
+        <pre id="task-logs">No logs were returned.</pre>
+      </div>
+      <div id="task-evidence" class="task-evidence" aria-live="polite" hidden>
+        <h3>Repository evidence</h3>
+        <p class="runtime-note">Only evidence the backend actually returned for this repository is shown below.</p>
+        <h4>Branches</h4>
+        <ul id="evidence-branches"></ul>
+        <h4>Commits</h4>
+        <ul id="evidence-commits"></ul>
+        <h4>Pull requests</h4>
+        <ul id="evidence-pull-requests"></ul>
+      </div>
+    </section>
   </main>
+  <script src="/static/runtime-status.js"></script>
   <script src="/static/command-center.js"></script>
 </body>
 </html>
