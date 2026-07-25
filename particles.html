@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Particle Field</title>
+<style>
+  html, body { margin: 0; overflow: hidden; background: #000; height: 100%; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- UMD build works from file:// (no CORS issue like ESM imports would have) -->
+<script src="https://unpkg.com/typescript@5.4.5/lib/typescript.js"></script>
+
+<script id="app" type="text/typescript">
+interface Particle {
+  x: number; y: number;
+  vx: number; vy: number;
+  hue: number;
+}
+
+const canvas = document.getElementById('c') as HTMLCanvasElement;
+const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+
+function resize(): void {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+window.addEventListener('mousemove', (e: MouseEvent) => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+const N = 220;
+const particles: Particle[] = [];
+for (let i = 0; i < N; i++) {
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: 0,
+    vy: 0,
+    hue: Math.random() * 360,
+  });
+}
+
+const PULL = 0.0015;
+const DAMPING = 0.95;
+
+function tick(): void {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (const p of particles) {
+    const dx = mouse.x - p.x;
+    const dy = mouse.y - p.y;
+    p.vx += dx * PULL;
+    p.vy += dy * PULL;
+    p.vx *= DAMPING;
+    p.vy *= DAMPING;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.hue = (p.hue + 0.3) % 360;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${p.hue}, 100%, 60%, 0.6)`;
+    ctx.fill();
+  }
+
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+
+<script>
+  // Minimal loader: transpile the TS block above, then run it as JS.
+  const src = document.getElementById('app').textContent;
+  const js = ts.transpileModule(src, {
+    compilerOptions: { target: 'ES2017' }
+  }).outputText;
+  new Function(js)();
+</script>
+</body>
+</html>
