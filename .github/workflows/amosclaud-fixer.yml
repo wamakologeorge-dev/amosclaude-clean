@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout failing revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.decide.outputs.target_sha }}
           fetch-depth: 0
@@ -184,7 +184,7 @@ jobs:
 
       - name: Upload repair evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: amosclaud-fixer-${{ github.run_id }}
           path: |

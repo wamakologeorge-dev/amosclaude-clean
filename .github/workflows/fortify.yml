@@ -27,7 +27,7 @@ jobs:
       DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
     steps:
       - name: Check out source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Detect configured Fortify provider
         id: config
