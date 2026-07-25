@@ -12,6 +12,20 @@
     <header class="page-heading"><p class="eyebrow">Authenticated workspace</p><h1>Command Center</h1><p>Choose a repository, record an issue, or request an agent task with that repository as context.</p></header>
     <p id="notice" class="notice" role="status" aria-live="polite">Loading repositories…</p>
 
+    <section id="services-dashboard" class="panel services-dashboard" aria-label="All platform services">
+      <div class="services-header">
+        <h2>All services</h2>
+        <div class="services-controls">
+          <span id="services-checked" class="services-checked">Checking…</span>
+          <button id="services-refresh" type="button">Refresh</button>
+        </div>
+      </div>
+      <p id="services-summary" class="services-summary" role="status" aria-live="polite">Checking every platform service…</p>
+      <p id="services-error" class="services-error" role="alert" hidden></p>
+      <ul id="services-tiles" class="services-tiles"></ul>
+      <p class="runtime-note">Each tile shows only a state a real check proved. A service with no health probe is shown as <strong>Unknown</strong>, never as healthy.</p>
+    </section>
+
     <section id="runtime-panel" class="panel runtime-panel" aria-label="Model runtime status">
       <h2>Runtime status</h2>
       <p class="runtime-headline"><span id="runtime-indicator" class="runtime-indicator" aria-hidden="true">•</span><strong id="runtime-headline">Checking the Amosclaud model runtime…</strong><span id="runtime-code" class="runtime-code" hidden></span></p>
