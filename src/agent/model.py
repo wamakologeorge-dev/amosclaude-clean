@@ -59,7 +59,9 @@ def load_model_config() -> ModelConfig:
             _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
         )
     elif not endpoint:
-        api_endpoint = _first_value("AMOSCLAUD_API_URL").rstrip("/")
+        api_endpoint = _first_value(
+            "AMOSCLAUD_PROVIDER_API_URL", "AMOSCLAUD_API_URL"
+        ).rstrip("/")
         api_token = _first_value("AMOSCLAUD_API_KEY")
         if api_endpoint and api_token:
             endpoint = api_endpoint

@@ -59,6 +59,20 @@ _SELF_HOSTED_ENV_NAMES = (
     "AMOSCLAUD_MODEL_URL",
     "AMOSCLAUD_BOT_URL",
 )
+# The remote-hosted first-party ``amosclaud-api`` model endpoint.
+#
+# Historically this candidate read ``AMOSCLAUD_API_URL``, but that variable is
+# already the Amosclaud *platform* base URL everywhere else (``shared.runtime``
+# and ``deployment_worker.config`` both treat it as the platform API, live
+# value ``http://www.amosclaud.com/``). Treating the platform URL as a model
+# API endpoint is a conflation bug: a preflight would probe the website as if
+# it were an inference server. ``AMOSCLAUD_PROVIDER_API_URL`` is the dedicated
+# model-endpoint variable; ``AMOSCLAUD_API_URL`` is kept only as a
+# backward-compatible fallback so existing deployments do not break.
+_FIRST_PARTY_API_ENV_NAMES = (
+    "AMOSCLAUD_PROVIDER_API_URL",
+    "AMOSCLAUD_API_URL",
+)
 _SECRET_ENV_NAMES = (
     "AMOSCLAUD_MODEL_TOKEN",
     "AMOSCLAUD_BOT_TOKEN",
@@ -374,7 +388,12 @@ def resolve_candidates(network: dict[str, Any] | None = None) -> list[Candidate]
     network = network_state() if network is None else dict(network)
     stations = int(network.get("ready_stations") or 0)
     network_ready = bool(network.get("ready"))
-    api_endpoint = _env("AMOSCLAUD_API_URL").rstrip("/")
+    api_endpoint = _env(*_FIRST_PARTY_API_ENV_NAMES).rstrip("/")
+    api_endpoint_env = "AMOSCLAUD_PROVIDER_API_URL"
+    for name in _FIRST_PARTY_API_ENV_NAMES:
+        if os.getenv(name, "").strip():
+            api_endpoint_env = name
+            break
     api_key = _env("AMOSCLAUD_API_KEY")
     self_hosted = _env(*_SELF_HOSTED_ENV_NAMES).rstrip("/")
     self_hosted_env = "AMOSCLAUD_MODEL_URL"
@@ -400,7 +419,7 @@ def resolve_candidates(network: dict[str, Any] | None = None) -> list[Candidate]
             runtime="amosclaud-api",
             kind="first-party",
             endpoint=api_endpoint,
-            endpoint_env="AMOSCLAUD_API_URL",
+            endpoint_env=api_endpoint_env,
             token_env="AMOSCLAUD_API_KEY",
             configured=bool(api_endpoint and api_key),
         ),

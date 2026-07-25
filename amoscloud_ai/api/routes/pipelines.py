@@ -115,6 +115,13 @@ def _get(pipeline_id: str) -> PipelineResponse | None:
     return _row_to_pipeline(row) if row else None
 
 
+def _delete(pipeline_id: str) -> None:
+    """Remove a pipeline row. Used to clean up transient self-test records."""
+    with _LOCK, _db() as db:
+        db.execute("DELETE FROM pipeline_runs WHERE id=?", (pipeline_id,))
+        db.commit()
+
+
 async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineResponse:
     pipeline.status = PipelineStatus.RUNNING
     pipeline.message = pipeline_reply(PipelineStatus.RUNNING)

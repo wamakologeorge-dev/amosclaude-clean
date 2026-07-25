@@ -98,7 +98,13 @@ def _amosclaud_api_reply(
     *,
     attempts: int | None = None,
 ) -> ProviderResult | None:
-    endpoint = os.getenv("AMOSCLAUD_API_URL", "").strip().rstrip("/")
+    # Prefer the dedicated model-endpoint variable; fall back to the legacy
+    # AMOSCLAUD_API_URL (the platform base URL) only for backward
+    # compatibility. See amoscloud_ai.model_runtime for the rationale.
+    endpoint = (
+        os.getenv("AMOSCLAUD_PROVIDER_API_URL", "").strip()
+        or os.getenv("AMOSCLAUD_API_URL", "").strip()
+    ).rstrip("/")
     api_key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
     if not endpoint or not api_key:
         return None
@@ -365,7 +371,13 @@ def status() -> dict[str, object]:
     return {
         "provider": "amosclaud",
         "response_contract": "model_api_response.v1",
-        "amosclaud_api_configured": bool(os.getenv("AMOSCLAUD_API_URL", "").strip() and os.getenv("AMOSCLAUD_API_KEY", "").strip()),
+        "amosclaud_api_configured": bool(
+            (
+                os.getenv("AMOSCLAUD_PROVIDER_API_URL", "").strip()
+                or os.getenv("AMOSCLAUD_API_URL", "").strip()
+            )
+            and os.getenv("AMOSCLAUD_API_KEY", "").strip()
+        ),
         "self_hosted_configured": bool(_model_endpoint()),
         "external_adapters_enabled": _external_adapters_enabled(),
         "openai_configured": bool(os.getenv("OPENAI_API_KEY", "").strip()),
