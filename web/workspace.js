@@ -10,11 +10,18 @@
   const output = document.getElementById('ws-output');
   const breadcrumbs = document.getElementById('ws-breadcrumbs');
   const searchInput = document.getElementById('ws-file-search');
+  const notFound = document.getElementById('ws-not-found');
+  const viewPane = document.getElementById('ws-view');
+  const editPane = document.getElementById('ws-edit');
+  const historyPane = document.getElementById('ws-history');
+  const blamePane = document.getElementById('ws-blame');
 
   let selectedPath = '';
   let currentPath = '';
   let repository = null;
   let entries = [];
+  let openFileData = null;
+  const tabLoaded = {};
 
   async function api(path, options = {}) {
     const response = await fetch(path, {
@@ -27,7 +34,7 @@
     });
     if (response.status === 401) {
       location.assign('/login');
-      throw new Error('Your session expired. Sign in again.');
+      throw Object.assign(new Error('Your session expired. Sign in again.'), { status: 401 });
     }
     if (response.status === 204) return null;
     const contentType = response.headers.get('content-type') || '';
@@ -42,17 +49,19 @@
     }
     if (!response.ok) {
       const detail = data?.detail || data?.message || `Request failed (${response.status})`;
-      throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+      const message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      throw Object.assign(new Error(message), { status: response.status, data });
     }
     return data;
   }
 
   const branch = () => branchSelect.value || repository?.default_branch || 'main';
   const setStatus = message => { status.textContent = message; };
-  const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const baseName = path => path.split('/').filter(Boolean).pop() || path;
   const parentPath = path => path.split('/').filter(Boolean).slice(0, -1).join('/');
   const joinPath = (left, right) => [left, right].filter(Boolean).join('/');
+  const extOf = path => (path.split('.').pop() || '').toLowerCase();
 
   function humanSize(size) {
     if (!size) return '—';
@@ -61,10 +70,112 @@
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  // --- Authoritative "Repository not found" banner ------------------------
+  // The banner is driven ONLY by the repository-metadata request. It appears
+  // when that request genuinely returns 403/404 and is hidden again whenever
+  // metadata loads successfully. It never keys off arbitrary status text.
+  function showNotFound() {
+    document.getElementById('ws-repo-meta').textContent = 'Unavailable';
+    document.querySelectorAll('#ws-branch,#ws-new-branch,#ws-file-search,#ws-new-folder,#ws-new-file')
+      .forEach(control => { control.disabled = true; });
+    document.querySelectorAll('.ws-panel').forEach(panel => { panel.hidden = true; });
+    const tabs = document.querySelector('.ws-tabs');
+    if (tabs) tabs.hidden = true;
+    if (notFound) notFound.hidden = false;
+  }
+
+  function hideNotFound() {
+    if (notFound) notFound.hidden = true;
+    const tabs = document.querySelector('.ws-tabs');
+    if (tabs) tabs.hidden = false;
+    document.querySelectorAll('.ws-panel').forEach(panel => { panel.hidden = false; });
+    document.querySelectorAll('#ws-file-search,#ws-new-folder,#ws-new-file,#ws-branch,#ws-new-branch')
+      .forEach(control => { control.disabled = false; });
+  }
+
+  // --- Self-contained syntax highlighter (no external CDN) ----------------
+  const KEYWORDS = new Set(('await async function return if else for while do break continue const let var ' +
+    'new class extends super import export from default try catch finally throw typeof instanceof in of ' +
+    'switch case yield this null true false undefined void delete def elif except with as pass lambda ' +
+    'raise global nonlocal print not and or is None True False self int str float bool list dict set ' +
+    'public private protected static final void interface enum struct package type namespace').split(' '));
+  const HASH_COMMENT = new Set(['py', 'rb', 'sh', 'bash', 'yml', 'yaml', 'toml', 'ini', 'conf', 'env', 'cfg']);
+
+  function highlight(code, ext) {
+    const patterns = [];
+    if (HASH_COMMENT.has(ext)) patterns.push(['tok-comment', /#[^\n]*/y]);
+    else patterns.push(['tok-comment', /\/\/[^\n]*|\/\*[\s\S]*?\*\//y]);
+    patterns.push(['tok-string', /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/y]);
+    patterns.push(['tok-number', /\b\d[\d_.]*(?:e[+-]?\d+)?\b/y]);
+    patterns.push(['tok-name', /[A-Za-z_$][A-Za-z0-9_$]*/y]);
+    let out = '';
+    let i = 0;
+    while (i < code.length) {
+      let matched = false;
+      for (const [cls, re] of patterns) {
+        re.lastIndex = i;
+        const m = re.exec(code);
+        if (m && m.index === i && m[0].length) {
+          const text = m[0];
+          if (cls === 'tok-name') {
+            out += KEYWORDS.has(text) ? `<span class="tok-keyword">${escapeHtml(text)}</span>` : escapeHtml(text);
+          } else {
+            out += `<span class="${cls}">${escapeHtml(text)}</span>`;
+          }
+          i += text.length;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) { out += escapeHtml(code[i]); i += 1; }
+    }
+    return out;
+  }
+
+  function renderCode(content, ext) {
+    const lines = content.split('\n');
+    const gutter = lines.map((_, index) => `<span>${index + 1}</span>`).join('');
+    const body = lines.map(line => `<span class="ws-code-line">${highlight(line, ext) || '&nbsp;'}</span>`).join('');
+    return `<div class="ws-code-view"><div class="ws-gutter">${gutter}</div><pre class="ws-code-body"><code>${body}</code></pre></div>`;
+  }
+
+  // --- Minimal, escaped Markdown renderer (no raw HTML passthrough) -------
+  function renderMarkdown(source) {
+    const inline = text => escapeHtml(text)
+      .replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g, (_, label, href) => `<a href="${escapeHtml(href)}" rel="noopener noreferrer nofollow" target="_blank">${label}</a>`);
+    const lines = source.split('\n');
+    const html = [];
+    let inCode = false;
+    let list = false;
+    const closeList = () => { if (list) { html.push('</ul>'); list = false; } };
+    for (const line of lines) {
+      if (/^```/.test(line)) {
+        if (inCode) { html.push('</code></pre>'); inCode = false; }
+        else { closeList(); html.push('<pre class="ws-md-code"><code>'); inCode = true; }
+        continue;
+      }
+      if (inCode) { html.push(escapeHtml(line)); continue; }
+      const heading = line.match(/^(#{1,6})\s+(.*)$/);
+      if (heading) { closeList(); html.push(`<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`); continue; }
+      const item = line.match(/^\s*[-*+]\s+(.*)$/);
+      if (item) { if (!list) { html.push('<ul>'); list = true; } html.push(`<li>${inline(item[1])}</li>`); continue; }
+      if (!line.trim()) { closeList(); continue; }
+      closeList();
+      html.push(`<p>${inline(line)}</p>`);
+    }
+    if (inCode) html.push('</code></pre>');
+    closeList();
+    return `<div class="ws-markdown">${html.join('')}</div>`;
+  }
+
   async function loadRepository() {
     repository = await api(`/api/v1/repositories/${repositoryId}`);
     document.getElementById('ws-repo-name').textContent = `${repository.owner_name}/${repository.name}`;
     document.getElementById('ws-repo-meta').textContent = `${repository.visibility} · ${repository.role}`;
+    hideNotFound();
   }
 
   async function loadBranches() {
@@ -96,6 +207,10 @@
     breadcrumbs.innerHTML = crumbs.map((crumb, index) => `${index ? '<span>/</span>' : ''}<button type="button" data-breadcrumb="${escapeHtml(crumb.path)}">${escapeHtml(crumb.label)}</button>`).join('');
   }
 
+  function fileIcon(entry) {
+    return entry.type === 'directory' ? '📁' : '📄';
+  }
+
   function renderTree() {
     renderBreadcrumbs();
     const query = searchInput.value.trim().toLowerCase();
@@ -103,12 +218,12 @@
       ? entries.filter(entry => entry.type === 'file' && entry.path.toLowerCase().includes(query))
       : directChildren(currentPath);
     const parentRow = !query && currentPath
-      ? `<button class="ws-tree-row ws-parent-row" type="button" data-directory="${escapeHtml(parentPath(currentPath))}"><span class="ws-file-icon">↩</span><span class="ws-file-name">..</span><span>—</span></button>`
+      ? `<button class="ws-tree-row ws-parent-row" type="button" data-directory="${escapeHtml(parentPath(currentPath))}"><span class="ws-file-icon">↩</span><span class="ws-file-name">..</span><span class="ws-file-size">—</span></button>`
       : '';
     const body = rows.map(entry => {
       const directory = entry.type === 'directory';
       return `<button class="ws-tree-row${entry.path === selectedPath ? ' active' : ''}" type="button" ${directory ? `data-directory="${escapeHtml(entry.path)}"` : `data-file="${escapeHtml(entry.path)}"`}>
-        <span class="ws-file-icon">${directory ? '📁' : '📄'}</span>
+        <span class="ws-file-icon">${fileIcon(entry)}</span>
         <span class="ws-file-name">${escapeHtml(query ? entry.path : baseName(entry.path))}</span>
         <span class="ws-file-size">${directory ? '—' : humanSize(entry.size)}</span>
       </button>`;
@@ -123,30 +238,132 @@
   }
 
   async function loadCommits() {
-    const commits = await api(`/api/v1/repositories/${repositoryId}/commits?branch=${encodeURIComponent(branch())}&limit=50`);
-    document.getElementById('ws-commits').innerHTML = commits.map(commit => `<article class="ws-commit">
-      <strong>${escapeHtml(commit.message)}</strong>
-      <span>${escapeHtml(commit.sha.slice(0, 7))} committed by ${escapeHtml(commit.author)}</span>
-    </article>`).join('') || '<div class="ws-empty-row">No commits yet.</div>';
+    const list = document.getElementById('ws-commits');
+    list.textContent = 'Loading commits…';
+    try {
+      const commits = await api(`/api/v1/repositories/${repositoryId}/commits?branch=${encodeURIComponent(branch())}&limit=50`);
+      list.innerHTML = commits.map(commit => `<article class="ws-commit">
+        <strong>${escapeHtml(commit.message)}</strong>
+        <span>${escapeHtml(commit.sha.slice(0, 7))} committed by ${escapeHtml(commit.author)}</span>
+      </article>`).join('') || '<div class="ws-empty-row">No commits yet.</div>';
+    } catch (error) {
+      list.innerHTML = `<div class="ws-empty-row ws-error-row">Could not load commits: ${escapeHtml(error.message)}</div>`;
+    }
   }
 
+  async function loadIssues() {
+    const container = document.getElementById('ws-issues');
+    container.innerHTML = '<div class="ws-empty-row">Loading issues…</div>';
+    try {
+      const issues = await api(`/api/v1/repositories/${repositoryId}/issues`);
+      container.innerHTML = issues.length ? issues.map(issue => `<div class="ws-tool-item">
+        <strong>#${issue.id} ${escapeHtml(issue.title)}</strong>
+        <span>${escapeHtml(issue.state)} · updated ${escapeHtml((issue.updated_at || '').slice(0, 10))}</span>
+      </div>`).join('') : '<div class="ws-empty-row">No issues yet.</div>';
+    } catch (error) {
+      container.innerHTML = `<div class="ws-empty-row ws-error-row">Could not load issues: ${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function loadPullRequests() {
+    const container = document.getElementById('ws-pull-requests');
+    container.innerHTML = '<div class="ws-empty-row">Loading pull requests…</div>';
+    try {
+      const prs = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
+      container.innerHTML = prs.length ? prs.map(pr => `<div class="ws-tool-item">
+        <strong>#${pr.id} ${escapeHtml(pr.title)}</strong>
+        <span>${escapeHtml(pr.state)} · ${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)}</span>
+      </div>`).join('') : '<div class="ws-empty-row">No pull requests yet.</div>';
+    } catch (error) {
+      container.innerHTML = `<div class="ws-empty-row ws-error-row">Could not load pull requests: ${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  function setMode(mode) {
+    document.querySelectorAll('.ws-editor-modes [data-mode]').forEach(button => {
+      button.classList.toggle('active', button.dataset.mode === mode);
+    });
+    viewPane.hidden = mode !== 'view';
+    editPane.hidden = mode !== 'edit';
+    historyPane.hidden = mode !== 'history';
+    blamePane.hidden = mode !== 'blame';
+    if (mode === 'history') loadHistory().catch(error => { historyPane.innerHTML = `<div class="ws-empty-row ws-error-row">${escapeHtml(error.message)}</div>`; });
+    if (mode === 'blame') loadBlame().catch(error => { blamePane.innerHTML = `<div class="ws-empty-row ws-error-row">${escapeHtml(error.message)}</div>`; });
+  }
+
+  function renderViewer() {
+    if (!openFileData) return;
+    if (!openFileData.viewable) {
+      viewPane.innerHTML = `<div class="ws-empty-row">Preview not available — ${escapeHtml(openFileData.reason)}</div>`;
+      return;
+    }
+    const ext = extOf(selectedPath);
+    viewPane.innerHTML = ext === 'md' ? renderMarkdown(openFileData.content) : renderCode(openFileData.content, ext);
+  }
+
+  const PREVIEW_LIMIT = 512 * 1024;
+
   async function openFile(path) {
-    const file = await api(`/api/v1/repositories/${repositoryId}/files?path=${encodeURIComponent(path)}&branch=${encodeURIComponent(branch())}`);
+    let file;
+    try {
+      file = await api(`/api/v1/repositories/${repositoryId}/files?path=${encodeURIComponent(path)}&branch=${encodeURIComponent(branch())}`);
+    } catch (error) {
+      if (error.status === 415) {
+        file = { path, content: '', size: 0, binary: true };
+      } else { throw error; }
+    }
     selectedPath = path;
     currentPath = parentPath(path);
     currentFile.textContent = path;
-    editor.value = file.content;
-    editor.disabled = false;
+    const tooBig = (file.size || 0) > PREVIEW_LIMIT;
+    const viewable = !file.binary && !tooBig;
+    openFileData = {
+      content: file.content || '',
+      viewable,
+      reason: file.binary ? 'this is a binary file.' : tooBig ? 'this file is too large to display.' : '',
+    };
+    editor.value = viewable ? file.content : '';
+    editor.disabled = !viewable;
     editorShell.hidden = false;
     editorEmpty.hidden = true;
-    ['ws-save', 'ws-rename', 'ws-delete'].forEach(id => { document.getElementById(id).disabled = false; });
+    document.getElementById('ws-rename').disabled = false;
+    document.getElementById('ws-delete').disabled = false;
+    document.getElementById('ws-save').disabled = !viewable;
+    document.getElementById('ws-mode-edit').disabled = !viewable;
     document.getElementById('ws-commit-message').value = `Update ${path}`;
-    setStatus(`Editing ${path}`);
+    renderViewer();
+    setMode('view');
+    setStatus(`Viewing ${path}`);
     renderTree();
+  }
+
+  async function loadHistory() {
+    historyPane.innerHTML = '<div class="ws-empty-row">Loading history…</div>';
+    const data = await api(`/api/v1/repositories/${repositoryId}/history?path=${encodeURIComponent(selectedPath)}&branch=${encodeURIComponent(branch())}`);
+    historyPane.innerHTML = data.commits.length ? data.commits.map(commit => `<article class="ws-commit">
+      <strong>${escapeHtml(commit.message)}</strong>
+      <span>${escapeHtml(commit.short_sha)} · ${escapeHtml(commit.author)} · ${escapeHtml((commit.created_at || '').slice(0, 10))}</span>
+    </article>`).join('') : '<div class="ws-empty-row">No commits have touched this file yet.</div>';
+  }
+
+  async function loadBlame() {
+    blamePane.innerHTML = '<div class="ws-empty-row">Loading blame…</div>';
+    const data = await api(`/api/v1/repositories/${repositoryId}/blame?path=${encodeURIComponent(selectedPath)}&branch=${encodeURIComponent(branch())}`);
+    if (!data.available) {
+      blamePane.innerHTML = `<div class="ws-empty-row">Blame unavailable — ${escapeHtml(data.reason || 'this file cannot be annotated.')}</div>`;
+      return;
+    }
+    const rows = data.lines.map(line => `<div class="ws-blame-row">
+      <span class="ws-blame-meta" title="${escapeHtml(line.author)} · ${escapeHtml(line.date)}">${escapeHtml(line.short_sha)} ${escapeHtml(line.author)}</span>
+      <span class="ws-blame-no">${line.line}</span>
+      <code class="ws-blame-code">${escapeHtml(line.content) || '&nbsp;'}</code>
+    </div>`).join('');
+    blamePane.innerHTML = `<div class="ws-blame-note">Standard git line attribution from real stored commits.</div>${rows}`;
   }
 
   function closeEditor() {
     selectedPath = '';
+    openFileData = null;
     editor.value = '';
     editor.disabled = true;
     editorShell.hidden = true;
@@ -166,6 +383,8 @@
       }),
     });
     setStatus('Committed');
+    if (openFileData) openFileData.content = editor.value;
+    renderViewer();
     await Promise.all([loadTree(), loadCommits()]);
   }
 
@@ -173,12 +392,18 @@
     selectedPath = path;
     currentPath = parentPath(path);
     currentFile.textContent = selectedPath;
+    openFileData = { content: '', viewable: true, reason: '' };
     editor.value = '';
     editor.disabled = false;
     editorShell.hidden = false;
     editorEmpty.hidden = true;
-    ['ws-save', 'ws-rename', 'ws-delete'].forEach(id => { document.getElementById(id).disabled = false; });
+    document.getElementById('ws-rename').disabled = false;
+    document.getElementById('ws-delete').disabled = false;
+    document.getElementById('ws-save').disabled = false;
+    document.getElementById('ws-mode-edit').disabled = false;
     document.getElementById('ws-commit-message').value = `Create ${selectedPath}`;
+    renderViewer();
+    setMode('edit');
     setStatus('New file ready to commit');
   }
 
@@ -248,11 +473,19 @@
     }
   }
 
+  function activateTab(name) {
+    if (name === 'commits') { loadCommits().catch(error => setStatus(error.message)); return; }
+    if (name === 'issues' && !tabLoaded.issues) { tabLoaded.issues = true; loadIssues(); }
+    if (name === 'pull-requests' && !tabLoaded.prs) { tabLoaded.prs = true; loadPullRequests(); }
+  }
+
   document.querySelectorAll('.ws-tab').forEach(tab => tab.addEventListener('click', () => {
     document.querySelectorAll('.ws-tab').forEach(item => item.classList.toggle('active', item === tab));
     document.querySelectorAll('.ws-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === tab.dataset.tab));
-    if (tab.dataset.tab === 'commits') loadCommits().catch(error => setStatus(error.message));
+    activateTab(tab.dataset.tab);
   }));
+
+  document.querySelectorAll('.ws-editor-modes [data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
 
   breadcrumbs.addEventListener('click', event => {
     const button = event.target.closest('[data-breadcrumb]');
@@ -275,6 +508,8 @@
   document.getElementById('ws-rename').addEventListener('click', () => renameFile().catch(error => setStatus(error.message)));
   document.getElementById('ws-delete').addEventListener('click', () => deleteFile().catch(error => setStatus(error.message)));
   document.getElementById('ws-new-branch').addEventListener('click', () => newBranch().catch(error => setStatus(error.message)));
+  document.getElementById('ws-refresh-issues')?.addEventListener('click', () => { tabLoaded.issues = true; loadIssues(); });
+  document.getElementById('ws-refresh-prs')?.addEventListener('click', () => { tabLoaded.prs = true; loadPullRequests(); });
   document.getElementById('ws-build').addEventListener('click', () => runTool('build', 'Build'));
   document.getElementById('ws-test').addEventListener('click', () => runTool('autonomous-check', 'Tests'));
   document.getElementById('ws-review').addEventListener('click', () => runTool('autonomous-check', 'Review'));
@@ -283,9 +518,16 @@
   (async () => {
     try {
       await loadRepository();
+    } catch (error) {
+      if (error.status === 404 || error.status === 403) { showNotFound(); return; }
+      setStatus(error.message);
+      return;
+    }
+    try {
       await loadBranches();
       await Promise.all([loadTree(), loadCommits()]);
       closeEditor();
+      setStatus(`${repository.owner_name}/${repository.name} on ${branch()}`);
     } catch (error) {
       setStatus(error.message);
     }

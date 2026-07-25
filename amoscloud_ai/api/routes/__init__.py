@@ -158,6 +158,7 @@ for _route in real_repositories.router.routes:
 
 from amoscloud_ai.api.routes import profile as profile
 from amoscloud_ai.api.routes import repositories as repositories
+from amoscloud_ai.api.routes import repository_history as repository_history
 from amoscloud_ai.api.routes import solo_development as solo_development
 from repository import git_server as native_git
 
@@ -175,7 +176,7 @@ def _route_keys(route):
 _native_keys = set()
 for _route in repositories.router.routes:
     _native_keys |= _route_keys(_route)
-for _module in (solo_development, profile, native_git):
+for _module in (solo_development, profile, native_git, repository_history):
     for _route in _module.router.routes:
         _keys = _route_keys(_route)
         if _keys & _native_keys:
