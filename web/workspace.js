@@ -7,7 +7,10 @@
   const editorEmpty = document.getElementById('ws-editor-empty');
   const currentFile = document.getElementById('ws-current-file');
   const status = document.getElementById('ws-status');
-  const output = document.getElementById('ws-output');
+  const output = document.getElementById('ws-agent-output');
+  const visibilityBox = document.getElementById('ws-visibility');
+  const visibilityState = document.getElementById('ws-visibility-state');
+  const visibilityToggle = document.getElementById('ws-visibility-toggle');
   const breadcrumbs = document.getElementById('ws-breadcrumbs');
   const searchInput = document.getElementById('ws-file-search');
   const notFound = document.getElementById('ws-not-found');
@@ -93,50 +96,26 @@
       .forEach(control => { control.disabled = false; });
   }
 
-  // --- Self-contained syntax highlighter (no external CDN) ----------------
-  const KEYWORDS = new Set(('await async function return if else for while do break continue const let var ' +
-    'new class extends super import export from default try catch finally throw typeof instanceof in of ' +
-    'switch case yield this null true false undefined void delete def elif except with as pass lambda ' +
-    'raise global nonlocal print not and or is None True False self int str float bool list dict set ' +
-    'public private protected static final void interface enum struct package type namespace').split(' '));
-  const HASH_COMMENT = new Set(['py', 'rb', 'sh', 'bash', 'yml', 'yaml', 'toml', 'ini', 'conf', 'env', 'cfg']);
+  // --- Syntax highlighting -------------------------------------------------
+  // Provided by the vendored, dependency-free /static/highlight.js. Nothing is
+  // fetched from a CDN. If the asset somehow fails to load we degrade to plain
+  // escaped text rather than rendering unhighlighted raw HTML.
+  const highlighter = () => window.AmosclaudHighlight || null;
 
-  function highlight(code, ext) {
-    const patterns = [];
-    if (HASH_COMMENT.has(ext)) patterns.push(['tok-comment', /#[^\n]*/y]);
-    else patterns.push(['tok-comment', /\/\/[^\n]*|\/\*[\s\S]*?\*\//y]);
-    patterns.push(['tok-string', /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/y]);
-    patterns.push(['tok-number', /\b\d[\d_.]*(?:e[+-]?\d+)?\b/y]);
-    patterns.push(['tok-name', /[A-Za-z_$][A-Za-z0-9_$]*/y]);
-    let out = '';
-    let i = 0;
-    while (i < code.length) {
-      let matched = false;
-      for (const [cls, re] of patterns) {
-        re.lastIndex = i;
-        const m = re.exec(code);
-        if (m && m.index === i && m[0].length) {
-          const text = m[0];
-          if (cls === 'tok-name') {
-            out += KEYWORDS.has(text) ? `<span class="tok-keyword">${escapeHtml(text)}</span>` : escapeHtml(text);
-          } else {
-            out += `<span class="${cls}">${escapeHtml(text)}</span>`;
-          }
-          i += text.length;
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) { out += escapeHtml(code[i]); i += 1; }
-    }
-    return out;
+  function highlightedLines(content, path) {
+    const engine = highlighter();
+    if (!engine) return content.split('\n').map(escapeHtml);
+    return engine.highlightLines(content, engine.languageForPath(path));
   }
 
-  function renderCode(content, ext) {
-    const lines = content.split('\n');
+  function renderCode(content, path) {
+    const lines = highlightedLines(content, path);
     const gutter = lines.map((_, index) => `<span>${index + 1}</span>`).join('');
-    const body = lines.map(line => `<span class="ws-code-line">${highlight(line, ext) || '&nbsp;'}</span>`).join('');
-    return `<div class="ws-code-view"><div class="ws-gutter">${gutter}</div><pre class="ws-code-body"><code>${body}</code></pre></div>`;
+    const body = lines.map(line => `<span class="ws-code-line">${line || '&nbsp;'}</span>`).join('');
+    const language = highlighter() ? highlighter().languageForPath(path) : 'plain';
+    return `<div class="ws-code-meta">${escapeHtml(language)} · ${lines.length} lines</div>`
+      + `<div class="ws-code-view"><div class="ws-gutter">${gutter}</div>`
+      + `<pre class="ws-code-body"><code>${body}</code></pre></div>`;
   }
 
   // --- Minimal, escaped Markdown renderer (no raw HTML passthrough) -------
@@ -175,7 +154,74 @@
     repository = await api(`/api/v1/repositories/${repositoryId}`);
     document.getElementById('ws-repo-name').textContent = `${repository.owner_name}/${repository.name}`;
     document.getElementById('ws-repo-meta').textContent = `${repository.visibility} · ${repository.role}`;
+    renderVisibility();
     hideNotFound();
+  }
+
+  // --- Publish / visibility ------------------------------------------------
+  // Owner-only. The control is hidden for everyone else, but that is only a
+  // convenience: PATCH /visibility re-derives the caller's role from the
+  // database and rejects non-owners, so hiding the button is never the
+  // security boundary.
+  function renderVisibility() {
+    if (!visibilityBox) return;
+    const owner = repository?.role === 'owner';
+    visibilityBox.hidden = !owner;
+    if (!owner) return;
+    const isPublic = repository.visibility === 'public';
+    visibilityState.textContent = isPublic ? 'Public' : 'Private';
+    visibilityState.className = `ws-visibility-state ${isPublic ? 'is-public' : 'is-private'}`;
+    visibilityToggle.textContent = isPublic ? 'Make private' : 'Publish';
+    visibilityToggle.disabled = false;
+  }
+
+  async function toggleVisibility() {
+    if (repository?.role !== 'owner') return;
+    const next = repository.visibility === 'public' ? 'private' : 'public';
+    const question = next === 'public'
+      ? `Publish ${repository.name}? Any signed-in user will be able to read it.`
+      : `Make ${repository.name} private? Only you and collaborators will keep access.`;
+    if (!confirm(question)) return;
+    visibilityToggle.disabled = true;
+    try {
+      repository = await api(`/api/v1/repositories/${repositoryId}/visibility`, {
+        method: 'PATCH',
+        body: JSON.stringify({ visibility: next }),
+      });
+      document.getElementById('ws-repo-meta').textContent = `${repository.visibility} · ${repository.role}`;
+      setStatus(`This repository is now ${repository.visibility}.`);
+    } catch (error) {
+      setStatus(`Could not change visibility: ${error.message}`);
+    } finally {
+      renderVisibility();
+    }
+  }
+
+  // --- Issue / pull-request creation ---------------------------------------
+  async function createIssue() {
+    const title = prompt('Issue title');
+    if (!title?.trim()) return;
+    await api(`/api/v1/repositories/${repositoryId}/issues`, {
+      method: 'POST',
+      body: JSON.stringify({ title: title.trim(), body: prompt('Describe the issue (optional)') || '' }),
+    });
+    await refreshTab('issues');
+    setStatus('Issue created');
+  }
+
+  async function createPullRequest() {
+    const title = prompt('Pull request title');
+    if (!title?.trim()) return;
+    const head = prompt('Merge from branch', branch());
+    if (!head?.trim()) return;
+    const base = prompt('Merge into branch', repository?.default_branch || 'main');
+    if (!base?.trim()) return;
+    await api(`/api/v1/repositories/${repositoryId}/pull-requests`, {
+      method: 'POST',
+      body: JSON.stringify({ title: title.trim(), body: '', head_branch: head.trim(), base_branch: base.trim() }),
+    });
+    await refreshTab('pull-requests');
+    setStatus('Pull request created');
   }
 
   async function loadBranches() {
@@ -297,8 +343,9 @@
       viewPane.innerHTML = `<div class="ws-empty-row">Preview not available — ${escapeHtml(openFileData.reason)}</div>`;
       return;
     }
-    const ext = extOf(selectedPath);
-    viewPane.innerHTML = ext === 'md' ? renderMarkdown(openFileData.content) : renderCode(openFileData.content, ext);
+    viewPane.innerHTML = extOf(selectedPath) === 'md'
+      ? renderMarkdown(openFileData.content)
+      : renderCode(openFileData.content, selectedPath);
   }
 
   const PREVIEW_LIMIT = 512 * 1024;
@@ -385,7 +432,7 @@
     setStatus('Committed');
     if (openFileData) openFileData.content = editor.value;
     renderViewer();
-    await Promise.all([loadTree(), loadCommits()]);
+    await Promise.all([loadTree(), refreshTab('commits')]);
   }
 
   function beginNewFile(path) {
@@ -430,7 +477,7 @@
     selectedPath = destination;
     currentPath = parentPath(destination);
     currentFile.textContent = destination;
-    await Promise.all([loadTree(), loadCommits()]);
+    await Promise.all([loadTree(), refreshTab('commits')]);
     setStatus('File moved');
   }
 
@@ -441,7 +488,7 @@
       body: JSON.stringify({ path: selectedPath, branch: branch(), commit_message: `Delete ${selectedPath}` }),
     });
     closeEditor();
-    await Promise.all([loadTree(), loadCommits()]);
+    await Promise.all([loadTree(), refreshTab('commits')]);
   }
 
   async function newBranch() {
@@ -452,7 +499,7 @@
     branchSelect.value = name;
     currentPath = '';
     closeEditor();
-    await Promise.all([loadTree(), loadCommits()]);
+    await Promise.all([loadTree(), refreshTab('commits')]);
   }
 
   async function runTool(mode, label) {
@@ -473,10 +520,37 @@
     }
   }
 
-  function activateTab(name) {
-    if (name === 'commits') { loadCommits().catch(error => setStatus(error.message)); return; }
-    if (name === 'issues' && !tabLoaded.issues) { tabLoaded.issues = true; loadIssues(); }
-    if (name === 'pull-requests' && !tabLoaded.prs) { tabLoaded.prs = true; loadPullRequests(); }
+  // --- Tab auto-loading with caching ---------------------------------------
+  // Every data tab loads itself the first time it is shown, renders its own
+  // loading state, and is then cached. Write operations invalidate the tabs
+  // they affect, so the next visit re-fetches instead of showing stale data.
+  const TAB_LOADERS = {
+    commits: loadCommits,
+    issues: loadIssues,
+    'pull-requests': loadPullRequests,
+  };
+
+  async function activateTab(name) {
+    const loader = TAB_LOADERS[name];
+    if (!loader || tabLoaded[name]) return;
+    tabLoaded[name] = true;
+    try {
+      await loader();
+    } catch (error) {
+      tabLoaded[name] = false; // failed loads are not cached; retry on revisit
+      setStatus(error.message);
+    }
+  }
+
+  function isTabActive(name) {
+    const panel = document.querySelector(`.ws-panel[data-panel="${name}"]`);
+    return Boolean(panel && panel.classList.contains('active'));
+  }
+
+  // Drop a tab's cache. Reload immediately only if the user is looking at it.
+  function refreshTab(name) {
+    delete tabLoaded[name];
+    return isTabActive(name) ? activateTab(name) : Promise.resolve();
   }
 
   document.querySelectorAll('.ws-tab').forEach(tab => tab.addEventListener('click', () => {
@@ -501,19 +575,29 @@
     if (file) openFile(file.dataset.file).catch(error => setStatus(error.message));
   });
   searchInput.addEventListener('input', renderTree);
-  branchSelect.addEventListener('change', () => { currentPath = ''; closeEditor(); Promise.all([loadTree(), loadCommits()]); });
+  branchSelect.addEventListener('change', () => { currentPath = ''; closeEditor(); Promise.all([loadTree(), refreshTab('commits')]); });
   document.getElementById('ws-save').addEventListener('click', () => saveFile().catch(error => setStatus(error.message)));
   document.getElementById('ws-new-file').addEventListener('click', createFile);
   document.getElementById('ws-new-folder').addEventListener('click', createFolder);
   document.getElementById('ws-rename').addEventListener('click', () => renameFile().catch(error => setStatus(error.message)));
   document.getElementById('ws-delete').addEventListener('click', () => deleteFile().catch(error => setStatus(error.message)));
   document.getElementById('ws-new-branch').addEventListener('click', () => newBranch().catch(error => setStatus(error.message)));
-  document.getElementById('ws-refresh-issues')?.addEventListener('click', () => { tabLoaded.issues = true; loadIssues(); });
-  document.getElementById('ws-refresh-prs')?.addEventListener('click', () => { tabLoaded.prs = true; loadPullRequests(); });
-  document.getElementById('ws-build').addEventListener('click', () => runTool('build', 'Build'));
-  document.getElementById('ws-test').addEventListener('click', () => runTool('autonomous-check', 'Tests'));
-  document.getElementById('ws-review').addEventListener('click', () => runTool('autonomous-check', 'Review'));
-  document.getElementById('ws-deploy').addEventListener('click', () => runTool('deploy', 'Deployment'));
+  document.getElementById('ws-refresh-issues')?.addEventListener('click', () => refreshTab('issues'));
+  document.getElementById('ws-refresh-prs')?.addEventListener('click', () => refreshTab('pull-requests'));
+  // These listeners used to be attached to hidden placeholder nodes
+  // (#ws-build and friends), so the Autonomous tab's visible buttons did
+  // nothing at all. Bind the real controls the user can actually see.
+  [
+    ['ws-agent-build', 'build', 'Build'],
+    ['ws-agent-test', 'autonomous-check', 'Tests'],
+    ['ws-agent-review', 'autonomous-check', 'Review'],
+    ['ws-agent-deploy', 'deploy', 'Deployment'],
+  ].forEach(([id, mode, label]) => {
+    document.getElementById(id)?.addEventListener('click', () => runTool(mode, label));
+  });
+  visibilityToggle?.addEventListener('click', () => toggleVisibility());
+  document.getElementById('ws-new-issue')?.addEventListener('click', () => createIssue().catch(error => setStatus(error.message)));
+  document.getElementById('ws-new-pr')?.addEventListener('click', () => createPullRequest().catch(error => setStatus(error.message)));
 
   (async () => {
     try {
@@ -525,7 +609,7 @@
     }
     try {
       await loadBranches();
-      await Promise.all([loadTree(), loadCommits()]);
+      await loadTree();
       closeEditor();
       setStatus(`${repository.owner_name}/${repository.name} on ${branch()}`);
     } catch (error) {
