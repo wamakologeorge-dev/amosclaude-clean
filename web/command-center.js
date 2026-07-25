@@ -4,10 +4,21 @@
   let repositories = [];
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+  // Never surface a bare HTTP reason phrase (e.g. "Method Not Allowed") to the
+  // user. If the API sent a real, human message we keep it; otherwise we build
+  // a clear one from the status code.
+  function humanHttpError(response, detail) {
+    const raw = String(detail || '').trim();
+    const phrase = String(response.statusText || '').trim();
+    if (!raw || raw.toLowerCase() === phrase.toLowerCase()) {
+      return `Amosclaud could not complete this request (HTTP ${response.status}). Please try again, and if it keeps failing report this to support.`;
+    }
+    return raw;
+  }
   async function request(path, options = {}) {
     const response = await fetch(path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
     if (response.status === 401) { window.location.assign('/login'); throw new Error('Sign in required'); }
-    if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || 'Request failed'); }
+    if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(humanHttpError(response, body.detail)); }
     return response.status === 204 ? null : response.json();
   }
   function selectedRepository() { return repositories.find((repository) => String(repository.id) === repositorySelect.value); }
@@ -31,6 +42,70 @@
   }
   repositorySelect.addEventListener('change', () => { renderRepository(); loadIssues().catch(showError); loadEvidence().catch(() => {}); });
   function showError(error) { notice.textContent = error.message || 'Request failed.'; }
+
+  // ---------------------------------------------------------------------
+  // Truthful all-services dashboard. Renders one tile per platform service
+  // with a state a real backend check proved. `unknown` is visually distinct
+  // from `operational` so an observability gap is never mistaken for health.
+  // ---------------------------------------------------------------------
+  const SERVICE_STATES = {
+    operational: { label: 'Operational', symbol: '●' },
+    degraded: { label: 'Degraded', symbol: '◐' },
+    unreachable: { label: 'Unreachable', symbol: '▲' },
+    not_configured: { label: 'Not configured', symbol: '○' },
+    disabled: { label: 'Disabled', symbol: '⊘' },
+    unknown: { label: 'Unknown', symbol: '?' },
+  };
+  const SERVICE_ORDER = ['operational', 'degraded', 'unreachable', 'not_configured', 'disabled', 'unknown'];
+
+  function renderServiceTile(service) {
+    const meta = SERVICE_STATES[service.state] || SERVICE_STATES.unknown;
+    const remediation = service.remediation
+      ? `<p class="service-remediation">What to do: ${escapeHtml(service.remediation)}</p>`
+      : '';
+    return `<li class="service-tile" data-state="${escapeHtml(service.state)}">
+      <div class="service-tile-head"><span class="service-symbol" aria-hidden="true">${meta.symbol}</span><strong class="service-name">${escapeHtml(service.name)}</strong><span class="service-state">${escapeHtml(meta.label)}</span></div>
+      <p class="service-explanation">${escapeHtml(service.explanation)}</p>
+      <p class="service-evidence">Evidence: ${escapeHtml(service.evidence)}</p>
+      ${remediation}
+    </li>`;
+  }
+
+  function renderServices(data) {
+    const services = Array.isArray(data.services) ? data.services : [];
+    const counts = data.summary || {};
+    const parts = SERVICE_ORDER.filter((state) => counts[state]).map((state) => `${counts[state]} ${SERVICE_STATES[state].label.toLowerCase()}`);
+    $('services-summary').textContent = services.length
+      ? `${services.length} services — ${parts.join(', ')}.`
+      : 'No services were reported by the backend.';
+    $('services-checked').textContent = data.generated_at
+      ? `Checked ${new Date(data.generated_at).toLocaleString()}`
+      : '';
+    $('services-tiles').innerHTML = services.map(renderServiceTile).join('')
+      || '<li class="muted">No services were reported by the backend.</li>';
+  }
+
+  async function loadServices() {
+    const refresh = $('services-refresh');
+    const error = $('services-error');
+    if (refresh) refresh.disabled = true;
+    try {
+      const data = await request('/api/v1/platform/services');
+      error.hidden = true;
+      error.textContent = '';
+      renderServices(data);
+    } catch (err) {
+      // If the endpoint itself fails we must NOT render an empty or all-green
+      // board: say plainly that status could not be determined.
+      $('services-tiles').innerHTML = '';
+      $('services-summary').textContent = 'Service status could not be determined.';
+      $('services-checked').textContent = 'Last check failed';
+      error.hidden = false;
+      error.textContent = `The all-services check did not respond: ${err.message}`;
+    } finally {
+      if (refresh) refresh.disabled = false;
+    }
+  }
 
   // ---------------------------------------------------------------------
   // Runtime status: honest diagnostics instead of raw on/off model toggles.
@@ -163,6 +238,8 @@
     } catch (error) { showError(error); }
   });
   $('runtime-recheck').addEventListener('click', () => { loadRuntimeStatus(); });
+  $('services-refresh').addEventListener('click', () => { loadServices(); });
+  loadServices();
   loadRuntimeStatus();
   loadRepositories().then(() => loadEvidence()).catch(showError);
 })();
