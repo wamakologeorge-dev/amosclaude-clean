@@ -1,13 +1,18 @@
 {
   "name": "Amosclaud Platform Workspace",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "runServices": ["postgres", "redis"],
   "workspaceFolder": "/workspaces/amosclaude-clean",
+  "shutdownAction": "stopCompose",
   "waitFor": "postCreateCommand",
-  "shutdownAction": "stopContainer",
-  "forwardPorts": [8000, 8001, 8091, 9090],
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+  "forwardPorts": [8000, 8001, 8091, 9090, 5432, 6379],
   "portsAttributes": {
     "8000": {
       "label": "Amosclaud Platform API",
@@ -24,23 +29,15 @@
     "9090": {
       "label": "Amosclaud Metrics and SSY",
       "onAutoForward": "silent"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "6379": {
+      "label": "Redis",
+      "onAutoForward": "silent"
     }
-  },
-  "containerEnv": {
-    "ENVIRONMENT": "development",
-    "AUTH_COOKIE_SECURE": "false",
-    "DATABASE_URL": "sqlite:///./data/amosclaud.db",
-    "AUTH_DB_PATH": "./data/auth.db",
-    "AMOSCLAUD_REPOSITORIES_ROOT": "./data/repositories",
-    "REPOSITORY_STORAGE_PATH": "./data/repositories",
-    "AMOSCLAUD_MODEL_HOME": "./data/model",
-    "AMOSCLAUD_MODEL_URL": "http://127.0.0.1:8091",
-    "AMOSCLAUD_MODEL_HEALTH_URL": "http://127.0.0.1:8091/health",
-    "AMOSCLAUD_API_URL": "http://127.0.0.1:8000",
-    "AMOSCLAUD_API_HEALTH_URL": "http://127.0.0.1:8000/health",
-    "AMOSCLAUD_API_METRICS_URL": "http://127.0.0.1:8000/metrics",
-    "AMOSCLAUD_METRICS_DB": "./data/metrics.db",
-    "REDIS_URL": "redis://127.0.0.1:6379/0"
   },
   "remoteEnv": {
     "PYTHONPATH": "/workspaces/amosclaude-clean"
@@ -61,9 +58,7 @@
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.testing.pytestEnabled": true,
-        "python.testing.pytestArgs": [
-          "tests"
-        ],
+        "python.testing.pytestArgs": ["tests"],
         "python.analysis.extraPaths": [
           "/workspaces/amosclaude-clean"
         ],
