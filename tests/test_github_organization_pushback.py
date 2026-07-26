@@ -108,7 +108,9 @@ def test_cloud_policy_is_server_managed_and_read_only() -> None:
     status = configuration.public_status()
 
     assert status["server_managed"] is True
-    assert "api.github.com" in status["network_domain_allowlist"]
+    allowlist = status["network_domain_allowlist"]
+    assert isinstance(allowlist, (list, tuple, set))
+    assert any(domain == "api.github.com" for domain in allowlist)
     assert status["repository_sync"]["direction"] == "bidirectional"
     assert status["repository_sync"]["overwrite_dirty_workspaces"] is False
     assert status["repository_sync"]["overwrite_diverged_history"] is False
