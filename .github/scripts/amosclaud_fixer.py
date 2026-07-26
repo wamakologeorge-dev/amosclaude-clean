@@ -2,8 +2,8 @@
 """Generate, apply, and verify a constrained repair patch for CI failures.
 
 The fixer uses the Amosclaud-owned model gateway, never edits protected automation,
-repair-engine, or secret-bearing files, never publishes an unverified patch, and
-emits a machine-readable report for the background workflow.
+repair-engine, instruction, or secret-bearing files, never publishes an unverified
+patch, and emits a machine-readable report for the background workflow.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ MAX_ATTEMPTS = max(1, min(int(os.getenv("AMOSCLAUD_FIXER_ATTEMPTS", "3")), 3))
 MAX_PATCH_BYTES = 250_000
 MAX_CHANGED_FILES = 25
 MAX_EVIDENCE_CHARS = 60_000
+MAX_INSTRUCTION_CHARS = 40_000
 PROTECTED_PREFIXES = (
     ".git/",
     ".github/workflows/",
@@ -36,6 +37,10 @@ PROTECTED_PREFIXES = (
     ".github/scripts/",
     ".github/amosclaud-fixer/",
 )
+PROTECTED_EXACT_PATHS = {
+    "AGENTS.md",
+    "docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md",
+}
 PROTECTED_NAMES = {
     ".env",
     ".env.local",
@@ -80,6 +85,30 @@ def redact(text: str) -> str:
         return text
     half = MAX_EVIDENCE_CHARS // 2
     return text[:half] + "\n\n...[evidence truncated]...\n\n" + text[-half:]
+
+
+def _read_instruction(path: Path) -> str:
+    if not path.is_file():
+        raise RuntimeError(f"Required repository instruction is missing: {path}")
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if len(text) > MAX_INSTRUCTION_CHARS:
+        text = text[:MAX_INSTRUCTION_CHARS] + "\n...[instruction truncated]..."
+    return text
+
+
+def repository_instructions() -> str:
+    """Load the immutable operating rules that every generated repair must follow."""
+
+    agents = _read_instruction(ROOT / "AGENTS.md")
+    engineering_book = _read_instruction(
+        ROOT / "docs" / "PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
+    )
+    return (
+        "=== AGENTS.md ===\n"
+        + agents
+        + "\n\n=== PYTHON AUTONOMOUS ENGINEERING BOOK ===\n"
+        + engineering_book
+    )
 
 
 def repository_context() -> str:
@@ -131,7 +160,8 @@ def _is_protected_path(path: str) -> bool:
     normalized = path.lstrip("./")
     name = Path(normalized).name.lower()
     return (
-        normalized in PROTECTED_NAMES
+        normalized in PROTECTED_EXACT_PATHS
+        or normalized in PROTECTED_NAMES
         or name == ".env"
         or name.startswith(".env.")
         or normalized.startswith(PROTECTED_PREFIXES)
@@ -248,15 +278,20 @@ def amosclaud_chat(instructions: str, prompt: str) -> str:
 def request_patch(failure_log: str, previous_feedback: str) -> str:
     instructions = """You are Amosclaud AI Fixer operating inside a Git repository.
 Return ONLY one unified git diff inside a ```diff fence.
-Repair the root cause shown by the failure evidence. Prefer the smallest correct change.
-Do not edit GitHub workflows, GitHub actions, the Amosclaud repair engine, secrets,
-environment files, generated files, or dependency lock files.
+Follow AGENTS.md and the Python Autonomous Engineering Book exactly.
+Repair only the root cause proven by the supplied failure evidence.
+Prefer the smallest correct change. Do not perform feature work, broad refactors,
+or dependency upgrades unrelated to the failure.
+Do not edit repository instructions, GitHub workflows, GitHub actions, the Amosclaud
+repair engine, secrets, environment files, generated files, or dependency lock files.
 You may repair a dependency manifest when installation evidence proves its constraints are invalid.
 Do not delete tests merely to make CI green. Update stale tests only when repository behavior is clearly intentional.
-Preserve public APIs unless the failure proves they are broken. Add or improve tests when useful.
-The patch must apply with `git apply` and must not contain commentary outside the diff.
+Preserve public APIs and user data unless the failure proves a compatible change is impossible.
+Add or improve tests when useful. The patch must apply with `git apply` and must not
+contain commentary outside the diff.
 """
     prompt = (
+        f"Repository operating instructions:\n{repository_instructions()}\n\n"
         f"Failure evidence:\n{failure_log}\n\n"
         f"Repository context:\n{repository_context()}\n\n"
         f"Previous repair feedback:\n{previous_feedback or 'none'}"
@@ -312,6 +347,10 @@ def main() -> int:
                             "changed_files": paths,
                             "human_approval_required": False,
                             "merge_policy": "auto-merge after required checks",
+                            "instruction_sources": [
+                                "AGENTS.md",
+                                "docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md",
+                            ],
                         },
                         indent=2,
                     ),
