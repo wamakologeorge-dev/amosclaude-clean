@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 from amoscloud_ai import workspace_runtime
+from amoscloud_ai.api.routes import platform_services
 from amoscloud_ai.main import app
 from amoscloud_ai.route_discovery import route_paths
 from amoscloud_ai.workspace_runtime_service import check as check_workspace_runtime
@@ -32,11 +33,23 @@ def test_cloud_workspace_routes_are_mounted_on_the_real_app() -> None:
     assert expected.issubset(paths)
 
 
+def test_workspace_runtime_is_registered_in_truthful_service_health() -> None:
+    checks = {item[0]: item for item in platform_services._CHECKS}
+    assert "workspace-runtime" in checks
+    assert checks["workspace-runtime"][2] is check_workspace_runtime
+
+
 def test_terminal_ticket_is_short_lived_signed_and_nonce_bound(monkeypatch) -> None:
     token = "runtime-test-token-that-is-long-and-random"
     monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", token)
-    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_URL", "https://runtime.example.test")
-    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_PUBLIC_URL", "https://terminal.example.test")
+    monkeypatch.setenv(
+        "AMOSCLAUD_WORKSPACE_RUNTIME_URL",
+        "https://runtime.example.test",
+    )
+    monkeypatch.setenv(
+        "AMOSCLAUD_WORKSPACE_PUBLIC_URL",
+        "https://terminal.example.test",
+    )
 
     before = 1_700_000_000
     monkeypatch.setattr(workspace_runtime.time, "time", lambda: before)
@@ -85,6 +98,10 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert "pty.openpty()" in source
     assert "_verify_origin(websocket)" in source
     assert "Terminal ticket was already used" in source
+    assert "_prepare_repository_storage(storage)" in source
+    assert 'default_acl = f"d:u:{WORKSPACE_UID}:rwx"' in source
+    assert 'f"{_workspace_id(workspace_id)}.activity"' in source
+    assert ".amosclaud-runtime-activity" not in source
 
 
 def test_workspace_base_image_is_non_root() -> None:
@@ -102,7 +119,9 @@ def test_runtime_stack_is_separate_and_owns_the_only_docker_socket_mount() -> No
 
     assert "/var/run/docker.sock:/var/run/docker.sock" in mounts
     assert any("/var/lib/amosclaud/repositories" in item for item in mounts)
+    assert "workspace-runtime-state:/var/lib/amosclaud/runtime-state" in mounts
     assert runtime["ports"][0].startswith("127.0.0.1:")
+    assert "/live" in " ".join(runtime["healthcheck"]["test"])
     assert compose["networks"]["workspace-control"]["internal"] is True
 
     production_dockerfile = _source("Dockerfile")
