@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import Any
 
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
@@ -37,6 +38,25 @@ HIGH_RISK_FILES = {
     "vercel.json",
 }
 
+AUTONOMOUS_REPAIR_MARKER = "<!-- amosclaud-autonomous-repair:v1 -->"
+AUTONOMOUS_REPAIR_BRANCH_PREFIX = "amosclaud-background-engineer/"
+AUTONOMOUS_REPAIR_MAX_FILES = 25
+AUTONOMOUS_REPAIR_PROTECTED_PREFIXES = (
+    ".git/",
+    ".github/",
+    "Infrastructure/",
+    "infrastructure/",
+)
+AUTONOMOUS_REPAIR_PROTECTED_PATHS = {
+    "AGENTS.md",
+    "docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md",
+    "SECURITY.md",
+    "CODEOWNERS",
+    "Dockerfile",
+    "railway.json",
+    "vercel.json",
+}
+
 APPROVAL_MARKER = "<!-- amosclaud-approval-source:"
 APPROVAL_CONSUMED_MARKER = "<!-- amosclaud-approval-consumed -->"
 APPROVAL_RECORD_MARKER = "<!-- amosclaud-approval-record -->"
@@ -50,6 +70,13 @@ def _is_sensitive_objective(objective: str) -> bool:
 
 def _normalize_objective(objective: str) -> str:
     return " ".join((objective or "").strip().lower().split())
+
+
+def _normalize_repo_path(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
 
 
 def _approval_source(source_number: int | str, objective: str) -> str:
@@ -67,6 +94,43 @@ def _high_risk_files(files: list[dict[str, Any]]) -> list[str]:
         or any(name.startswith(prefix) for prefix in HIGH_RISK_PREFIXES)
         or any(hint in name.lower() for hint in ("security", "auth", "permission", "secret", "credential"))
     ]
+
+
+def _is_authorized_autonomous_repair(
+    pull_request: dict[str, Any],
+    files: list[dict[str, Any]],
+) -> bool:
+    """Recognize only bounded repair PRs emitted by the trusted daily workflow.
+
+    The marker and branch prefix establish intent. The independent path and size
+    checks prevent a forged marker from bypassing approval for infrastructure,
+    policy, workflow, secret-bearing, or otherwise protected changes.
+    """
+
+    head = pull_request.get("head") or {}
+    head_ref = str(head.get("ref") or "")
+    body = str(pull_request.get("body") or "")
+    if not head_ref.startswith(AUTONOMOUS_REPAIR_BRANCH_PREFIX):
+        return False
+    if AUTONOMOUS_REPAIR_MARKER not in body:
+        return False
+    if not files or len(files) > AUTONOMOUS_REPAIR_MAX_FILES:
+        return False
+
+    for item in files:
+        normalized = _normalize_repo_path(str(item.get("filename") or ""))
+        if not normalized:
+            return False
+        name = Path(normalized).name.lower()
+        if normalized in AUTONOMOUS_REPAIR_PROTECTED_PATHS:
+            return False
+        if any(normalized.startswith(prefix) for prefix in AUTONOMOUS_REPAIR_PROTECTED_PREFIXES):
+            return False
+        if name == ".env" or name.startswith(".env."):
+            return False
+        if name in {"secrets.json", "credentials.json"}:
+            return False
+    return True
 
 
 def _issues(bot: AmosclaudBot, *, state: str) -> list[dict[str, Any]]:
@@ -302,6 +366,15 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
             return None
         files = bot._request("GET", f"/repos/{bot.repository}/pulls/{number}/files?per_page=100")
         files = files if isinstance(files, list) else []
+        if _is_authorized_autonomous_repair(pr, files):
+            bot.post_comment(
+                number,
+                "### Amosclaud Bot — Bounded autonomous repair authorized\n"
+                "This pull request was created by the daily autonomous repair workflow, "
+                "contains the required audit marker, and stays outside protected paths. "
+                "No separate human approval is required; required checks still control merge eligibility.",
+            )
+            return None
         risky = _high_risk_files(files)
         if risky:
             approval = _create_approval_issue(
