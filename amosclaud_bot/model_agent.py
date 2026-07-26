@@ -10,7 +10,7 @@ from typing import Any
 
 from amoscloud_ai import model_runtime, provider
 
-BOT_NAMES = ("@amosclaud-bot", "@amosclaud")
+COMMAND_PREFIX = "/amosclaud"
 TRUSTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 MAX_PROMPT_CHARS = 6000
 MAX_COMMENT_CHARS = 9000
@@ -26,11 +26,10 @@ def parse_model_command(text: str) -> ModelCommand:
     """Parse the explicit, cost-bearing model commands handled by this runner."""
     raw = (text or "").strip()
     lowered = raw.lower()
-    matched = next((name for name in BOT_NAMES if lowered.startswith(name)), None)
-    if not matched:
+    if not lowered.startswith(COMMAND_PREFIX):
         return ModelCommand(None)
 
-    remainder = raw[len(matched) :].strip()
+    remainder = raw[len(COMMAND_PREFIX) :].strip()
     command, _, prompt = remainder.partition(" ")
     command = command.lower().strip()
     prompt = prompt.strip()
@@ -171,7 +170,7 @@ def run_from_environment() -> int:
             repository,
             issue_number,
             "### Amosclaud Autonomous — Missing question\n\n"
-            "Use `@amosclaud ask <your question>`. For repository writes, use "
+            "Use `/amosclaud ask <your question>`. For repository writes, use "
             "`@amosclaud fix <specific change>`.",
             token,
         )
