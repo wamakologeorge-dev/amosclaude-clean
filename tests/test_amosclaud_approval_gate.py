@@ -79,6 +79,10 @@ def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
     )
     assert not _is_authorized_autonomous_repair(
         pull_request,
+        [{"filename": ".amosclaud/approvals.yml"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
         [{"filename": "AGENTS.md"}],
     )
     assert not _is_authorized_autonomous_repair(
@@ -111,6 +115,7 @@ def test_repository_policy_records_the_same_bounded_authorization() -> None:
     assert AUTONOMOUS_REPAIR_MARKER in policy
     assert "direct_default_branch_writes: false" in policy
     assert '"AGENTS.md"' in policy
+    assert '".amosclaud/**"' in policy
     assert '".github/**"' in policy
 
 
