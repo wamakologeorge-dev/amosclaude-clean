@@ -1,8 +1,8 @@
 """Dedicated execution-plane service for Amosclaud cloud workspaces.
 
-This service must run on a separate container host. The public Amosclaud API never
-receives the Docker socket; it talks to this service through an authenticated
-private-network API.
+Run this service on a separate container host. The public Amosclaud API never
+receives the Docker socket; it communicates with this service through an
+authenticated private-network API.
 """
 
 from __future__ import annotations
@@ -31,15 +31,23 @@ app = FastAPI(title="Amosclaud Workspace Runtime", version="1.0.0")
 
 _ID_RE = re.compile(r"^ws_[a-z0-9]{12,48}$")
 RUNTIME_TOKEN = os.getenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", "").strip()
-STORAGE_ROOT = Path(
-    os.getenv("AMOSCLAUD_WORKSPACE_STORAGE_ROOT", "/var/lib/amosclaud/workspaces")
+REPOSITORY_STORAGE_ROOT = Path(
+    os.getenv(
+        "AMOSCLAUD_REPOSITORY_STORAGE_ROOT",
+        "/var/lib/amosclaud/repositories",
+    )
 ).resolve()
 WORKSPACE_IMAGE = os.getenv(
     "AMOSCLAUD_WORKSPACE_IMAGE", "amosclaud/workspace-base:latest"
 ).strip()
 WORKSPACE_NETWORK = os.getenv("AMOSCLAUD_WORKSPACE_NETWORK", "none").strip()
+WORKSPACE_UID = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_UID", "1000")), 1), 65535)
+WORKSPACE_GID = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_GID", "1000")), 1), 65535)
 CPU_LIMIT = min(max(float(os.getenv("AMOSCLAUD_WORKSPACE_CPU", "2")), 0.25), 2.0)
-MEMORY_LIMIT = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_MEMORY_MB", "4096")), 256), 4096)
+MEMORY_LIMIT = min(
+    max(int(os.getenv("AMOSCLAUD_WORKSPACE_MEMORY_MB", "4096")), 256),
+    4096,
+)
 PIDS_LIMIT = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_PIDS", "512")), 64), 512)
 IDLE_TIMEOUT_SECONDS = min(
     max(int(os.getenv("AMOSCLAUD_WORKSPACE_IDLE_TIMEOUT_SECONDS", "1800")), 300),
@@ -65,7 +73,9 @@ def _docker():
     try:
         return docker.from_env(timeout=15)
     except DockerException as exc:
-        raise HTTPException(status_code=503, detail="Docker runtime is unavailable") from exc
+        raise HTTPException(
+            status_code=503, detail="Docker runtime is unavailable"
+        ) from exc
 
 
 def _require_token(authorization: str | None) -> None:
@@ -86,10 +96,14 @@ def _workspace_id(value: str) -> str:
     return candidate
 
 
-def _workspace_path(workspace_id: str) -> Path:
-    target = (STORAGE_ROOT / _workspace_id(workspace_id)).resolve()
-    if STORAGE_ROOT not in target.parents:
-        raise HTTPException(status_code=422, detail="Invalid workspace path")
+def _repository_path(repository_id: int) -> Path:
+    if isinstance(repository_id, bool) or repository_id <= 0:
+        raise HTTPException(status_code=422, detail="Invalid repository identifier")
+    target = (REPOSITORY_STORAGE_ROOT / str(repository_id)).resolve()
+    try:
+        target.relative_to(REPOSITORY_STORAGE_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid repository path") from exc
     return target
 
 
@@ -109,6 +123,20 @@ def _safe_environment(values: dict[str, str]) -> dict[str, str]:
     return safe
 
 
+def _container(workspace_id: str):
+    try:
+        return _docker().containers.get(_container_name(workspace_id))
+    except NotFound as exc:
+        raise HTTPException(
+            status_code=404, detail="Workspace container not found"
+        ) from exc
+
+
+def _touch_activity(repository_id: int) -> None:
+    marker = _repository_path(repository_id) / ".amosclaud-runtime-activity"
+    marker.touch(exist_ok=True)
+
+
 def _public(container) -> dict[str, Any]:
     container.reload()
     state = container.attrs.get("State") or {}
@@ -124,15 +152,10 @@ def _public(container) -> dict[str, Any]:
         "persistent_path": labels.get("amosclaud.storage_path"),
         "cpu_limit": CPU_LIMIT,
         "memory_mb": MEMORY_LIMIT,
+        "pids_limit": PIDS_LIMIT,
         "network": WORKSPACE_NETWORK,
+        "user": "developer",
     }
-
-
-def _container(workspace_id: str):
-    try:
-        return _docker().containers.get(_container_name(workspace_id))
-    except NotFound as exc:
-        raise HTTPException(status_code=404, detail="Workspace container not found") from exc
 
 
 def _ticket_payload(ticket: TerminalTicket) -> bytes:
@@ -149,14 +172,18 @@ def _verify_ticket(ticket_value: str, workspace_id: str) -> TerminalTicket:
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid terminal ticket") from exc
     if ticket.workspace_id != _workspace_id(workspace_id):
-        raise HTTPException(status_code=401, detail="Terminal ticket workspace mismatch")
+        raise HTTPException(
+            status_code=401, detail="Terminal ticket workspace mismatch"
+        )
     if ticket.expires_at < int(time.time()):
         raise HTTPException(status_code=401, detail="Terminal ticket expired")
     expected = hmac.new(
         RUNTIME_TOKEN.encode(), _ticket_payload(ticket), hashlib.sha256
     ).hexdigest()
     if not hmac.compare_digest(expected, ticket.signature):
-        raise HTTPException(status_code=401, detail="Invalid terminal ticket signature")
+        raise HTTPException(
+            status_code=401, detail="Invalid terminal ticket signature"
+        )
     return ticket
 
 
@@ -172,8 +199,10 @@ def health() -> dict[str, Any]:
         "docker_ready": docker_ready,
         "token_configured": bool(RUNTIME_TOKEN),
         "workspace_image": WORKSPACE_IMAGE,
+        "repository_storage_root": str(REPOSITORY_STORAGE_ROOT),
         "cpu_limit": CPU_LIMIT,
         "memory_mb": MEMORY_LIMIT,
+        "pids_limit": PIDS_LIMIT,
         "network": WORKSPACE_NETWORK,
     }
 
@@ -185,13 +214,25 @@ def start_workspace(
 ) -> dict[str, Any]:
     _require_token(authorization)
     workspace_id = _workspace_id(body.workspace_id)
-    storage = _workspace_path(workspace_id)
+    storage = _repository_path(body.repository_id)
     storage.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chown(storage, WORKSPACE_UID, WORKSPACE_GID)
+    except PermissionError:
+        pass
     os.chmod(storage, 0o770)
+    _touch_activity(body.repository_id)
+
     client = _docker()
     name = _container_name(workspace_id)
     try:
         container = client.containers.get(name)
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        if int(labels.get("amosclaud.repository_id") or 0) != body.repository_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Workspace identifier is already bound to another repository",
+            )
         container.reload()
         if not container.attrs.get("State", {}).get("Running"):
             container.start()
@@ -223,7 +264,6 @@ def start_workspace(
                 "amosclaud.repository_id": str(body.repository_id),
                 "amosclaud.owner_id": str(body.owner_id),
                 "amosclaud.storage_path": str(storage),
-                "amosclaud.last_activity": str(int(time.time())),
             },
             nano_cpus=int(CPU_LIMIT * 1_000_000_000),
             mem_limit=f"{MEMORY_LIMIT}m",
@@ -234,7 +274,9 @@ def start_workspace(
             read_only=True,
             tmpfs={
                 "/tmp": "rw,noexec,nosuid,size=512m",
-                "/home/developer/.cache": "rw,noexec,nosuid,size=256m,uid=1000,gid=1000",
+                "/home/developer/.cache": (
+                    "rw,noexec,nosuid,size=256m,uid=1000,gid=1000"
+                ),
             },
             **network_kwargs,
         )
@@ -272,13 +314,21 @@ def delete_workspace(
     authorization: str | None = Header(default=None),
 ) -> None:
     _require_token(authorization)
+    repository_id = 0
     try:
-        _container(workspace_id).remove(force=True)
+        container = _container(workspace_id)
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        repository_id = int(labels.get("amosclaud.repository_id") or 0)
+        container.remove(force=True)
     except HTTPException as exc:
         if exc.status_code != 404:
             raise
-    if os.getenv("AMOSCLAUD_WORKSPACE_DELETE_STORAGE", "false").lower() == "true":
-        shutil.rmtree(_workspace_path(workspace_id), ignore_errors=True)
+    if (
+        repository_id
+        and os.getenv("AMOSCLAUD_WORKSPACE_DELETE_STORAGE", "false").lower()
+        == "true"
+    ):
+        shutil.rmtree(_repository_path(repository_id), ignore_errors=True)
 
 
 async def _read_terminal(master_fd: int, websocket: WebSocket) -> None:
@@ -309,8 +359,13 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
         container.reload()
         if not container.attrs.get("State", {}).get("Running"):
             raise HTTPException(status_code=409, detail="Workspace is not running")
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        repository_id = int(labels.get("amosclaud.repository_id") or 0)
+        _touch_activity(repository_id)
     except HTTPException as exc:
-        await websocket.close(code=4400 + min(exc.status_code, 99), reason=str(exc.detail))
+        await websocket.close(
+            code=4400 + min(exc.status_code, 99), reason=str(exc.detail)
+        )
         return
 
     await websocket.accept()
@@ -352,7 +407,13 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
-        process.wait(timeout=5)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         os.close(master_fd)
         try:
             await websocket.close()
@@ -366,13 +427,14 @@ def stop_idle_workspaces(
 ) -> dict[str, Any]:
     _require_token(authorization)
     stopped: list[str] = []
-    cutoff = int(time.time()) - IDLE_TIMEOUT_SECONDS
+    cutoff = time.time() - IDLE_TIMEOUT_SECONDS
     for container in _docker().containers.list(
         filters={"label": "amosclaud.managed=true"}
     ):
         labels = (container.attrs.get("Config") or {}).get("Labels") or {}
-        last_activity = int(labels.get("amosclaud.last_activity") or 0)
-        if last_activity and last_activity < cutoff:
+        repository_id = int(labels.get("amosclaud.repository_id") or 0)
+        marker = _repository_path(repository_id) / ".amosclaud-runtime-activity"
+        if marker.exists() and marker.stat().st_mtime < cutoff:
             container.stop(timeout=10)
             stopped.append(labels.get("amosclaud.workspace_id") or container.name)
     return {"stopped": stopped, "count": len(stopped)}
