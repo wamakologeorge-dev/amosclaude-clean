@@ -197,6 +197,33 @@ def test_overview_reports_real_repository_counts_and_policy_files(tmp_path, monk
     assert "Python" in {language["name"] for language in payload["languages"]}
 
 
+
+def test_markdown_and_media_endpoints_reject_symlinks_outside_repository(
+    tmp_path, monkeypatch
+):
+    _isolate(tmp_path, monkeypatch)
+    token, owner = _mkuser("owner@example.com")
+    rid = repositories.create_repository(
+        repositories.RepositoryCreate(name="contained-project"), owner
+    ).id
+    repo = repositories._open(rid)
+    root = repositories._repo_path(rid)
+    outside_markdown = tmp_path / "outside.md"
+    outside_image = tmp_path / "outside.png"
+    outside_markdown.write_text("# Private\n", encoding="utf-8")
+    outside_image.write_bytes(b"\x89PNG\r\n\x1a\nPRIVATE")
+    (root / "escape.md").symlink_to(outside_markdown)
+    (root / "escape.png").symlink_to(outside_image)
+    repo.index.add(["escape.md", "escape.png"])
+    repo.index.commit("Add path-containment fixtures")
+
+    markdown = _get(token, f"/api/v1/repositories/{rid}/markdown?path=escape.md")
+    media = _get(token, f"/api/v1/repositories/{rid}/raw?path=escape.png")
+
+    assert markdown.status_code == 422
+    assert media.status_code == 422
+
+
 def test_workspace_loads_backend_markdown_service_and_repository_overview():
     html = (WEB / "workspace.html").read_text(encoding="utf-8")
     javascript = (WEB / "markdown-service.js").read_text(encoding="utf-8")

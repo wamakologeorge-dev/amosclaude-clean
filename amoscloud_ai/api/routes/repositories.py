@@ -529,11 +529,6 @@ def render_repository_markdown(
         repo = _open(repository_id)
         _checkout(repo, branch)
         target = _repo_target_path(repository_id, relative)
-        target = (repo_root / relative).resolve()
-        try:
-            target.relative_to(repo_root)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail="Invalid file path") from exc
         if not target.is_file():
             raise HTTPException(status_code=404, detail="Markdown file not found")
         try:
@@ -569,17 +564,12 @@ def read_repository_media(
     relative = _safe_relative(path)
     media_type = _INLINE_MEDIA_TYPES.get(relative.suffix.casefold())
     if not media_type:
-        target = _repo_target_path(repository_id, relative)
+        raise HTTPException(status_code=415, detail="Inline media type is not allowed")
     with _repo_lock(repository_id), _db() as db:
         _access(db, repository_id, user["id"])
         repo = _open(repository_id)
         _checkout(repo, branch)
-        repository_root = _repo_path(repository_id).resolve()
-        target = (repository_root / relative).resolve(strict=False)
-        try:
-            target.relative_to(repository_root)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail="Invalid file path") from exc
+        target = _repo_target_path(repository_id, relative)
         if not target.is_file():
             raise HTTPException(status_code=404, detail="Media file not found")
         if target.stat().st_size > 10 * 1024 * 1024:
