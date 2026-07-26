@@ -26,6 +26,7 @@ human_approval:
     protected_paths:
       - "AGENTS.md"
       - "docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
+      - ".amosclaud/**"
       - ".github/**"
       - "Infrastructure/**"
       - "infrastructure/**"
@@ -40,6 +41,7 @@ human_approval:
       - "credentials.json"
 
   protected_paths:
+    - ".amosclaud/**"
     - ".github/workflows/**"
     - ".github/actions/**"
     - "Infrastructure/**"
