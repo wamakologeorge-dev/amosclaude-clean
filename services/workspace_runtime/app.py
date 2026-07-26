@@ -159,7 +159,7 @@ def _public(container) -> dict[str, Any]:
         "status": state.get("Status") or container.status,
         "running": bool(state.get("Running")),
         "started_at": state.get("StartedAt"),
-        "persistent_path": labels.get("amosclaud.storage_path"),
+        "persistent_repository": True,
         "cpu_limit": CPU_LIMIT,
         "memory_mb": MEMORY_LIMIT,
         "pids_limit": PIDS_LIMIT,
@@ -213,8 +213,16 @@ def _verify_origin(websocket: WebSocket) -> None:
         raise HTTPException(status_code=403, detail="Untrusted terminal origin")
 
 
+@app.get("/live")
+def live() -> dict[str, bool]:
+    return {"ok": True}
+
+
 @app.get("/health")
-def health() -> dict[str, Any]:
+def health(
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _require_token(authorization)
     docker_ready = False
     try:
         docker_ready = bool(_docker().ping())
@@ -225,7 +233,6 @@ def health() -> dict[str, Any]:
         "docker_ready": docker_ready,
         "token_configured": bool(RUNTIME_TOKEN),
         "workspace_image": WORKSPACE_IMAGE,
-        "repository_storage_root": str(REPOSITORY_STORAGE_ROOT),
         "cpu_limit": CPU_LIMIT,
         "memory_mb": MEMORY_LIMIT,
         "pids_limit": PIDS_LIMIT,
