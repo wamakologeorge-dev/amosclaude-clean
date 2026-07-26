@@ -23,7 +23,6 @@ from amoscloud_ai.markdown_service import render_markdown_document
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
 REPOSITORY_ROOT = Path(os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories"))
-REPOSITORY_ROOT_RESOLVED = REPOSITORY_ROOT.resolve()
 MAX_REPOSITORIES_PER_USER = int(os.getenv("MAX_REPOSITORIES_PER_USER", "10"))
 MAX_REPOSITORY_BYTES = int(os.getenv("MAX_REPOSITORY_BYTES", str(500 * 1024 * 1024)))
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -184,11 +183,23 @@ def _safe_repository_id(repository_id: int) -> int:
     return repository_id
 
 
+def _repository_root() -> Path:
+    """Resolve the configured repository root at call time.
+
+    Tests and worker processes may override ``REPOSITORY_ROOT`` after module
+    import. Resolving it dynamically prevents writes from escaping an isolated
+    test directory or continuing to use stale production storage.
+    """
+
+    return REPOSITORY_ROOT.expanduser().resolve()
+
+
 def _repo_path(repository_id: int) -> Path:
     safe_repository_id = _safe_repository_id(repository_id)
-    candidate = (REPOSITORY_ROOT_RESOLVED / str(safe_repository_id)).absolute()
+    repository_root = _repository_root()
+    candidate = (repository_root / str(safe_repository_id)).resolve()
     try:
-        candidate.relative_to(REPOSITORY_ROOT_RESOLVED)
+        candidate.relative_to(repository_root)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid repository path") from exc
     return candidate
@@ -271,6 +282,15 @@ def _open(repository_id: int) -> Repo:
         raise HTTPException(status_code=500, detail="Repository storage is damaged") from exc
 
 
+def _initialize_repository(path: Path) -> Repo:
+    """Create a non-bare Git repository and prove its metadata exists."""
+
+    repo = Repo.init(path, initial_branch="main")
+    if not (path / ".git").is_dir():
+        raise RuntimeError(f"Git initialization did not create metadata at {path}")
+    return repo
+
+
 def _checkout(repo: Repo, branch: str) -> None:
     branch = _safe_branch(branch)
     if branch not in [head.name for head in repo.heads]:
@@ -339,7 +359,7 @@ def create_repository(body: RepositoryCreate, user: sqlite3.Row = Depends(_curre
         path = _repo_path(repository_id)
         try:
             path.mkdir(parents=True, exist_ok=False)
-            repo = Repo.init(path, initial_branch="main")
+            repo = _initialize_repository(path)
             starter_files = _starter_files(name, body.description.strip(), body.initialize_readme)
             for relative_path, content in starter_files.items():
                 target = path / relative_path
