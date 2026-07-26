@@ -446,7 +446,8 @@ jobs:
            steps.configuration.outputs.ready != 'true' ||
            steps.reproduce.outputs.reproduced != 'true' ||
            steps.candidate.outputs.applied != 'true' ||
-           steps.verify.outputs.verified != 'true')
+           steps.verify.outputs.verified != 'true' ||
+           steps.publish.outcome != 'success')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.target.outputs.pr_number }}
@@ -455,6 +456,7 @@ jobs:
           REPRODUCED: ${{ steps.reproduce.outputs.reproduced }}
           CANDIDATE: ${{ steps.candidate.outputs.applied }}
           VERIFIED: ${{ steps.verify.outputs.verified }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           body="### Amosclaud Autonomous CI Repair\n\nNo repair was pushed."
           if [ -n "$BUDGET_REASON" ]; then
@@ -469,6 +471,8 @@ jobs:
             body="${body}\n\nReason: the candidate failed the fresh credential-free pre-run and was discarded."
             git -C target reset --hard HEAD || true
             git -C target clean -fd || true
+          elif [ "$PUBLISH_OUTCOME" != "success" ]; then
+            body="${body}\n\nReason: the verified candidate was not published because the branch moved or publication failed. No force push was attempted."
           fi
           body="${body}\n\nEvidence artifact: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           gh pr comment "$PR_NUMBER" --body "$body"
