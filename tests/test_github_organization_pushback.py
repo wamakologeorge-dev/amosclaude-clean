@@ -139,11 +139,14 @@ def test_devcontainer_runs_app_postgres_redis_and_docker() -> None:
     assert services["redis"]["healthcheck"]
 
 
-def test_repository_creation_ui_sends_selected_owner() -> None:
+def test_repository_ui_creates_and_publishes_to_selected_owner() -> None:
     source = (ROOT / "web/github-organization-publish.js").read_text(
         encoding="utf-8"
     )
     assert "/api/v1/github/organizations" in source
     assert "/api/v1/repositories/create-real" in source
-    assert "owner: ownerInput.value" in source
+    assert "owner: createOwnerInput.value" in source
+    assert "/api/v1/github/repositories/${encodeURIComponent(publishIdInput.value)}/publish" in source
+    assert "/api/v1/github/repositories/${encodeURIComponent(repositoryId)}/push" in source
+    assert "Publish / push GitHub" in source
     assert "/api/v1/github/connect-organizations" in source
