@@ -17,6 +17,7 @@ import pty
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import time
 from pathlib import Path
@@ -115,6 +116,70 @@ def _repository_path(repository_id: int) -> Path:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid repository path") from exc
     return target
+
+
+def _prepare_repository_storage(storage: Path) -> None:
+    """Make one repository writable by the fixed non-root workspace identity.
+
+    Symlinks are never followed. Default ACLs ensure files created later by the
+    control plane remain writable by the workspace developer without making the
+    repository writable to other host users.
+    """
+
+    storage.mkdir(parents=True, exist_ok=True)
+    directories: list[str] = []
+    try:
+        for root, names, files in os.walk(storage, followlinks=False):
+            paths = [Path(root)] + [Path(root) / name for name in names + files]
+            for path in paths:
+                os.chown(
+                    path,
+                    WORKSPACE_UID,
+                    WORKSPACE_GID,
+                    follow_symlinks=False,
+                )
+                if path.is_symlink():
+                    continue
+                mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)
+                if path.is_dir():
+                    os.chmod(path, mode | 0o2770, follow_symlinks=False)
+                    directories.append(str(path))
+                else:
+                    os.chmod(path, mode | 0o660, follow_symlinks=False)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Persistent repository storage cannot apply the configured "
+                "non-root UID/GID ownership."
+            ),
+        ) from exc
+
+    acl = f"u:{WORKSPACE_UID}:rwX"
+    default_acl = f"d:u:{WORKSPACE_UID}:rwX"
+    for offset in range(0, len(directories), 200):
+        command = [
+            "setfacl",
+            "-m",
+            acl,
+            "-m",
+            default_acl,
+            *directories[offset : offset + 200],
+        ]
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Persistent repository storage must support POSIX ACLs or use "
+                    "a shared non-root UID/GID for the control plane and workspace."
+                ),
+            )
 
 
 def _container_name(workspace_id: str) -> str:
@@ -249,12 +314,7 @@ def start_workspace(
     _require_token(authorization)
     workspace_id = _workspace_id(body.workspace_id)
     storage = _repository_path(body.repository_id)
-    storage.mkdir(parents=True, exist_ok=True)
-    try:
-        os.chown(storage, WORKSPACE_UID, WORKSPACE_GID)
-    except PermissionError:
-        pass
-    os.chmod(storage, 0o770)
+    _prepare_repository_storage(storage)
     _touch_activity(body.repository_id)
 
     client = _docker()
@@ -396,6 +456,7 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
             raise HTTPException(status_code=409, detail="Workspace is not running")
         labels = (container.attrs.get("Config") or {}).get("Labels") or {}
         repository_id = int(labels.get("amosclaud.repository_id") or 0)
+        _prepare_repository_storage(_repository_path(repository_id))
         _touch_activity(repository_id)
     except HTTPException as exc:
         await websocket.close(
