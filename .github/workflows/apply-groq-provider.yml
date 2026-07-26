@@ -1,0 +1,97 @@
+name: Apply Groq provider wiring
+
+on:
+  push:
+    branches:
+      - agent/unified-amosclaud-workspaces
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/unified-amosclaud-workspaces
+          fetch-depth: 0
+
+      - name: Wire Groq secret into Amosclaud model workflows
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path('.github/workflows/amosclaud-bot.yml'),
+              Path('.github/workflows/amosclaud-model-agent.yml'),
+          ]
+
+          ollama_keys = "secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA"
+
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+
+              old_url = "${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL || ((" + ollama_keys + ") && 'https://ollama.com') }}"
+              new_url = "${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL || ((" + ollama_keys + ") && 'https://ollama.com') || (secrets.GROQ_API_KEY && 'https://api.groq.com/openai') }}"
+
+              old_token = "${{ secrets.AMOSCLAUD_MODEL_TOKEN || " + ollama_keys + " }}"
+              new_token = "${{ secrets.AMOSCLAUD_MODEL_TOKEN || " + ollama_keys + " || secrets.GROQ_API_KEY }}"
+
+              old_model = "${{ vars.AMOSCLAUD_MODEL || ((" + ollama_keys + ") && 'gpt-oss:120b') || 'qwen2.5-coder:1.5b' }}"
+              new_model = "${{ vars.AMOSCLAUD_MODEL || ((" + ollama_keys + ") && 'gpt-oss:120b') || (secrets.GROQ_API_KEY && vars.GROQ_MODEL) || (secrets.GROQ_API_KEY && 'openai/gpt-oss-20b') || 'qwen2.5-coder:1.5b' }}"
+
+              for old, new, label in (
+                  (old_url, new_url, 'model URL'),
+                  (old_token, new_token, 'model token'),
+                  (old_model, new_model, 'model name'),
+              ):
+                  if old not in text and new not in text:
+                      raise SystemExit(f'{path}: expected {label} expression not found')
+                  text = text.replace(old, new, 1)
+
+              marker = "          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}"
+              addition = marker + "\n          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}\n          GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-20b' }}"
+              if 'GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}' not in text:
+                  if marker not in text:
+                      raise SystemExit(f'{path}: OpenAI environment marker not found')
+                  text = text.replace(marker, addition, 1)
+
+              path.write_text(text, encoding='utf-8')
+
+          test_path = Path('tests/test_groq_workflow_wiring.py')
+          test_path.write_text(
+              '''from pathlib import Path\n\n\nROOT = Path(__file__).resolve().parents[1]\nWORKFLOWS = (\n    ROOT / ".github/workflows/amosclaud-bot.yml",\n    ROOT / ".github/workflows/amosclaud-model-agent.yml",\n)\n\n\ndef test_groq_secret_is_wired_without_storing_its_value() -> None:\n    for workflow in WORKFLOWS:\n        source = workflow.read_text(encoding="utf-8")\n        assert "GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}" in source\n        assert "GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-20b' }}" in source\n        assert "secrets.GROQ_API_KEY && 'https://api.groq.com/openai'" in source\n        assert "|| secrets.GROQ_API_KEY }}" in source\n        assert "secrets.GROQ_API_KEY && 'openai/gpt-oss-20b'" in source\n        assert "gsk_" not in source\n\n\ndef test_first_party_and_ollama_routes_still_precede_groq() -> None:\n    for workflow in WORKFLOWS:\n        source = workflow.read_text(encoding="utf-8")\n        expression = next(\n            line.strip()\n            for line in source.splitlines()\n            if line.strip().startswith("AMOSCLAUD_MODEL_URL:")\n        )\n        assert expression.index("secrets.AMOSCLAUD_MODEL_URL") < expression.index("secrets.GROQ_API_KEY")\n        assert expression.index("secrets.OLLAMA_URL") < expression.index("secrets.GROQ_API_KEY")\n''',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Verify Groq workflow contracts
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pytest pyyaml
+          python -m pytest -q tests/test_groq_workflow_wiring.py
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in (
+              Path('.github/workflows/amosclaud-bot.yml'),
+              Path('.github/workflows/amosclaud-model-agent.yml'),
+          ):
+              yaml.safe_load(path.read_text(encoding='utf-8'))
+              print(f'validated {path}')
+          PY
+
+      - name: Commit verified Groq wiring and remove patch workflow
+        run: |
+          set -euo pipefail
+          rm .github/workflows/apply-groq-provider.yml
+          git config user.name "amosclaud-integration[bot]"
+          git config user.email "amosclaud-integration[bot]@users.noreply.github.com"
+          git add .github/workflows/amosclaud-bot.yml .github/workflows/amosclaud-model-agent.yml tests/test_groq_workflow_wiring.py .github/workflows/apply-groq-provider.yml
+          git commit -m "feat: add Groq model fallback to Amosclaud workflows"
+          git push origin HEAD:agent/unified-amosclaud-workspaces
