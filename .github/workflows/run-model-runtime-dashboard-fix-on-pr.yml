@@ -23,48 +23,267 @@ jobs:
           fetch-depth: 1
           show-progress: false
 
-      - name: Extract and run correction script
+      - name: Apply structural corrections
         shell: bash
         run: |
-          set +e
-          {
-            python - <<'EXTRACT'
+          python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
+          import re
 
-          workflow = Path(
-              ".github/workflows/apply-model-runtime-dashboard-fix.yml"
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected exactly one literal target in {path}, found {count}"
+                  )
+              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def regex_once(path: str, pattern: str, replacement: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              updated, count = re.subn(
+                  pattern,
+                  lambda _: replacement,
+                  text,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected exactly one structural target in {path}, found {count}"
+                  )
+              file.write_text(updated, encoding="utf-8")
+
+          provider_block = dedent('''\
+          def _self_hosted_reachable() -> bool:
+              cand = _find_candidate("self-hosted")
+              return bool(
+                  cand is not None
+                  and cand.configured
+                  and model_runtime.candidate_health(cand).reachable
+              )
+
+
+          def _model_network_reachable() -> tuple[bool, int]:
+              """Return whether a genuine first-party station can serve inference."""
+              state = model_runtime.network_state()
+              stations = int(state.get("ready_stations") or 0)
+              return bool(
+                  state.get("configured") and state.get("ready") and stations > 0
+              ), stations
+
+
+          def _check_amosclaud_provider() -> dict:
+              """Report the aggregate first-party provider path truthfully.
+
+              Model-network stations, the optional hosted Amosclaud API, and the direct
+              self-hosted endpoint are all first-party routes. The provider path is
+              operational when any one of those routes is genuinely reachable.
+              """
+              sid = "amosclaud-provider"
+              name = "First-party Amosclaud provider path"
+
+              network_reachable, stations = _model_network_reachable()
+              if network_reachable:
+                  return _entry(
+                      sid,
+                      name,
+                      OPERATIONAL,
+                      f"{stations} first-party model station(s) are registered and online, "
+                      "so the Amosclaud provider path can serve inference even if the "
+                      "direct self-hosted endpoint is unavailable.",
+                      "amoscloud_ai.model_network.network_status() and the model-runtime "
+                      "resolution order",
+                  )
+
+              cand = _find_candidate("amosclaud-api")
+              api_health = None
+              if cand is not None and cand.configured:
+                  api_health = model_runtime.candidate_health(cand)
+                  if api_health.reachable:
+                      return _health_entry(sid, name, cand, api_health)
+
+              if _self_hosted_reachable():
+                  return _entry(
+                      sid,
+                      name,
+                      OPERATIONAL,
+                      "The direct self-hosted model runtime is reachable and serves the "
+                      "first-party provider path, so the optional hosted Amosclaud API "
+                      "and station network are not required.",
+                      "model_runtime candidate 'self-hosted' passed its bounded preflight",
+                  )
+
+              if cand is not None and api_health is not None:
+                  return _health_entry(sid, name, cand, api_health)
+
+              return _entry(
+                  sid,
+                  name,
+                  NOT_CONFIGURED,
+                  "No model station is ready, the remote-hosted Amosclaud API is not "
+                  "configured, and no self-hosted runtime is reachable, so the "
+                  "first-party provider path cannot serve traffic.",
+                  "model_runtime candidates 'model-network', 'amosclaud-api', and "
+                  "'self-hosted'",
+                  "Connect an online model station, configure a reachable self-hosted "
+                  "AMOSCLAUD_MODEL_URL, or set AMOSCLAUD_PROVIDER_API_URL + "
+                  "AMOSCLAUD_API_KEY for the remote API.",
+              )
+
+
+          ''')
+
+          regex_once(
+              "amoscloud_ai/api/routes/platform_services.py",
+              r"def _self_hosted_reachable\(\) -> bool:\n.*?(?=def _check_model_runtime\(\) -> dict:)",
+              provider_block,
           )
-          lines = workflow.read_text(encoding="utf-8").splitlines()
-          start = next(
-              index
-              for index, line in enumerate(lines)
-              if line.strip() == "python - <<'PY'"
-          ) + 1
-          end = next(
-              index
-              for index in range(start, len(lines))
-              if lines[index] == "          PY"
+
+          diagnose_old = dedent('''\
+          def diagnose(code: str, detail: str, candidate: Candidate) -> Diagnosis:
+              return Diagnosis(
+                  code=code,
+                  detail=redact(detail)[:300],
+                  remediation=remediation(code, candidate),
+              )
+          ''')
+
+          preflight_helper = dedent('''\
+
+
+          def _preflight_timeout_diagnosis(
+              error: BaseException, candidate: Candidate
+          ) -> Diagnosis:
+              """Explain a TCP preflight timeout without confusing it with inference."""
+              endpoint = candidate.sanitized_endpoint or "the configured model endpoint"
+              endpoint_env = candidate.endpoint_env or "AMOSCLAUD_MODEL_URL"
+              return Diagnosis(
+                  code=TIMEOUT,
+                  detail=redact(f"{type(error).__name__}: {error}")[:300],
+                  remediation=(
+                      f"{endpoint} did not accept a TCP connection within the bounded "
+                      "preflight — check that the model service is running and listening "
+                      "on the private-network host and port, confirm "
+                      f"{endpoint_env} points at the inference port, and raise "
+                      "AMOSCLAUD_MODEL_PROBE_TIMEOUT only if the healthy service needs a "
+                      "larger connection budget."
+                  ),
+              )
+          ''')
+
+          replace_once(
+              "amoscloud_ai/model_runtime.py",
+              diagnose_old,
+              diagnose_old + preflight_helper,
           )
-          script = "\n".join(line[10:] for line in lines[start:end]) + "\n"
-          Path("/tmp/apply_model_runtime_fix.py").write_text(
-              script, encoding="utf-8"
+
+          preflight_old = dedent('''\
+              try:
+                  _tcp_connect(host, port, connect_budget_seconds())
+              except Exception as error:
+                  return CandidateHealth(
+                      candidate=candidate,
+                      reachable=False,
+                      diagnosis=classify(error, candidate),
+                      checked_at=now,
+                  )
+          ''')
+
+          preflight_new = dedent('''\
+              try:
+                  _tcp_connect(host, port, connect_budget_seconds())
+              except Exception as error:
+                  diagnosis = classify(error, candidate)
+                  if diagnosis.code == TIMEOUT:
+                      diagnosis = _preflight_timeout_diagnosis(error, candidate)
+                  return CandidateHealth(
+                      candidate=candidate,
+                      reachable=False,
+                      diagnosis=diagnosis,
+                      checked_at=now,
+                  )
+          ''')
+
+          replace_once(
+              "amoscloud_ai/model_runtime.py",
+              preflight_old,
+              preflight_new,
           )
-          print(f"Extracted {len(script.splitlines())} correction-script lines")
-          EXTRACT
-            python -m py_compile /tmp/apply_model_runtime_fix.py
-            python /tmp/apply_model_runtime_fix.py
-          } > /tmp/model-runtime-fix.log 2>&1
-          status=$?
-          cat /tmp/model-runtime-fix.log
-          if [ "$status" -ne 0 ]; then
-            cp /tmp/model-runtime-fix.log repair-workflow-error.txt
-            git config user.name "Amosclaud Repair Bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add repair-workflow-error.txt
-            git commit -m "Capture model runtime repair failure [skip ci]"
-            git push origin HEAD:${{ github.head_ref }}
-            exit "$status"
-          fi
+
+          Path("tests/test_model_runtime_dashboard_corrections.py").write_text(
+              dedent('''\
+              """Regression tests for model provider dashboard corrections."""
+              from __future__ import annotations
+
+              import socket
+
+              from amoscloud_ai import model_runtime
+              from amoscloud_ai.api.routes import platform_services as ps
+
+
+              def test_provider_path_is_operational_via_online_station(monkeypatch):
+                  monkeypatch.setattr(
+                      ps.model_runtime,
+                      "network_state",
+                      lambda: {
+                          "configured": True,
+                          "ready": True,
+                          "ready_stations": 1,
+                      },
+                  )
+
+                  entry = ps._check_amosclaud_provider()
+
+                  assert entry["state"] == ps.OPERATIONAL
+                  assert "station" in entry["explanation"].lower()
+                  assert "1" in entry["explanation"]
+
+
+              def test_tcp_preflight_timeout_names_probe_timeout(monkeypatch):
+                  monkeypatch.delenv("AMOSCLAUD_MODEL_ENDPOINT", raising=False)
+                  monkeypatch.delenv("AMOSCLAUD_BOT_URL", raising=False)
+                  monkeypatch.setenv(
+                      "AMOSCLAUD_MODEL_URL",
+                      "http://amosclaud-model.railway.internal:11434",
+                  )
+                  model_runtime.reset_cache()
+                  candidate = next(
+                      item
+                      for item in model_runtime.resolve_candidates(
+                          {"configured": False, "ready": False, "ready_stations": 0}
+                      )
+                      if item.key == "self-hosted"
+                  )
+                  monkeypatch.setattr(
+                      model_runtime,
+                      "_resolve_host",
+                      lambda host, port: [
+                          (socket.AF_INET, socket.SOCK_STREAM, 6, "", (host, port))
+                      ],
+                  )
+
+                  def timeout(host: str, port: int, budget: float) -> None:
+                      raise socket.timeout("timed out")
+
+                  monkeypatch.setattr(model_runtime, "_tcp_connect", timeout)
+
+                  health = model_runtime.candidate_health(candidate, force=True)
+
+                  assert health.reachable is False
+                  assert health.diagnosis is not None
+                  assert health.diagnosis.code == model_runtime.TIMEOUT
+                  remediation = health.diagnosis.remediation
+                  assert "AMOSCLAUD_MODEL_PROBE_TIMEOUT" in remediation
+                  assert "AMOSCLAUD_MODEL_TIMEOUT" not in remediation
+                  assert "private-network" in remediation
+              '''),
+              encoding="utf-8",
+          )
+          PY
 
       - name: Validate focused correction
         shell: bash
