@@ -128,6 +128,23 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _normalize_domain(value: str) -> str:
+    domain = value.strip().lower().rstrip(".")
+    if not domain or len(domain) > 253:
+        raise HTTPException(400, "Enter a valid hostname")
+    labels = domain.split(".")
+    if len(labels) < 2:
+        raise HTTPException(400, "Enter a valid hostname")
+    for label in labels:
+        if not 1 <= len(label) <= 63:
+            raise HTTPException(400, "Enter a valid hostname")
+        if label[0] == "-" or label[-1] == "-":
+            raise HTTPException(400, "Enter a valid hostname")
+        if not all(character.isalnum() or character == "-" for character in label):
+            raise HTTPException(400, "Enter a valid hostname")
+    return domain
+
+
 def _safe_member_path(name: str) -> PurePosixPath:
     normalized = PurePosixPath(name)
     if normalized.is_absolute() or ".." in normalized.parts:
@@ -283,9 +300,7 @@ async def attach_domain(
     payload: DomainRequest,
     _: None = Depends(require_internal_key),
 ) -> dict[str, object]:
-    domain = payload.domain.strip().lower().rstrip(".")
-    if "/" in domain or " " in domain or "." not in domain:
-        raise HTTPException(400, "Enter a valid hostname")
+    domain = _normalize_domain(payload.domain)
 
     with connect() as db:
         preview = db.execute(
@@ -294,32 +309,67 @@ async def attach_domain(
         ).fetchone()
         if not preview:
             raise HTTPException(404, "Preview not found")
-        token = "amosclaud-preview=" + secrets.token_urlsafe(24)
-        db.execute(
+
+        existing = db.execute(
             """
-            INSERT INTO preview_domains(
-                domain, owner_user_id, preview_id,
-                verification_token, verified, created_at
-            ) VALUES (?, ?, ?, ?, 0, ?)
-            ON CONFLICT(domain) DO UPDATE SET
-                owner_user_id=excluded.owner_user_id,
-                preview_id=excluded.preview_id,
-                verification_token=excluded.verification_token,
-                verified=0,
-                created_at=excluded.created_at
+            SELECT owner_user_id, verification_token, verified
+            FROM preview_domains WHERE domain=?
             """,
-            (
-                domain,
-                payload.owner_user_id,
-                payload.preview_id,
-                token,
-                int(time.time()),
-            ),
-        )
+            (domain,),
+        ).fetchone()
+        if existing and int(existing["owner_user_id"]) != payload.owner_user_id:
+            raise HTTPException(409, "Domain is already attached to another owner")
+
+        now = int(time.time())
+        if existing and bool(existing["verified"]):
+            token = str(existing["verification_token"])
+            verified = True
+            db.execute(
+                """
+                UPDATE preview_domains
+                SET preview_id=?, created_at=?
+                WHERE domain=? AND owner_user_id=?
+                """,
+                (payload.preview_id, now, domain, payload.owner_user_id),
+            )
+        else:
+            token = "amosclaud-preview=" + secrets.token_urlsafe(24)
+            verified = False
+            if existing:
+                db.execute(
+                    """
+                    UPDATE preview_domains
+                    SET preview_id=?, verification_token=?, verified=0, created_at=?
+                    WHERE domain=? AND owner_user_id=?
+                    """,
+                    (
+                        payload.preview_id,
+                        token,
+                        now,
+                        domain,
+                        payload.owner_user_id,
+                    ),
+                )
+            else:
+                db.execute(
+                    """
+                    INSERT INTO preview_domains(
+                        domain, owner_user_id, preview_id,
+                        verification_token, verified, created_at
+                    ) VALUES (?, ?, ?, ?, 0, ?)
+                    """,
+                    (
+                        domain,
+                        payload.owner_user_id,
+                        payload.preview_id,
+                        token,
+                        now,
+                    ),
+                )
         db.commit()
     return {
         "domain": domain,
-        "verified": False,
+        "verified": verified,
         "dns_record": {
             "type": "TXT",
             "name": f"_amosclaud-preview.{domain}",
@@ -333,7 +383,7 @@ async def verify_domain(
     payload: DomainRequest,
     _: None = Depends(require_internal_key),
 ) -> dict[str, object]:
-    domain = payload.domain.strip().lower().rstrip(".")
+    domain = _normalize_domain(payload.domain)
     with connect() as db:
         record = db.execute(
             """
