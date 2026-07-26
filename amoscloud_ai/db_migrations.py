@@ -108,7 +108,13 @@ def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
-def _migrate_github_repository_schema(db: sqlite3.Connection) -> None:
+def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
+    """Idempotently add GitHub mapping fields on a canonical repositories table.
+
+    Production calls this from migration 3 before traffic. Tests and legacy CLI
+    entry points may also call it after creating an isolated base schema.
+    """
+
     columns = {
         row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
     }
@@ -155,7 +161,7 @@ def run_migrations(path: str | Path) -> list[int]:
                 continue
             with db:
                 if migration.version == 3:
-                    _migrate_github_repository_schema(db)
+                    ensure_github_repository_schema(db)
                 else:
                     db.executescript(migration.sql)
                 db.execute(
