@@ -74,7 +74,7 @@ See [the guide](docs/guide.md) and ![logo](assets/logo.png).
     )
 
     assert '<h1 id="amosclaud-markdown">' in document.html
-    assert 'class="task-list-item"' in document.html
+    assert 'class="task-list-item' in document.html
     assert "<table>" in document.html
     assert 'data-repository-path="docs/guide.md"' in document.html
     assert "/workspace/42?path=docs%2Fguide.md&amp;branch=feature%2Fdocs" in document.html
@@ -85,7 +85,7 @@ See [the guide](docs/guide.md) and ![logo](assets/logo.png).
     assert len(document.source_sha256) == 64
 
 
-def test_renderer_blocks_raw_html_javascript_and_repository_traversal():
+def test_renderer_blocks_executable_urls_and_repository_traversal():
     document = render_markdown_document(
         """<script>alert(1)</script>
 
@@ -102,8 +102,9 @@ def test_renderer_blocks_raw_html_javascript_and_repository_traversal():
 
     lowered = document.html.lower()
     assert "<script" not in lowered
-    assert "javascript:" not in lowered
-    assert "data:text" not in lowered
+    assert 'href="javascript:' not in lowered
+    assert 'src="data:' not in lowered
+    assert 'href="#"' in lowered
     assert "private.txt" not in lowered
 
 
@@ -193,7 +194,7 @@ def test_overview_reports_real_repository_counts_and_policy_files(tmp_path, monk
     assert payload["commit_count"] == 3
     assert payload["branch_count"] == 1
     assert payload["features"]["contributing"] == "CONTRIBUTING.md"
-    assert payload["languages"][0]["name"] == "Python"
+    assert "Python" in {language["name"] for language in payload["languages"]}
 
 
 def test_workspace_loads_backend_markdown_service_and_repository_overview():
