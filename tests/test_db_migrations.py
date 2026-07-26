@@ -7,7 +7,7 @@ from amoscloud_ai import db_migrations
 
 def test_migrations_are_idempotent(tmp_path):
     path = tmp_path / "auth.db"
-    assert db_migrations.run_migrations(path) == [1, 2, 3]
+    assert db_migrations.run_migrations(path) == [1, 2, 3, 4]
     assert db_migrations.run_migrations(path) == []
     with sqlite3.connect(path) as db:
         applied = db.execute(
@@ -27,17 +27,23 @@ def test_migrations_are_idempotent(tmp_path):
             row[1]
             for row in db.execute("PRAGMA index_list(repositories)").fetchall()
         }
+        workspace_indexes = {
+            row[1]
+            for row in db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
+        }
 
     assert applied == [
         (1, "developer_webhooks"),
         (2, "native_repository_base_schema"),
         (3, "github_repository_sync_schema"),
+        (4, "cloud_workspaces"),
     ]
     assert {
         "developer_webhooks",
         "webhook_deliveries",
         "repositories",
         "repository_collaborators",
+        "cloud_workspaces",
     } <= tables
     assert {
         "id",
@@ -60,6 +66,7 @@ def test_migrations_are_idempotent(tmp_path):
     } <= repository_columns
     assert "idx_repositories_github_repository_id" in indexes
     assert "idx_repositories_github_full_name" in indexes
+    assert "idx_cloud_workspaces_owner" in workspace_indexes
 
 
 def test_github_schema_helper_is_idempotent(tmp_path):
