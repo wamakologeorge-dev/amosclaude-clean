@@ -308,6 +308,26 @@ def diagnose(code: str, detail: str, candidate: Candidate) -> Diagnosis:
     )
 
 
+def _preflight_timeout_diagnosis(
+    error: BaseException, candidate: Candidate
+) -> Diagnosis:
+    """Explain a TCP preflight timeout without confusing it with inference."""
+    endpoint = candidate.sanitized_endpoint or "the configured model endpoint"
+    endpoint_env = candidate.endpoint_env or "AMOSCLAUD_MODEL_URL"
+    return Diagnosis(
+        code=TIMEOUT,
+        detail=redact(f"{type(error).__name__}: {error}")[:300],
+        remediation=(
+            f"{endpoint} did not accept a TCP connection within the bounded "
+            "preflight — check that the model service is running and listening "
+            "on the private-network host and port, confirm "
+            f"{endpoint_env} points at the inference port, and raise "
+            "AMOSCLAUD_MODEL_PROBE_TIMEOUT only if the healthy service needs a "
+            "larger connection budget."
+        ),
+    )
+
+
 def _status_code(error: BaseException) -> int | None:
     response = getattr(error, "response", None)
     status = getattr(response, "status_code", None)
@@ -570,10 +590,13 @@ def _preflight(candidate: Candidate) -> CandidateHealth:
     try:
         _tcp_connect(host, port, connect_budget_seconds())
     except Exception as error:
+        diagnosis = classify(error, candidate)
+        if diagnosis.code == TIMEOUT:
+            diagnosis = _preflight_timeout_diagnosis(error, candidate)
         return CandidateHealth(
             candidate=candidate,
             reachable=False,
-            diagnosis=classify(error, candidate),
+            diagnosis=diagnosis,
             checked_at=now,
         )
     return CandidateHealth(candidate=candidate, reachable=True, checked_at=now)

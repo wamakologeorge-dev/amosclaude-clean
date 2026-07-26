@@ -244,43 +244,69 @@ def _self_hosted_reachable() -> bool:
     )
 
 
-def _check_amosclaud_provider() -> dict:
-    """Report the first-party provider path truthfully.
+def _model_network_reachable() -> tuple[bool, int]:
+    """Return whether a genuine first-party station can serve inference."""
+    state = model_runtime.network_state()
+    stations = int(state.get("ready_stations") or 0)
+    return bool(state.get("ready") and stations > 0), stations
 
-    ``amosclaud-api`` is the optional remote-hosted Amosclaud API. When it is
-    absent but the self-hosted runtime is reachable, the first-party provider
-    path remains operational because the self-hosted route serves the same
-    first-party traffic. It is only ``not_configured`` when neither path can
-    serve first-party traffic.
+
+def _check_amosclaud_provider() -> dict:
+    """Report the aggregate first-party provider path truthfully.
+
+    Model-network stations, the optional hosted Amosclaud API, and the direct
+    self-hosted endpoint are all first-party routes. The provider path is
+    operational when any one of those routes is genuinely reachable.
     """
     sid = "amosclaud-provider"
     name = "First-party Amosclaud provider path"
+
+    network_reachable, stations = _model_network_reachable()
+    if network_reachable:
+        return _entry(
+            sid,
+            name,
+            OPERATIONAL,
+            f"{stations} first-party model station(s) are registered and online, "
+            "so the Amosclaud provider path can serve inference even if the "
+            "direct self-hosted endpoint is unavailable.",
+            "amoscloud_ai.model_network.network_status() and the model-runtime "
+            "resolution order",
+        )
+
     cand = _find_candidate("amosclaud-api")
+    api_health = None
     if cand is not None and cand.configured:
-        # Explicitly enabled: hold it to a real reachability standard.
-        return _health_entry(sid, name, cand, model_runtime.candidate_health(cand))
+        api_health = model_runtime.candidate_health(cand)
+        if api_health.reachable:
+            return _health_entry(sid, name, cand, api_health)
+
     if _self_hosted_reachable():
         return _entry(
             sid,
             name,
             OPERATIONAL,
-            "The optional remote-hosted Amosclaud API is not enabled and is "
-            "not required: the self-hosted model runtime serves the "
-            "first-party provider path and is reachable, so the provider "
-            "path as a whole is operational.",
-            "model_runtime candidate 'amosclaud-api' (optional) with a "
-            "reachable 'self-hosted' runtime",
+            "The direct self-hosted model runtime is reachable and serves the "
+            "first-party provider path, so the optional hosted Amosclaud API "
+            "and station network are not required.",
+            "model_runtime candidate 'self-hosted' passed its bounded preflight",
         )
+
+    if cand is not None and api_health is not None:
+        return _health_entry(sid, name, cand, api_health)
+
     return _entry(
         sid,
         name,
         NOT_CONFIGURED,
-        "The remote-hosted Amosclaud API is not configured and no self-hosted "
-        "runtime is reachable, so the first-party provider path cannot serve "
-        "traffic.",
-        "model_runtime candidates 'amosclaud-api' and 'self-hosted'",
-        "Configure a reachable self-hosted AMOSCLAUD_MODEL_URL, or set "
-        "AMOSCLAUD_PROVIDER_API_URL + AMOSCLAUD_API_KEY for the remote API.",
+        "No model station is ready, the remote-hosted Amosclaud API is not "
+        "configured, and no self-hosted runtime is reachable, so the "
+        "first-party provider path cannot serve traffic.",
+        "model_runtime candidates 'model-network', 'amosclaud-api', and "
+        "'self-hosted'",
+        "Connect an online model station, configure a reachable self-hosted "
+        "AMOSCLAUD_MODEL_URL, or set AMOSCLAUD_PROVIDER_API_URL + "
+        "AMOSCLAUD_API_KEY for the remote API.",
     )
 
 
