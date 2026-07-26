@@ -1,4 +1,4 @@
-name: Diagnose model runtime patch boundaries
+name: Correct model runtime patch indentation
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  correct-generator:
     if: github.head_ref == 'agent/fix-model-runtime-dashboard'
     runs-on: ubuntu-latest
     steps:
@@ -23,55 +23,64 @@ jobs:
           fetch-depth: 1
           show-progress: false
 
-      - name: Record boundary diagnostics once
+      - name: Keep the generated TCP block inside preflight
         shell: bash
         run: |
-          if [ -f repair-marker-diagnostics.txt ]; then
-            echo "Diagnostics already recorded."
-            exit 0
-          fi
           python - <<'PY'
           from pathlib import Path
 
-          platform = Path("amoscloud_ai/api/routes/platform_services.py").read_text(
-              encoding="utf-8"
-          )
-          runtime = Path("amoscloud_ai/model_runtime.py").read_text(encoding="utf-8")
+          path = Path(".github/scripts/apply_model_runtime_dashboard_fix.py")
+          text = path.read_text(encoding="utf-8")
+          old_import = "from textwrap import dedent\n"
+          if text.count(old_import) != 1:
+              raise SystemExit(f"Expected one textwrap import, found {text.count(old_import)}")
+          text = text.replace(old_import, "from textwrap import dedent, indent\n", 1)
 
-          markers = {
-              "platform_start": (
-                  platform,
-                  "def _self_hosted_reachable() -> bool:\n",
-              ),
-              "platform_end": (
-                  platform,
-                  "def _check_model_runtime() -> dict:\n",
-              ),
-              "status_marker": (
-                  runtime,
-                  "def _status_code(error: BaseException) -> int | None:\n",
-              ),
-              "tcp_start": (
-                  runtime,
-                  "    try:\n"
-                  "        _tcp_connect(host, port, connect_budget_seconds())\n",
-              ),
-              "success_marker": (
-                  runtime,
-                  "    return CandidateHealth(candidate=candidate, reachable=True, checked_at=now)\n",
-              ),
-          }
-          lines = [f"{name}={text.count(marker)}" for name, (text, marker) in markers.items()]
-          lines.append("tcp_context=")
-          needle = "_tcp_connect(host, port, connect_budget_seconds())"
-          index = runtime.find(needle)
-          lines.append(repr(runtime[max(0, index - 100): index + 260]))
-          Path("repair-marker-diagnostics.txt").write_text(
-              "\n".join(lines) + "\n", encoding="utf-8"
-          )
+          old_block = '''    tcp_block = dedent(
+        \'\'\'\\
+            try:
+                _tcp_connect(host, port, connect_budget_seconds())
+            except Exception as error:
+                diagnosis = classify(error, candidate)
+                if diagnosis.code == TIMEOUT:
+                    diagnosis = _preflight_timeout_diagnosis(error, candidate)
+                return CandidateHealth(
+                    candidate=candidate,
+                    reachable=False,
+                    diagnosis=diagnosis,
+                    checked_at=now,
+                )
+        \'\'\'
+    )
+'''
+          new_block = '''    tcp_block = indent(
+        dedent(
+            \'\'\'\\
+            try:
+                _tcp_connect(host, port, connect_budget_seconds())
+            except Exception as error:
+                diagnosis = classify(error, candidate)
+                if diagnosis.code == TIMEOUT:
+                    diagnosis = _preflight_timeout_diagnosis(error, candidate)
+                return CandidateHealth(
+                    candidate=candidate,
+                    reachable=False,
+                    diagnosis=diagnosis,
+                    checked_at=now,
+                )
+            \'\'\'
+        ),
+        "    ",
+    )
+'''
+          if text.count(old_block) != 1:
+              raise SystemExit(f"Expected one TCP generator block, found {text.count(old_block)}")
+          path.write_text(text.replace(old_block, new_block, 1), encoding="utf-8")
           PY
+          rm .github/workflows/diagnose-model-runtime-patch.yml
           git config user.name "Amosclaud Repair Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add repair-marker-diagnostics.txt
-          git commit -m "Record model runtime patch diagnostics [skip ci]"
+          git add .github/scripts/apply_model_runtime_dashboard_fix.py \
+                  .github/workflows/diagnose-model-runtime-patch.yml
+          git commit -m "Fix generated TCP preflight indentation [skip ci]"
           git push origin HEAD:${{ github.head_ref }}
