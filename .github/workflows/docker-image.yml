@@ -2,17 +2,31 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+permissions:
+  contents: read
 
 jobs:
-
   build:
-
+    name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: control-plane
+            file: Dockerfile
+            tag: amosclaud/control-plane:ci
+          - name: workspace-runtime
+            file: services/workspace_runtime/Dockerfile
+            tag: amosclaud/workspace-runtime:ci
+          - name: workspace-base
+            file: services/workspace_runtime/workspace-image/Dockerfile
+            tag: amosclaud/workspace-base:ci
     steps:
-    - uses: actions/checkout@v7
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build . --file "${{ matrix.file }}" --tag "${{ matrix.tag }}"
