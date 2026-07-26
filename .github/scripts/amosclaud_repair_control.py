@@ -163,7 +163,6 @@ def _upsert_incident(repository: str, route: Route, token: str, max_attempts: in
         match = re.search(r"- Attempts: `([0-9]+)`", existing_body)
         attempts = int(match.group(1)) if match else 0
         running = "amosclaud-repair-state:running" in existing_body
-        published = "amosclaud-repair-state:published" in existing_body
         same_sha = f"- Target revision: `{route.target_sha}`" in existing_body
         if running and same_sha:
             route.duplicate = True
@@ -171,7 +170,7 @@ def _upsert_incident(repository: str, route: Route, token: str, max_attempts: in
             route.reason = "an identical repair incident is already running"
             route.attempt = attempts
             return route
-        if attempts >= max_attempts and not published:
+        if attempts >= max_attempts:
             route.should_repair = False
             route.reason = f"repair attempt limit reached ({attempts}/{max_attempts})"
             route.attempt = attempts
