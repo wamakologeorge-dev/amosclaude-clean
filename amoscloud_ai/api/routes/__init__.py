@@ -194,3 +194,18 @@ for _route in account_recovery.router.routes:
     if getattr(_route, "path", None) not in _auth_paths:
         auth.router.routes.append(_route)
         _auth_paths.add(getattr(_route, "path", None))
+
+# Add organization-aware publishing to the existing GitHub API router so the
+# application keeps one canonical /api/v1/github surface.
+from amoscloud_ai.api.routes import github_repositories as github_repositories
+from amoscloud_ai.api.routes import github_organization_publish as github_organization_publish
+
+_github_keys = set()
+for _route in github_repositories.router.routes:
+    _github_keys |= _route_keys(_route)
+for _route in github_organization_publish.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _github_keys:
+        continue
+    github_repositories.router.routes.append(_route)
+    _github_keys |= _keys
