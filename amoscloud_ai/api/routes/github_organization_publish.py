@@ -7,7 +7,7 @@ import re
 import secrets
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,6 +28,7 @@ from amoscloud_ai.api.routes.github_repositories import (
 )
 from amoscloud_ai.api.routes.repositories import _db as _repository_db
 from amoscloud_ai.api.routes.repositories import _repo_path, _safe_branch
+from amoscloud_ai.github_repository_sync import sync_status
 
 router = APIRouter(prefix="/github", tags=["github-organization-publish"])
 
@@ -73,14 +74,20 @@ def _creation_path(owner: str, github_login: str) -> str:
 def _validated_owner(value: str) -> str:
     owner = value.strip()
     if not _OWNER_RE.fullmatch(owner):
-        raise HTTPException(status_code=422, detail="Invalid GitHub owner or organization")
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid GitHub owner or organization",
+        )
     return owner
 
 
 def _validated_repository_name(value: str) -> str:
     name = value.strip()
     if not _REPOSITORY_RE.fullmatch(name):
-        raise HTTPException(status_code=422, detail="Invalid GitHub repository name")
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid GitHub repository name",
+        )
     return name
 
 
@@ -110,8 +117,7 @@ def _github_detail(response: httpx.Response, fallback: str) -> str:
         payload = response.json()
     except ValueError:
         return fallback
-    message = payload.get("message") if isinstance(payload, dict) else None
-    return str(message or fallback)
+    return str(payload.get("message") or fallback) if isinstance(payload, dict) else fallback
 
 
 def _remote_has_commits(
@@ -159,9 +165,44 @@ def _validate_existing_target(
     )
 
 
+def _remote_full_name(url: str) -> str | None:
+    value = url.strip()
+    if not value:
+        return None
+    if value.startswith("git@github.com:"):
+        path = value.split(":", 1)[1]
+    else:
+        path = urlparse(value).path.lstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    return path or None
+
+
+def _canonical_origin(repo: Repo, full_name: str):
+    names = {remote.name for remote in repo.remotes}
+    if "origin" not in names:
+        return repo.create_remote("origin", _public_remote_url(full_name))
+    origin = repo.remote("origin")
+    configured = _remote_full_name(origin.url)
+    if configured and configured.casefold() != full_name.casefold():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"The local origin points to {configured}. Import or unlink that remote "
+                "before publishing this workspace to a different GitHub repository."
+            ),
+        )
+    return origin
+
+
 def _push_or_raise(remote, branch: str) -> None:
-    rejected = PushInfo.ERROR | PushInfo.REJECTED | PushInfo.REMOTE_REJECTED
-    results = remote.push(refspec=f"HEAD:refs/heads/{branch}")
+    rejected = (
+        PushInfo.ERROR
+        | PushInfo.REJECTED
+        | PushInfo.REMOTE_REJECTED
+        | PushInfo.REMOTE_FAILURE
+    )
+    results = remote.push(refspec=f"HEAD:refs/heads/{branch}", set_upstream=True)
     if not results or any(result.flags & rejected for result in results):
         raise HTTPException(
             status_code=409,
@@ -182,7 +223,10 @@ def connect_github_organizations(
     del user
     client_id = os.getenv("GITHUB_CLIENT_ID")
     if not client_id:
-        raise HTTPException(status_code=503, detail="GitHub integration is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="GitHub integration is not configured",
+        )
     state = secrets.token_urlsafe(32)
     callback = os.getenv("GITHUB_REPOSITORY_CALLBACK_URL") or str(
         request.url_for("github_repository_callback")
@@ -210,7 +254,7 @@ def connect_github_organizations(
 
 @router.get("/organizations")
 def list_github_publish_targets(user=Depends(_current_user)) -> dict:
-    """List the connected user and GitHub organizations visible to the token."""
+    """List the connected user and organizations visible to the authorization."""
 
     token, github_login, scopes = _connected_token(int(user["id"]))
     targets = [
@@ -224,12 +268,11 @@ def list_github_publish_targets(user=Depends(_current_user)) -> dict:
     reconnect_required = not {"repo", "workflow", "read:org"}.issubset(
         _scope_set(scopes)
     )
-    headers = _headers(token)
     with httpx.Client(timeout=20) as client:
         for page in range(1, 11):
             response = client.get(
                 "https://api.github.com/user/orgs",
-                headers=headers,
+                headers=_headers(token),
                 params={"per_page": 100, "page": page},
             )
             if response.status_code == 401:
@@ -253,17 +296,16 @@ def list_github_publish_targets(user=Depends(_current_user)) -> dict:
                 )
             for organization in organizations:
                 login = str(organization.get("login") or "").strip()
-                if not login or not _OWNER_RE.fullmatch(login):
-                    continue
-                targets.append(
-                    {
-                        "login": login,
-                        "kind": "organization",
-                        "avatar_url": organization.get("avatar_url"),
-                        "description": organization.get("description")
-                        or "GitHub organization",
-                    }
-                )
+                if login and _OWNER_RE.fullmatch(login):
+                    targets.append(
+                        {
+                            "login": login,
+                            "kind": "organization",
+                            "avatar_url": organization.get("avatar_url"),
+                            "description": organization.get("description")
+                            or "GitHub organization",
+                        }
+                    )
             if len(organizations) < 100:
                 break
     return {
@@ -276,6 +318,17 @@ def list_github_publish_targets(user=Depends(_current_user)) -> dict:
             "Organization policy, SSO, or app approval may still be required."
         ),
     }
+
+
+@router.get("/repositories/{repository_id}/sync-status")
+def github_repository_sync_status(
+    repository_id: int,
+    user=Depends(_current_user),
+) -> dict:
+    status = sync_status(repository_id, int(user["id"]))
+    if not status:
+        raise HTTPException(status_code=404, detail="Repository not found")
+    return status
 
 
 @router.post("/repositories/{repository_id}/publish", status_code=201)
@@ -362,21 +415,19 @@ def publish_repository_to_github(
                     status_code=403,
                     detail="The connected GitHub account does not have push access",
                 )
-            default_branch = str(metadata.get("default_branch") or "main")
             _validate_existing_target(
                 full_name=full_name,
                 linked_full_name=linked_full_name,
                 has_commits=_remote_has_commits(
                     client,
                     full_name,
-                    default_branch,
+                    str(metadata.get("default_branch") or "main"),
                     headers,
                 ),
             )
 
-    path = _repo_path(repository_id)
     try:
-        repo = Repo(path)
+        repo = Repo(_repo_path(repository_id))
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -398,18 +449,11 @@ def publish_repository_to_github(
             config.set_value("user", "email", user["email"])
         repo.index.commit(body.commit_message.strip())
 
-    remote_name = "origin" if linked_full_name else "amosclaud-publish"
-    authenticated_url = _authenticated_clone_url(full_name, token)
+    origin = _canonical_origin(repo, full_name)
     public_url = _public_remote_url(full_name)
-    if remote_name in [remote.name for remote in repo.remotes]:
-        remote = repo.remote(remote_name)
-        original_url = remote.url
-    else:
-        remote = repo.create_remote(remote_name, public_url)
-        original_url = public_url
     try:
-        remote.set_url(authenticated_url)
-        _push_or_raise(remote, branch)
+        origin.set_url(_authenticated_clone_url(full_name, token))
+        _push_or_raise(origin, branch)
     except GitCommandError as exc:
         raise HTTPException(
             status_code=409,
@@ -419,7 +463,7 @@ def publish_repository_to_github(
             ),
         ) from exc
     finally:
-        remote.set_url(original_url or public_url)
+        origin.set_url(public_url)
 
     now = datetime.now(timezone.utc).isoformat()
     html_url = str(metadata.get("html_url") or f"https://github.com/{full_name}")
@@ -445,7 +489,11 @@ def publish_repository_to_github(
         "github_full_name": full_name,
         "github_html_url": html_url,
         "owner": owner,
-        "owner_type": "user" if owner.casefold() == github_login.casefold() else "organization",
+        "owner_type": (
+            "user"
+            if owner.casefold() == github_login.casefold()
+            else "organization"
+        ),
         "branch": branch,
         "commit": repo.head.commit.hexsha,
         "created": created,
