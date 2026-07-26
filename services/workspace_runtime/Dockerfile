@@ -7,9 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv/workspace-runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends docker.io ca-certificates \
+    && apt-get install -y --no-install-recommends acl docker.io ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /var/lib/amosclaud/workspaces
+    && mkdir -p /var/lib/amosclaud/repositories
 
 COPY services/workspace_runtime/requirements.txt ./requirements.txt
 RUN python -m pip install --upgrade pip setuptools wheel \
