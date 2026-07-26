@@ -390,10 +390,17 @@ def delete_repository(repository_id: int, response: Response, user: sqlite3.Row 
 
 def _repository_files(root: Path) -> list[Path]:
     """Return working-tree files without exposing Git's private storage."""
+    base_root = REPOSITORY_ROOT.resolve()
+    safe_root = root.resolve()
+    try:
+        safe_root.relative_to(base_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid repository path") from exc
+
     return [
         item
-        for item in root.rglob("*")
-        if item.is_file() and ".git" not in item.relative_to(root).parts
+        for item in safe_root.rglob("*")
+        if item.is_file() and ".git" not in item.relative_to(safe_root).parts
     ]
 
 
