@@ -32,7 +32,9 @@ def _safe_workspace(workspace: str) -> str:
         raise HTTPException(status_code=400, detail="Workspace must be a relative path")
 
     candidate = (base / workspace_path).resolve()
-    if candidate != base and base not in candidate.parents:
+    try:
+        candidate.relative_to(base)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
     return str(candidate)
 
