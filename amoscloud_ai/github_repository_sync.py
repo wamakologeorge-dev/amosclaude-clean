@@ -68,6 +68,15 @@ def sync_status(repository_id: int, owner_id: int) -> dict:
     return dict(row)
 
 
+def _synchronization_remote(repo: Repo):
+    names = {remote.name for remote in repo.remotes}
+    if "origin" in names:
+        return repo.remote("origin")
+    if "amosclaud-publish" in names:
+        return repo.remote("amosclaud-publish")
+    raise ValueError("No GitHub synchronization remote is configured")
+
+
 def synchronize_github_push(
     repository_full_name: str,
     ref: str,
@@ -130,7 +139,8 @@ def synchronize_github_push(
                     )
                     continue
 
-                remote = repo.remote("origin")
+                remote = _synchronization_remote(repo)
+                remote_name = remote.name
                 original_url = remote.url
                 try:
                     remote.set_url(
@@ -142,7 +152,7 @@ def synchronize_github_push(
                         original_url or _public_remote_url(repository_full_name)
                     )
 
-                remote_ref = repo.commit(f"origin/{branch}")
+                remote_ref = repo.commit(f"{remote_name}/{branch}")
                 if branch not in [head.name for head in repo.heads]:
                     local_head = repo.create_head(branch, remote_ref)
                     local_head.checkout()
