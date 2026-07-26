@@ -92,8 +92,28 @@ def _high_risk_files(files: list[dict[str, Any]]) -> list[str]:
         for name in names
         if name in HIGH_RISK_FILES
         or any(name.startswith(prefix) for prefix in HIGH_RISK_PREFIXES)
-        or any(hint in name.lower() for hint in ("security", "auth", "permission", "secret", "credential"))
+        or any(
+            hint in name.lower()
+            for hint in ("security", "auth", "permission", "secret", "credential")
+        )
     ]
+
+
+def _path_is_outside_autonomous_boundary(path: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return True
+    name = Path(normalized).name.lower()
+    return (
+        normalized in AUTONOMOUS_REPAIR_PROTECTED_PATHS
+        or any(
+            normalized.startswith(prefix)
+            for prefix in AUTONOMOUS_REPAIR_PROTECTED_PREFIXES
+        )
+        or name == ".env"
+        or name.startswith(".env.")
+        or name in {"secrets.json", "credentials.json"}
+    )
 
 
 def _is_authorized_autonomous_repair(
@@ -102,14 +122,20 @@ def _is_authorized_autonomous_repair(
 ) -> bool:
     """Recognize only bounded repair PRs emitted by the trusted daily workflow.
 
-    The marker and branch prefix establish intent. The independent path and size
-    checks prevent a forged marker from bypassing approval for infrastructure,
-    policy, workflow, secret-bearing, or otherwise protected changes.
+    The same-repository branch, marker, path, and size checks prevent a fork or
+    forged marker from bypassing approval for infrastructure, policy, workflow,
+    secret-bearing, renamed protected files, or otherwise protected changes.
     """
 
     head = pull_request.get("head") or {}
+    base = pull_request.get("base") or {}
     head_ref = str(head.get("ref") or "")
+    head_repo = str((head.get("repo") or {}).get("full_name") or "")
+    base_repo = str((base.get("repo") or {}).get("full_name") or "")
     body = str(pull_request.get("body") or "")
+
+    if not head_repo or not base_repo or head_repo != base_repo:
+        return False
     if not head_ref.startswith(AUTONOMOUS_REPAIR_BRANCH_PREFIX):
         return False
     if AUTONOMOUS_REPAIR_MARKER not in body:
@@ -118,17 +144,11 @@ def _is_authorized_autonomous_repair(
         return False
 
     for item in files:
-        normalized = _normalize_repo_path(str(item.get("filename") or ""))
-        if not normalized:
-            return False
-        name = Path(normalized).name.lower()
-        if normalized in AUTONOMOUS_REPAIR_PROTECTED_PATHS:
-            return False
-        if any(normalized.startswith(prefix) for prefix in AUTONOMOUS_REPAIR_PROTECTED_PREFIXES):
-            return False
-        if name == ".env" or name.startswith(".env."):
-            return False
-        if name in {"secrets.json", "credentials.json"}:
+        paths = [str(item.get("filename") or "")]
+        previous = str(item.get("previous_filename") or "")
+        if previous:
+            paths.append(previous)
+        if any(_path_is_outside_autonomous_boundary(path) for path in paths):
             return False
     return True
 
@@ -298,7 +318,10 @@ def _record_decision(bot: AmosclaudBot, payload: dict[str, Any], command: str) -
         return 0
 
     if association not in WRITE_ASSOCIATIONS:
-        bot.post_comment(number, "### Amosclaud Approval\nDecision rejected: only OWNER, MEMBER, or COLLABORATOR may approve or deny sensitive actions.")
+        bot.post_comment(
+            number,
+            "### Amosclaud Approval\nDecision rejected: only OWNER, MEMBER, or COLLABORATOR may approve or deny sensitive actions.",
+        )
         return 0
 
     state = "APPROVED" if command == "approve" else "DENIED"
@@ -371,8 +394,9 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
                 number,
                 "### Amosclaud Bot — Bounded autonomous repair authorized\n"
                 "This pull request was created by the daily autonomous repair workflow, "
-                "contains the required audit marker, and stays outside protected paths. "
-                "No separate human approval is required; required checks still control merge eligibility.",
+                "contains the required audit marker, comes from the same repository, "
+                "and stays outside protected paths. No separate human approval is "
+                "required; required checks still control merge eligibility.",
             )
             return None
         risky = _high_risk_files(files)
@@ -384,7 +408,11 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
                 reason_lines=[f"High-risk path changed: `{name}`" for name in risky[:12]],
                 requested_capability="Pull request merge/review decision",
             )
-            bot.post_comment(number, f"### Amosclaud Bot — Human approval required\nSensitive paths were detected. Approval issue: #{approval}")
+            bot.post_comment(
+                number,
+                "### Amosclaud Bot — Human approval required\n"
+                f"Sensitive paths were detected. Approval issue: #{approval}",
+            )
             return 0
 
     return None
