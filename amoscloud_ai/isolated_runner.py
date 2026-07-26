@@ -198,20 +198,75 @@ def _write_environment_file(environment: Mapping[str, str]) -> Path:
     return path
 
 
-def _runner_user() -> str:
-    configured = os.getenv("AMOSCLAUD_RUNNER_USER", "").strip()
-    if configured:
-        return configured
+def _parse_runner_user(value: str) -> tuple[int, int]:
+    parts = value.split(":", 1)
+    if len(parts) != 2 or not all(part.isdigit() for part in parts):
+        raise RunnerConfigurationError(
+            "AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID"
+        )
+    uid, gid = (int(part) for part in parts)
+    if uid <= 0 or gid <= 0:
+        raise RunnerConfigurationError(
+            "AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID"
+        )
+    return uid, gid
+
+
+def _runner_identity() -> tuple[str, int, int]:
     if not hasattr(os, "getuid") or not hasattr(os, "getgid"):
         raise RunnerConfigurationError("AMOSCLAUD_RUNNER_USER is required on this worker")
-    uid = os.getuid()
-    gid = os.getgid()
-    if uid == 0:
+
+    current_uid = os.getuid()
+    current_gid = os.getgid()
+    configured = os.getenv("AMOSCLAUD_RUNNER_USER", "").strip()
+    if configured:
+        uid, gid = _parse_runner_user(configured)
+        if current_uid != 0 and (uid != current_uid or gid != current_gid):
+            raise RunnerConfigurationError(
+                "A non-root worker may only use its own UID:GID for the runner"
+            )
+        return f"{uid}:{gid}", uid, gid
+
+    if current_uid == 0:
         raise RunnerConfigurationError(
-            "A root worker must configure AMOSCLAUD_RUNNER_USER to a non-root UID:GID "
-            "that owns the workspace"
+            "A root worker must configure AMOSCLAUD_RUNNER_USER to a non-root UID:GID"
         )
-    return f"{uid}:{gid}"
+    return f"{current_uid}:{current_gid}", current_uid, current_gid
+
+
+def _runner_user() -> str:
+    """Return the Docker user string while retaining the legacy helper API."""
+
+    user, _, _ = _runner_identity()
+    return user
+
+
+def _lchown(path: Path, uid: int, gid: int) -> None:
+    try:
+        if hasattr(os, "lchown"):
+            os.lchown(path, uid, gid)
+        else:
+            os.chown(path, uid, gid, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+
+
+def _prepare_workspace_ownership(root: Path, uid: int, gid: int) -> None:
+    """Make a root-created workspace writable by the configured non-root container.
+
+    The traversal never follows symlinks. Non-root workers already run containers
+    with their own UID:GID and therefore require no ownership mutation.
+    """
+
+    if not hasattr(os, "getuid") or os.getuid() != 0:
+        return
+    _lchown(root, uid, gid)
+    for directory, directory_names, file_names in os.walk(root, followlinks=False):
+        base = Path(directory)
+        for name in directory_names:
+            _lchown(base / name, uid, gid)
+        for name in file_names:
+            _lchown(base / name, uid, gid)
 
 
 def _terminate_container(docker: str, cid_path: Path, process: subprocess.Popen[bytes]) -> None:
@@ -263,7 +318,8 @@ def run_in_isolated_container(
     cpus = os.getenv("AMOSCLAUD_RUNNER_CPUS", "1.0")
     memory = os.getenv("AMOSCLAUD_RUNNER_MEMORY", "768m")
     pids = os.getenv("AMOSCLAUD_RUNNER_PIDS_LIMIT", "128")
-    user = _runner_user()
+    user, uid, gid = _runner_identity()
+    _prepare_workspace_ownership(root, uid, gid)
 
     env_path = _write_environment_file(environment)
     cid_handle = tempfile.NamedTemporaryFile(
