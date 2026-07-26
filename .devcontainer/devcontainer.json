@@ -6,6 +6,7 @@
   "workspaceFolder": "/workspaces/amosclaude-clean",
   "shutdownAction": "stopCompose",
   "waitFor": "postCreateCommand",
+  "privileged": true,
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:4": {}
   },
