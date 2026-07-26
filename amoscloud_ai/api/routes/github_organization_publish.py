@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.github_repositories import (
     OAUTH_STATE_COOKIE,
-    _authenticated_clone_url,
     _connection,
     _current_user,
     _db as _github_db,
@@ -32,6 +31,7 @@ from amoscloud_ai.api.routes.repositories import (
     _repo_path,
     _safe_branch,
 )
+from amoscloud_ai.github_git_auth import authenticated_git
 from amoscloud_ai.github_repository_sync import sync_status
 
 router = APIRouter(prefix="/github", tags=["github-organization-publish"])
@@ -125,6 +125,16 @@ def _github_detail(response: httpx.Response, fallback: str) -> str:
     if isinstance(payload, dict):
         return str(payload.get("message") or fallback)
     return fallback
+
+
+def _response_object(response: httpx.Response, fallback: str) -> dict:
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=fallback) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail=fallback)
+    return payload
 
 
 def _remote_has_commits(
@@ -402,10 +412,7 @@ def publish_repository_to_github(
     )
     requested_full_name = f"{requested_owner}/{requested_name}"
     linked_full_name = str(repository["github_full_name"] or "").strip() or None
-    if (
-        linked_full_name
-        and linked_full_name.casefold() != requested_full_name.casefold()
-    ):
+    if linked_full_name and linked_full_name.casefold() != requested_full_name.casefold():
         raise HTTPException(
             status_code=409,
             detail=(
@@ -467,15 +474,16 @@ def publish_repository_to_github(
                     )
                 if create_response.status_code >= 400:
                     raise HTTPException(
-                        status_code=(
-                            409 if create_response.status_code == 422 else 502
-                        ),
+                        status_code=409 if create_response.status_code == 422 else 502,
                         detail=_github_detail(
                             create_response,
                             "GitHub repository creation failed",
                         ),
                     )
-                metadata = create_response.json()
+                metadata = _response_object(
+                    create_response,
+                    "GitHub returned invalid repository metadata",
+                )
                 created = True
             elif metadata_response.status_code in {401, 403}:
                 raise HTTPException(
@@ -488,7 +496,10 @@ def publish_repository_to_github(
                     detail="Unable to inspect the target GitHub repository",
                 )
             else:
-                metadata = metadata_response.json()
+                metadata = _response_object(
+                    metadata_response,
+                    "GitHub returned invalid repository metadata",
+                )
                 permissions = metadata.get("permissions") or {}
                 if not any(
                     bool(permissions.get(name))
@@ -523,10 +534,9 @@ def publish_repository_to_github(
 
             full_name = str(metadata.get("full_name") or requested_full_name)
             origin = _canonical_origin(repo, full_name)
-            public_url = _public_remote_url(full_name)
             try:
-                origin.set_url(_authenticated_clone_url(full_name, token))
-                _push_or_raise(origin, branch)
+                with authenticated_git(repo, token):
+                    _push_or_raise(origin, branch)
                 if created and str(metadata.get("default_branch") or "") != branch:
                     default_response = client.patch(
                         f"https://api.github.com/repos/{full_name}",
@@ -553,8 +563,6 @@ def publish_repository_to_github(
                         "authorization, or remote changes."
                     ),
                 ) from exc
-            finally:
-                origin.set_url(public_url)
 
         github_default_branch = (
             branch if created else str(metadata.get("default_branch") or "main")
