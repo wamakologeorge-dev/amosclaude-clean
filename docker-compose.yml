@@ -31,15 +31,23 @@ services:
     command:
       - sh
       - -ec
-      - exec redis-server --appendonly yes --requirepass "$$(cat /run/secrets/redis_password)"
+      - |
+        umask 077
+        {
+          printf 'appendonly yes\n'
+          printf 'requirepass %s\n' "$$(cat /run/secrets/redis_password)"
+        } > /tmp/redis.conf
+        exec redis-server /tmp/redis.conf
     secrets:
       - redis_password
     volumes:
       - redis_data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=1m
     healthcheck:
       test:
         - CMD-SHELL
-        - redis-cli -a "$$(cat /run/secrets/redis_password)" ping | grep -q PONG
+        - REDISCLI_AUTH="$$(cat /run/secrets/redis_password)" redis-cli ping | grep -q PONG
       interval: 10s
       timeout: 5s
       retries: 10
