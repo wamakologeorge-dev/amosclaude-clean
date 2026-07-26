@@ -23,7 +23,15 @@ class JobRequest(BaseModel):
 
 def _safe_workspace(workspace: str) -> str:
     base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
-    candidate = (base / str(workspace or ".")).resolve()
+    raw_workspace = str(workspace or ".").strip()
+    if "\x00" in raw_workspace:
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        raise HTTPException(status_code=400, detail="Workspace must be a relative path")
+
+    candidate = (base / workspace_path).resolve()
     if candidate != base and base not in candidate.parents:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
     return str(candidate)
