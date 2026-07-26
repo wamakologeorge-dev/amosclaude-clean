@@ -11,7 +11,6 @@ from amoscloud_ai.api.routes.repositories import (
     _access,
     _current_user,
     _db,
-    _repo_path,
     _require_owner,
     _require_write,
 )
@@ -47,7 +46,7 @@ def repository_workspace_status(
     payload = {
         "workspace": workspace,
         "runtime": workspace_runtime.runtime_health(),
-        "persistent_repository_path": str(_repo_path(repository_id)),
+        "persistent_repository": True,
     }
     if workspace_runtime.configured() and workspace["runtime_status"] != "not_started":
         try:
@@ -127,9 +126,7 @@ def delete_repository_workspace(
     )
     if workspace_runtime.configured():
         try:
-            workspace_runtime._request(  # internal, authenticated runtime call
-                "DELETE", f"/v1/workspaces/{workspace['id']}"
-            )
+            workspace_runtime.delete_workspace(workspace)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     with _db() as db:
