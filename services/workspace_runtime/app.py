@@ -44,22 +44,50 @@ RUNTIME_STATE_ROOT = Path(
         "/var/lib/amosclaud/runtime-state",
     )
 ).resolve()
-WORKSPACE_IMAGE = os.getenv(
-    "AMOSCLAUD_WORKSPACE_IMAGE", "amosclaud/workspace-base:latest"
+POLICY_PATH = Path(
+    os.getenv(
+        "AMOSCLAUD_ORGANIZATION_SETTINGS",
+        "/etc/amosclaud/organization-settings.json",
+    )
+).resolve()
+WORKSPACE_UID = 1000
+WORKSPACE_GID = 1000
+WORKSPACE_USER = "developer"
+
+
+def _load_policy() -> dict[str, Any]:
+    if not POLICY_PATH.exists():
+        return {}
+    payload = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("server_managed") is not True:
+        raise RuntimeError("Workspace policy must be a server-managed JSON object")
+    return payload
+
+
+POLICY = _load_policy()
+SANDBOX_POLICY = POLICY.get("sandbox_resource_limits") or {}
+WORKSPACE_IMAGE = str(
+    POLICY.get("default_sandbox_image") or "amosclaud/workspace-base:latest"
 ).strip()
-WORKSPACE_NETWORK = os.getenv("AMOSCLAUD_WORKSPACE_NETWORK", "none").strip()
-WORKSPACE_UID = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_UID", "1000")), 1), 65535)
-WORKSPACE_GID = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_GID", "1000")), 1), 65535)
-CPU_LIMIT = min(max(float(os.getenv("AMOSCLAUD_WORKSPACE_CPU", "2")), 0.25), 2.0)
+CPU_LIMIT = min(max(float(SANDBOX_POLICY.get("max_cpu_cores", 2)), 0.25), 2.0)
 MEMORY_LIMIT = min(
-    max(int(os.getenv("AMOSCLAUD_WORKSPACE_MEMORY_MB", "4096")), 256),
+    max(int(SANDBOX_POLICY.get("max_memory_mb", 4096)), 256),
     4096,
 )
-PIDS_LIMIT = min(max(int(os.getenv("AMOSCLAUD_WORKSPACE_PIDS", "512")), 64), 512)
+PIDS_LIMIT = min(
+    max(int(SANDBOX_POLICY.get("max_processes", 512)), 64),
+    512,
+)
 IDLE_TIMEOUT_SECONDS = min(
-    max(int(os.getenv("AMOSCLAUD_WORKSPACE_IDLE_TIMEOUT_SECONDS", "1800")), 300),
+    max(int(SANDBOX_POLICY.get("idle_timeout_seconds", 1800)), 300),
     86400,
 )
+WORKSPACE_NETWORK = "none"
+if SANDBOX_POLICY.get("run_as_user", WORKSPACE_USER) != WORKSPACE_USER:
+    raise RuntimeError("Workspace policy must use the fixed non-root developer identity")
+if SANDBOX_POLICY.get("allow_internal_mesh_access", False) is not False:
+    raise RuntimeError("Workspace policy must deny internal platform mesh access")
+
 ALLOWED_ORIGINS = {
     item.strip().rstrip("/")
     for item in os.getenv(
@@ -91,7 +119,8 @@ def _docker():
         return docker.from_env(timeout=15)
     except DockerException as exc:
         raise HTTPException(
-            status_code=503, detail="Docker runtime is unavailable"
+            status_code=503,
+            detail="Docker runtime is unavailable",
         ) from exc
 
 
@@ -139,11 +168,11 @@ def _touch_activity(workspace_id: str) -> None:
 
 
 def _prepare_repository_storage(storage: Path) -> None:
-    """Make one repository writable by the fixed non-root workspace identity.
+    """Prepare one repository for the fixed non-root workspace identity.
 
-    Symlinks are never followed. Default ACLs ensure files created later by the
-    control plane remain writable by the workspace developer without making the
-    repository writable to other host users.
+    Symlinks are never followed. Directory and file modes are exact, so existing
+    world-writable bits are not preserved. Executable files retain only their
+    owner/group executable bits. Default ACLs cover future control-plane writes.
     """
 
     storage.mkdir(parents=True, exist_ok=True)
@@ -162,29 +191,28 @@ def _prepare_repository_storage(storage: Path) -> None:
                     continue
                 mode = stat.S_IMODE(path.stat(follow_symlinks=False).st_mode)
                 if path.is_dir():
-                    os.chmod(path, mode | 0o2770, follow_symlinks=False)
+                    os.chmod(path, 0o2770, follow_symlinks=False)
                     directories.append(str(path))
                 else:
-                    os.chmod(path, mode | 0o660, follow_symlinks=False)
+                    executable = mode & 0o110
+                    os.chmod(path, 0o660 | executable, follow_symlinks=False)
     except OSError as exc:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Persistent repository storage cannot apply the configured "
-                "non-root UID/GID ownership."
+                "Persistent repository storage cannot apply the fixed "
+                "non-root developer ownership."
             ),
         ) from exc
 
-    acl = f"u:{WORKSPACE_UID}:rwx"
-    default_acl = f"d:u:{WORKSPACE_UID}:rwx"
     for offset in range(0, len(directories), 200):
         result = subprocess.run(
             [
                 "setfacl",
                 "-m",
-                acl,
+                f"u:{WORKSPACE_UID}:rwx",
                 "-m",
-                default_acl,
+                f"d:u:{WORKSPACE_UID}:rwx",
                 *directories[offset : offset + 200],
             ],
             check=False,
@@ -196,7 +224,7 @@ def _prepare_repository_storage(storage: Path) -> None:
                 status_code=503,
                 detail=(
                     "Persistent repository storage must support POSIX ACLs or use "
-                    "a shared non-root UID/GID for the control plane and workspace."
+                    "the fixed UID/GID 1000 for both the control plane and workspace."
                 ),
             )
 
@@ -222,7 +250,8 @@ def _container(workspace_id: str):
         return _docker().containers.get(_container_name(workspace_id))
     except NotFound as exc:
         raise HTTPException(
-            status_code=404, detail="Workspace container not found"
+            status_code=404,
+            detail="Workspace container not found",
         ) from exc
 
 
@@ -243,7 +272,8 @@ def _public(container) -> dict[str, Any]:
         "memory_mb": MEMORY_LIMIT,
         "pids_limit": PIDS_LIMIT,
         "network": WORKSPACE_NETWORK,
-        "user": "developer",
+        "user": WORKSPACE_USER,
+        "workspace_image": WORKSPACE_IMAGE,
     }
 
 
@@ -269,19 +299,20 @@ def _verify_ticket(ticket_value: str, workspace_id: str) -> TerminalTicket:
             _USED_TICKETS.pop(nonce, None)
     if ticket.workspace_id != _workspace_id(workspace_id):
         raise HTTPException(
-            status_code=401, detail="Terminal ticket workspace mismatch"
+            status_code=401,
+            detail="Terminal ticket workspace mismatch",
         )
     if ticket.expires_at < now:
         raise HTTPException(status_code=401, detail="Terminal ticket expired")
     if ticket.nonce in _USED_TICKETS:
         raise HTTPException(status_code=401, detail="Terminal ticket was already used")
     expected = hmac.new(
-        RUNTIME_TOKEN.encode(), _ticket_payload(ticket), hashlib.sha256
+        RUNTIME_TOKEN.encode(),
+        _ticket_payload(ticket),
+        hashlib.sha256,
     ).hexdigest()
     if not hmac.compare_digest(expected, ticket.signature):
-        raise HTTPException(
-            status_code=401, detail="Invalid terminal ticket signature"
-        )
+        raise HTTPException(status_code=401, detail="Invalid terminal ticket signature")
     _USED_TICKETS[ticket.nonce] = ticket.expires_at
     return ticket
 
@@ -312,6 +343,7 @@ def health(
         "docker_ready": docker_ready,
         "token_configured": bool(RUNTIME_TOKEN),
         "workspace_image": WORKSPACE_IMAGE,
+        "policy_path": str(POLICY_PATH),
         "cpu_limit": CPU_LIMIT,
         "memory_mb": MEMORY_LIMIT,
         "pids_limit": PIDS_LIMIT,
@@ -341,18 +373,20 @@ def start_workspace(
                 status_code=409,
                 detail="Workspace identifier is already bound to another repository",
             )
+        if labels.get("amosclaud.workspace_image") != WORKSPACE_IMAGE:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Workspace image policy changed; remove this stopped container "
+                    "before starting it again."
+                ),
+            )
         container.reload()
         if not container.attrs.get("State", {}).get("Running"):
             container.start()
         return _public(container)
     except NotFound:
         pass
-
-    network_kwargs: dict[str, Any]
-    if WORKSPACE_NETWORK == "none":
-        network_kwargs = {"network_mode": "none"}
-    else:
-        network_kwargs = {"network": WORKSPACE_NETWORK}
 
     try:
         container = client.containers.run(
@@ -362,7 +396,7 @@ def start_workspace(
             detach=True,
             tty=True,
             stdin_open=True,
-            user="developer",
+            user=WORKSPACE_USER,
             working_dir="/workspace",
             environment=_safe_environment(body.environment),
             volumes={str(storage): {"bind": "/workspace", "mode": "rw"}},
@@ -372,6 +406,7 @@ def start_workspace(
                 "amosclaud.repository_id": str(body.repository_id),
                 "amosclaud.owner_id": str(body.owner_id),
                 "amosclaud.storage_path": str(storage),
+                "amosclaud.workspace_image": WORKSPACE_IMAGE,
             },
             nano_cpus=int(CPU_LIMIT * 1_000_000_000),
             mem_limit=f"{MEMORY_LIMIT}m",
@@ -380,13 +415,13 @@ def start_workspace(
             cap_drop=["ALL"],
             security_opt=["no-new-privileges:true"],
             read_only=True,
+            network_mode=WORKSPACE_NETWORK,
             tmpfs={
                 "/tmp": "rw,noexec,nosuid,size=512m",
                 "/home/developer/.cache": (
                     "rw,noexec,nosuid,size=256m,uid=1000,gid=1000"
                 ),
             },
-            **network_kwargs,
         )
     except DockerException as exc:
         raise HTTPException(
@@ -460,6 +495,13 @@ async def _write_terminal(master_fd: int, websocket: WebSocket) -> None:
             await asyncio.to_thread(os.write, master_fd, data)
 
 
+async def _terminal_heartbeat(workspace_id: str) -> None:
+    interval = max(15, min(60, IDLE_TIMEOUT_SECONDS // 4))
+    while True:
+        await asyncio.sleep(interval)
+        await asyncio.to_thread(_touch_activity, workspace_id)
+
+
 @app.websocket("/v1/terminal/{workspace_id}")
 async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None:
     try:
@@ -475,7 +517,8 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
         _touch_activity(workspace_id)
     except HTTPException as exc:
         await websocket.close(
-            code=4400 + min(exc.status_code, 99), reason=str(exc.detail)
+            code=4400 + min(exc.status_code, 99),
+            reason=str(exc.detail),
         )
         return
 
@@ -487,7 +530,7 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
             "exec",
             "-it",
             "--user",
-            "developer",
+            WORKSPACE_USER,
             "--workdir",
             "/workspace",
             container.name,
@@ -501,11 +544,13 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
         start_new_session=True,
     )
     os.close(slave_fd)
+    heartbeat = asyncio.create_task(_terminal_heartbeat(workspace_id))
     try:
         reader = asyncio.create_task(_read_terminal(master_fd, websocket))
         writer = asyncio.create_task(_write_terminal(master_fd, websocket))
         done, pending = await asyncio.wait(
-            {reader, writer}, return_when=asyncio.FIRST_COMPLETED
+            {reader, writer},
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()
@@ -514,6 +559,11 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
     except (WebSocketDisconnect, OSError, asyncio.CancelledError):
         pass
     finally:
+        heartbeat.cancel()
+        try:
+            await heartbeat
+        except asyncio.CancelledError:
+            pass
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
