@@ -69,8 +69,21 @@ class AutonomousEngineeringLoop:
         lessons: list[str] = []
         checks: list[dict[str, Any]] = []
 
-        def record(phase: LoopPhase, status: str, message: str, evidence: list[str] | None = None) -> None:
-            events.append(LoopEvent(phase.value, status, message, round(monotonic() - started, 3), evidence or []))
+        def record(
+            phase: LoopPhase,
+            status: str,
+            message: str,
+            evidence: list[str] | None = None,
+        ) -> None:
+            events.append(
+                LoopEvent(
+                    phase.value,
+                    status,
+                    message,
+                    round(monotonic() - started, 3),
+                    evidence or [],
+                )
+            )
 
         criteria = [
             "Requested outcome is addressed",
@@ -78,10 +91,20 @@ class AutonomousEngineeringLoop:
             "Verification produces evidence",
             "No success is reported while blocking checks fail",
         ]
-        record(LoopPhase.UNDERSTAND, "passed", "Objective and success criteria established.", criteria)
+        record(
+            LoopPhase.UNDERSTAND,
+            "passed",
+            "Objective and success criteria established.",
+            criteria,
+        )
 
-        evidence = self.analyzer.inspect()
-        record(LoopPhase.INSPECT, "passed", f"Inspected repository evidence ({len(evidence)} item(s)).", evidence[:20])
+        evidence = self.analyzer.inspect(objective)
+        record(
+            LoopPhase.INSPECT,
+            "passed",
+            f"Inspected repository evidence ({len(evidence)} item(s)).",
+            evidence[:20],
+        )
 
         if mode == "fix" and not authorized_writes:
             blocker = "Fix mode requires explicit write authorization"
@@ -101,53 +124,183 @@ class AutonomousEngineeringLoop:
                 for proposal in proposals:
                     self.files.write(proposal.path, proposal.content, authorized=True)
                     changed.append(proposal.path)
-                record(LoopPhase.EXECUTE, "passed", f"Applied {len(changed)} authorized file change(s).", changed)
+                record(
+                    LoopPhase.EXECUTE,
+                    "passed",
+                    f"Applied {len(changed)} authorized file change(s).",
+                    changed,
+                )
             except Exception as exc:
                 blocker = f"Execution stopped safely: {type(exc).__name__}: {exc}"
                 record(LoopPhase.EXECUTE, "failed", blocker)
-                return self._finish(started, objective, criteria, plan, changed, checks, events, lessons, blocker)
+                return self._finish(
+                    started,
+                    objective,
+                    criteria,
+                    plan,
+                    changed,
+                    checks,
+                    events,
+                    lessons,
+                    blocker,
+                )
         else:
-            record(LoopPhase.EXECUTE, "skipped", "Read-only mode; no files were changed.")
+            record(
+                LoopPhase.EXECUTE,
+                "skipped",
+                "Read-only mode; no files were changed.",
+            )
 
         for attempt in range(1, self.max_attempts + 1):
-            checks = self.runtime.verify()
+            checks = self.runtime.verify(changed_files=changed)
             failed = [item for item in checks if not item.get("passed")]
-            record(LoopPhase.VERIFY, "failed" if failed else "passed", f"Verification attempt {attempt} completed.", [item.get("summary", "") for item in checks])
+            record(
+                LoopPhase.VERIFY,
+                "failed" if failed else "passed",
+                f"Verification attempt {attempt} completed.",
+                [item.get("summary", "") for item in checks],
+            )
             if not failed:
                 break
             if mode != "fix" or attempt == self.max_attempts:
                 blocker = failed[0].get("summary") or "Verification failed"
-                lessons.append(f"Do not report success until this blocker is resolved: {blocker}")
-                record(LoopPhase.LEARN, "recorded", "Stored a failure lesson for the Academy.", lessons)
-                return self._finish(started, objective, criteria, plan, changed, checks, events, lessons, blocker)
-            record(LoopPhase.EXECUTE, "retry", "Verification failed; another bounded repair attempt is allowed.")
+                lessons.append(
+                    f"Do not report success until this blocker is resolved: {blocker}"
+                )
+                record(
+                    LoopPhase.LEARN,
+                    "recorded",
+                    "Stored a failure lesson for the Academy.",
+                    lessons,
+                )
+                return self._finish(
+                    started,
+                    objective,
+                    criteria,
+                    plan,
+                    changed,
+                    checks,
+                    events,
+                    lessons,
+                    blocker,
+                )
+            record(
+                LoopPhase.EXECUTE,
+                "retry",
+                "Verification failed; another bounded repair attempt is allowed.",
+            )
 
-        lessons.append(f"Verified objective with {len(changed)} changed file(s) and {len(checks)} check(s).")
-        record(LoopPhase.LEARN, "recorded", "Prepared verified lesson evidence for the Academy.", lessons)
-        record(LoopPhase.REPORT, "passed", "Engineering loop completed with verification evidence.")
-        return LoopOutcome("success", objective, criteria, plan, changed, checks, events, lessons, round(monotonic() - started, 3))
+        lessons.append(
+            f"Verified objective with {len(changed)} changed file(s) and {len(checks)} check(s)."
+        )
+        record(
+            LoopPhase.LEARN,
+            "recorded",
+            "Prepared verified lesson evidence for the Academy.",
+            lessons,
+        )
+        record(
+            LoopPhase.REPORT,
+            "passed",
+            "Engineering loop completed with verification evidence.",
+        )
+        return LoopOutcome(
+            "success",
+            objective,
+            criteria,
+            plan,
+            changed,
+            checks,
+            events,
+            lessons,
+            round(monotonic() - started, 3),
+        )
 
     def _plan(self, objective: str, evidence: list[str], mode: str) -> list[str]:
         if mode == "fix":
             return self.model.plan(objective, evidence)
-        return ["Understand objective", "Inspect evidence", "Run deterministic verification", "Report exact results"]
+        return [
+            "Understand objective",
+            "Inspect evidence",
+            "Run deterministic verification",
+            "Report exact results",
+        ]
 
     def _proposals(self, objective: str, evidence: list[str]) -> list[ChangeProposal]:
         raw = self.model.complete(objective, evidence).strip()
-        if raw.startswith("```"):
-            raw = "\n".join(raw.splitlines()[1:-1])
-        payload = json.loads(raw)
+        payload = self._json_payload(raw)
         changes = payload.get("changes", []) if isinstance(payload, dict) else []
-        if not isinstance(changes, list):
-            raise ValueError("Model proposal must contain a changes list")
+        if not isinstance(changes, list) or not changes:
+            raise ValueError("Model proposal must contain at least one change")
         proposals: list[ChangeProposal] = []
-        for item in changes[:12]:
-            if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("content"), str):
+        seen: set[str] = set()
+        for item in changes[:8]:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("path"), str)
+                or not isinstance(item.get("content"), str)
+            ):
                 raise ValueError("Every change requires path and complete content")
-            proposals.append(ChangeProposal(item["path"], item["content"], str(item.get("reason", ""))))
+            path = item["path"].strip().replace("\\", "/")
+            if not path or path in seen:
+                raise ValueError("Every proposed path must be unique and non-empty")
+            seen.add(path)
+            proposals.append(
+                ChangeProposal(path, item["content"], str(item.get("reason", "")))
+            )
         return proposals
 
     @staticmethod
-    def _finish(started, objective, criteria, plan, changed, checks, events, lessons, blocker) -> LoopOutcome:
-        events.append(LoopEvent(LoopPhase.REPORT.value, "failed" if blocker else "passed", "Engineering loop reported the final result.", round(monotonic() - started, 3), [blocker] if blocker else []))
-        return LoopOutcome("failed" if blocker else "success", objective, criteria, plan, changed, checks, events, lessons, round(monotonic() - started, 3), blocker)
+    def _json_payload(raw: str) -> dict[str, Any]:
+        if raw.startswith("```"):
+            lines = raw.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            raw = "\n".join(lines).strip()
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start < 0 or end <= start:
+                raise ValueError("Model proposal did not contain a JSON object")
+            payload = json.loads(raw[start : end + 1])
+        if not isinstance(payload, dict):
+            raise ValueError("Model proposal must be a JSON object")
+        return payload
+
+    @staticmethod
+    def _finish(
+        started,
+        objective,
+        criteria,
+        plan,
+        changed,
+        checks,
+        events,
+        lessons,
+        blocker,
+    ) -> LoopOutcome:
+        events.append(
+            LoopEvent(
+                LoopPhase.REPORT.value,
+                "failed" if blocker else "passed",
+                "Engineering loop reported the final result.",
+                round(monotonic() - started, 3),
+                [blocker] if blocker else [],
+            )
+        )
+        return LoopOutcome(
+            "failed" if blocker else "success",
+            objective,
+            criteria,
+            plan,
+            changed,
+            checks,
+            events,
+            lessons,
+            round(monotonic() - started, 3),
+            blocker,
+        )
