@@ -38,33 +38,35 @@ def test_tcp_preflight_timeout_names_probe_timeout(monkeypatch):
         "http://amosclaud-model.railway.internal:11434",
     )
     model_runtime.reset_cache()
-    candidate = next(
-        item
-        for item in model_runtime.resolve_candidates(
-            {"configured": False, "ready": False, "ready_stations": 0}
+    try:
+        candidate = next(
+            item
+            for item in model_runtime.resolve_candidates(
+                {"configured": False, "ready": False, "ready_stations": 0}
+            )
+            if item.key == "self-hosted"
         )
-        if item.key == "self-hosted"
-    )
-    monkeypatch.setattr(
-        model_runtime,
-        "_resolve_host",
-        lambda host, port: [
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", (host, port))
-        ],
-    )
+        monkeypatch.setattr(
+            model_runtime,
+            "_resolve_host",
+            lambda host, port: [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", (host, port))
+            ],
+        )
 
-    def timeout(host: str, port: int, budget: float) -> None:
-        raise socket.timeout("timed out")
+        def timeout(host: str, port: int, budget: float) -> None:
+            raise socket.timeout("timed out")
 
-    monkeypatch.setattr(model_runtime, "_tcp_connect", timeout)
+        monkeypatch.setattr(model_runtime, "_tcp_connect", timeout)
 
-    health = model_runtime.candidate_health(candidate, force=True)
+        health = model_runtime.candidate_health(candidate, force=True)
 
-    assert health.reachable is False
-    assert health.diagnosis is not None
-    assert health.diagnosis.code == model_runtime.TIMEOUT
-    remediation = health.diagnosis.remediation
-    assert "AMOSCLAUD_MODEL_PROBE_TIMEOUT" in remediation
-    assert "AMOSCLAUD_MODEL_TIMEOUT" not in remediation
-    assert "private-network" in remediation
-    model_runtime.reset_cache()
+        assert health.reachable is False
+        assert health.diagnosis is not None
+        assert health.diagnosis.code == model_runtime.TIMEOUT
+        remediation = health.diagnosis.remediation
+        assert "AMOSCLAUD_MODEL_PROBE_TIMEOUT" in remediation
+        assert "AMOSCLAUD_MODEL_TIMEOUT" not in remediation
+        assert "private-network" in remediation
+    finally:
+        model_runtime.reset_cache()
