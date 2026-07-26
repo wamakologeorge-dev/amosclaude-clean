@@ -3,7 +3,7 @@ name: Amosclaud Autonomous Background Engineer
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 4 * * *'
   workflow_run:
     workflows:
       - CI
@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           revision="${HEAD_REF#amosclaud-background-engineer/}"
           short_sha="${revision%%-*}"
-          title="Amosclaud autonomous repair retry ${short_sha}"
+          title="Amosclaud autonomous repair ${short_sha}"
           issue_number="$(gh issue list \
             --state open \
             --search "\"${title}\" in:title" \
@@ -62,7 +62,7 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
 
     steps:
       - name: Checkout repository
@@ -77,6 +77,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: pip
+
+      - name: Verify repository operating instructions
+        run: |
+          set -euo pipefail
+          test -f AGENTS.md
+          test -f docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md
+          grep -q "Inspect relevant files before editing" AGENTS.md
+          grep -q "Run required checks and report the exact result" AGENTS.md
 
       - name: Install autonomous bootstrap dependencies
         run: |
@@ -104,16 +112,92 @@ jobs:
             echo ""
             cat amosclaud-install.log
           } > amosclaud-failure.log
-          echo "::warning title=Repository installation failed::The failure was captured and will be passed to Amosclaud Autonomous for repair."
+          echo "::warning title=Repository installation failed::The failure was captured for the autonomous repair issue and Amosclaud Fixer."
+
+      - name: Inspect repository health before opening an issue
+        id: inspect
+        shell: bash
+        env:
+          PROJECT_INSTALL_OK: ${{ steps.dependencies.outputs.project_install_ok }}
+        run: |
+          set -euo pipefail
+          if [ "$PROJECT_INSTALL_OK" != "true" ]; then
+            echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=dependency installation failed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          set +e
+          {
+            echo "=== PYTHON COMPILATION ==="
+            python -m compileall -q amoscloud_ai src tests
+            compile_status=$?
+            echo "compile_exit_code=$compile_status"
+            echo ""
+            echo "=== PYTEST ==="
+            python -m pytest -q --disable-warnings --maxfail=25
+            pytest_status=$?
+            echo "pytest_exit_code=$pytest_status"
+          } 2>&1 | tee amosclaud-health.log
+          pipeline_status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$pipeline_status" -eq 0 ]; then
+            echo "repair_needed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=repository checks passed" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          {
+            echo "=== DAILY AUTONOMOUS INSPECTION FAILURE ==="
+            echo "The repository failed compilation or pytest verification."
+            echo ""
+            cat amosclaud-health.log
+          } > amosclaud-failure.log
+          echo "repair_needed=true" >> "$GITHUB_OUTPUT"
+          echo "reason=compilation or pytest failed" >> "$GITHUB_OUTPUT"
+
+      - name: Report healthy daily inspection
+        if: steps.inspect.outputs.repair_needed != 'true'
+        run: |
+          echo "Daily Amosclaud inspection passed. No issue, repair branch, or pull request was created." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update repair issue before Amosclaud Fixer runs
+        id: incident
+        if: steps.inspect.outputs.repair_needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          FAILURE_REASON: ${{ steps.inspect.outputs.reason }}
+        run: |
+          set -euo pipefail
+          short_sha="${TARGET_SHA:0:8}"
+          title="Amosclaud autonomous repair ${short_sha}"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="Amosclaud Bot detected a verified repository failure for commit \`${TARGET_SHA}\`: ${FAILURE_REASON}. Amosclaud Fixer will inspect the recorded evidence, create a bounded repair branch, run fresh verification, and open an automatic pull request without requesting human approval. Workflow: ${run_url}"
+          issue_number="$(gh issue list \
+            --state open \
+            --search "\"${title}\" in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" \
+            | head -n 1)"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" --body "$body"
+          else
+            issue_url="$(gh issue create --title "$title" --body "$body")"
+            issue_number="${issue_url##*/}"
+          fi
+          echo "issue_number=$issue_number" >> "$GITHUB_OUTPUT"
+          echo "Repair issue: #${issue_number}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify autonomous configuration
         id: preflight
+        if: steps.inspect.outputs.repair_needed == 'true'
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
           AMOSCLAUD_AUTONOMOUS_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
         run: |
           set -euo pipefail
-          test -f docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md
           test -f .github/scripts/amosclaud_fixer.py
           test -f .github/scripts/redact_amosclaud_evidence.py
           test -f .github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/bot.py
@@ -133,13 +217,17 @@ jobs:
           fi
 
       - name: Fail closed when repair engine is unavailable
-        if: steps.preflight.outputs.model_configured != 'true'
+        if: >-
+          steps.inspect.outputs.repair_needed == 'true' &&
+          steps.preflight.outputs.model_configured != 'true'
         run: |
-          echo "The autonomous repair model is not configured; no repair can be attempted."
+          echo "The autonomous repair model is not configured; the repair issue remains open for the next scheduled attempt."
           exit 1
 
       - name: Run Amosclaud autonomous background engineer
-        if: steps.preflight.outputs.model_configured == 'true'
+        if: >-
+          steps.inspect.outputs.repair_needed == 'true' &&
+          steps.preflight.outputs.model_configured == 'true'
         id: engineer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
@@ -170,6 +258,7 @@ jobs:
         run: |
           python .github/scripts/redact_amosclaud_evidence.py \
             amosclaud-install.log \
+            amosclaud-health.log \
             amosclaud-failure.log \
             amosclaud-fixer-report.json \
             amosclaud-background-engineer-report.json \
@@ -182,6 +271,7 @@ jobs:
           name: amosclaud-background-engineer-${{ github.run_id }}
           path: |
             amosclaud-install.log
+            amosclaud-health.log
             amosclaud-failure.log
             amosclaud-fixer-report.json
             amosclaud-background-engineer-report.json
@@ -197,6 +287,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ISSUE_NUMBER: ${{ steps.incident.outputs.issue_number }}
         run: |
           set -euo pipefail
           short_sha="${TARGET_SHA:0:8}"
@@ -247,17 +338,19 @@ jobs:
           {
             echo "## Amosclaud Autonomous Background Engineer"
             echo ""
-            echo "This repair was generated and verified autonomously using the Python Autonomous Engineering Book."
+            echo "This repair was generated from issue #${ISSUE_NUMBER} and verified autonomously under AGENTS.md and the Python Autonomous Engineering Book."
             echo ""
+            echo "- Repair issue: #${ISSUE_NUMBER}"
             echo "- Source commit: \`${TARGET_SHA}\`"
             echo "- Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            echo "- Merge policy: auto-merge after all required repository checks pass"
-            echo "- Human approval: not required for this verified low-risk repair"
+            echo "- Merge policy: auto-merge only after all required repository checks pass"
+            echo "- Human approval: not required for this verified bounded repair"
+            echo "- Direct default-branch writes: prohibited"
           } > /tmp/amosclaud-pr-body.md
           pr_url="$(gh pr create \
             --base "${{ github.event.repository.default_branch }}" \
             --head "$branch" \
-            --title "fix: Amosclaud autonomous background repair" \
+            --title "fix: Amosclaud autonomous repair for #${ISSUE_NUMBER}" \
             --body-file /tmp/amosclaud-pr-body.md)"
           gh pr merge "$pr_url" --auto --squash --delete-branch
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
@@ -267,42 +360,34 @@ jobs:
         if: steps.publish.outputs.pr_url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ISSUE_NUMBER: ${{ steps.incident.outputs.issue_number }}
           PR_URL: ${{ steps.publish.outputs.pr_url }}
         run: |
           set -euo pipefail
-          short_sha="${TARGET_SHA:0:8}"
-          title="Amosclaud autonomous repair retry ${short_sha}"
-          body="A verified repair was published at ${PR_URL}. Auto-merge is enabled, and this incident remains open until GitHub confirms the pull request was merged."
-          issue_number="$(gh issue list \
-            --state open \
-            --search "\"${title}\" in:title" \
-            --json number,title \
-            --jq ".[] | select(.title == \"${title}\") | .number" \
-            | head -n 1)"
-          if [ -n "$issue_number" ]; then
-            gh issue comment "$issue_number" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
-          fi
+          body="A verified repair was published at ${PR_URL}. Auto-merge is enabled, and this issue remains open until GitHub confirms the pull request was merged."
+          gh issue comment "$ISSUE_NUMBER" --body "$body"
 
       - name: Record autonomous retry without requesting human approval
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ISSUE_NUMBER: ${{ steps.incident.outputs.issue_number }}
         run: |
           set -euo pipefail
           short_sha="${TARGET_SHA:0:8}"
-          title="Amosclaud autonomous repair retry ${short_sha}"
+          title="Amosclaud autonomous repair ${short_sha}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          body="The background engineer did not produce and publish a verified repair in this attempt. No human approval is requested. Redacted evidence is attached to ${run_url}, and the scheduled autonomous workflow will retry this revision."
-          issue_number="$(gh issue list \
-            --state open \
-            --search "\"${title}\" in:title" \
-            --json number,title \
-            --jq ".[] | select(.title == \"${title}\") | .number" \
-            | head -n 1)"
+          body="The autonomous attempt did not publish a verified repair. No human approval is requested. Redacted evidence is attached to ${run_url}, and the daily or failure-triggered workflow will retry this revision."
+          issue_number="$ISSUE_NUMBER"
+          if [ -z "$issue_number" ]; then
+            issue_number="$(gh issue list \
+              --state open \
+              --search "\"${title}\" in:title" \
+              --json number,title \
+              --jq ".[] | select(.title == \"${title}\") | .number" \
+              | head -n 1)"
+          fi
           if [ -n "$issue_number" ]; then
             gh issue comment "$issue_number" --body "$body"
           else
