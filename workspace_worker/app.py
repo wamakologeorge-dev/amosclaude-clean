@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import os
 import shutil
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -27,10 +28,23 @@ class WorkspaceProvisionRequest(BaseModel):
     pids: int = Field(default=256, ge=32, le=512)
 
 
+def _read_secret(name: str) -> str:
+    direct = os.getenv(name, "").strip()
+    if direct:
+        return direct
+    path_value = os.getenv(f"{name}_FILE", "").strip()
+    if not path_value:
+        return ""
+    try:
+        path = Path(path_value)
+        return path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+    except OSError:
+        return ""
+
+
 def _configured_token() -> str:
-    return (
-        os.getenv("AMOSCLAUD_WORKSPACE_WORKER_TOKEN", "").strip()
-        or os.getenv("AMOSCLAUD_WORKSPACE_PROVIDER_TOKEN", "").strip()
+    return _read_secret("AMOSCLAUD_WORKSPACE_WORKER_TOKEN") or _read_secret(
+        "AMOSCLAUD_WORKSPACE_PROVIDER_TOKEN"
     )
 
 
