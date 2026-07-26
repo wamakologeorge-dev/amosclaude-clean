@@ -23,6 +23,7 @@ from amoscloud_ai.markdown_service import render_markdown_document
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
 REPOSITORY_ROOT = Path(os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories"))
+REPOSITORY_ROOT_RESOLVED = REPOSITORY_ROOT.resolve()
 MAX_REPOSITORIES_PER_USER = int(os.getenv("MAX_REPOSITORIES_PER_USER", "10"))
 MAX_REPOSITORY_BYTES = int(os.getenv("MAX_REPOSITORY_BYTES", str(500 * 1024 * 1024)))
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -178,7 +179,14 @@ def _repo_lock(repository_id: int) -> threading.RLock:
 
 
 def _repo_path(repository_id: int) -> Path:
-    return REPOSITORY_ROOT / str(repository_id)
+    if repository_id <= 0:
+        raise HTTPException(status_code=422, detail="Invalid repository id")
+    candidate = (REPOSITORY_ROOT_RESOLVED / str(repository_id)).resolve()
+    try:
+        candidate.relative_to(REPOSITORY_ROOT_RESOLVED)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid repository path") from exc
+    return candidate
 
 
 def _repo_target_path(repository_id: int, relative: Path) -> Path:
