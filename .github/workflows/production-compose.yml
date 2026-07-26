@@ -58,7 +58,7 @@ jobs:
             model_token \
             stripe_secret_key \
             stripe_webhook_secret; do
-              printf 'ci-placeholder-%s' "$name" > "secrets/$name"
+              openssl rand -hex 32 > "secrets/$name"
           done
           chmod 600 .env.production secrets/*
 
