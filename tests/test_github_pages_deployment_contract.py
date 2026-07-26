@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 from amoscloud_ai.main import create_app
 
 
@@ -8,6 +10,35 @@ WORKFLOW = ROOT / ".github" / "workflows" / "pages.yml"
 INDEX = ROOT / "pages-site" / "index.html"
 APP = ROOT / "pages-site" / "app.js"
 DEPLOYMENTS = ROOT / "amoscloud_ai" / "api" / "routes" / "deployments.py"
+
+
+def _workflow_action_refs() -> list[str]:
+    parsed = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    assert isinstance(parsed, dict)
+    jobs = parsed.get("jobs")
+    assert isinstance(jobs, dict)
+    refs: list[str] = []
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if isinstance(step, dict) and isinstance(step.get("uses"), str):
+                refs.append(str(step["uses"]))
+    return refs
+
+
+def _has_supported_major(action: str, minimum_major: int) -> bool:
+    prefix = f"{action}@v"
+    for ref in _workflow_action_refs():
+        if not ref.startswith(prefix):
+            continue
+        major = ref[len(prefix):]
+        if major.isdigit() and int(major) >= minimum_major:
+            return True
+    return False
 
 
 def test_legacy_pages_report_route_remains_registered_for_compatibility() -> None:
@@ -22,7 +53,7 @@ def test_pages_workflow_verifies_and_reports_deployment() -> None:
     assert "Verify deployed GitHub Page" in workflow
     assert "curl --location" in workflow
     assert "deployment-evidence.html" in workflow
-    assert "actions/upload-artifact@v4" in workflow
+    assert _has_supported_major("actions/upload-artifact", 4)
     assert "github_pat_" in workflow
     assert "localStorage.*token" in workflow
     assert "/api/v1/deployments/github-pages/report" not in workflow
@@ -65,4 +96,4 @@ def test_legacy_pages_report_still_requires_worker_authentication() -> None:
     assert '"/github-pages/report"' in source
     assert 'environment="github-pages"' in source
     assert "body.verified" in source
-    assert "body.health_status == \"healthy\"" in source
+    assert 'body.health_status == "healthy"' in source
