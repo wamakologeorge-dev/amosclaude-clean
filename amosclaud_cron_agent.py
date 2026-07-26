@@ -308,13 +308,14 @@ def validate_patch(patch: str) -> list[str]:
                 f"Generated patch targets an unsupported path: {normalized}"
             )
 
-    if not any(path.startswith(RUNTIME_PREFIXES) for path in paths):
+    normalized_paths = [normalize_path(p) for p in paths]
+    if not any(p.startswith(RUNTIME_PREFIXES) for p in normalized_paths):
         raise CronAgentError(
             "Generated patch does not modify an existing runtime component"
         )
-    if not any(path.startswith("tests/") for path in paths):
+    if not any(p.startswith("tests/") for p in normalized_paths):
         raise CronAgentError("Generated patch must include test coverage")
-    return paths
+    return normalized_paths
 
 
 def restore_workspace() -> None:
