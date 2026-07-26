@@ -38,6 +38,12 @@ REPOSITORY_STORAGE_ROOT = Path(
         "/var/lib/amosclaud/repositories",
     )
 ).resolve()
+RUNTIME_STATE_ROOT = Path(
+    os.getenv(
+        "AMOSCLAUD_WORKSPACE_STATE_ROOT",
+        "/var/lib/amosclaud/runtime-state",
+    )
+).resolve()
 WORKSPACE_IMAGE = os.getenv(
     "AMOSCLAUD_WORKSPACE_IMAGE", "amosclaud/workspace-base:latest"
 ).strip()
@@ -118,6 +124,20 @@ def _repository_path(repository_id: int) -> Path:
     return target
 
 
+def _activity_path(workspace_id: str) -> Path:
+    RUNTIME_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    target = (RUNTIME_STATE_ROOT / f"{_workspace_id(workspace_id)}.activity").resolve()
+    try:
+        target.relative_to(RUNTIME_STATE_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid runtime state path") from exc
+    return target
+
+
+def _touch_activity(workspace_id: str) -> None:
+    _activity_path(workspace_id).touch(exist_ok=True)
+
+
 def _prepare_repository_storage(storage: Path) -> None:
     """Make one repository writable by the fixed non-root workspace identity.
 
@@ -155,19 +175,18 @@ def _prepare_repository_storage(storage: Path) -> None:
             ),
         ) from exc
 
-    acl = f"u:{WORKSPACE_UID}:rwX"
-    default_acl = f"d:u:{WORKSPACE_UID}:rwX"
+    acl = f"u:{WORKSPACE_UID}:rwx"
+    default_acl = f"d:u:{WORKSPACE_UID}:rwx"
     for offset in range(0, len(directories), 200):
-        command = [
-            "setfacl",
-            "-m",
-            acl,
-            "-m",
-            default_acl,
-            *directories[offset : offset + 200],
-        ]
         result = subprocess.run(
-            command,
+            [
+                "setfacl",
+                "-m",
+                acl,
+                "-m",
+                default_acl,
+                *directories[offset : offset + 200],
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -205,11 +224,6 @@ def _container(workspace_id: str):
         raise HTTPException(
             status_code=404, detail="Workspace container not found"
         ) from exc
-
-
-def _touch_activity(repository_id: int) -> None:
-    marker = _repository_path(repository_id) / ".amosclaud-runtime-activity"
-    marker.touch(exist_ok=True)
 
 
 def _public(container) -> dict[str, Any]:
@@ -315,7 +329,7 @@ def start_workspace(
     workspace_id = _workspace_id(body.workspace_id)
     storage = _repository_path(body.repository_id)
     _prepare_repository_storage(storage)
-    _touch_activity(body.repository_id)
+    _touch_activity(workspace_id)
 
     client = _docker()
     name = _container_name(workspace_id)
@@ -417,6 +431,7 @@ def delete_workspace(
     except HTTPException as exc:
         if exc.status_code != 404:
             raise
+    _activity_path(workspace_id).unlink(missing_ok=True)
     if (
         repository_id
         and os.getenv("AMOSCLAUD_WORKSPACE_DELETE_STORAGE", "false").lower()
@@ -457,7 +472,7 @@ async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None
         labels = (container.attrs.get("Config") or {}).get("Labels") or {}
         repository_id = int(labels.get("amosclaud.repository_id") or 0)
         _prepare_repository_storage(_repository_path(repository_id))
-        _touch_activity(repository_id)
+        _touch_activity(workspace_id)
     except HTTPException as exc:
         await websocket.close(
             code=4400 + min(exc.status_code, 99), reason=str(exc.detail)
@@ -528,9 +543,9 @@ def stop_idle_workspaces(
         filters={"label": "amosclaud.managed=true"}
     ):
         labels = (container.attrs.get("Config") or {}).get("Labels") or {}
-        repository_id = int(labels.get("amosclaud.repository_id") or 0)
-        marker = _repository_path(repository_id) / ".amosclaud-runtime-activity"
+        workspace_id = labels.get("amosclaud.workspace_id") or ""
+        marker = _activity_path(workspace_id)
         if marker.exists() and marker.stat().st_mtime < cutoff:
             container.stop(timeout=10)
-            stopped.append(labels.get("amosclaud.workspace_id") or container.name)
+            stopped.append(workspace_id or container.name)
     return {"stopped": stopped, "count": len(stopped)}
