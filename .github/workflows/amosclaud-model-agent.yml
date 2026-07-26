@@ -1,0 +1,54 @@
+name: Amosclaud Model Agent
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: amosclaud-model-agent-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  answer:
+    if: >-
+      startsWith(github.event.comment.body, '/amosclaud ask') ||
+      startsWith(github.event.comment.body, '/amosclaud model status')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted repository base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install Amosclaud model runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -e .
+
+      - name: Run trusted GitHub model agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: 'true'
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_PROVIDER_API_URL: ${{ secrets.AMOSCLAUD_PROVIDER_API_URL }}
+          AMOSCLAUD_MODEL_URL: ${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL }}
+          AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || 'qwen2.5-coder:1.5b' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4o-mini' }}
+        run: |
+          set -euo pipefail
+          python -m amosclaud_bot.model_agent
