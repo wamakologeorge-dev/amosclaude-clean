@@ -1,16 +1,27 @@
 {
-	email dev@amosclaud.ai
+    email {$ACME_EMAIL}
 }
 
-amosclaud.com, www.amosclaud.com {
-	encode zstd gzip
+{$APEX_DOMAIN} {
+    redir https://{$PRIMARY_DOMAIN}{uri} permanent
+}
 
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		X-Content-Type-Options "nosniff"
-		X-Frame-Options "DENY"
-		Referrer-Policy "strict-origin-when-cross-origin"
-	}
+{$PRIMARY_DOMAIN} {
+    encode zstd gzip
 
-	reverse_proxy api:8000
+    reverse_proxy amoscloud_api:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    log {
+        output stdout
+        format console
+    }
 }
