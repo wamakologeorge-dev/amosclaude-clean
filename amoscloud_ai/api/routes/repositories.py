@@ -518,7 +518,12 @@ def render_repository_markdown(
         _access(db, repository_id, user["id"])
         repo = _open(repository_id)
         _checkout(repo, branch)
-        target = _repo_path(repository_id) / relative
+        repo_root = _repo_path(repository_id).resolve()
+        target = (repo_root / relative).resolve()
+        try:
+            target.relative_to(repo_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid file path") from exc
         if not target.is_file():
             raise HTTPException(status_code=404, detail="Markdown file not found")
         try:
