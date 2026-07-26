@@ -29,6 +29,20 @@ class ApprovalBot:
         return self.pages.get(page, [])
 
 
+def _autonomous_pr(
+    *,
+    head_ref: str = "amosclaud-background-engineer/abc12345-99",
+    head_repo: str = "owner/repo",
+    base_repo: str = "owner/repo",
+    body: str = AUTONOMOUS_REPAIR_MARKER,
+) -> dict[str, object]:
+    return {
+        "head": {"ref": head_ref, "repo": {"full_name": head_repo}},
+        "base": {"repo": {"full_name": base_repo}},
+        "body": body,
+    }
+
+
 def test_sensitive_fix_objective_detection() -> None:
     assert _is_sensitive_objective("update production deployment workflow")
     assert _is_sensitive_objective("rotate authentication credential handling")
@@ -45,10 +59,9 @@ def test_high_risk_pull_request_paths() -> None:
 
 
 def test_marked_bounded_autonomous_repair_skips_separate_approval() -> None:
-    pull_request = {
-        "head": {"ref": "amosclaud-background-engineer/abc12345-99"},
-        "body": f"{AUTONOMOUS_REPAIR_MARKER}\nVerified repair evidence",
-    }
+    pull_request = _autonomous_pr(
+        body=f"{AUTONOMOUS_REPAIR_MARKER}\nVerified repair evidence"
+    )
     files = [
         {"filename": "amoscloud_ai/api/routes/auth.py"},
         {"filename": "tests/test_auth.py"},
@@ -58,10 +71,7 @@ def test_marked_bounded_autonomous_repair_skips_separate_approval() -> None:
 
 
 def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
-    pull_request = {
-        "head": {"ref": "amosclaud-background-engineer/abc12345-99"},
-        "body": AUTONOMOUS_REPAIR_MARKER,
-    }
+    pull_request = _autonomous_pr()
 
     assert not _is_authorized_autonomous_repair(
         pull_request,
@@ -72,8 +82,24 @@ def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
         [{"filename": "AGENTS.md"}],
     )
     assert not _is_authorized_autonomous_repair(
-        {"head": {"ref": "feature/not-autonomous"}, "body": AUTONOMOUS_REPAIR_MARKER},
+        _autonomous_pr(head_ref="feature/not-autonomous"),
         [{"filename": "src/service.py"}],
+    )
+
+
+def test_fork_and_protected_rename_cannot_forge_autonomous_authorization() -> None:
+    assert not _is_authorized_autonomous_repair(
+        _autonomous_pr(head_repo="attacker/repo"),
+        [{"filename": "src/service.py"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        _autonomous_pr(),
+        [
+            {
+                "filename": "docs/renamed-policy.md",
+                "previous_filename": "AGENTS.md",
+            }
+        ],
     )
 
 
