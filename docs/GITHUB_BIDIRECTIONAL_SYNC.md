@@ -18,7 +18,7 @@ New repositories are created through either:
 - `POST /user/repos` for the connected personal account; or
 - `POST /orgs/{organization}/repos` for an organization.
 
-Amosclaud then commits the local project, pushes the selected branch, stores the real GitHub repository identity, and removes the credential from the persisted remote URL.
+Amosclaud validates the selected local branch and existing remote before creating anything on GitHub. It then commits only the active dirty branch, pushes the named local branch rather than an arbitrary `HEAD`, sets the real GitHub default branch for a newly created repository, stores GitHub's immutable repository ID and canonical full name, and removes the credential from the persisted remote URL.
 
 Existing native Amosclaud repositories can be published through:
 
@@ -26,7 +26,7 @@ Existing native Amosclaud repositories can be published through:
 POST /api/v1/github/repositories/{repository_id}/publish
 ```
 
-Amosclaud will not push a native project over an unrelated GitHub repository that already contains history. Import the target repository first when it already exists.
+The selected visibility must match an existing target repository. Amosclaud will not push a private workspace to an existing public target, replace a GitLab or private origin, or overwrite an unrelated GitHub repository that already contains history. Import the target repository first when it already exists.
 
 ## 2. GitHub to platform
 
@@ -36,19 +36,26 @@ The GitHub App webhook URL is:
 https://www.amosclaud.com/api/v1/agent/github/webhook
 ```
 
-Configure the GitHub App with a webhook secret and subscribe to the `push` event. Amosclaud validates the exact request bytes with `X-Hub-Signature-256` and constant-time comparison before accepting the event.
+Configure the GitHub App with a webhook secret and subscribe to both:
 
-A valid push queues a mapped-workspace synchronization job. The worker:
+- `push`, for code synchronization; and
+- `repository`, for rename and transfer mapping updates.
 
-1. finds local repositories mapped to the GitHub `full_name`;
-2. processes only the mapped default branch;
-3. blocks when the workspace has uncommitted files;
-4. fetches using the encrypted connected authorization;
-5. fast-forwards only when the local commit is an ancestor of the remote commit;
-6. refuses to overwrite ahead or diverged history;
-7. records the latest sync state and remote SHA.
+The GitHub App needs read-level **Metadata** repository permission to receive repository events. Amosclaud validates the exact request bytes with `X-Hub-Signature-256` and constant-time comparison before accepting the event. In production, a missing webhook secret fails closed.
 
-This means a platform push may produce a harmless webhook round trip: the worker sees that the workspace already matches GitHub and records `current`.
+A valid push is queued only when the server-managed `repository_sync.direction` and `repository_sync.github_to_platform` policy allow inbound synchronization. The worker:
+
+1. finds mapped workspaces by GitHub's immutable repository ID, with a case-insensitive full-name fallback for legacy rows;
+2. refreshes the canonical full name when GitHub renames or transfers the repository;
+3. processes only the mapped GitHub default branch;
+4. blocks when the workspace has uncommitted files;
+5. blocks a detached HEAD containing unreferenced committed work;
+6. fetches using the encrypted connected authorization, isolating an expired authorization to that one workspace;
+7. fast-forwards only when the local branch commit is an ancestor of the remote commit;
+8. refuses to overwrite ahead or diverged history;
+9. records every attempt separately from the timestamp of the last successful synchronization.
+
+This means a platform push may produce a harmless webhook round trip: the worker sees that the workspace already matches GitHub and records `current` as a successful synchronization.
 
 ## 3. Why no SSH deployment action
 
@@ -95,7 +102,7 @@ There is intentionally no API that lets a project developer mutate these server-
 The Dev Container uses `.devcontainer/docker-compose.yml` to start:
 
 - the Amosclaud application container;
-- PostgreSQL 16;
+- PostgreSQL 16 for both `DATABASE_URL` and `AMOSCLAUD_PLATFORM_DATABASE_URL`;
 - Redis 7;
 - Docker-in-Docker for project container builds.
 
@@ -106,4 +113,4 @@ python -m pytest -q tests/test_github_organization_pushback.py
 uvicorn amoscloud_ai.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The development credentials in the Compose file are local-only defaults. Production secrets remain in Railway variables or another secret manager and must not be committed.
+The development database uses trust authentication only inside the isolated Compose network. Production databases and secrets remain in Railway variables or another secret manager and must not be committed.
