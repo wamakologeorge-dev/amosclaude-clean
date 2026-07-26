@@ -27,6 +27,7 @@ permissions:
 jobs:
   delegate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Delegate to the unified repair control plane
         env:
