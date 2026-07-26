@@ -4,8 +4,10 @@ import pytest
 
 from amoscloud_ai.isolated_runner import (
     MAX_LOG_BYTES,
+    RunnerConfigurationError,
     UnsafeCommandError,
     _BoundedByteBuffer,
+    _parse_runner_user,
     parse_allowed_command,
     redact_output,
 )
@@ -55,6 +57,28 @@ def test_live_output_buffer_is_bounded_before_process_completion() -> None:
     assert len(output.encode("utf-8")) < MAX_LOG_BYTES
 
 
+def test_runner_user_must_be_a_numeric_non_root_uid_and_gid() -> None:
+    assert _parse_runner_user("1000:1001") == (1000, 1001)
+
+    for value in ("root", "1000", "1000:staff", "0:0", "0:1000", "1000:0"):
+        with pytest.raises(RunnerConfigurationError):
+            _parse_runner_user(value)
+
+
+def test_runner_source_prepares_root_created_workspace_without_following_symlinks() -> None:
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "amoscloud_ai"
+        / "isolated_runner.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _prepare_workspace_ownership" in source
+    assert "os.walk(root, followlinks=False)" in source
+    assert "os.lchown" in source
+    assert "_prepare_workspace_ownership(root, uid, gid)" in source
+    assert "A root worker must configure AMOSCLAUD_RUNNER_USER" in source
+
+
 def test_runner_source_never_invokes_a_host_shell() -> None:
     source = (
         Path(__file__).resolve().parents[1]
@@ -68,6 +92,6 @@ def test_runner_source_never_invokes_a_host_shell() -> None:
     assert '"no-new-privileges"' in source
     assert "subprocess.Popen" in source
     assert "_BoundedByteBuffer(MAX_LOG_BYTES)" in source
-    assert 'return f"{uid}:{gid}"' in source
+    assert 'return f"{uid}:{gid}", uid, gid' in source
     assert "65532:65532" not in source
     assert "--cidfile" in source
