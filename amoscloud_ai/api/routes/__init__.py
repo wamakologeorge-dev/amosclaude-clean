@@ -215,6 +215,7 @@ for _route in github_organization_publish.router.routes:
 
 from amoscloud_ai.api.routes import platform_services as platform_services
 from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
+from amoscloud_ai import workspace_runtime_service
 
 _platform_keys = set()
 for _route in platform_services.router.routes:
@@ -225,3 +226,13 @@ for _route in cloud_configuration.router.routes:
         continue
     platform_services.router.routes.append(_route)
     _platform_keys |= _keys
+
+if not any(item[0] == "workspace-runtime" for item in platform_services._CHECKS):
+    platform_services._CHECKS = (
+        *platform_services._CHECKS,
+        (
+            "workspace-runtime",
+            "Isolated cloud workspace runtime",
+            workspace_runtime_service.check,
+        ),
+    )
