@@ -33,8 +33,9 @@ except ImportError:
     from dependencies import get_current_user, rate_limiter
 
 from Amosclaud.platform_bus import PlatformByteBus, platform_bus_from_environment
+from database.async_session import async_session_scope
 from database.models import AutonomousJob, AutonomousJobStatus, Repository
-from database.session import create_database, session_scope
+from database.session import create_database
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("AmosclaudGateway")
@@ -173,14 +174,16 @@ def _publish_job_to_internal_bus(task_id: str) -> None:
         logger.exception("Failed to publish task %s through internal byte bus", task_id)
 
 
-def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
-    with session_scope() as session:
-        existing = session.scalar(
-            select(AutonomousJob).where(AutonomousJob.task_id == task.task_id)
-        )
+async def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
+    async with async_session_scope() as session:
+        existing = (
+            await session.execute(
+                select(AutonomousJob).where(AutonomousJob.task_id == task.task_id)
+            )
+        ).scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=409, detail="task_id already exists")
-        repository = session.get(Repository, task.repository_id)
+        repository = await session.get(Repository, task.repository_id)
         if repository is None:
             raise HTTPException(status_code=404, detail="Amosclaud repository not found")
         job = AutonomousJob(
@@ -194,8 +197,8 @@ def _create_job(task: ActionTask, username: str | None = None) -> AutonomousJob:
             result_summary=f"Queued by {username or 'authenticated Amosclaud user'}",
         )
         session.add(job)
-        session.flush()
-        session.refresh(job)
+        await session.flush()
+        await session.refresh(job)
     _publish_job_to_internal_bus(job.task_id)
     return job
 
@@ -210,7 +213,7 @@ async def run_agent(
     current_user: dict = Depends(get_current_user),
     _: bool = Depends(rate_limiter),
 ):
-    job = _create_job(task, str(current_user.get("username", "user")))
+    job = await _create_job(task, str(current_user.get("username", "user")))
     logger.info(
         "Queued Autonomous task %s for repository %s",
         job.task_id,
@@ -233,10 +236,12 @@ async def read_agent_job(
     _: dict = Depends(get_current_user),
     __: bool = Depends(rate_limiter),
 ):
-    with session_scope() as session:
-        job = session.scalar(
-            select(AutonomousJob).where(AutonomousJob.task_id == task_id)
-        )
+    async with async_session_scope() as session:
+        job = (
+            await session.execute(
+                select(AutonomousJob).where(AutonomousJob.task_id == task_id)
+            )
+        ).scalar_one_or_none()
         if job is None:
             raise HTTPException(status_code=404, detail="Autonomous job not found")
         return JobStatusResponse(
@@ -321,7 +326,7 @@ async def queue_fixer_job(
     """Queue a real repair job; never claim remediation before verification."""
     if task.agent_type == "amosclaud-core":
         task.agent_type = "amosclaud-fixer"
-    job = _create_job(task, str(current_user.get("username", "user")))
+    job = await _create_job(task, str(current_user.get("username", "user")))
     return JobStatusResponse(
         task_id=job.task_id,
         repository_id=job.repository_id,
