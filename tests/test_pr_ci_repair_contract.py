@@ -73,6 +73,8 @@ def test_verified_repair_returns_to_original_pr_without_force_push() -> None:
     assert "Remote pull request branch moved; refusing a stale push." in source
     assert 'fix: Amosclaud CI repair for PR #${PR_NUMBER}' in source
     assert "GitHub and external checks are running again" in source
+    assert "steps.publish.outcome != 'success'" in source
+    assert "No force push was attempted" in source
 
 
 def test_repair_attempts_and_patch_scope_are_bounded_by_policy() -> None:
