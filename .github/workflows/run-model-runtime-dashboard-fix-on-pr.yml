@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
 
       - name: Extract and run correction script
         shell: bash
@@ -46,7 +47,9 @@ jobs:
           Path("/tmp/apply_model_runtime_fix.py").write_text(
               script, encoding="utf-8"
           )
+          print(f"Extracted {len(script.splitlines())} correction-script lines")
           EXTRACT
+          python -m py_compile /tmp/apply_model_runtime_fix.py
           python /tmp/apply_model_runtime_fix.py
 
       - name: Validate focused correction
