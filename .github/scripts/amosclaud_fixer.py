@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generate, apply, and verify a constrained repair patch for CI failures.
 
-The fixer uses the Amosclaud-owned model gateway, never edits protected automation
-or secret-bearing files, never commits an unverified patch, and emits a
-machine-readable report for the workflow.
+The fixer uses the Amosclaud-owned model gateway, never edits protected automation,
+repair-engine, or secret-bearing files, never publishes an unverified patch, and
+emits a machine-readable report for the background workflow.
 """
 
 from __future__ import annotations
@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -26,10 +28,13 @@ MODEL = os.getenv("AMOSCLAUD_FIXER_MODEL", "amosclaud-agent")
 MAX_ATTEMPTS = max(1, min(int(os.getenv("AMOSCLAUD_FIXER_ATTEMPTS", "3")), 3))
 MAX_PATCH_BYTES = 250_000
 MAX_CHANGED_FILES = 25
+MAX_EVIDENCE_CHARS = 60_000
 PROTECTED_PREFIXES = (
     ".git/",
     ".github/workflows/",
     ".github/actions/",
+    ".github/scripts/",
+    ".github/amosclaud-fixer/",
 )
 PROTECTED_NAMES = {
     ".env",
@@ -38,20 +43,6 @@ PROTECTED_NAMES = {
     "secrets.json",
     "credentials.json",
 }
-VERIFY_COMMANDS = [
-    [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--disable-pip-version-check",
-        "--no-input",
-        "-e",
-        ".",
-    ],
-    [sys.executable, "-m", "compileall", "-q", "amoscloud_ai", "src", "tests"],
-    [sys.executable, "-m", "pytest", "-q", "--disable-warnings", "--maxfail=25"],
-]
 
 
 def run(command: list[str], *, check: bool = False) -> subprocess.CompletedProcess[str]:
@@ -70,15 +61,25 @@ def git(*args: str, check: bool = False) -> subprocess.CompletedProcess[str]:
 
 
 def redact(text: str) -> str:
-    patterns = (
-        r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s]+",
+    """Redact common credentials while preserving both bootstrap and final evidence."""
+
+    text = re.sub(
+        r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s]+",
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        text,
+    )
+    for pattern in (
         r"gh[pousr]_[A-Za-z0-9_]{20,}",
         r"amos_(?:svc|agent|auto)_[A-Za-z0-9_-]{16,}",
         r"sk-[A-Za-z0-9_-]{16,}",
-    )
-    for pattern in patterns:
-        text = re.sub(pattern, r"\1=[REDACTED]", text)
-    return text[-60_000:]
+        r"https?://[^\s/@:]+:[^\s/@]+@[^\s]+",
+    ):
+        text = re.sub(pattern, "[REDACTED]", text)
+
+    if len(text) <= MAX_EVIDENCE_CHARS:
+        return text
+    half = MAX_EVIDENCE_CHARS // 2
+    return text[:half] + "\n\n...[evidence truncated]...\n\n" + text[-half:]
 
 
 def repository_context() -> str:
@@ -102,44 +103,110 @@ def extract_diff(response_text: str) -> str:
     return candidate[start:].strip() + "\n"
 
 
-def changed_paths(patch: str) -> list[str]:
-    return re.findall(r"^\+\+\+ b/(.+)$", patch, re.MULTILINE)
+def patch_paths(patch: str) -> list[str]:
+    """Return every old and new path, including deleted and renamed files."""
+
+    paths: set[str] = set()
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            try:
+                parts = shlex.split(line)
+            except ValueError as exc:
+                raise ValueError("generated patch has invalid path quoting") from exc
+            if len(parts) != 4:
+                raise ValueError("generated patch has an invalid diff header")
+            for item in parts[2:]:
+                if item.startswith(("a/", "b/")):
+                    paths.add(item[2:])
+        elif line.startswith(("--- ", "+++ ")):
+            item = line[4:].split("\t", 1)[0]
+            if item == "/dev/null":
+                continue
+            if item.startswith(("a/", "b/")):
+                paths.add(item[2:])
+    return sorted(paths)
+
+
+def _is_protected_path(path: str) -> bool:
+    normalized = path.lstrip("./")
+    name = Path(normalized).name.lower()
+    return (
+        normalized in PROTECTED_NAMES
+        or name == ".env"
+        or name.startswith(".env.")
+        or normalized.startswith(PROTECTED_PREFIXES)
+    )
 
 
 def validate_patch(patch: str) -> list[str]:
     if len(patch.encode("utf-8")) > MAX_PATCH_BYTES:
         raise ValueError("generated patch exceeds size limit")
-    paths = changed_paths(patch)
+    paths = patch_paths(patch)
     if not paths:
         raise ValueError("generated patch has no changed files")
-    if len(set(paths)) > MAX_CHANGED_FILES:
+    if len(paths) > MAX_CHANGED_FILES:
         raise ValueError("generated patch changes too many files")
     for path in paths:
+        if not path or "\x00" in path or "\n" in path or "\r" in path:
+            raise ValueError("generated patch contains an invalid path")
         normalized = path.lstrip("./")
-        if normalized in PROTECTED_NAMES or normalized.startswith(PROTECTED_PREFIXES):
-            raise ValueError(f"generated patch targets protected path: {normalized}")
-        if ".." in Path(normalized).parts:
+        if Path(normalized).is_absolute() or ".." in Path(normalized).parts:
             raise ValueError(f"generated patch contains unsafe path: {normalized}")
-    return sorted(set(paths))
+        if _is_protected_path(normalized):
+            raise ValueError(f"generated patch targets protected path: {normalized}")
+    return paths
 
 
-def verify() -> tuple[bool, str]:
+def _verification_commands(python: str) -> list[list[str]]:
+    return [
+        [
+            python,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-input",
+            "-e",
+            ".",
+        ],
+        [python, "-m", "compileall", "-q", "amoscloud_ai", "src", "tests"],
+        [python, "-m", "pytest", "-q", "--disable-warnings", "--maxfail=25"],
+    ]
+
+
+def verify(attempt: int) -> tuple[bool, str]:
+    """Verify each candidate in a fresh environment so attempts cannot contaminate one another."""
+
     output: list[str] = []
-    for command in VERIFY_COMMANDS:
-        result = run(command)
-        output.append(f"$ {' '.join(command)}\n{result.stdout}")
-        if result.returncode != 0:
+    with tempfile.TemporaryDirectory(prefix=f"amosclaud-verify-{attempt}-") as directory:
+        create = run([sys.executable, "-m", "venv", directory])
+        output.append(f"$ {sys.executable} -m venv {directory}\n{create.stdout}")
+        if create.returncode != 0:
             return False, redact("\n\n".join(output))
+
+        python = str(Path(directory) / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))
+        for command in _verification_commands(python):
+            result = run(command)
+            output.append(f"$ {' '.join(command)}\n{result.stdout}")
+            if result.returncode != 0:
+                return False, redact("\n\n".join(output))
     return True, redact("\n\n".join(output))
 
 
 def restore() -> None:
     git("reset", "--hard", "HEAD", check=True)
-    git("clean", "-fd", "--exclude=amosclaud-failure.log", "--exclude=amosclaud-fixer-report.json")
+    git(
+        "clean",
+        "-fd",
+        "--exclude=amosclaud-failure.log",
+        "--exclude=amosclaud-fixer-report.json",
+        "--exclude=amosclaud-fix-attempt-*.patch",
+    )
 
 
 def amosclaud_chat(instructions: str, prompt: str) -> str:
     """Call Amosclaud's compatible gateway with an Amosclaud-owned key."""
+
     payload = json.dumps(
         {
             "model": MODEL,
@@ -182,7 +249,8 @@ def request_patch(failure_log: str, previous_feedback: str) -> str:
     instructions = """You are Amosclaud AI Fixer operating inside a Git repository.
 Return ONLY one unified git diff inside a ```diff fence.
 Repair the root cause shown by the failure evidence. Prefer the smallest correct change.
-Do not edit GitHub workflows, actions, secrets, environment files, generated files, or dependency lock files.
+Do not edit GitHub workflows, GitHub actions, the Amosclaud repair engine, secrets,
+environment files, generated files, or dependency lock files.
 You may repair a dependency manifest when installation evidence proves its constraints are invalid.
 Do not delete tests merely to make CI green. Update stale tests only when repository behavior is clearly intentional.
 Preserve public APIs unless the failure proves they are broken. Add or improve tests when useful.
@@ -199,9 +267,16 @@ The patch must apply with `git apply` and must not contain commentary outside th
 def main() -> int:
     if not AMOSCLAUD_API_KEY:
         raise SystemExit("AMOSCLAUD_API_KEY is required for Amosclaud AI Fixer")
-    failure_log = redact(LOG_PATH.read_text(encoding="utf-8", errors="replace") if LOG_PATH.exists() else "")
+    failure_log = redact(
+        LOG_PATH.read_text(encoding="utf-8", errors="replace")
+        if LOG_PATH.exists()
+        else ""
+    )
     if not failure_log.strip():
-        failure_log = "CI failed without an attached log. Reproduce and repair failures using the repository test suite."
+        failure_log = (
+            "CI failed without an attached log. Reproduce and repair failures "
+            "using the repository test suite."
+        )
 
     attempts: list[dict[str, object]] = []
     feedback = ""
@@ -217,8 +292,15 @@ def main() -> int:
             if check.returncode != 0:
                 raise ValueError(f"git apply --check failed:\n{check.stdout}")
             git("apply", "--whitespace=fix", str(patch_path), check=True)
-            passed, verification = verify()
-            attempts.append({"attempt": attempt, "paths": paths, "verified": passed, "verification": verification})
+            passed, verification = verify(attempt)
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "paths": paths,
+                    "verified": passed,
+                    "verification": verification,
+                }
+            )
             if passed:
                 REPORT_PATH.write_text(
                     json.dumps(
@@ -241,7 +323,9 @@ def main() -> int:
             feedback = verification
         except Exception as error:
             feedback = redact(f"{type(error).__name__}: {error}")
-            attempts.append({"attempt": attempt, "verified": False, "error": feedback})
+            attempts.append(
+                {"attempt": attempt, "verified": False, "error": feedback}
+            )
 
     restore()
     REPORT_PATH.write_text(
