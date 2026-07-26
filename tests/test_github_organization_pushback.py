@@ -7,6 +7,7 @@ from git import Repo
 from amoscloud_ai.api.routes import github_app, github_repositories, platform_services
 from amoscloud_ai.api.routes.github_organization_publish import (
     GitHubOrganizationPublishRequest,
+    _canonical_origin,
     _creation_path,
     _validated_owner,
 )
@@ -24,6 +25,7 @@ def test_organization_publish_routes_are_mounted() -> None:
     assert "/github/connect-organizations" in github_paths
     assert "/github/organizations" in github_paths
     assert "/github/repositories/{repository_id}/publish" in github_paths
+    assert "/github/repositories/{repository_id}/sync-status" in github_paths
 
     platform_paths = route_paths(platform_services.router.routes)
     assert "/platform/cloud-configuration" in platform_paths
@@ -72,7 +74,14 @@ def test_push_webhook_queues_fast_forward_sync() -> None:
     assert "repo.head.reset(remote_ref, index=True, working_tree=True)" in sync_source
 
 
-def test_sync_supports_imported_and_newly_published_remotes(tmp_path: Path) -> None:
+def test_publish_keeps_github_as_canonical_origin(tmp_path: Path) -> None:
+    repo = Repo.init(tmp_path / "project")
+    origin = _canonical_origin(repo, "example/project")
+    assert origin.name == "origin"
+    assert origin.url == "https://github.com/example/project.git"
+
+
+def test_sync_supports_imported_and_legacy_published_remotes(tmp_path: Path) -> None:
     origin_repo = Repo.init(tmp_path / "origin")
     origin_repo.create_remote("origin", "https://github.com/example/origin.git")
     assert _synchronization_remote(origin_repo).name == "origin"
@@ -113,11 +122,14 @@ def test_devcontainer_runs_app_postgres_redis_and_docker() -> None:
     compose = yaml.safe_load(
         (ROOT / ".devcontainer/docker-compose.yml").read_text(encoding="utf-8")
     )
+    dockerfile = (ROOT / ".devcontainer/Dockerfile").read_text(encoding="utf-8")
 
     assert devcontainer["dockerComposeFile"] == "docker-compose.yml"
     assert devcontainer["service"] == "app"
+    assert devcontainer["privileged"] is True
     assert set(devcontainer["runServices"]) == {"postgres", "redis"}
     assert "ghcr.io/devcontainers/features/docker-in-docker:4" in devcontainer["features"]
+    assert "python:1-3.12-bookworm" in dockerfile
 
     services = compose["services"]
     assert {"app", "postgres", "redis"}.issubset(services)
