@@ -1,50 +1,36 @@
-name: Apply provider status wording correction
+name: Amosclaud CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, reopened, synchronize]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-correction:
-    if: github.head_ref == 'agent/fix-model-runtime-dashboard'
+  test:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 1
-          show-progress: false
+          python-version: "3.11"
+          cache: pip
 
-      - name: Correct operational wording
-        shell: bash
+      - name: Install dependencies
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-          path = Path("amoscloud_ai/api/routes/platform_services.py")
-          text = path.read_text(encoding="utf-8")
-          old = "and station network are not required."
-          new = (
-              "and station network are not required, so the provider path "
-              "is operational."
-          )
-          if new in text:
-              raise SystemExit(0)
-          if text.count(old) != 1:
-              raise SystemExit(f"Expected one wording target, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
+      - name: Lint critical errors
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-          if git diff --quiet -- amoscloud_ai/api/routes/platform_services.py; then
-            echo "Wording is already corrected."
-            exit 0
-          fi
-          git config user.name "Amosclaud Repair Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add amoscloud_ai/api/routes/platform_services.py
-          git commit -m "Fix operational provider explanation"
-          git push origin HEAD:${{ github.head_ref }}
+      - name: Run tests
+        run: pytest
