@@ -129,7 +129,9 @@ def _request(method: str, path: str, **kwargs: Any) -> dict[str, Any]:
             message = response.json().get("detail")
         except (ValueError, AttributeError):
             message = response.text
-        raise RuntimeError(str(message or f"Workspace runtime returned {response.status_code}"))
+        raise RuntimeError(
+            str(message or f"Workspace runtime returned {response.status_code}")
+        )
     if response.status_code == 204 or not response.content:
         return {}
     payload = response.json()
@@ -174,7 +176,11 @@ def start_workspace(
     except RuntimeError as exc:
         _record(workspace["id"], "error", str(exc))
         raise
-    _record(workspace["id"], str(result.get("status") or "running"), started=True)
+    _record(
+        workspace["id"],
+        str(result.get("status") or "running"),
+        started=True,
+    )
     return result
 
 
@@ -184,8 +190,16 @@ def stop_workspace(workspace: dict[str, Any]) -> dict[str, Any]:
     except RuntimeError as exc:
         _record(workspace["id"], "error", str(exc))
         raise
-    _record(workspace["id"], str(result.get("status") or "exited"), stopped=True)
+    _record(
+        workspace["id"],
+        str(result.get("status") or "exited"),
+        stopped=True,
+    )
     return result
+
+
+def delete_workspace(workspace: dict[str, Any]) -> None:
+    _request("DELETE", f"/v1/workspaces/{workspace['id']}")
 
 
 def remote_status(workspace: dict[str, Any]) -> dict[str, Any]:
@@ -194,8 +208,13 @@ def remote_status(workspace: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _ticket_payload(workspace_id: str, user_id: int, expires_at: int) -> bytes:
-    return f"{workspace_id}:{user_id}:{expires_at}".encode()
+def _ticket_payload(
+    workspace_id: str,
+    user_id: int,
+    expires_at: int,
+    nonce: str,
+) -> bytes:
+    return f"{workspace_id}:{user_id}:{expires_at}:{nonce}".encode()
 
 
 def _public_websocket_url(workspace_id: str, ticket: str) -> str:
@@ -212,20 +231,30 @@ def terminal_ticket(workspace: dict[str, Any], user_id: int) -> dict[str, Any]:
     if not token:
         raise RuntimeError("Workspace runtime token is not configured")
     expires_at = int(time.time()) + 120
+    nonce = secrets.token_urlsafe(18)
     signature = hmac.new(
         token.encode(),
-        _ticket_payload(workspace["id"], user_id, expires_at),
+        _ticket_payload(workspace["id"], user_id, expires_at, nonce),
         hashlib.sha256,
     ).hexdigest()
     envelope = {
         "workspace_id": workspace["id"],
         "user_id": user_id,
         "expires_at": expires_at,
+        "nonce": nonce,
         "signature": signature,
     }
-    encoded = base64.urlsafe_b64encode(
-        json.dumps(envelope, separators=(",", ":"), sort_keys=True).encode()
-    ).decode().rstrip("=")
+    encoded = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                envelope,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
     return {
         "workspace_id": workspace["id"],
         "expires_at": expires_at,
