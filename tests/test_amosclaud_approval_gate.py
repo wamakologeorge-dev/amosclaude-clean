@@ -1,9 +1,11 @@
 from amosclaud_bot.approval_gate import (
     APPROVAL_CONSUMED_MARKER,
     APPROVAL_RECORD_MARKER,
+    AUTONOMOUS_REPAIR_MARKER,
     _approval_decision,
     _approval_source,
     _high_risk_files,
+    _is_authorized_autonomous_repair,
     _is_sensitive_objective,
     _normalize_objective,
 )
@@ -34,6 +36,39 @@ def test_high_risk_pull_request_paths() -> None:
         {"filename": "SECURITY.md"},
     ]
     assert _high_risk_files(files) == [".github/workflows/deploy.yml", "SECURITY.md"]
+
+
+def test_marked_bounded_autonomous_repair_skips_separate_approval() -> None:
+    pull_request = {
+        "head": {"ref": "amosclaud-background-engineer/abc12345-99"},
+        "body": f"{AUTONOMOUS_REPAIR_MARKER}\nVerified repair evidence",
+    }
+    files = [
+        {"filename": "amoscloud_ai/api/routes/auth.py"},
+        {"filename": "tests/test_auth.py"},
+    ]
+
+    assert _is_authorized_autonomous_repair(pull_request, files)
+
+
+def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
+    pull_request = {
+        "head": {"ref": "amosclaud-background-engineer/abc12345-99"},
+        "body": AUTONOMOUS_REPAIR_MARKER,
+    }
+
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
+        [{"filename": ".github/workflows/deploy.yml"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
+        [{"filename": "AGENTS.md"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        {"head": {"ref": "feature/not-autonomous"}, "body": AUTONOMOUS_REPAIR_MARKER},
+        [{"filename": "src/service.py"}],
+    )
 
 
 def test_approval_source_is_bound_to_exact_normalized_objective() -> None:
