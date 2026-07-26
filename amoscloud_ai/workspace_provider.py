@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,10 +30,26 @@ class WorkspaceProviderConfig:
         return bool(self.base_url and self.token)
 
 
+def _secret_value(name: str) -> str:
+    direct = os.getenv(name, "").strip()
+    if direct:
+        return direct
+    path_value = os.getenv(f"{name}_FILE", "").strip()
+    if not path_value:
+        return ""
+    path = Path(path_value)
+    try:
+        if not path.is_file():
+            return ""
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
 def provider_config() -> WorkspaceProviderConfig:
     return WorkspaceProviderConfig(
         base_url=os.getenv("AMOSCLAUD_WORKSPACE_PROVIDER_URL", "").strip().rstrip("/"),
-        token=os.getenv("AMOSCLAUD_WORKSPACE_PROVIDER_TOKEN", "").strip(),
+        token=_secret_value("AMOSCLAUD_WORKSPACE_PROVIDER_TOKEN"),
         timeout_seconds=max(
             1.0,
             min(float(os.getenv("AMOSCLAUD_WORKSPACE_PROVIDER_TIMEOUT", "20")), 60.0),
@@ -45,7 +62,7 @@ def _request(method: str, path: str, *, payload: dict[str, Any] | None = None) -
     if not config.configured:
         raise WorkspaceProviderError(
             "The isolated workspace provider is not configured. Set "
-            "AMOSCLAUD_WORKSPACE_PROVIDER_URL and AMOSCLAUD_WORKSPACE_PROVIDER_TOKEN."
+            "AMOSCLAUD_WORKSPACE_PROVIDER_URL and a workspace provider token."
         )
 
     try:
