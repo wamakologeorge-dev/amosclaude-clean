@@ -13,6 +13,7 @@ BOT = (
     / "bot.py"
 )
 FIXER = ROOT / ".github" / "scripts" / "amosclaud_fixer.py"
+REQUIREMENTS = ROOT / "requirements.txt"
 
 
 def test_verified_repairs_enable_auto_merge_without_human_approval() -> None:
@@ -34,6 +35,14 @@ def test_dependency_install_failure_is_handed_to_autonomous_repair() -> None:
     assert "PREVIOUS WORKFLOW FAILURE EVIDENCE" in bot
     assert '"pip",\n        "install"' in fixer
     assert '"-e",\n        "."' in fixer
+
+
+def test_linter_dependency_constraints_can_be_resolved_together() -> None:
+    requirements = REQUIREMENTS.read_text(encoding="utf-8")
+
+    assert "pylint>=4.0.6,<5" in requirements
+    assert "isort>=8.0.1,<9" in requirements
+    assert "pylint>=3,<4" not in requirements
 
 
 def test_failed_attempts_queue_an_autonomous_retry_instead_of_owner_review() -> None:
