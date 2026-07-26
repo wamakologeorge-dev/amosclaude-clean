@@ -27,6 +27,9 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "passlib>=1.7,<2" \
         "bcrypt>=4.1,<5" \
         "jinja2>=3.1.3" \
+        "bleach>=6.1,<7" \
+        "markdown-it-py>=3,<5" \
+        "mdit-py-plugins>=0.4,<1" \
         "webauthn>=2.2,<4" \
         "anthropic>=0.25,<1" \
         "celery>=5.3,<6" \
