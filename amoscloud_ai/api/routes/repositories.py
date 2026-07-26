@@ -178,10 +178,15 @@ def _repo_lock(repository_id: int) -> threading.RLock:
         return _LOCKS.setdefault(repository_id, threading.RLock())
 
 
-def _repo_path(repository_id: int) -> Path:
+def _safe_repository_id(repository_id: int) -> int:
     if repository_id <= 0:
         raise HTTPException(status_code=422, detail="Invalid repository id")
-    candidate = (REPOSITORY_ROOT_RESOLVED / str(repository_id)).resolve()
+    return repository_id
+
+
+def _repo_path(repository_id: int) -> Path:
+    safe_repository_id = _safe_repository_id(repository_id)
+    candidate = (REPOSITORY_ROOT_RESOLVED / str(safe_repository_id)).resolve()
     try:
         candidate.relative_to(REPOSITORY_ROOT_RESOLVED)
     except ValueError as exc:
