@@ -7,9 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from amosclaud_os.agent.runtime_bridge import (
-    run_native_coding_if_requested,
-)
+from amosclaud_os.agent.runtime_bridge import run_native_coding_if_requested
 from src.amosclaud_security import (
     Capability,
     CommandState,
@@ -27,7 +25,6 @@ from .engineering_loop import AutonomousEngineeringLoop, LoopOutcome
 from .model import AutonomousModelGateway
 from .react_integration import AutonomousReactController
 from .react_loop import ReactOutcome
-
 
 _WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
@@ -66,10 +63,8 @@ class AutonomousOrchestrator:
 
     def _fixer_write_authorized(self, task: AutonomousTask) -> tuple[bool, dict[str, Any]]:
         """Consume the Autonomous -> Fixer grant before any write-capable loop."""
-
         if task.mode not in _WRITE_MODES:
             return False, {"required": False, "verified": False}
-
         required = security_enforced()
         if not task.fixer_grant:
             if required:
@@ -83,14 +78,12 @@ class AutonomousOrchestrator:
                 "verified": False,
                 "legacy_authorization": bool(task.authorized_writes),
             }
-
         if not task.security_repository or not task.security_target_sha:
             return False, {
                 "required": required,
                 "verified": False,
                 "reason": "security_target_missing",
             }
-
         authority = authority_for_workspace(self.workspace, required=True)
         assert authority is not None
         try:
@@ -146,7 +139,6 @@ class AutonomousOrchestrator:
     def run(self, task: AutonomousTask) -> LoopOutcome | ReactOutcome:
         if task.mode in {"react", "answer", "guide", "learn", "teach"}:
             return self.run_react(task)
-
         write_authorized, security = self._fixer_write_authorized(task)
         task.metadata["security"] = security
         level = int(task.metadata.get("academy_level", 1))
@@ -160,9 +152,7 @@ class AutonomousOrchestrator:
         outcome = self.engineering_loop.run(
             objective=task.objective,
             mode=task.mode,
-            authorized_writes=(
-                write_authorized and "write" in context.allowed_actions
-            ),
+            authorized_writes=(write_authorized and "write" in context.allowed_actions),
         )
         grant_command_id = security.get("command_id")
         correlation_id = security.get("correlation_id")
@@ -185,7 +175,7 @@ class AutonomousOrchestrator:
             )
             final_state = (
                 CommandState.VERIFIED
-                if outcome.status == "success"
+                if outcome.status in {"success", "completed", "passed"}
                 else CommandState.FAILED
             )
             authority.transition(
@@ -260,7 +250,6 @@ def run_autonomous(
 ) -> dict[str, Any]:
     safe_workspace = _resolve_workspace(workspace)
     prepared = dict(metadata or {})
-
     task = AutonomousTask(
         objective=objective,
         mode=mode,
@@ -272,12 +261,12 @@ def run_autonomous(
         security_parent_command_id=security_parent_command_id,
     )
     orchestrator = AutonomousOrchestrator(safe_workspace)
-    write_authorized, security = orchestrator._fixer_write_authorized(task)
-    task.metadata["security"] = security
+    if mode in _WRITE_MODES:
+        return orchestrator.run(task).to_dict()
     native_result = run_native_coding_if_requested(
         objective=objective,
         mode=mode,
-        authorized_writes=write_authorized,
+        authorized_writes=False,
         workspace=str(safe_workspace),
         metadata=prepared,
     )
