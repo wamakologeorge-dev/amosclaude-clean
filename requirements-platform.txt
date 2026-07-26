@@ -2,6 +2,6 @@
 # Install the main project first: pip install -e .
 GitPython>=3.1.43
 fastapi>=0.139.2
-pydantic>=2.8
+pydantic>=2.13.4
 pytest>=9.1.1
 uvicorn>=0.30
