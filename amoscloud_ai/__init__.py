@@ -4,6 +4,9 @@
 existing deployments and extensions do not break. It is not the product name.
 All user-visible branding, runtime identity, service labels, and new APIs must
 use ``Amosclaud`` or ``Amosclaud Autonomous``.
+
+The repository-local ``.amosclaud`` control directory is initialized before the
+ordinary repository ``.env`` file and before application modules are imported.
 """
 
 from __future__ import annotations
@@ -14,9 +17,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .repository_control import initialize_repository_control
+
 PRODUCT_NAME = "Amosclaud"
 RUNTIME_NAME = "Amosclaud Autonomous"
 LEGACY_IMPORT_NAMESPACE = "amoscloud_ai"
+
+# The .amosclaud directory is the first repository configuration/control layer.
+# It loads metadata and environment defaults only; mutating scripts are never
+# executed as an import or server-start side effect.
+REPOSITORY_CONTROL = initialize_repository_control()
 
 
 def _configure_persistent_auth_storage() -> None:
@@ -27,9 +37,9 @@ def _configure_persistent_auth_storage() -> None:
     account, session, and passkey database there so users are not recreated
     after each release. ``AUTH_DB_PATH`` always overrides this default.
     """
-    # Package initialization happens before the platform application imports,
-    # so load .env here before deciding whether the caller supplied an override.
-    load_dotenv()
+    # .amosclaud has already loaded first. The ordinary repository .env now
+    # fills only values that were not supplied by the process or control layer.
+    load_dotenv(override=False)
     if os.getenv("AUTH_DB_PATH"):
         return
 
@@ -63,6 +73,7 @@ from amoscloud_ai import project_platform as _project_platform  # noqa: E402,F40
 __all__ = [
     "LEGACY_IMPORT_NAMESPACE",
     "PRODUCT_NAME",
+    "REPOSITORY_CONTROL",
     "RUNTIME_NAME",
     "__version__",
 ]

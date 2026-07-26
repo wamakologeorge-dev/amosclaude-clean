@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Amosclaud autonomous background engineering bot.
 
-This wrapper performs repository preflight, records failure evidence, injects the
-Python engineering book into the repair context, and delegates patch generation
-and verification to the guarded Amosclaud Fixer engine.
+This wrapper performs repository preflight, records bounded failure evidence,
+injects the Python engineering book into the repair context, and delegates patch
+generation and verification to the guarded Amosclaud Fixer engine.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ BOOK = ROOT / "docs" / "PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
 FIXER = ROOT / ".github" / "scripts" / "amosclaud_fixer.py"
 FAILURE_LOG = ROOT / "amosclaud-failure.log"
 BOT_REPORT = ROOT / "amosclaud-background-engineer-report.json"
+SECTION_LIMIT = 20_000
 
 
 def run(command: list[str]) -> subprocess.CompletedProcess[str]:
@@ -32,11 +33,35 @@ def run(command: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def verify_prerequisites() -> None:
-    missing = [str(path.relative_to(ROOT)) for path in (BOOK, FIXER) if not path.is_file()]
+    missing = [
+        str(path.relative_to(ROOT))
+        for path in (BOOK, FIXER)
+        if not path.is_file()
+    ]
     if missing:
         raise RuntimeError("Missing bot prerequisites: " + ", ".join(missing))
     if not os.getenv("AMOSCLAUD_API_KEY", "").strip():
         raise RuntimeError("AMOSCLAUD_API_KEY is required")
+
+
+def _bounded(text: str, limit: int = SECTION_LIMIT) -> str:
+    """Keep both the beginning and end of every evidence section."""
+
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    return text[:half] + "\n...[section truncated]...\n" + text[-half:]
+
+
+def _previous_failure_evidence() -> str:
+    """Preserve setup failures captured before the background engineer starts."""
+
+    if not FAILURE_LOG.is_file():
+        return ""
+    content = FAILURE_LOG.read_text(encoding="utf-8", errors="replace").strip()
+    if not content:
+        return ""
+    return "=== PREVIOUS WORKFLOW FAILURE EVIDENCE ===\n" + _bounded(content)
 
 
 def collect_failure_evidence() -> tuple[bool, str]:
@@ -45,12 +70,23 @@ def collect_failure_evidence() -> tuple[bool, str]:
         [sys.executable, "-m", "pytest", "-q", "--disable-warnings", "--maxfail=25"],
     ]
     sections: list[str] = []
-    passed = True
+    previous = _previous_failure_evidence()
+    if previous:
+        sections.append(previous)
+
+    passed = not previous
     for command in commands:
-        result = run(command)
-        sections.append(f"$ {' '.join(command)}\n{result.stdout}")
-        if result.returncode != 0:
+        try:
+            result = run(command)
+            output = result.stdout
+            return_code = result.returncode
+        except OSError as error:
+            output = f"{type(error).__name__}: {error}"
+            return_code = 1
+        sections.append(f"$ {' '.join(command)}\n{_bounded(output)}")
+        if return_code != 0:
             passed = False
+
     evidence = "\n\n".join(sections)
     instructions = BOOK.read_text(encoding="utf-8")
     repair_context = (
@@ -96,10 +132,14 @@ def main() -> int:
     BOT_REPORT.write_text(
         json.dumps(
             {
-                "status": "verified-repair" if result.returncode == 0 else "repair-failed",
+                "status": (
+                    "verified-repair" if result.returncode == 0 else "repair-failed"
+                ),
                 "fixer_return_code": result.returncode,
-                "failure_excerpt": evidence[-12000:],
-                "fixer_output": result.stdout[-12000:],
+                "failure_excerpt": _bounded(evidence, 12_000),
+                "fixer_output": _bounded(result.stdout, 12_000),
+                "human_approval_required": False,
+                "merge_policy": "auto-merge after required checks",
             },
             indent=2,
         ),
