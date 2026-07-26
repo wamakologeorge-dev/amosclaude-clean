@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from amoscloud_ai.api.routes import auth, repositories
-
 
 @pytest.fixture
 def isolated_repository_data(
@@ -18,7 +16,12 @@ def isolated_repository_data(
     concurrently by separate GitHub Actions jobs or pytest-xdist workers. No
     test using this fixture can read from or write to the production ``data``
     directory in the checked-out repository.
+
+    Application modules are imported lazily so lightweight contract/audit test
+    jobs can collect tests without installing the full Amosclaud runtime.
     """
+
+    from amoscloud_ai.api.routes import auth, repositories
 
     data_root = tmp_path / "data"
     repository_root = data_root / "repositories"
