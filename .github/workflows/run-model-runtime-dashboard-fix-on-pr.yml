@@ -26,6 +26,30 @@ jobs:
       - name: Apply deterministic source corrections
         run: python .github/scripts/apply_model_runtime_dashboard_fix.py
 
+      - name: Preserve generated preflight indentation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("amoscloud_ai/model_runtime.py")
+          text = path.read_text(encoding="utf-8")
+          start_marker = "\ntry:\n    _tcp_connect(host, port, connect_budget_seconds())\n"
+          end_marker = (
+              "\n    return CandidateHealth("
+              "candidate=candidate, reachable=True, checked_at=now)\n"
+          )
+          if text.count(start_marker) != 1:
+              raise RuntimeError(
+                  f"Expected one unindented TCP block, found {text.count(start_marker)}"
+              )
+          start = text.index(start_marker) + 1
+          end = text.index(end_marker, start)
+          block = text[start:end]
+          indented = "\n".join(f"    {line}" if line else line for line in block.split("\n"))
+          path.write_text(text[:start] + indented + text[end:], encoding="utf-8")
+          PY
+
       - name: Validate corrected Python files
         shell: bash
         run: |
