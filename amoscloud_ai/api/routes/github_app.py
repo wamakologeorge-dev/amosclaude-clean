@@ -17,10 +17,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from amoscloud_ai import codex_memory, github_issue_commands
 from amoscloud_ai.api.routes.agent import _authenticated_user
+from amoscloud_ai.github_repository_sync import synchronize_github_push
 
 router = APIRouter(prefix="/agent/github", tags=["github-app"])
 
@@ -71,7 +72,10 @@ def _webhook_secret() -> str:
 
 
 def _production() -> bool:
-    return os.getenv("AMOSCLAUD_ENV", "development").lower() in {"production", "prod"}
+    return os.getenv("AMOSCLAUD_ENV", "development").lower() in {
+        "production",
+        "prod",
+    }
 
 
 def _verify_signature(payload: bytes, signature_header: str | None) -> None:
@@ -85,9 +89,10 @@ def _verify_signature(payload: bytes, signature_header: str | None) -> None:
         return
     if not signature_header or not signature_header.startswith("sha256="):
         raise HTTPException(status_code=401, detail="Missing webhook signature")
-    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    provided = signature_header.split("=", 1)[1].strip()
-    if not hmac.compare_digest(expected, provided):
+    expected = "sha256=" + hmac.new(
+        secret.encode(), payload, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature_header.strip()):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
@@ -124,7 +129,10 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         issue = payload.get("issue") or {}
         comment = payload.get("comment") or {}
         body = " ".join(str(comment.get("body") or "").split())[:200]
-        title = f"Comment on #{issue.get('number')} by {str((comment.get('user') or {}).get('login') or 'unknown')}"
+        title = (
+            f"Comment on #{issue.get('number')} by "
+            f"{str((comment.get('user') or {}).get('login') or 'unknown')}"
+        )
         return action, title, f"{title}: {body}"
     if event in {"installation", "installation_repositories"}:
         repos = payload.get("repositories") or payload.get("repositories_added") or []
@@ -140,15 +148,24 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         return action, title, title
     if event == "check_suite":
         suite = payload.get("check_suite") or {}
-        title = f"Check suite {str(suite.get('conclusion') or suite.get('status') or action)}"
+        title = (
+            f"Check suite {str(suite.get('conclusion') or suite.get('status') or action)}"
+        )
         return action, title, title
-    return action, f"GitHub event: {event}", f"Received GitHub event '{event}' ({action or 'no action'})"
+    return (
+        action,
+        f"GitHub event: {event}",
+        f"Received GitHub event '{event}' ({action or 'no action'})",
+    )
 
 
 @router.post("/webhook", summary="Receive GitHub App webhook deliveries")
-async def receive_webhook(request: Request) -> dict:
+async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
     payload_bytes = await request.body()
-    _verify_signature(payload_bytes, request.headers.get("X-Hub-Signature-256"))
+    _verify_signature(
+        payload_bytes,
+        request.headers.get("X-Hub-Signature-256"),
+    )
     event = (request.headers.get("X-GitHub-Event") or "").strip().lower()
     if not event:
         raise HTTPException(status_code=400, detail="Missing X-GitHub-Event header")
@@ -160,7 +177,11 @@ async def receive_webhook(request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Payload must be a JSON object")
 
     if event == "ping":
-        return {"ok": True, "pong": str(payload.get("zen") or "pong"), "handled": True}
+        return {
+            "ok": True,
+            "pong": str(payload.get("zen") or "pong"),
+            "handled": True,
+        }
 
     repository = str((payload.get("repository") or {}).get("full_name") or "")
     sender = str((payload.get("sender") or {}).get("login") or "")
@@ -198,6 +219,14 @@ async def receive_webhook(request: Request) -> dict:
         "handled": event in HANDLED_EVENTS,
         "event_id": record["id"],
     }
+    if event == "push" and repository:
+        background_tasks.add_task(
+            synchronize_github_push,
+            repository,
+            str(payload.get("ref") or ""),
+            str(payload.get("after") or "") or None,
+        )
+        response["sync_queued"] = True
     if event in {"issues", "issue_comment"}:
         command = github_issue_commands.handle_issue_event(
             event=event,
@@ -246,10 +275,12 @@ async def list_issue_commands(
     user = _authenticated_user(request)
     if not user:
         raise HTTPException(
-            status_code=401, detail="Sign in to view issue-driven Amosclaud tasks"
+            status_code=401,
+            detail="Sign in to view issue-driven Amosclaud tasks",
         )
     items = github_issue_commands.recent_issue_commands(
-        limit=limit, repository=repository
+        limit=limit,
+        repository=repository,
     )
     return {
         "issue_commands": items,
@@ -267,7 +298,10 @@ async def list_issue_commands(
 async def app_status(request: Request) -> dict:
     user = _authenticated_user(request)
     if not user:
-        raise HTTPException(status_code=401, detail="Sign in to view GitHub App status")
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in to view GitHub App status",
+        )
     with _connect() as db:
         row = db.execute(
             "SELECT COUNT(*) AS events, MAX(received_at) AS last_event_at FROM github_events"
@@ -279,6 +313,11 @@ async def app_status(request: Request) -> dict:
         "events_recorded": row["events"],
         "last_event_at": row["last_event_at"],
         "handled_events": sorted(HANDLED_EVENTS),
+        "push_sync": {
+            "enabled": True,
+            "mode": "fast-forward-only",
+            "conflict_policy": "never overwrite dirty, ahead, or diverged work",
+        },
         "issue_commands": {
             "commands": sorted(github_issue_commands.COMMANDS),
             "mentions": list(github_issue_commands.MENTIONS),
