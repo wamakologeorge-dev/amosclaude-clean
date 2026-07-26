@@ -13,9 +13,11 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import BinaryIO, Mapping, Sequence
 
 
 DEFAULT_ALLOWLIST = {
@@ -47,6 +49,7 @@ BLOCKED_EXECUTABLES = {
 MAX_COMMAND_LENGTH = 4096
 MAX_ARGUMENTS = 128
 MAX_LOG_BYTES = 2_000_000
+READ_CHUNK_BYTES = 64 * 1024
 
 
 class RunnerConfigurationError(RuntimeError):
@@ -62,6 +65,58 @@ class IsolatedRunResult:
     returncode: int
     output: str
     timed_out: bool = False
+
+
+class _BoundedByteBuffer:
+    """Thread-safe tail buffer that never retains more than its byte limit."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self._chunks: deque[bytes] = deque()
+        self._size = 0
+        self._truncated = False
+        self._lock = threading.Lock()
+
+    def append(self, chunk: bytes) -> None:
+        if not chunk:
+            return
+        with self._lock:
+            if len(chunk) >= self.limit:
+                self._chunks.clear()
+                self._chunks.append(chunk[-self.limit :])
+                self._size = self.limit
+                self._truncated = True
+                return
+            self._chunks.append(chunk)
+            self._size += len(chunk)
+            while self._size > self.limit and self._chunks:
+                excess = self._size - self.limit
+                first = self._chunks[0]
+                if len(first) <= excess:
+                    self._chunks.popleft()
+                    self._size -= len(first)
+                else:
+                    self._chunks[0] = first[excess:]
+                    self._size -= excess
+                self._truncated = True
+
+    def text(self) -> str:
+        with self._lock:
+            payload = b"".join(self._chunks)
+            truncated = self._truncated
+        decoded = payload.decode("utf-8", errors="replace")
+        return ("[output truncated]\n" if truncated else "") + decoded
+
+
+def _drain_output(stream: BinaryIO, buffer: _BoundedByteBuffer) -> None:
+    try:
+        while True:
+            chunk = stream.read(READ_CHUNK_BYTES)
+            if not chunk:
+                return
+            buffer.append(chunk)
+    finally:
+        stream.close()
 
 
 def configured_allowlist() -> set[str]:
@@ -115,29 +170,68 @@ def redact_output(text: str, secret_values: Sequence[str]) -> str:
     return redacted
 
 
-def _write_environment_file(directory: Path, environment: Mapping[str, str]) -> Path:
-    """Write a short-lived Docker env file without putting secrets in command arguments."""
+def _write_environment_file(environment: Mapping[str, str]) -> Path:
+    """Write a short-lived private env file outside the mounted workspace."""
 
-    directory.mkdir(parents=True, exist_ok=True)
     handle = tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
         prefix="amosclaud-runner-",
         suffix=".env",
-        dir=directory,
         delete=False,
     )
     try:
         for key, value in sorted(environment.items()):
             if not key.replace("_", "").isalnum() or not key or key[0].isdigit():
                 continue
-            safe_value = str(value).replace("\x00", "").replace("\r", "").replace("\n", "\\n")
+            safe_value = (
+                str(value)
+                .replace("\x00", "")
+                .replace("\r", "")
+                .replace("\n", "\\n")
+            )
             handle.write(f"{key}={safe_value}\n")
     finally:
         handle.close()
     path = Path(handle.name)
     path.chmod(0o600)
     return path
+
+
+def _runner_user() -> str:
+    configured = os.getenv("AMOSCLAUD_RUNNER_USER", "").strip()
+    if configured:
+        return configured
+    if not hasattr(os, "getuid") or not hasattr(os, "getgid"):
+        raise RunnerConfigurationError("AMOSCLAUD_RUNNER_USER is required on this worker")
+    uid = os.getuid()
+    gid = os.getgid()
+    if uid == 0:
+        raise RunnerConfigurationError(
+            "A root worker must configure AMOSCLAUD_RUNNER_USER to a non-root UID:GID "
+            "that owns the workspace"
+        )
+    return f"{uid}:{gid}"
+
+
+def _terminate_container(docker: str, cid_path: Path, process: subprocess.Popen[bytes]) -> None:
+    container_id = ""
+    if cid_path.is_file():
+        container_id = cid_path.read_text(encoding="utf-8", errors="ignore").strip()
+    if container_id:
+        subprocess.run(
+            [docker, "kill", container_id],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+            check=False,
+        )
+    if process.poll() is None:
+        process.kill()
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def run_in_isolated_container(
@@ -160,6 +254,8 @@ def run_in_isolated_container(
     root = workspace.resolve()
     if not root.is_dir():
         raise RunnerConfigurationError("runner workspace does not exist")
+    if not os.access(root, os.W_OK | os.X_OK):
+        raise RunnerConfigurationError("runner workspace is not writable by the worker")
 
     argv = parse_allowed_command(command)
     timeout = timeout_seconds or int(os.getenv("AMOSCLAUD_RUNNER_TIMEOUT_SECONDS", "600"))
@@ -167,13 +263,22 @@ def run_in_isolated_container(
     cpus = os.getenv("AMOSCLAUD_RUNNER_CPUS", "1.0")
     memory = os.getenv("AMOSCLAUD_RUNNER_MEMORY", "768m")
     pids = os.getenv("AMOSCLAUD_RUNNER_PIDS_LIMIT", "128")
-    user = os.getenv("AMOSCLAUD_RUNNER_USER", "65532:65532")
+    user = _runner_user()
 
-    env_path = _write_environment_file(root, environment)
+    env_path = _write_environment_file(environment)
+    cid_handle = tempfile.NamedTemporaryFile(
+        prefix="amosclaud-runner-", suffix=".cid", delete=False
+    )
+    cid_handle.close()
+    cid_path = Path(cid_handle.name)
+    cid_path.unlink(missing_ok=True)
+
     docker_command = [
         docker,
         "run",
         "--rm",
+        "--cidfile",
+        str(cid_path),
         "--network",
         "none",
         "--cpus",
@@ -197,26 +302,45 @@ def run_in_isolated_container(
         "/workspace",
         "--env-file",
         str(env_path),
+        "--env",
+        "HOME=/tmp",
         image,
         *argv,
     ]
 
+    buffer = _BoundedByteBuffer(MAX_LOG_BYTES)
+    timed_out = False
+    process: subprocess.Popen[bytes] | None = None
+    reader: threading.Thread | None = None
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             docker_command,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
         )
-        output = redact_output(completed.stdout or "", list(environment.values()))
-        return IsolatedRunResult(completed.returncode, output)
-    except subprocess.TimeoutExpired as exc:
-        captured = exc.stdout or ""
-        if isinstance(captured, bytes):
-            captured = captured.decode("utf-8", errors="replace")
-        output = redact_output(str(captured), list(environment.values()))
-        return IsolatedRunResult(124, output + "\nRunner timed out.\n", timed_out=True)
+        if process.stdout is None:
+            raise RunnerConfigurationError("isolated runner did not expose an output stream")
+        reader = threading.Thread(
+            target=_drain_output,
+            args=(process.stdout, buffer),
+            daemon=True,
+        )
+        reader.start()
+        try:
+            returncode = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _terminate_container(docker, cid_path, process)
+            returncode = 124
+        reader.join(timeout=15)
+        output = redact_output(buffer.text(), list(environment.values()))
+        if timed_out:
+            output += "\nRunner timed out.\n"
+        return IsolatedRunResult(returncode, output, timed_out=timed_out)
     finally:
+        if process is not None and process.poll() is None:
+            _terminate_container(docker, cid_path, process)
+        if reader is not None and reader.is_alive():
+            reader.join(timeout=1)
         env_path.unlink(missing_ok=True)
+        cid_path.unlink(missing_ok=True)
