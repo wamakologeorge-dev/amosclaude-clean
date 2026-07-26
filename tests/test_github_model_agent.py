@@ -102,8 +102,17 @@ def test_workflow_wires_first_party_ollama_and_fallback_secret_names():
     for required in (
         "secrets.GITHUB_TOKEN",
         "secrets.AMOSCLAUD_API_KEY",
-        "secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL",
-        "secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY",
+        "secrets.AMOSCLAUD_MODEL_URL",
+        "secrets.OLLAMA_URL",
+        "secrets.AMOSCLAUD_MODEL_TOKEN",
+        "secrets.OLLAMA_API_KEY",
+        "secrets.OLLAMA_CLOUD_API_KEY",
+        "secrets.OLLAMA_KEY",
+        "secrets.OLLAMA_TOKEN",
+        "secrets.AMOSCLAUD_OLLAMA_API_KEY",
+        "secrets.OLLAMA",
+        "'https://ollama.com'",
+        "'gpt-oss:120b'",
         "secrets.ANTHROPIC_API_KEY",
         "secrets.OPENAI_API_KEY",
         "AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: 'true'",
@@ -111,7 +120,5 @@ def test_workflow_wires_first_party_ollama_and_fallback_secret_names():
     ):
         assert required in workflow
 
-    assert "secrets.OLLAMA_API_KEY && 'https://ollama.com'" in workflow
-    assert "secrets.OLLAMA_API_KEY && 'qwen3-coder:480b'" in workflow
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in workflow
     assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in workflow
