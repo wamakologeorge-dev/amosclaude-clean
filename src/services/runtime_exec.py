@@ -13,6 +13,20 @@ class RuntimeExecutor:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
 
+    def _safe_workspace_relative_paths(self, changed_files: list[str] | None) -> list[str]:
+        safe_paths: list[str] = []
+        for item in (changed_files or []):
+            raw = str(item).strip().replace("\\", "/")
+            if not raw:
+                continue
+            candidate = (self.workspace / raw).resolve()
+            try:
+                relative = candidate.relative_to(self.workspace)
+            except ValueError:
+                continue
+            safe_paths.append(relative.as_posix())
+        return safe_paths
+
     def _run(
         self,
         command: list[str],
@@ -60,11 +74,7 @@ class RuntimeExecutor:
     def verification_commands(
         self, changed_files: list[str] | None = None
     ) -> list[tuple[str, list[str], int]]:
-        normalized = [
-            str(item).strip().replace("\\", "/")
-            for item in (changed_files or [])
-            if str(item).strip()
-        ]
+        normalized = self._safe_workspace_relative_paths(changed_files)
         commands: list[tuple[str, list[str], int]] = [
             ("Git diff integrity", ["git", "diff", "--check"], 60)
         ]
