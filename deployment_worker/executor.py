@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from amoscloud_ai.isolated_runner import (
     RunnerConfigurationError,
@@ -34,6 +34,9 @@ class DeploymentExecutor:
         self.app_dir = os.path.abspath(
             os.path.join(WorkerConfig.WORKSPACE_DIR, task_id)
         )
+        # Legacy deployment polling expects this attribute even though hardened
+        # workers never launch an in-process preview application.
+        self.process: Optional[subprocess.Popen[str]] = None
         self.logs_accumulator: list[str] = []
 
     def log(self, message: str) -> None:
@@ -122,6 +125,7 @@ class DeploymentExecutor:
         """
 
         del start_command
+        self.process = None
         self.log(
             "Application start was not executed. Publish the verified artifact "
             "to the dedicated Amosclaud preview service instead."
@@ -129,4 +133,5 @@ class DeploymentExecutor:
         return False
 
     def stop_app(self) -> None:
+        self.process = None
         self.log("No in-process application is running; no stop action is required.")
