@@ -57,6 +57,37 @@ def test_daily_inspection_opens_issue_before_the_fixer_and_pull_request() -> Non
     assert "Repair issue: #${ISSUE_NUMBER}" in workflow
 
 
+def test_failure_trigger_watches_real_main_branch_workflows_only() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    for name in (
+        "Amosclaud CI",
+        "CI/CD — Test & Deploy",
+        "Build and Verify",
+        "Python package",
+        "Amosclaud Workspace CI",
+        "Docker Image CI",
+    ):
+        assert f"- {name}" in workflow
+    assert (
+        "github.event.workflow_run.head_branch == "
+        "github.event.repository.default_branch"
+    ) in workflow
+
+
+def test_retries_update_one_revision_branch_and_pull_request() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert 'branch="amosclaud-background-engineer/${short_sha}"' in workflow
+    assert "${GITHUB_RUN_ID}" not in workflow.split(
+        'branch="amosclaud-background-engineer/${short_sha}"', 1
+    )[0].split("branch=", 1)[-1]
+    assert 'git checkout -B "$branch"' in workflow
+    assert 'git push --force-with-lease --set-upstream origin "$branch"' in workflow
+    assert 'gh pr list --state open --head "$branch"' in workflow
+    assert 'gh pr edit "$pr_url"' in workflow
+
+
 def test_dependency_install_failure_is_handed_to_autonomous_repair() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     bot = BOT.read_text(encoding="utf-8")
