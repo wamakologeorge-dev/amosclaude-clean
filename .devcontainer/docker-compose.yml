@@ -11,7 +11,7 @@ services:
       ENVIRONMENT: development
       AMOSCLAUD_ENV: development
       AUTH_COOKIE_SECURE: "false"
-      DATABASE_URL: postgresql://amosclaud:amosclaud@postgres:5432/amosclaud
+      DATABASE_URL: postgresql://amosclaud@postgres:5432/amosclaud
       AUTH_DB_PATH: /workspaces/amosclaude-clean/data/auth.db
       AMOSCLAUD_REPOSITORIES_ROOT: /workspaces/amosclaude-clean/data/repositories
       REPOSITORY_STORAGE_PATH: /workspaces/amosclaude-clean/data/repositories
@@ -40,7 +40,7 @@ services:
     environment:
       POSTGRES_DB: amosclaud
       POSTGRES_USER: amosclaud
-      POSTGRES_PASSWORD: amosclaud
+      POSTGRES_HOST_AUTH_METHOD: trust
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U amosclaud -d amosclaud"]
       interval: 5s
