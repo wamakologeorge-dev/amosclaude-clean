@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from amosclaud_bot.approval_gate import (
     APPROVAL_CONSUMED_MARKER,
     APPROVAL_RECORD_MARKER,
@@ -9,6 +11,10 @@ from amosclaud_bot.approval_gate import (
     _is_sensitive_objective,
     _normalize_objective,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+APPROVAL_POLICY = ROOT / ".amosclaud" / "approvals.yml"
 
 
 class ApprovalBot:
@@ -69,6 +75,17 @@ def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
         {"head": {"ref": "feature/not-autonomous"}, "body": AUTONOMOUS_REPAIR_MARKER},
         [{"filename": "src/service.py"}],
     )
+
+
+def test_repository_policy_records_the_same_bounded_authorization() -> None:
+    policy = APPROVAL_POLICY.read_text(encoding="utf-8")
+
+    assert "authorized_autonomous_repairs:" in policy
+    assert 'branch_prefix: "amosclaud-background-engineer/"' in policy
+    assert AUTONOMOUS_REPAIR_MARKER in policy
+    assert "direct_default_branch_writes: false" in policy
+    assert '"AGENTS.md"' in policy
+    assert '".github/**"' in policy
 
 
 def test_approval_source_is_bound_to_exact_normalized_objective() -> None:
