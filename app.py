@@ -3,12 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import secrets
 import sqlite3
 import time
 import uuid
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -96,6 +95,9 @@ def connect() -> sqlite3.Connection:
 
 
 def _table_columns(db: sqlite3.Connection, table: str) -> set[str]:
+    allowed = {"projects", "variables", "runs", "artifacts"}
+    if table not in allowed:
+        raise ValueError("Unknown dashboard table")
     return {str(row["name"]) for row in db.execute(f"PRAGMA table_info({table})")}
 
 
@@ -187,20 +189,20 @@ init_db()
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    repository_url: str = ""
-    root_path: str = "."
-    build_command: str = ""
-    start_command: str = ""
-    output_path: str = ""
+    repository_url: str = Field(default="", max_length=2_000)
+    root_path: str = Field(default=".", max_length=500)
+    build_command: str = Field(default="", max_length=4_096)
+    start_command: str = Field(default="", max_length=4_096)
+    output_path: str = Field(default="", max_length=500)
 
 
 class ProjectUpdate(BaseModel):
-    name: str | None = None
-    repository_url: str | None = None
-    root_path: str | None = None
-    build_command: str | None = None
-    start_command: str | None = None
-    output_path: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    repository_url: str | None = Field(default=None, max_length=2_000)
+    root_path: str | None = Field(default=None, max_length=500)
+    build_command: str | None = Field(default=None, max_length=4_096)
+    start_command: str | None = Field(default=None, max_length=4_096)
+    output_path: str | None = Field(default=None, max_length=500)
 
 
 class VariableInput(BaseModel):
@@ -240,6 +242,27 @@ def _project_row(
     if not row:
         raise HTTPException(404, "Project not found")
     return row
+
+
+def _normalize_domain(value: str) -> str:
+    """Validate a hostname in linear time without a backtracking expression."""
+
+    domain = value.strip().lower().rstrip(".")
+    if not domain or len(domain) > 253:
+        raise HTTPException(400, "Enter a valid hostname")
+    labels = domain.split(".")
+    if len(labels) < 2:
+        raise HTTPException(400, "Enter a valid hostname")
+    for label in labels:
+        if not 1 <= len(label) <= 63:
+            raise HTTPException(400, "Enter a valid hostname")
+        if label[0] == "-" or label[-1] == "-":
+            raise HTTPException(400, "Enter a valid hostname")
+        if not all(character.isalnum() or character == "-" for character in label):
+            raise HTTPException(400, "Enter a valid hostname")
+    if not labels[-1].isalpha() or len(labels[-1]) < 2:
+        raise HTTPException(400, "Enter a valid hostname")
+    return domain
 
 
 def project_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -457,14 +480,7 @@ async def set_domain(
     user: sqlite3.Row = Depends(require_user),
 ) -> dict[str, Any]:
     owner = _owner_id(user)
-    domain = payload.domain.strip().lower().rstrip(".")
-    if not re.fullmatch(
-        r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
-        r"[a-z]{2,63}",
-        domain,
-    ):
-        raise HTTPException(400, "Enter a valid hostname")
-
+    domain = _normalize_domain(payload.domain)
     token = "amosclaud-verification=" + secrets.token_urlsafe(24)
     with connect() as db:
         cursor = db.execute(
@@ -515,10 +531,7 @@ async def verify_domain(
         answers = dns.resolver.resolve(
             f"_amosclaud.{row['domain']}", "TXT", lifetime=8
         )
-        values = {
-            b"".join(answer.strings).decode()
-            for answer in answers
-        }
+        values = {b"".join(answer.strings).decode() for answer in answers}
     except Exception:
         return {
             "verified": False,
@@ -652,7 +665,7 @@ def execute_queued_run(run_id: str, owner_user_id: int) -> str:
         str(owner_user_id),
         str(project["id"]),
     )
-    workspace = resolve_within(project_root, project["root_path"])
+    workspace = resolve_within(project_root, str(project["root_path"]))
     workspace.mkdir(parents=True, exist_ok=True)
 
     with connect() as db:
@@ -690,7 +703,7 @@ def execute_queued_run(run_id: str, owner_user_id: int) -> str:
             for command in commands:
                 log.write(f"$ {command}\n")
                 result = run_in_isolated_container(
-                    command,
+                    str(command),
                     workspace=workspace,
                     environment=environment,
                 )
@@ -867,13 +880,17 @@ async def download_artifact(
     user: sqlite3.Row = Depends(require_user),
 ) -> FileResponse:
     owner = _owner_id(user)
+    normalized = PurePosixPath(artifact_path)
+    if normalized.is_absolute() or ".." in normalized.parts:
+        raise HTTPException(404, "Artifact not found")
+    relative_path = normalized.as_posix()
     with connect() as db:
         artifact = db.execute(
             """
             SELECT relative_path, media_type FROM artifacts
             WHERE run_id=? AND owner_user_id=? AND relative_path=?
             """,
-            (run_id, owner, artifact_path),
+            (run_id, owner, relative_path),
         ).fetchone()
     if not artifact:
         raise HTTPException(404, "Artifact not found")
