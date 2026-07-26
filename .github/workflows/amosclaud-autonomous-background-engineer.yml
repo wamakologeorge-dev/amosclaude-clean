@@ -11,6 +11,8 @@ on:
       - Python verification
       - Build
     types: [completed]
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: write
@@ -20,10 +22,40 @@ permissions:
   checks: read
 
 concurrency:
-  group: amosclaud-autonomous-background-engineer-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: amosclaud-autonomous-background-engineer-${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
+  close-merged-repair-incident:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'amosclaud-background-engineer/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Close incident for merged repair revision
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+          revision="${HEAD_REF#amosclaud-background-engineer/}"
+          short_sha="${revision%%-*}"
+          title="Amosclaud autonomous repair retry ${short_sha}"
+          issue_number="$(gh issue list \
+            --state open \
+            --search "\"${title}\" in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" \
+            | head -n 1)"
+          if [ -n "$issue_number" ]; then
+            gh issue comment "$issue_number" \
+              --body "The verified autonomous repair was merged: ${PR_URL}"
+            gh issue close "$issue_number" --reason completed
+          fi
+
   autonomous-background-repair:
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -38,7 +70,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.event.repository.default_branch }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -74,23 +106,40 @@ jobs:
           } > amosclaud-failure.log
           echo "::warning title=Repository installation failed::The failure was captured and will be passed to Amosclaud Autonomous for repair."
 
-      - name: Verify Amosclaud bot configuration
+      - name: Verify autonomous configuration
         id: preflight
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_AUTONOMOUS_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
         run: |
+          set -euo pipefail
           test -f docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md
           test -f .github/scripts/amosclaud_fixer.py
+          test -f .github/scripts/redact_amosclaud_evidence.py
           test -f .github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/bot.py
+
           if [ -n "$AMOSCLAUD_API_KEY" ]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "model_configured=true" >> "$GITHUB_OUTPUT"
           else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Autonomous background engineer skipped::Repository secret AMOSCLAUD_API_KEY is not configured, so the autonomous background engineer did not run. Add the secret to enable automated background repairs."
+            echo "model_configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Autonomous repair unavailable::AMOSCLAUD_API_KEY is not configured."
           fi
 
+          if [ -n "$AMOSCLAUD_AUTONOMOUS_TOKEN" ]; then
+            echo "publisher_configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publisher_configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Autonomous publishing unavailable::AMOSCLAUD_AUTONOMOUS_TOKEN is required so repair pull requests trigger their required checks."
+          fi
+
+      - name: Fail closed when repair engine is unavailable
+        if: steps.preflight.outputs.model_configured != 'true'
+        run: |
+          echo "The autonomous repair model is not configured; no repair can be attempted."
+          exit 1
+
       - name: Run Amosclaud autonomous background engineer
-        if: steps.preflight.outputs.configured == 'true'
+        if: steps.preflight.outputs.model_configured == 'true'
         id: engineer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
@@ -99,11 +148,32 @@ jobs:
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
         run: |
           set +e
-          python .github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/bot.py | tee amosclaud-background-engineer-output.txt
+          python .github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/bot.py \
+            | tee amosclaud-background-engineer-output.txt
           status=${PIPESTATUS[0]}
           set -e
-          grep '^AMOSCLAUD_BACKGROUND_ENGINEER_STATUS=' amosclaud-background-engineer-output.txt >> "$GITHUB_OUTPUT" || true
+          grep '^AMOSCLAUD_BACKGROUND_ENGINEER_STATUS=' \
+            amosclaud-background-engineer-output.txt >> "$GITHUB_OUTPUT" || true
           exit "$status"
+
+      - name: Require publisher token for verified repair
+        if: >-
+          steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair' &&
+          steps.preflight.outputs.publisher_configured != 'true'
+        run: |
+          echo "A verified repair exists, but AMOSCLAUD_AUTONOMOUS_TOKEN is missing."
+          echo "The repair was not published because GITHUB_TOKEN-created pull requests do not trigger required workflows."
+          exit 1
+
+      - name: Redact engineering evidence
+        if: always()
+        run: |
+          python .github/scripts/redact_amosclaud_evidence.py \
+            amosclaud-install.log \
+            amosclaud-failure.log \
+            amosclaud-fixer-report.json \
+            amosclaud-background-engineer-report.json \
+            amosclaud-background-engineer-output.txt
 
       - name: Upload engineering evidence
         if: always()
@@ -115,33 +185,64 @@ jobs:
             amosclaud-failure.log
             amosclaud-fixer-report.json
             amosclaud-background-engineer-report.json
-            amosclaud-fix-attempt-*.patch
+            amosclaud-background-engineer-output.txt
           if-no-files-found: ignore
           retention-days: 14
 
       - name: Publish verified repair and enable autonomous merge
-        if: steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair'
+        id: publish
+        if: >-
+          steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair' &&
+          steps.preflight.outputs.publisher_configured == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
+          set -euo pipefail
           short_sha="${TARGET_SHA:0:8}"
           branch="amosclaud-background-engineer/${short_sha}-${GITHUB_RUN_ID}"
+
+          mapfile -t changed_files < <(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("amosclaud-fixer-report.json").read_text(encoding="utf-8"))
+          for path in report.get("changed_files", []):
+              if isinstance(path, str) and path:
+                  print(path)
+          PY
+          )
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "No verified source paths were reported."
+            exit 1
+          fi
+
           git config user.name "Amosclaud Autonomous Background Engineer"
           git config user.email "background-engineer@amosclaud.internal"
           git checkout -b "$branch"
-          git add -A -- \
-            ':!.github/workflows' \
-            ':!amosclaud-install.log' \
-            ':!amosclaud-failure.log' \
-            ':!amosclaud-fixer-report.json' \
-            ':!amosclaud-background-engineer-report.json' \
-            ':!amosclaud-fix-attempt-*.patch'
+          git add -A -- "${changed_files[@]}"
           git diff --cached --quiet && {
-            echo "No verified source changes were produced"
+            echo "No verified source changes were staged."
             exit 1
           }
+
+          mapfile -t staged_files < <(git diff --cached --name-only)
+          for staged in "${staged_files[@]}"; do
+            found=false
+            for allowed in "${changed_files[@]}"; do
+              if [ "$staged" = "$allowed" ]; then
+                found=true
+                break
+              fi
+            done
+            if [ "$found" != true ]; then
+              echo "Refusing to publish unvalidated path: $staged"
+              exit 1
+            fi
+          done
+
           git commit -m "fix: autonomous background repair for ${short_sha}"
+          gh auth setup-git
           git push --set-upstream origin "$branch"
           {
             echo "## Amosclaud Autonomous Background Engineer"
@@ -159,29 +260,49 @@ jobs:
             --title "fix: Amosclaud autonomous background repair" \
             --body-file /tmp/amosclaud-pr-body.md)"
           gh pr merge "$pr_url" --auto --squash --delete-branch
+          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
           echo "Autonomous repair pull request: $pr_url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Resolve autonomous retry incident
-        if: steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair'
+      - name: Record verified repair awaiting merge
+        if: steps.publish.outputs.pr_url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          PR_URL: ${{ steps.publish.outputs.pr_url }}
         run: |
-          title="Amosclaud autonomous repair retry queued"
-          issue_number="$(gh issue list --state open --search "\"${title}\" in:title" --json number,title --jq ".[] | select(.title == \"${title}\") | .number" | head -n 1)"
+          set -euo pipefail
+          short_sha="${TARGET_SHA:0:8}"
+          title="Amosclaud autonomous repair retry ${short_sha}"
+          body="A verified repair was published at ${PR_URL}. Auto-merge is enabled, and this incident remains open until GitHub confirms the pull request was merged."
+          issue_number="$(gh issue list \
+            --state open \
+            --search "\"${title}\" in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" \
+            | head -n 1)"
           if [ -n "$issue_number" ]; then
-            gh issue comment "$issue_number" --body "A verified repair was produced in workflow run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Auto-merge has been enabled after required checks pass."
-            gh issue close "$issue_number" --reason completed
+            gh issue comment "$issue_number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
           fi
 
       - name: Record autonomous retry without requesting human approval
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          title="Amosclaud autonomous repair retry queued"
+          set -euo pipefail
+          short_sha="${TARGET_SHA:0:8}"
+          title="Amosclaud autonomous repair retry ${short_sha}"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          body="The background engineer did not produce a verified repair in this attempt. No human approval is requested. Evidence is attached to ${run_url}, and the scheduled autonomous workflow will retry."
-          issue_number="$(gh issue list --state open --search "\"${title}\" in:title" --json number,title --jq ".[] | select(.title == \"${title}\") | .number" | head -n 1)"
+          body="The background engineer did not produce and publish a verified repair in this attempt. No human approval is requested. Redacted evidence is attached to ${run_url}, and the scheduled autonomous workflow will retry this revision."
+          issue_number="$(gh issue list \
+            --state open \
+            --search "\"${title}\" in:title" \
+            --json number,title \
+            --jq ".[] | select(.title == \"${title}\") | .number" \
+            | head -n 1)"
           if [ -n "$issue_number" ]; then
             gh issue comment "$issue_number" --body "$body"
           else
