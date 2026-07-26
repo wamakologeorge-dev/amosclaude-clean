@@ -7,10 +7,7 @@
   "shutdownAction": "stopCompose",
   "waitFor": "postCreateCommand",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:4": {
-      "version": "latest",
-      "dockerDashComposeVersion": "v2"
-    }
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
   },
   "forwardPorts": [8000, 8001, 8091, 9090, 5432, 6379],
   "portsAttributes": {
