@@ -32,50 +32,24 @@ jobs:
           path = Path(".github/scripts/apply_model_runtime_dashboard_fix.py")
           text = path.read_text(encoding="utf-8")
           old_import = "from textwrap import dedent\n"
-          if text.count(old_import) != 1:
-              raise SystemExit(f"Expected one textwrap import, found {text.count(old_import)}")
-          text = text.replace(old_import, "from textwrap import dedent, indent\n", 1)
+          new_import = "from textwrap import dedent, indent\n"
+          old_open = "    tcp_block = dedent(\n"
+          new_open = "    tcp_block = indent(\n        dedent(\n"
+          old_close = "        '''\n    )\n    text = text[:tcp_start] + tcp_block + text[tcp_end:]\n"
+          new_close = "            '''\n        ),\n        \"    \",\n    )\n    text = text[:tcp_start] + tcp_block + text[tcp_end:]\n"
 
-          old_block = '''    tcp_block = dedent(
-        \'\'\'\\
-            try:
-                _tcp_connect(host, port, connect_budget_seconds())
-            except Exception as error:
-                diagnosis = classify(error, candidate)
-                if diagnosis.code == TIMEOUT:
-                    diagnosis = _preflight_timeout_diagnosis(error, candidate)
-                return CandidateHealth(
-                    candidate=candidate,
-                    reachable=False,
-                    diagnosis=diagnosis,
-                    checked_at=now,
-                )
-        \'\'\'
-    )
-'''
-          new_block = '''    tcp_block = indent(
-        dedent(
-            \'\'\'\\
-            try:
-                _tcp_connect(host, port, connect_budget_seconds())
-            except Exception as error:
-                diagnosis = classify(error, candidate)
-                if diagnosis.code == TIMEOUT:
-                    diagnosis = _preflight_timeout_diagnosis(error, candidate)
-                return CandidateHealth(
-                    candidate=candidate,
-                    reachable=False,
-                    diagnosis=diagnosis,
-                    checked_at=now,
-                )
-            \'\'\'
-        ),
-        "    ",
-    )
-'''
-          if text.count(old_block) != 1:
-              raise SystemExit(f"Expected one TCP generator block, found {text.count(old_block)}")
-          path.write_text(text.replace(old_block, new_block, 1), encoding="utf-8")
+          for label, old in (
+              ("textwrap import", old_import),
+              ("TCP block opener", old_open),
+              ("TCP block closer", old_close),
+          ):
+              if text.count(old) != 1:
+                  raise SystemExit(f"Expected one {label}, found {text.count(old)}")
+
+          text = text.replace(old_import, new_import, 1)
+          text = text.replace(old_open, new_open, 1)
+          text = text.replace(old_close, new_close, 1)
+          path.write_text(text, encoding="utf-8")
           PY
           rm .github/workflows/diagnose-model-runtime-patch.yml
           git config user.name "Amosclaud Repair Bot"
