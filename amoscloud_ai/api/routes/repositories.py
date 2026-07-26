@@ -181,6 +181,16 @@ def _repo_path(repository_id: int) -> Path:
     return REPOSITORY_ROOT / str(repository_id)
 
 
+def _repo_target_path(repository_id: int, relative: Path) -> Path:
+    base = _repo_path(repository_id).resolve()
+    target = (base / relative).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid file path") from exc
+    return target
+
+
 def _safe_relative(value: str) -> Path:
     cleaned = value.strip().replace("\\", "/").strip("/")
     path = Path(cleaned)
@@ -518,7 +528,7 @@ def render_repository_markdown(
         _access(db, repository_id, user["id"])
         repo = _open(repository_id)
         _checkout(repo, branch)
-        repo_root = _repo_path(repository_id).resolve()
+        target = _repo_target_path(repository_id, relative)
         target = (repo_root / relative).resolve()
         try:
             target.relative_to(repo_root)
@@ -559,7 +569,7 @@ def read_repository_media(
     relative = _safe_relative(path)
     media_type = _INLINE_MEDIA_TYPES.get(relative.suffix.casefold())
     if not media_type:
-        raise HTTPException(status_code=415, detail="Inline media type is not allowed")
+        target = _repo_target_path(repository_id, relative)
     with _repo_lock(repository_id), _db() as db:
         _access(db, repository_id, user["id"])
         repo = _open(repository_id)
