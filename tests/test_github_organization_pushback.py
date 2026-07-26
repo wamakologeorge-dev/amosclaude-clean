@@ -109,9 +109,19 @@ def test_cloud_policy_is_server_managed_and_read_only() -> None:
     status = configuration.public_status()
 
     assert status["server_managed"] is True
+
+    def _normalized_host(entry: str) -> str | None:
+        parsed = urlparse(entry)
+        host = parsed.hostname
+        if host is None:
+            host = urlparse(f"//{entry}").hostname
+        return host.rstrip(".").lower() if host else None
+
     allowlist_hosts = {
-        urlparse(entry).hostname if "://" in entry else entry
+        host
         for entry in status["network_domain_allowlist"]
+        for host in [_normalized_host(entry)]
+        if host is not None
     }
     assert "api.github.com" in allowlist_hosts
     assert status["repository_sync"]["direction"] == "bidirectional"
