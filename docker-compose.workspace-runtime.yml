@@ -1,0 +1,39 @@
+services:
+  workspace-base:
+    build:
+      context: .
+      dockerfile: services/workspace_runtime/workspace-image/Dockerfile
+    image: ${AMOSCLAUD_WORKSPACE_IMAGE:-amosclaud/workspace-base:latest}
+    profiles: ["build"]
+
+  workspace-runtime:
+    build:
+      context: .
+      dockerfile: services/workspace_runtime/Dockerfile
+    image: amosclaud/workspace-runtime:latest
+    restart: unless-stopped
+    environment:
+      AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN: ${AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN:?set AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN}
+      AMOSCLAUD_REPOSITORY_STORAGE_ROOT: /var/lib/amosclaud/repositories
+      AMOSCLAUD_WORKSPACE_IMAGE: ${AMOSCLAUD_WORKSPACE_IMAGE:-amosclaud/workspace-base:latest}
+      AMOSCLAUD_WORKSPACE_NETWORK: ${AMOSCLAUD_WORKSPACE_NETWORK:-none}
+      AMOSCLAUD_WORKSPACE_CPU: ${AMOSCLAUD_WORKSPACE_CPU:-2}
+      AMOSCLAUD_WORKSPACE_MEMORY_MB: ${AMOSCLAUD_WORKSPACE_MEMORY_MB:-4096}
+      AMOSCLAUD_WORKSPACE_PIDS: ${AMOSCLAUD_WORKSPACE_PIDS:-512}
+      AMOSCLAUD_WORKSPACE_IDLE_TIMEOUT_SECONDS: ${AMOSCLAUD_WORKSPACE_IDLE_TIMEOUT_SECONDS:-1800}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AMOSCLAUD_REPOSITORY_STORAGE_ROOT:-./data/repositories}:/var/lib/amosclaud/repositories
+    ports:
+      - "127.0.0.1:${AMOSCLAUD_WORKSPACE_RUNTIME_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - workspace-control
+
+networks:
+  workspace-control:
+    internal: true
