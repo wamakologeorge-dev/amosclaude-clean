@@ -118,7 +118,10 @@ def _resolve_workspace(workspace: str) -> Path:
     try:
         candidate.relative_to(base)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Workspace must stay inside server root") from exc
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace must stay inside server root",
+        ) from exc
     return candidate
 
 
