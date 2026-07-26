@@ -206,8 +206,15 @@ def _repo_target_path(repository_id: int, relative: Path) -> Path:
 
 def _safe_relative(value: str) -> Path:
     cleaned = value.strip().replace("\\", "/").strip("/")
-    path = Path(cleaned)
-    if not cleaned or path.is_absolute() or ".." in path.parts or path.parts[0] == ".git":
+    if not cleaned or cleaned.startswith("/"):
+        raise HTTPException(status_code=422, detail="Invalid file path")
+    parts = cleaned.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise HTTPException(status_code=422, detail="Invalid file path")
+    if any(part.casefold() == ".git" for part in parts):
+        raise HTTPException(status_code=422, detail="Invalid file path")
+    path = Path(*parts)
+    if path.is_absolute():
         raise HTTPException(status_code=422, detail="Invalid file path")
     return path
 
