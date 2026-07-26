@@ -476,10 +476,10 @@ def repository_overview(
 ) -> dict:
     """Return real repository facts for the workspace details sidebar."""
     with _repo_lock(repository_id), _db() as db:
-        _access(db, repository_id, user["id"])
+        row = _access(db, repository_id, user["id"])
         repo = _open(repository_id)
         _checkout(repo, branch)
-        root = _repo_path(repository_id)
+        root = _repo_path(int(row["id"]))
         files = _repository_files(root)
         lookup = _root_file_lookup(root, files)
         license_path = _first_root_file(
