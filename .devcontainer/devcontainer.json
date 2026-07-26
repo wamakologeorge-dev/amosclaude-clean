@@ -10,7 +10,7 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:4": {}
   },
-  "forwardPorts": [8000, 8001, 8091, 9090, 5432, 6379],
+  "forwardPorts": [8000, 8001, 8091, 9090],
   "portsAttributes": {
     "8000": {
       "label": "Amosclaud Platform API",
@@ -26,14 +26,6 @@
     },
     "9090": {
       "label": "Amosclaud Metrics and SSY",
-      "onAutoForward": "silent"
-    },
-    "5432": {
-      "label": "PostgreSQL",
-      "onAutoForward": "silent"
-    },
-    "6379": {
-      "label": "Redis",
       "onAutoForward": "silent"
     }
   },
