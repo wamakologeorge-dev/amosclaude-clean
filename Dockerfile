@@ -27,10 +27,10 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "passlib>=1.7,<2" \
         "bcrypt>=4.1,<5" \
         "jinja2>=3.1.3" \
-        "webauthn>=2.2,<3" \
+        "webauthn>=2.2,<4" \
         "anthropic>=0.25,<1" \
         "celery>=5.3,<6" \
-        "redis>=5,<7" \
+        "redis>=5,<9" \
         "sqlalchemy>=2.0,<3" \
         "alembic>=1.13,<2" \
         "asyncpg>=0.28,<1" \
@@ -41,11 +41,12 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "click>=8.1,<9" \
         "requests>=2.31,<3" \
         "httpx>=0.27,<1" \
-        "stripe>=11,<15" \
+        "stripe>=11,<16" \
         "aiofiles>=23.2,<25" \
         "python-dotenv>=1.0,<2" \
         "PyYAML>=6.0,<7" \
-        "pytest>=8,<9"
+        "dnspython>=2.6,<3" \
+        "pytest>=8,<10"
 
 COPY . /app
 

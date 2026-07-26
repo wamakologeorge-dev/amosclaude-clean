@@ -12,7 +12,36 @@ human_approval:
     pull_request_sensitive_changes: true
     sensitive_tool_requests: true
 
+  authorized_autonomous_repairs:
+    enabled: true
+    branch_prefix: "amosclaud-background-engineer/"
+    pull_request_marker: "<!-- amosclaud-autonomous-repair:v1 -->"
+    max_changed_files: 25
+    direct_default_branch_writes: false
+    required_verification:
+      - editable_install
+      - python_compileall
+      - pytest
+      - required_pull_request_checks
+    protected_paths:
+      - "AGENTS.md"
+      - "docs/PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
+      - ".amosclaud/**"
+      - ".github/**"
+      - "Infrastructure/**"
+      - "infrastructure/**"
+      - "SECURITY.md"
+      - "CODEOWNERS"
+      - "Dockerfile"
+      - "railway.json"
+      - "vercel.json"
+      - ".env"
+      - ".env.*"
+      - "secrets.json"
+      - "credentials.json"
+
   protected_paths:
+    - ".amosclaud/**"
     - ".github/workflows/**"
     - ".github/actions/**"
     - "Infrastructure/**"

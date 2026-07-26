@@ -38,6 +38,7 @@ stripe>=15.3.1,<16
 aiofiles>=23.2,<25
 python-dotenv>=1.0,<2
 PyYAML>=6.0,<7
+dnspython>=2.6,<3
 pytest>=9.1.1,<10
 pytest-asyncio>=0.23,<2
 pytest-cov>=4.1,<7
