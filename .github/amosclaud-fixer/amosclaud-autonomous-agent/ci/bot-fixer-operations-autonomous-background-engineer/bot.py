@@ -3,7 +3,7 @@
 
 This wrapper performs repository preflight, records bounded failure evidence,
 injects the Python engineering book into the repair context, and delegates patch
-generation and verification to the guarded Amosclaud Fixer engine.
+generation and verification to the signed, one-time Amosclaud Fixer boundary.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 BOOK = ROOT / "docs" / "PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
-FIXER = ROOT / ".github" / "scripts" / "amosclaud_fixer.py"
+SECURED_FIXER = ROOT / ".github" / "scripts" / "run_secured_amosclaud_fixer.py"
 FAILURE_LOG = ROOT / "amosclaud-failure.log"
 BOT_REPORT = ROOT / "amosclaud-background-engineer-report.json"
 SECTION_LIMIT = 20_000
@@ -35,18 +35,21 @@ def run(command: list[str]) -> subprocess.CompletedProcess[str]:
 def verify_prerequisites() -> None:
     missing = [
         str(path.relative_to(ROOT))
-        for path in (BOOK, FIXER)
+        for path in (BOOK, SECURED_FIXER)
         if not path.is_file()
     ]
     if missing:
         raise RuntimeError("Missing bot prerequisites: " + ", ".join(missing))
     if not os.getenv("AMOSCLAUD_API_KEY", "").strip():
         raise RuntimeError("AMOSCLAUD_API_KEY is required")
+    if not os.getenv("AMOSCLAUD_FIXER_GRANT", "").strip():
+        raise RuntimeError("AMOSCLAUD_FIXER_GRANT is required")
+    if not os.getenv("AMOSCLAUD_COMMAND_BUS_SECRET", "").strip():
+        raise RuntimeError("AMOSCLAUD_COMMAND_BUS_SECRET is required")
 
 
 def _bounded(text: str, limit: int = SECTION_LIMIT) -> str:
     """Keep both the beginning and end of every evidence section."""
-
     if len(text) <= limit:
         return text
     half = limit // 2
@@ -55,7 +58,6 @@ def _bounded(text: str, limit: int = SECTION_LIMIT) -> str:
 
 def _previous_failure_evidence() -> str:
     """Preserve setup failures captured before the background engineer starts."""
-
     if not FAILURE_LOG.is_file():
         return ""
     content = FAILURE_LOG.read_text(encoding="utf-8", errors="replace").strip()
@@ -120,8 +122,9 @@ def main() -> int:
     env = os.environ.copy()
     env["AMOSCLAUD_FAILURE_LOG"] = FAILURE_LOG.name
     env["AMOSCLAUD_INSTRUCTION_BOOK"] = str(BOOK.relative_to(ROOT))
+    env["AMOSCLAUD_SECURITY_ENFORCE"] = "true"
     result = subprocess.run(
-        [sys.executable, str(FIXER)],
+        [sys.executable, str(SECURED_FIXER)],
         cwd=ROOT,
         env=env,
         text=True,
@@ -140,6 +143,10 @@ def main() -> int:
                 "fixer_output": _bounded(result.stdout, 12_000),
                 "human_approval_required": False,
                 "merge_policy": "auto-merge after required checks",
+                "security": {
+                    "signed_command_chain": True,
+                    "grant_material_exposed": False,
+                },
             },
             indent=2,
         ),
