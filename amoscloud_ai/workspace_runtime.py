@@ -56,27 +56,24 @@ def ensure_workspace_table() -> None:
 
 def workspace_for_repository(repository_id: int, owner_id: int) -> dict[str, Any]:
     ensure_workspace_table()
+    now = _now()
+    workspace_id = f"ws_{secrets.token_hex(12)}"
     with _db() as db:
-        row = db.execute(
-            "SELECT * FROM cloud_workspaces WHERE repository_id=? AND owner_id=?",
-            (repository_id, owner_id),
-        ).fetchone()
-        if row:
-            return dict(row)
-        now = _now()
-        workspace_id = f"ws_{secrets.token_hex(12)}"
         db.execute(
             """INSERT INTO cloud_workspaces
                (id, repository_id, owner_id, runtime_status, created_at, updated_at)
-               VALUES (?, ?, ?, 'not_started', ?, ?)""",
+               VALUES (?, ?, ?, 'not_started', ?, ?)
+               ON CONFLICT(repository_id) DO NOTHING""",
             (workspace_id, repository_id, owner_id, now, now),
         )
         db.commit()
-        return dict(
-            db.execute(
-                "SELECT * FROM cloud_workspaces WHERE id=?", (workspace_id,)
-            ).fetchone()
-        )
+        row = db.execute(
+            "SELECT * FROM cloud_workspaces WHERE repository_id=?",
+            (repository_id,),
+        ).fetchone()
+    if not row or int(row["owner_id"]) != owner_id:
+        raise RuntimeError("Repository workspace ownership is inconsistent")
+    return dict(row)
 
 
 def _record(
