@@ -37,6 +37,7 @@ def test_verified_repairs_use_check_triggering_token_and_auto_merge() -> None:
     assert 'gh pr merge "$pr_url" --auto --squash --delete-branch' in workflow
     assert "Human approval: not required" in workflow
     assert "Direct default-branch writes: prohibited" in workflow
+    assert "<!-- amosclaud-autonomous-repair:v1 -->" in workflow
     assert "Human review is still required" not in workflow
     assert "needs owner review" not in workflow
 
