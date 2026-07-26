@@ -8,10 +8,9 @@ import hashlib
 import json
 import re
 import urllib.error
-import urllib.parse
 import urllib.request
 from collections import defaultdict
-from typing import Any, Iterable
+from typing import Any
 
 BOT_LOGINS = {
     "github-actions[bot]",
@@ -67,7 +66,7 @@ def _api(repository: str, suffix: str) -> str:
 
 def _normalize(value: str) -> str:
     value = re.sub(r"\s+", " ", value).strip().lower()
-    return re.sub(r"[^a-z0-9._:/ -]+", "", value)
+    return re.sub(r"[^a-z0-9]+", "-", value).strip("-")
 
 
 def _fields(body: str) -> dict[str, str]:
@@ -217,12 +216,14 @@ def _ensure_canonical(
     canonical: dict[str, Any],
     marker: str,
     token: str,
+    *,
+    reopen: bool,
 ) -> None:
     body = str(canonical.get("body") or "")
     payload: dict[str, Any] = {}
     if marker not in body:
         payload["body"] = f"{marker}\n{body}".rstrip() + "\n"
-    if canonical.get("state") != "open":
+    if reopen and canonical.get("state") != "open":
         payload["state"] = "open"
     if payload:
         _patch_issue(repository, int(canonical["number"]), token, payload)
@@ -281,14 +282,21 @@ def deduplicate(
     canonical_count = 0
     closed_count = 0
     for key, group in groups.items():
+        open_items = [item for item in group if item.get("state") == "open"]
+        if not open_items:
+            continue
         marker = marker_for_key(key)
         canonical = _choose_canonical(group, marker)
-        _ensure_canonical(repository, canonical, marker, token)
+        _ensure_canonical(
+            repository,
+            canonical,
+            marker,
+            token,
+            reopen=True,
+        )
         canonical_count += 1
-        for duplicate in group:
+        for duplicate in open_items:
             if int(duplicate["number"]) == int(canonical["number"]):
-                continue
-            if duplicate.get("state") != "open":
                 continue
             _close_duplicate(repository, canonical, duplicate, token)
             closed_count += 1
