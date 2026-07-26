@@ -1,43 +1,34 @@
-"""Contracts for durable Amosclaud fixer evidence and truthful step status."""
+"""Contracts for the unified Amosclaud repair evidence and compatibility entrypoint."""
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github" / "workflows" / "amosclaud-fixer.yml"
+SHIM = ROOT / ".github" / "workflows" / "amosclaud-fixer.yml"
+CONTROL = ROOT / ".github" / "workflows" / "amosclaud-repair-control-plane.yml"
 
 
-def _workflow_text() -> str:
-    return WORKFLOW.read_text(encoding="utf-8")
+def test_legacy_fixer_is_manual_only_and_delegates_to_control_plane() -> None:
+    source = SHIM.read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in source
+    assert "workflow_run:" not in source
+    assert "status:" not in source
+    assert "schedule:" not in source
+    assert "gh workflow run amosclaud-repair-control-plane.yml" in source
 
 
-def test_fixer_writes_live_output_outside_the_cleaned_repository() -> None:
-    workflow = _workflow_text()
-
-    assert 'output_file="$RUNNER_TEMP/amosclaud-fixer-output.txt"' in workflow
-    assert 'tee "$output_file"' in workflow
-    assert 'cp "$output_file" amosclaud-fixer-output.txt' in workflow
-    assert "tee amosclaud-fixer-output.txt" not in workflow
-
-
-def test_fixer_preserves_the_python_exit_code_after_tee() -> None:
-    workflow = _workflow_text()
-
-    assert 'fixer_status="${PIPESTATUS[0]}"' in workflow
-    assert 'exit "$fixer_status"' in workflow
+def test_control_plane_preserves_live_and_structured_evidence() -> None:
+    source = CONTROL.read_text(encoding="utf-8")
+    assert "Collect exact failed-check evidence" in source
+    assert "amosclaud-repair-failure.log" in source
+    assert "amosclaud-candidate-report.json" in source
+    assert "amosclaud-verification-report.json" in source
+    assert "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" in source
 
 
-def test_fixer_always_emits_a_boolean_verified_output() -> None:
-    workflow = _workflow_text()
-
-    assert 'verified="$(grep -m1' in workflow
-    assert 'verified=false' in workflow
-    assert 'echo "AMOSCLAUD_FIX_VERIFIED=$verified" >> "$GITHUB_OUTPUT"' in workflow
-
-
-def test_failure_evidence_is_copied_before_the_step_exits() -> None:
-    workflow = _workflow_text()
-
-    copy_position = workflow.index('cp "$output_file" amosclaud-fixer-output.txt')
-    exit_position = workflow.index('exit "$fixer_status"')
-    assert copy_position < exit_position
+def test_candidate_and_verifier_statuses_are_truthful() -> None:
+    source = CONTROL.read_text(encoding="utf-8")
+    assert "status=${PIPESTATUS[0]}" in source
+    assert 'echo "applied=true"' in source
+    assert 'echo "applied=false"' in source
+    assert 'echo "verified=$([ "$status" -eq 0 ] && echo true || echo false)"' in source
+    assert "The repair candidate failed the credential-free adaptive pre-run and was discarded." in source
