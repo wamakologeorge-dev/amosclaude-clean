@@ -39,18 +39,39 @@ def verify_prerequisites() -> None:
         raise RuntimeError("AMOSCLAUD_API_KEY is required")
 
 
+def _previous_failure_evidence() -> str:
+    """Preserve setup failures captured before the background engineer starts."""
+    if not FAILURE_LOG.is_file():
+        return ""
+    content = FAILURE_LOG.read_text(encoding="utf-8", errors="replace").strip()
+    if not content:
+        return ""
+    return "=== PREVIOUS WORKFLOW FAILURE EVIDENCE ===\n" + content[-60_000:]
+
+
 def collect_failure_evidence() -> tuple[bool, str]:
     commands = [
         [sys.executable, "-m", "compileall", "-q", "amoscloud_ai", "src", "tests"],
         [sys.executable, "-m", "pytest", "-q", "--disable-warnings", "--maxfail=25"],
     ]
     sections: list[str] = []
-    passed = True
+    previous = _previous_failure_evidence()
+    if previous:
+        sections.append(previous)
+
+    passed = not previous
     for command in commands:
-        result = run(command)
-        sections.append(f"$ {' '.join(command)}\n{result.stdout}")
-        if result.returncode != 0:
+        try:
+            result = run(command)
+            output = result.stdout
+            return_code = result.returncode
+        except OSError as error:
+            output = f"{type(error).__name__}: {error}"
+            return_code = 1
+        sections.append(f"$ {' '.join(command)}\n{output}")
+        if return_code != 0:
             passed = False
+
     evidence = "\n\n".join(sections)
     instructions = BOOK.read_text(encoding="utf-8")
     repair_context = (
@@ -100,6 +121,8 @@ def main() -> int:
                 "fixer_return_code": result.returncode,
                 "failure_excerpt": evidence[-12000:],
                 "fixer_output": result.stdout[-12000:],
+                "human_approval_required": False,
+                "merge_policy": "auto-merge after required checks",
             },
             indent=2,
         ),
