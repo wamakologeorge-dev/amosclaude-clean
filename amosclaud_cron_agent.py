@@ -24,7 +24,7 @@ def read_readme_instructions() -> str:
 
 def query_amosclaud_brain(prompt: str) -> str:
     """
-    Connects to the Anthropic API layer to process the instructions 
+    Connects to the Anthropic API layer to process the instructions
     and output a raw functional code block or structural modification.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -37,7 +37,7 @@ def query_amosclaud_brain(prompt: str) -> str:
         "anthropic-version": "2023-06-01",
         "content-type": "application/json"
     }
-    
+
     payload = {
         "model": "claude-3-5-sonnet-20241022",
         "max_tokens": 2048,
@@ -68,7 +68,7 @@ def create_github_issue(title: str, body: str):
         "Accept": "application/vnd.github.v3+json"
     }
     payload = {"title": title, "body": body}
-    
+
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=15)
         if res.status_code == 201:
@@ -88,14 +88,14 @@ def self_heal_codebase(file_path: str) -> bool:
 
 def run_daily_autonomous_cycle():
     log_msg("=== Initiating Daily Amosclaud Autonomous Pipeline ===")
-    
+
     # 1. Read guidelines
     instructions = read_readme_instructions()
-    
+
     # 2. Query brain for a new architectural file update
     log_msg("Analyzing system requirements and blueprints...")
     generated_code = query_amosclaud_brain(f"Context: {instructions}\nTask: Generate a file named 'generated_features.py'.")
-    
+
     if not generated_code:
         log_msg("Zero mutation output received. Exiting cycle.", "ERROR")
         return
@@ -105,9 +105,9 @@ def run_daily_autonomous_cycle():
         f.write(generated_code)
     log_msg(f"Wrote generated changes directly into {target_file}")
 
-    # 3. Validate integrity and fix 
+    # 3. Validate integrity and fix
     is_healthy = self_heal_codebase(target_file)
-    
+
     if not is_healthy:
         # Trigger an emergency repair prompt block
         log_msg("Launching self-healing script loop...", "WARNING")
@@ -122,7 +122,7 @@ def run_daily_autonomous_cycle():
     if is_healthy:
         status_report += f"✅ Successfully added and validated `{target_file}` based on your README guidelines."
         title = "Amosclaud Automated Loop: Build Passed"
-        
+
         # Git synchronization block
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", "cron-agent: added daily automated feature updates"], check=True)
