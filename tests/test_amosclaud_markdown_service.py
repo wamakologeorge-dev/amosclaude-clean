@@ -38,13 +38,6 @@ def _mkuser(email: str):
     return token, user
 
 
-def _isolate(tmp_path, monkeypatch):
-    database = tmp_path / "auth.db"
-    monkeypatch.setattr(auth, "DB_PATH", database)
-    monkeypatch.setattr(repositories, "DB_PATH", database)
-    monkeypatch.setattr(repositories, "REPOSITORY_ROOT", tmp_path / "repositories")
-
-
 def _get(token, url):
     async def run():
         transport = httpx.ASGITransport(app=create_app())
@@ -108,8 +101,7 @@ def test_renderer_blocks_executable_urls_and_repository_traversal():
     assert "private.txt" not in lowered
 
 
-def test_markdown_endpoint_renders_real_repository_file(tmp_path, monkeypatch):
-    _isolate(tmp_path, monkeypatch)
+def test_markdown_endpoint_renders_real_repository_file(isolated_repository_data):
     token, owner = _mkuser("owner@example.com")
     rid = repositories.create_repository(
         repositories.RepositoryCreate(name="markdown-project", description="Rendered docs"),
@@ -136,8 +128,7 @@ def test_markdown_endpoint_renders_real_repository_file(tmp_path, monkeypatch):
     assert payload["outline"][0]["title"] == "Real README"
 
 
-def test_raw_endpoint_serves_only_safe_inline_media(tmp_path, monkeypatch):
-    _isolate(tmp_path, monkeypatch)
+def test_raw_endpoint_serves_only_safe_inline_media(isolated_repository_data):
     token, owner = _mkuser("owner@example.com")
     rid = repositories.create_repository(
         repositories.RepositoryCreate(name="media-project"), owner
@@ -160,8 +151,9 @@ def test_raw_endpoint_serves_only_safe_inline_media(tmp_path, monkeypatch):
     assert svg.status_code == 415
 
 
-def test_overview_reports_real_repository_counts_and_policy_files(tmp_path, monkeypatch):
-    _isolate(tmp_path, monkeypatch)
+def test_overview_reports_real_repository_counts_and_policy_files(
+    isolated_repository_data,
+):
     token, owner = _mkuser("owner@example.com")
     rid = repositories.create_repository(
         repositories.RepositoryCreate(name="overview-project"), owner
@@ -197,11 +189,9 @@ def test_overview_reports_real_repository_counts_and_policy_files(tmp_path, monk
     assert "Python" in {language["name"] for language in payload["languages"]}
 
 
-
 def test_markdown_and_media_endpoints_reject_symlinks_outside_repository(
-    tmp_path, monkeypatch
+    tmp_path, isolated_repository_data
 ):
-    _isolate(tmp_path, monkeypatch)
     token, owner = _mkuser("owner@example.com")
     rid = repositories.create_repository(
         repositories.RepositoryCreate(name="contained-project"), owner
