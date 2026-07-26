@@ -27,6 +27,7 @@ from src.amosclaud_security.runtime import (  # noqa: E402
 
 FAILURE_LOG = ROOT / os.getenv("AMOSCLAUD_FAILURE_LOG", "amosclaud-failure.log")
 REPORT_PATH = ROOT / "amosclaud-fixer-report.json"
+VERIFIED_PATCH_PATH = ROOT / "amosclaud-verified-repair.patch"
 FIXER_PATH = ROOT / ".github" / "scripts" / "amosclaud_fixer.py"
 
 
@@ -46,6 +47,69 @@ def _safe_child_environment() -> dict[str, str]:
     environment["AMOSCLAUD_SECURITY_ENFORCE"] = "true"
     environment["AMOSCLAUD_FIXER_SECURITY_WRAPPED"] = "true"
     return environment
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+
+def _normalize_path(path: str) -> str:
+    value = path.replace("\\", "/")
+    while value.startswith("./"):
+        value = value[2:]
+    return value
+
+
+def _validate_changed_files(report: dict, constraints: dict) -> list[str]:
+    changed_files = sorted(
+        {
+            _normalize_path(str(item))
+            for item in (report.get("changed_files") or [])
+            if isinstance(item, str) and item
+        }
+    )
+    max_files = min(int(constraints.get("max_changed_files", 25)), 25)
+    if not changed_files or len(changed_files) > max_files:
+        raise RuntimeError("verified repair changed-file set violates the grant")
+    prefixes = tuple(
+        _normalize_path(str(item))
+        for item in (constraints.get("protected_prefixes") or [])
+    )
+    paths = {
+        _normalize_path(str(item))
+        for item in (constraints.get("protected_paths") or [])
+    }
+    for path in changed_files:
+        candidate = Path(path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise RuntimeError(f"verified repair contains unsafe path: {path}")
+        if path in paths or path.startswith(prefixes):
+            raise RuntimeError(f"verified repair escaped the signed boundary: {path}")
+    return changed_files
+
+
+def _export_verified_patch(changed_files: list[str]) -> None:
+    intent = _git("add", "-N", "--", *changed_files)
+    if intent.returncode != 0:
+        raise RuntimeError(f"unable to prepare verified patch: {intent.stdout[:1000]}")
+    names = _git("diff", "--name-only", "--", *changed_files)
+    actual = sorted(line.strip() for line in names.stdout.splitlines() if line.strip())
+    if names.returncode != 0 or actual != changed_files:
+        raise RuntimeError(
+            "working tree does not match the Fixer report: "
+            f"reported={changed_files}; actual={actual}"
+        )
+    patch = _git("diff", "--binary", "--no-ext-diff", "--", *changed_files)
+    if patch.returncode != 0 or not patch.stdout.startswith("diff --git "):
+        raise RuntimeError("verified repair did not produce an exportable Git patch")
+    VERIFIED_PATCH_PATH.write_text(patch.stdout, encoding="utf-8")
 
 
 def _write_security_report(
@@ -76,9 +140,13 @@ def _write_security_report(
         "audit_event_count": len(events),
         "audit_head": events[-1]["event_hash"] if events else None,
         "audit_chain_valid": authority.verify_audit_chain(),
+        "verified_patch": VERIFIED_PATCH_PATH.name if VERIFIED_PATCH_PATH.is_file() else None,
     }
     report["security"] = security
-    REPORT_PATH.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    REPORT_PATH.write_text(
+        json.dumps(report, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
@@ -110,7 +178,9 @@ def main() -> int:
             consume=True,
         )
     except SecurityError as exc:
-        raise SystemExit(f"Fixer security grant rejected: {type(exc).__name__}") from exc
+        raise SystemExit(
+            f"Fixer security grant rejected: {type(exc).__name__}"
+        ) from exc
 
     grant = decision.grant
     assert grant is not None
@@ -147,6 +217,15 @@ def main() -> int:
 
     verified = process.returncode == 0 and report.get("status") == "verified"
     if verified:
+        try:
+            changed_files = _validate_changed_files(report, grant.constraints)
+            _export_verified_patch(changed_files)
+        except RuntimeError as exc:
+            report["status"] = "failed"
+            report["security_export_error"] = str(exc)
+            verified = False
+
+    if verified:
         for state, actor in (
             (CommandState.PATCH_PROPOSED, Principal.FIXER),
             (CommandState.VERIFYING, Principal.VERIFIER),
@@ -175,6 +254,7 @@ def main() -> int:
             },
         )
         status = CommandState.FAILED.value
+        VERIFIED_PATCH_PATH.unlink(missing_ok=True)
 
     report.setdefault("status", "failed")
     _write_security_report(
