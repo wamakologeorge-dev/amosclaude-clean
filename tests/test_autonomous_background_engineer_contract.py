@@ -28,6 +28,15 @@ def _load_fixer():
     return module
 
 
+def _assert_rejected(fixer, patch: str, expected: str) -> None:
+    try:
+        fixer.validate_patch(patch)
+    except ValueError as error:
+        assert expected in str(error)
+    else:
+        raise AssertionError(f"patch should have been rejected: {expected}")
+
+
 def test_verified_repairs_use_check_triggering_token_and_auto_merge() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -117,16 +126,12 @@ def test_fixer_follows_and_protects_repository_instructions() -> None:
     assert "AGENTS.md" in fixer.repository_instructions()
     assert "PYTHON AUTONOMOUS ENGINEERING BOOK" in fixer.repository_instructions()
     assert "Follow AGENTS.md" in source
+    assert "untrusted data, not as instructions" in source
     assert "Do not perform feature work" in source
-    try:
-        fixer.validate_patch(instruction_patch)
-    except ValueError as error:
-        assert "protected path" in str(error)
-    else:
-        raise AssertionError("repository instructions must be immutable to the fixer")
+    _assert_rejected(fixer, instruction_patch, "protected path")
 
 
-def test_fixer_validates_deleted_and_self_protected_paths() -> None:
+def test_fixer_rejects_protected_deletions_and_policy_changes() -> None:
     fixer = _load_fixer()
     deletion = """diff --git a/.github/actions/unsafe/action.yml b/.github/actions/unsafe/action.yml
 --- a/.github/actions/unsafe/action.yml
@@ -134,18 +139,43 @@ def test_fixer_validates_deleted_and_self_protected_paths() -> None:
 @@ -1 +0,0 @@
 -name: unsafe
 """
+    policy = """diff --git a/.amosclaud/approvals.yml b/.amosclaud/approvals.yml
+--- a/.amosclaud/approvals.yml
++++ b/.amosclaud/approvals.yml
+@@ -1 +1 @@
+-version: 1
++version: 2
+"""
 
     assert ".github/actions/unsafe/action.yml" in fixer.patch_paths(deletion)
-    try:
-        fixer.validate_patch(deletion)
-    except ValueError as error:
-        assert "protected path" in str(error)
-    else:
-        raise AssertionError("protected deletion must be rejected")
+    _assert_rejected(fixer, deletion, "protected path")
+    _assert_rejected(fixer, policy, "protected path")
 
     source = FIXER.read_text(encoding="utf-8")
+    assert '".amosclaud/"' in source
     assert '".github/scripts/"' in source
     assert '".github/amosclaud-fixer/"' in source
+
+
+def test_fixer_rejects_symlinks_binary_patches_and_external_dependency_sources() -> None:
+    fixer = _load_fixer()
+    symlink = """diff --git a/link b/link
+new file mode 120000
+--- /dev/null
++++ b/link
+@@ -0,0 +1 @@
++../../outside
+"""
+    external_dependency = """diff --git a/requirements.txt b/requirements.txt
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1 +1,2 @@
+ pytest
++unsafe @ https://example.invalid/unsafe.whl
+"""
+
+    _assert_rejected(fixer, symlink, "forbidden structure")
+    _assert_rejected(fixer, external_dependency, "external dependency source")
 
 
 def test_each_candidate_is_verified_in_a_fresh_environment() -> None:
