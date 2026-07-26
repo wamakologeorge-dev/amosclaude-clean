@@ -29,6 +29,7 @@ _ALLOWED_COMMAND_PREFIXES: tuple[tuple[str, ...], ...] = (
 _PROTECTED_PARTS = {".git", ".github", ".env", "secrets", "credentials"}
 _MAX_WRITE_BYTES = 512_000
 _MAX_OUTPUT_CHARS = 40_000
+_MAX_CONSECUTIVE_NO_ACTION = 2
 
 
 class AgentPolicyError(RuntimeError):
@@ -67,6 +68,9 @@ class RealCodexAgent:
         self._transition("inspecting", "Codex worker started repository inspection.")
         history = [{"role": "system", "content": self._get_system_guidelines()}]
         current_prompt = f"Objective: {objective}\nBegin with one permitted action."
+        consecutive_no_action = 0
+        last_result: subprocess.CompletedProcess[str] | None = None
+        last_command: str | None = None
 
         try:
             for loop_idx in range(self.max_loops):
@@ -80,13 +84,16 @@ class RealCodexAgent:
                     raise AgentPolicyError("one response may request only one action")
 
                 if write_action:
+                    consecutive_no_action = 0
                     self._transition("repairing", f"Writing {write_action['path']}")
                     relative_path = self._write_file(write_action["path"], write_action["content"])
                     feedback = f"[SYSTEM FEEDBACK] wrote {relative_path}. Run verification next."
                 elif exec_action:
+                    consecutive_no_action = 0
                     self._transition("verifying", f"Running {exec_action['command']}")
                     result = self._execute_command(exec_action["command"])
-                    feedback = self._command_feedback(result)
+                    last_result = result
+                    last_command = exec_action["command"]
                     if result.returncode == 0:
                         verification_id = f"agent-{uuid.uuid4().hex}"
                         summary = (
@@ -102,7 +109,24 @@ class RealCodexAgent:
                             "command": exec_action["command"],
                             "output": result.stdout[-_MAX_OUTPUT_CHARS:],
                         }
+                    feedback = (
+                        f"[SYSTEM FEEDBACK] verification failed (exit {result.returncode}). "
+                        "Adjust the code with a single write action and re-run verification.\n"
+                        f"{self._command_feedback(result)}"
+                    )
                 else:
+                    consecutive_no_action += 1
+                    if consecutive_no_action >= _MAX_CONSECUTIVE_NO_ACTION:
+                        message = (
+                            "Worker aborted after repeated responses without a permitted action. "
+                            "The model must return one write or execute block per reply."
+                        )
+                        self._transition("failed", message)
+                        return {
+                            "status": "failed",
+                            "message": message,
+                            "changed_files": list(self.changed_files),
+                        }
                     current_prompt = (
                         "No executable action was supplied. The task is not complete. "
                         "Provide one permitted write or verification action."
@@ -112,8 +136,18 @@ class RealCodexAgent:
                 current_prompt = f"Review this execution result and choose the next action:\n{feedback}"
 
             message = "Maximum self-correction loops reached without passing verification."
-            self._transition("failed", message)
-            return {"status": "failed", "message": message, "changed_files": self.changed_files}
+            self._transition("failed", self._failure_summary(message, last_command, last_result))
+            payload: dict[str, Any] = {
+                "status": "failed",
+                "message": message,
+                "changed_files": list(self.changed_files),
+            }
+            if last_result is not None:
+                payload["last_command"] = last_command
+                payload["last_exit_code"] = last_result.returncode
+                payload["last_output"] = last_result.stdout[-_MAX_OUTPUT_CHARS:]
+                payload["last_stderr"] = last_result.stderr[-_MAX_OUTPUT_CHARS:]
+            return payload
         except Exception as exc:
             self._transition("failed", str(exc))
             raise
@@ -193,11 +227,29 @@ class RealCodexAgent:
             f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
         )
 
+    @staticmethod
+    def _failure_summary(
+        message: str,
+        command: str | None,
+        result: subprocess.CompletedProcess[str] | None,
+    ) -> str:
+        if result is None:
+            return message
+        tail = result.stdout[-4000:] or result.stderr[-4000:]
+        return (
+            f"{message}\nLast command: {command}\n"
+            f"Exit code: {result.returncode}\nOutput tail:\n{tail}"
+        )
+
     def _get_system_guidelines(self) -> str:
         return (
             "You are the Amosclaud verified software worker. Request exactly one action per reply.\n"
             "Write files only with: ```write:relative/path.py\nCONTENT\n```\n"
             "Run verification only with: ```execute\npython -m pytest -q\n```\n"
+            "Typical flow: inspect the failure, emit one write action to fix it, then emit one "
+            "execute action to re-run the verification. If verification returns a non-zero exit code, "
+            "read the reported STDOUT/STDERR and issue another single write to correct the code before "
+            "verifying again.\n"
             "Allowed tools are compileall, pytest, flake8, and ruff check. "
             "Never access credentials, workflows, .git, networks, git push, or merge operations. "
             "A task is complete only after an allowed verification command exits with code 0."
