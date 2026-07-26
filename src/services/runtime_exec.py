@@ -13,7 +13,9 @@ class RuntimeExecutor:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
 
-    def _safe_workspace_relative_paths(self, changed_files: list[str] | None) -> list[str]:
+    def _safe_workspace_relative_paths(
+        self, changed_files: list[str] | None
+    ) -> list[str]:
         safe_paths: list[str] = []
         for item in (changed_files or []):
             raw = str(item).strip().replace("\\", "/")
@@ -67,7 +69,9 @@ class RuntimeExecutor:
                 "command": " ".join(command),
                 "passed": False,
                 "exit_code": 127,
-                "summary": f"Verification executable is unavailable: {command[0]}",
+                "summary": (
+                    f"Verification executable is unavailable: {command[0]}"
+                ),
                 "output": str(exc),
             }
 
@@ -75,9 +79,9 @@ class RuntimeExecutor:
         self, changed_files: list[str] | None = None
     ) -> list[tuple[str, list[str], int]]:
         normalized = self._safe_workspace_relative_paths(changed_files)
-        commands: list[tuple[str, list[str], int]] = [
-            ("Git diff integrity", ["git", "diff", "--check"], 60)
-        ]
+        commands: list[tuple[str, list[str], int]] = []
+        if (self.workspace / ".git").exists():
+            commands.append(("Git diff integrity", ["git", "diff", "--check"], 60))
 
         python_files = [
             item
@@ -97,7 +101,11 @@ class RuntimeExecutor:
         for item in python_files:
             path = Path(item)
             name = path.name
-            if item.startswith("tests/") or name.startswith("test_") or name.endswith("_test.py"):
+            if (
+                item.startswith("tests/")
+                or name.startswith("test_")
+                or name.endswith("_test.py")
+            ):
                 selected_tests.append(item)
                 continue
             stem = path.stem
@@ -106,7 +114,9 @@ class RuntimeExecutor:
                 self.workspace / "tests" / f"{stem}_test.py",
             ):
                 if candidate.is_file():
-                    selected_tests.append(candidate.relative_to(self.workspace).as_posix())
+                    selected_tests.append(
+                        candidate.relative_to(self.workspace).as_posix()
+                    )
 
         selected_tests = list(dict.fromkeys(selected_tests))
         if selected_tests:
@@ -127,7 +137,9 @@ class RuntimeExecutor:
             )
         return commands
 
-    def verify(self, changed_files: list[str] | None = None) -> list[dict[str, object]]:
+    def verify(
+        self, changed_files: list[str] | None = None
+    ) -> list[dict[str, object]]:
         return [
             self._run(command, timeout, name=name)
             for name, command, timeout in self.verification_commands(changed_files)
