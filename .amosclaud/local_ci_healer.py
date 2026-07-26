@@ -22,7 +22,7 @@ def auto_fix_formatting(file_path: str, active_repairs: list) -> bool:
     """Fixes basic syntax guidelines before committing."""
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
-    
+
     modified = False
 
     if "trailing-whitespace" in active_repairs:
@@ -44,7 +44,7 @@ def auto_fix_formatting(file_path: str, active_repairs: list) -> bool:
     if modified:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-            
+
     return modified
 
 def verify_and_heal_workspace() -> bool:
@@ -57,13 +57,13 @@ def verify_and_heal_workspace() -> bool:
     for root, _, files in os.walk("."):
         if any(ignored in root for ignored in [".git", "venv", "__pycache__", CONFIG_DIR]):
             continue
-            
+
         for file in files:
             if not file.endswith((".py", ".yml", ".yaml", ".json")):
                 continue
-                
+
             file_path = os.path.join(root, file)
-            
+
             # Apply formatting fixes
             if auto_fix_formatting(file_path, auto_repairs):
                 print(f" -> Automatically normalized layout formatting for: {file_path}")
@@ -76,10 +76,10 @@ def verify_and_heal_workspace() -> bool:
                 except py_compile.PyCompileError as err:
                     print(f" ❌ Compilation failure caught in {file_path}. Initiating repair...")
                     workspace_clean = False
-                    
+
                     # If compilation is fundamentally broken, drop into fallback recovery if available
                     # Otherwise block push so broken execution structures never touch github
-                    
+
     if mutated_files:
         print(" 🔄 Formatting adjustments detected. Automatically restaging clean components...")
         subprocess.run(["git", "add"] + mutated_files, check=True)
