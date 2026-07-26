@@ -1,0 +1,72 @@
+name: Run model runtime dashboard correction on PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  apply-correction:
+    if: github.head_ref == 'agent/fix-model-runtime-dashboard'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Extract and run correction script
+        shell: bash
+        run: |
+          python - <<'EXTRACT'
+          from pathlib import Path
+
+          workflow = Path(
+              ".github/workflows/apply-model-runtime-dashboard-fix.yml"
+          )
+          lines = workflow.read_text(encoding="utf-8").splitlines()
+          start = next(
+              index
+              for index, line in enumerate(lines)
+              if line.strip() == "python - <<'PY'"
+          ) + 1
+          end = next(
+              index
+              for index in range(start, len(lines))
+              if lines[index] == "          PY"
+          )
+          script = "\n".join(line[10:] for line in lines[start:end]) + "\n"
+          Path("/tmp/apply_model_runtime_fix.py").write_text(
+              script, encoding="utf-8"
+          )
+          EXTRACT
+          python /tmp/apply_model_runtime_fix.py
+
+      - name: Validate focused correction
+        shell: bash
+        run: |
+          python -m compileall -q \
+            amoscloud_ai/model_runtime.py \
+            amoscloud_ai/api/routes/platform_services.py \
+            tests/test_model_runtime_dashboard_corrections.py
+          python -m pip install --disable-pip-version-check -q \
+            pytest httpx fastapi python-dotenv uvicorn
+          pytest -q tests/test_model_runtime_dashboard_corrections.py
+
+      - name: Commit corrected implementation
+        shell: bash
+        run: |
+          rm .github/workflows/apply-model-runtime-dashboard-fix.yml
+          rm .github/workflows/run-model-runtime-dashboard-fix-on-pr.yml
+          git config user.name "Amosclaud Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix model runtime dashboard health reporting [skip ci]"
+          git push origin HEAD:${{ github.head_ref }}
