@@ -109,6 +109,14 @@
     button.addEventListener('click', () => activateWorkspaceTab(button.dataset.openWorkspaceTab));
   });
 
+  document.querySelectorAll('[data-open-tab]').forEach(button => {
+    button.addEventListener('click', () => {
+      activateWorkspaceTab(button.dataset.openTab);
+      document.getElementById('account-drawer')?.setAttribute('hidden', '');
+      document.getElementById('account-drawer-backdrop')?.setAttribute('hidden', '');
+    });
+  });
+
   clearButton?.addEventListener('click', async () => {
     if (sessionId) {
       await fetch(`/api/chat/history/${encodeURIComponent(sessionId)}`, {
