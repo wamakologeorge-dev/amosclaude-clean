@@ -564,7 +564,12 @@ def read_repository_media(
         _access(db, repository_id, user["id"])
         repo = _open(repository_id)
         _checkout(repo, branch)
-        target = _repo_path(repository_id) / relative
+        repository_root = _repo_path(repository_id).resolve()
+        target = (repository_root / relative).resolve(strict=False)
+        try:
+            target.relative_to(repository_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid file path") from exc
         if not target.is_file():
             raise HTTPException(status_code=404, detail="Media file not found")
         if target.stat().st_size > 10 * 1024 * 1024:
