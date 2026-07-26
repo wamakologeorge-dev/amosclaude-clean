@@ -1,15 +1,15 @@
 version: 2.1
-jobs:
-  build:
+
+executors:
+  python311:
     docker:
-      - image: cimg/base:current
-    resource_class: wamakologeorge-dev/amosclaud-clean
-    steps:
-      - run: echo "Hi I'm on a Container Runner!"
-workflows:
-  build-workflow:
-    jobs:
-      - build
+      - image: cimg/python:3.11
+    resource_class: medium
+    environment:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+
 commands:
   restore_python_cache:
     steps:
@@ -54,7 +54,7 @@ commands:
             ERROR_CONTEXT="CircleCI verification failed for ${CIRCLE_PROJECT_REPONAME} at commit ${CIRCLE_SHA1}. Workflow: ${CIRCLE_BUILD_URL}"
             export TASK_ID ERROR_CONTEXT
 
-            python - \<<'PY' > /tmp/amosclaud-fixer-payload.json
+            python - <<'PY' > /tmp/amosclaud-fixer-payload.json
             import json
             import os
 
