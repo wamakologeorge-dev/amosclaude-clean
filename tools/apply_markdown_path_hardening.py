@@ -1,4 +1,4 @@
-"""Apply repository path containment to Markdown media and add coverage."""
+"""Correct the Markdown path containment integration and add coverage."""
 
 from pathlib import Path
 
@@ -17,18 +17,37 @@ def replace_once(relative: str, old: str, new: str) -> None:
 
 replace_once(
     "amoscloud_ai/api/routes/repositories.py",
-    '''        target = _repo_path(repository_id) / relative
-        if not target.is_file():
-            raise HTTPException(status_code=404, detail="Media file not found")
-''',
-    '''        repo_root = _repo_path(repository_id).resolve()
+    '''        target = _repo_target_path(repository_id, relative)
         target = (repo_root / relative).resolve()
         try:
             target.relative_to(repo_root)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail="Invalid file path") from exc
-        if not target.is_file():
-            raise HTTPException(status_code=404, detail="Media file not found")
+''',
+    '''        target = _repo_target_path(repository_id, relative)
+''',
+)
+
+replace_once(
+    "amoscloud_ai/api/routes/repositories.py",
+    '''    if not media_type:
+        target = _repo_target_path(repository_id, relative)
+''',
+    '''    if not media_type:
+        raise HTTPException(status_code=415, detail="Inline media type is not allowed")
+''',
+)
+
+replace_once(
+    "amoscloud_ai/api/routes/repositories.py",
+    '''        repository_root = _repo_path(repository_id).resolve()
+        target = (repository_root / relative).resolve(strict=False)
+        try:
+            target.relative_to(repository_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid file path") from exc
+''',
+    '''        target = _repo_target_path(repository_id, relative)
 ''',
 )
 
