@@ -247,11 +247,11 @@ def _self_hosted_reachable() -> bool:
 def _check_amosclaud_provider() -> dict:
     """Report the first-party provider path truthfully.
 
-    ``amosclaud-api`` is the *remote hosted* Amosclaud API, which the owner
-    does not run. The self-hosted runtime covers the identical need, so when
-    the remote API is absent this is an optional (DISABLED) capability, not a
-    deficiency — provided the self-hosted runtime is actually reachable. It is
-    only ``not_configured`` when neither path can serve first-party traffic.
+    ``amosclaud-api`` is the optional remote-hosted Amosclaud API. When it is
+    absent but the self-hosted runtime is reachable, the first-party provider
+    path remains operational because the self-hosted route serves the same
+    first-party traffic. It is only ``not_configured`` when neither path can
+    serve first-party traffic.
     """
     sid = "amosclaud-provider"
     name = "First-party Amosclaud provider path"
@@ -263,7 +263,7 @@ def _check_amosclaud_provider() -> dict:
         return _entry(
             sid,
             name,
-            DISABLED,
+            OPERATIONAL,
             "The optional remote-hosted Amosclaud API is not enabled and is "
             "not required: the self-hosted model runtime serves the "
             "first-party provider path and is reachable, so the provider "

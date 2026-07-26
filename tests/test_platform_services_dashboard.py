@@ -264,12 +264,12 @@ def test_optional_capabilities_are_disabled_not_deficient(tmp_path, monkeypatch)
     assert "optional" in adapters["explanation"].lower()
 
 
-def test_provider_path_reads_operational_via_self_hosted(tmp_path, monkeypatch):
+def test_provider_path_is_operational_via_self_hosted(tmp_path, monkeypatch):
     _bind(tmp_path, monkeypatch)
     monkeypatch.setattr(ps, "_self_hosted_reachable", lambda: True)
     monkeypatch.setattr(ps, "_find_candidate", lambda key: None)
     entry = ps._check_amosclaud_provider()
-    assert entry["state"] == ps.DISABLED
+    assert entry["state"] == ps.OPERATIONAL
     assert "self-hosted" in entry["explanation"].lower()
     assert "operational" in entry["explanation"].lower()
 
