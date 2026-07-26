@@ -62,6 +62,20 @@ class AutonomousEngineeringLoop:
         self.runtime = runtime
         self.max_attempts = max(1, min(max_attempts, 5))
 
+    def _inspect_evidence(self, objective: str) -> list[str]:
+        """Use objective-aware analyzers while preserving older adapter contracts."""
+        try:
+            return self.analyzer.inspect(objective)
+        except TypeError:
+            return self.analyzer.inspect()
+
+    def _verify_changes(self, changed: list[str]) -> list[dict[str, Any]]:
+        """Use changed-file verification while preserving older runtime adapters."""
+        try:
+            return self.runtime.verify(changed_files=changed)
+        except TypeError:
+            return self.runtime.verify()
+
     def run(self, *, objective: str, mode: str, authorized_writes: bool) -> LoopOutcome:
         started = monotonic()
         events: list[LoopEvent] = []
@@ -98,7 +112,7 @@ class AutonomousEngineeringLoop:
             criteria,
         )
 
-        evidence = self.analyzer.inspect(objective)
+        evidence = self._inspect_evidence(objective)
         record(
             LoopPhase.INSPECT,
             "passed",
@@ -152,7 +166,7 @@ class AutonomousEngineeringLoop:
             )
 
         for attempt in range(1, self.max_attempts + 1):
-            checks = self.runtime.verify(changed_files=changed)
+            checks = self._verify_changes(changed)
             failed = [item for item in checks if not item.get("passed")]
             record(
                 LoopPhase.VERIFY,
