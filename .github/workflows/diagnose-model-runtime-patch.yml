@@ -1,0 +1,77 @@
+name: Diagnose model runtime patch boundaries
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.head_ref == 'agent/fix-model-runtime-dashboard'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 1
+          show-progress: false
+
+      - name: Record boundary diagnostics once
+        shell: bash
+        run: |
+          if [ -f repair-marker-diagnostics.txt ]; then
+            echo "Diagnostics already recorded."
+            exit 0
+          fi
+          python - <<'PY'
+          from pathlib import Path
+
+          platform = Path("amoscloud_ai/api/routes/platform_services.py").read_text(
+              encoding="utf-8"
+          )
+          runtime = Path("amoscloud_ai/model_runtime.py").read_text(encoding="utf-8")
+
+          markers = {
+              "platform_start": (
+                  platform,
+                  "def _self_hosted_reachable() -> bool:\n",
+              ),
+              "platform_end": (
+                  platform,
+                  "def _check_model_runtime() -> dict:\n",
+              ),
+              "status_marker": (
+                  runtime,
+                  "def _status_code(error: BaseException) -> int | None:\n",
+              ),
+              "tcp_start": (
+                  runtime,
+                  "    try:\n"
+                  "        _tcp_connect(host, port, connect_budget_seconds())\n",
+              ),
+              "success_marker": (
+                  runtime,
+                  "    return CandidateHealth(candidate=candidate, reachable=True, checked_at=now)\n",
+              ),
+          }
+          lines = [f"{name}={text.count(marker)}" for name, (text, marker) in markers.items()]
+          lines.append("tcp_context=")
+          needle = "_tcp_connect(host, port, connect_budget_seconds())"
+          index = runtime.find(needle)
+          lines.append(repr(runtime[max(0, index - 100): index + 260]))
+          Path("repair-marker-diagnostics.txt").write_text(
+              "\n".join(lines) + "\n", encoding="utf-8"
+          )
+          PY
+          git config user.name "Amosclaud Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add repair-marker-diagnostics.txt
+          git commit -m "Record model runtime patch diagnostics [skip ci]"
+          git push origin HEAD:${{ github.head_ref }}
