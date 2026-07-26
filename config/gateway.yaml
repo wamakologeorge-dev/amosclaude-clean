@@ -10,6 +10,7 @@ profiles:
 routing:
   github_api: https://api.github.com
   public_platform: https://www.amosclaud.com
+  workspace_runtime: private-service
   model_strategy:
     - model-station
     - self-hosted
@@ -20,12 +21,19 @@ network:
     - api.github.com
     - github.com
     - objects.githubusercontent.com
+    - cdn.jsdelivr.net
     - www.amosclaud.com
 
 sandbox:
-  default_image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+  default_image: amosclaud/workspace-base:latest
   docker_enabled: true
   privileged_by_default: false
+  run_as_user: developer
+  max_cpu_cores: 2
+  max_memory_mb: 4096
+  max_processes: 512
+  default_network: none
+  allow_internal_mesh_access: false
 
 telemetry:
   enabled: true
