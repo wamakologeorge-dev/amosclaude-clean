@@ -2,9 +2,10 @@
 
 Receives webhook deliveries from the "Amosclaud Platform" GitHub App at
 ``/api/v1/agent/github/webhook``, verifies their signatures, records every
-event into the repository's codex memory volume, and exposes a queryable
-event feed so GitHub activity becomes a first-class tool inside the platform.
+event into the repository's codex memory volume, and exposes a queryable event
+feed so GitHub activity becomes a first-class tool inside the platform.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,6 +22,9 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from amoscloud_ai import codex_memory, github_issue_commands
 from amoscloud_ai.api.routes.agent import _authenticated_user
+from amoscloud_ai.api.routes.github_repositories import _db as _repository_db
+from amoscloud_ai.cloud_configuration import load_cloud_configuration
+from amoscloud_ai.db_migrations import ensure_github_repository_schema
 from amoscloud_ai.github_repository_sync import synchronize_github_push
 
 router = APIRouter(prefix="/agent/github", tags=["github-app"])
@@ -33,6 +37,7 @@ HANDLED_EVENTS = {
     "issue_comment",
     "installation",
     "installation_repositories",
+    "repository",
     "check_suite",
     "workflow_run",
 }
@@ -72,10 +77,12 @@ def _webhook_secret() -> str:
 
 
 def _production() -> bool:
-    return os.getenv("AMOSCLAUD_ENV", "development").lower() in {
-        "production",
-        "prod",
-    }
+    environment = (
+        os.getenv("AMOSCLAUD_ENV")
+        or os.getenv("ENVIRONMENT")
+        or "development"
+    )
+    return environment.strip().lower() in {"production", "prod"}
 
 
 def _verify_signature(payload: bytes, signature_header: str | None) -> None:
@@ -96,8 +103,113 @@ def _verify_signature(payload: bytes, signature_header: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
+def _github_to_platform_policy() -> tuple[bool, str]:
+    try:
+        configuration = load_cloud_configuration()
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False, "server-managed cloud configuration is unavailable"
+    sync = configuration.organization_settings.get("repository_sync") or {}
+    direction = str(sync.get("direction") or "").strip().lower()
+    mode = str(sync.get("github_to_platform") or "").strip().lower()
+    direction_allows = direction in {
+        "bidirectional",
+        "github-to-platform",
+        "github_to_platform",
+        "inbound",
+    }
+    mode_allows = mode not in {"", "disabled", "none", "off", "false"}
+    if not direction_allows:
+        return False, f"repository_sync.direction={direction or 'unset'}"
+    if not mode_allows:
+        return False, f"repository_sync.github_to_platform={mode or 'unset'}"
+    return True, mode
+
+
+def _repository_identity(payload: dict[str, Any]) -> tuple[int | None, str]:
+    repository = payload.get("repository") or {}
+    raw_id = repository.get("id")
+    try:
+        repository_id = int(raw_id) if raw_id is not None else None
+    except (TypeError, ValueError):
+        repository_id = None
+    return repository_id, str(repository.get("full_name") or "").strip()
+
+
+def _previous_repository_full_name(payload: dict[str, Any]) -> str | None:
+    repository = payload.get("repository") or {}
+    owner = str((repository.get("owner") or {}).get("login") or "").strip()
+    changes = payload.get("changes") or {}
+    previous_name = str(
+        ((changes.get("repository") or {}).get("name") or {}).get("from") or ""
+    ).strip()
+    if owner and previous_name:
+        return f"{owner}/{previous_name}"
+    previous_owner = str(
+        ((changes.get("owner") or {}).get("from") or {}).get("login") or ""
+    ).strip()
+    current_name = str(repository.get("name") or "").strip()
+    if previous_owner and current_name:
+        return f"{previous_owner}/{current_name}"
+    return None
+
+
+def _refresh_repository_mapping(
+    payload: dict[str, Any],
+    event: str,
+    action: str,
+) -> None:
+    github_repository_id, full_name = _repository_identity(payload)
+    if not github_repository_id or not full_name:
+        return
+    repository = payload.get("repository") or {}
+    html_url = str(repository.get("html_url") or "")
+    default_branch = str(repository.get("default_branch") or "")
+    previous_full_name = (
+        _previous_repository_full_name(payload)
+        if event == "repository" and action in {"renamed", "transferred"}
+        else None
+    )
+    with _repository_db() as db:
+        ensure_github_repository_schema(db)
+        if previous_full_name:
+            db.execute(
+                """UPDATE repositories
+                   SET github_repository_id=?, github_full_name=?, github_html_url=?,
+                       github_default_branch=COALESCE(NULLIF(?, ''), github_default_branch)
+                   WHERE github_repository_id=?
+                      OR github_full_name=? COLLATE NOCASE""",
+                (
+                    github_repository_id,
+                    full_name,
+                    html_url,
+                    default_branch,
+                    github_repository_id,
+                    previous_full_name,
+                ),
+            )
+        else:
+            db.execute(
+                """UPDATE repositories
+                   SET github_repository_id=?, github_full_name=?, github_html_url=?,
+                       github_default_branch=COALESCE(NULLIF(?, ''), github_default_branch)
+                   WHERE github_repository_id=?
+                      OR (github_repository_id IS NULL
+                          AND github_full_name=? COLLATE NOCASE)""",
+                (
+                    github_repository_id,
+                    full_name,
+                    html_url,
+                    default_branch,
+                    github_repository_id,
+                    full_name,
+                ),
+            )
+        db.commit()
+
+
 def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
     """Return (action, title, summary) for a webhook payload."""
+
     action = str(payload.get("action") or "")
     repo = str((payload.get("repository") or {}).get("full_name") or "")
     if event == "push":
@@ -109,6 +221,9 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         title = f"Push to {repo}@{ref}: {len(commits)} commit(s)"
         summary = f"{pusher} pushed {len(commits)} commit(s) to {ref}. Head: {message}"
         return "push", title, summary
+    if event == "repository":
+        title = f"Repository {action}: {repo}"
+        return action, title, title
     if event == "pull_request":
         pr = payload.get("pull_request") or {}
         number = payload.get("number") or pr.get("number")
@@ -118,12 +233,16 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         summary = (
             f"Pull request #{number} {state} by "
             f"{str((pr.get('user') or {}).get('login') or 'unknown')} "
-            f"({pr.get('changed_files', '?')} files, +{pr.get('additions', '?')}/-{pr.get('deletions', '?')})"
+            f"({pr.get('changed_files', '?')} files, "
+            f"+{pr.get('additions', '?')}/-{pr.get('deletions', '?')})"
         )
         return state, title, summary
     if event == "issues":
         issue = payload.get("issue") or {}
-        title = f"Issue #{issue.get('number')} {action}: {str(issue.get('title') or '')[:160]}"
+        title = (
+            f"Issue #{issue.get('number')} {action}: "
+            f"{str(issue.get('title') or '')[:160]}"
+        )
         return action, title, title
     if event == "issue_comment":
         issue = payload.get("issue") or {}
@@ -149,7 +268,8 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
     if event == "check_suite":
         suite = payload.get("check_suite") or {}
         title = (
-            f"Check suite {str(suite.get('conclusion') or suite.get('status') or action)}"
+            f"Check suite "
+            f"{str(suite.get('conclusion') or suite.get('status') or action)}"
         )
         return action, title, title
     return (
@@ -160,7 +280,10 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
 
 
 @router.post("/webhook", summary="Receive GitHub App webhook deliveries")
-async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
+async def receive_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict:
     payload_bytes = await request.body()
     _verify_signature(
         payload_bytes,
@@ -183,9 +306,10 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -
             "handled": True,
         }
 
-    repository = str((payload.get("repository") or {}).get("full_name") or "")
+    repository_id, repository = _repository_identity(payload)
     sender = str((payload.get("sender") or {}).get("login") or "")
     action, title, summary = _summarise(event, payload)
+    _refresh_repository_mapping(payload, event, action)
 
     record = {
         "id": f"ghe_{uuid.uuid4().hex[:20]}",
@@ -220,13 +344,19 @@ async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -
         "event_id": record["id"],
     }
     if event == "push" and repository:
-        background_tasks.add_task(
-            synchronize_github_push,
-            repository,
-            str(payload.get("ref") or ""),
-            str(payload.get("after") or "") or None,
-        )
-        response["sync_queued"] = True
+        enabled, policy = _github_to_platform_policy()
+        response["sync_policy"] = policy
+        if enabled:
+            background_tasks.add_task(
+                synchronize_github_push,
+                repository,
+                str(payload.get("ref") or ""),
+                str(payload.get("after") or "") or None,
+                repository_id,
+            )
+            response["sync_queued"] = True
+        else:
+            response["sync_queued"] = False
     if event in {"issues", "issue_comment"}:
         command = github_issue_commands.handle_issue_event(
             event=event,
@@ -306,6 +436,7 @@ async def app_status(request: Request) -> dict:
         row = db.execute(
             "SELECT COUNT(*) AS events, MAX(received_at) AS last_event_at FROM github_events"
         ).fetchone()
+    enabled, policy = _github_to_platform_policy()
     return {
         "app_slug": os.getenv("GITHUB_APP_SLUG", "amosclaud-platform"),
         "webhook_path": "/api/v1/agent/github/webhook",
@@ -314,8 +445,8 @@ async def app_status(request: Request) -> dict:
         "last_event_at": row["last_event_at"],
         "handled_events": sorted(HANDLED_EVENTS),
         "push_sync": {
-            "enabled": True,
-            "mode": "fast-forward-only",
+            "enabled": enabled,
+            "mode": policy,
             "conflict_policy": "never overwrite dirty, ahead, or diverged work",
         },
         "issue_commands": {
