@@ -4,6 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 DEPLOYMENT_EXECUTOR = ROOT / "deployment_worker" / "executor.py"
+WORKER = ROOT / "amoscloud_ai" / "worker.py"
+DOCKERFILE = ROOT / "Dockerfile"
 PROGRAM = ROOT / "docs" / "ABSOLUTE_SECURITY_HARDENING.md"
 
 
@@ -26,11 +28,24 @@ def test_dashboard_never_mounts_an_unauthenticated_artifact_directory() -> None:
 
 def test_dashboard_execution_is_queued_and_not_run_in_api_process() -> None:
     source = APP.read_text(encoding="utf-8")
+    worker = WORKER.read_text(encoding="utf-8")
 
     assert "dispatch_task(run_dashboard_project, run_id, owner)" in source
     assert "status='running'" in source
     assert "shell=True" not in source
     assert "subprocess.run" not in source
+    assert 'include=["amoscloud_ai.dashboard_worker"]' in worker
+    assert 'imports=("amoscloud_ai.dashboard_worker",)' in worker
+
+
+def test_domain_validation_is_linear_and_dns_support_is_in_production() -> None:
+    source = APP.read_text(encoding="utf-8")
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "def _normalize_domain" in source
+    assert "re.fullmatch" not in source
+    assert "domain.split" in source
+    assert '"dnspython>=2.6,<3"' in dockerfile
 
 
 def test_secret_and_domain_tokens_are_not_in_normal_project_responses() -> None:
@@ -50,6 +65,8 @@ def test_legacy_deployment_worker_does_not_execute_host_shell_commands() -> None
     assert "shell=True" not in source
     assert "run_in_isolated_container" in source
     assert "dedicated Amosclaud preview service" in source
+    assert "self.process: Optional[subprocess.Popen[str]] = None" in source
+    assert "self.process = None" in source
 
 
 def test_security_program_keeps_high_risk_approval_command() -> None:
