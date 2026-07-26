@@ -10,11 +10,9 @@ from git import Repo
 from git.exc import GitCommandError
 
 from amoscloud_ai.api.routes.github_repositories import (
-    _authenticated_clone_url,
     _connection,
     _db,
     _decrypt_token,
-    _public_remote_url,
 )
 from amoscloud_ai.api.routes.repositories import (
     _db as _repository_db,
@@ -22,6 +20,7 @@ from amoscloud_ai.api.routes.repositories import (
     _repo_path,
 )
 from amoscloud_ai.db_migrations import ensure_github_repository_schema
+from amoscloud_ai.github_git_auth import authenticated_git
 
 log = logging.getLogger(__name__)
 
@@ -230,16 +229,8 @@ def _synchronize_github_push(
 
                 remote = _synchronization_remote(repo)
                 remote_name = remote.name
-                original_url = remote.url
-                try:
-                    remote.set_url(
-                        _authenticated_clone_url(repository_full_name, token)
-                    )
+                with authenticated_git(repo, token):
                     remote.fetch(branch)
-                finally:
-                    remote.set_url(
-                        original_url or _public_remote_url(repository_full_name)
-                    )
 
                 remote_ref = repo.commit(f"{remote_name}/{branch}")
                 if branch not in {head.name for head in repo.heads}:
