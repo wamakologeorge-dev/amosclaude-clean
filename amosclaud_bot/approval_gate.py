@@ -43,6 +43,7 @@ AUTONOMOUS_REPAIR_BRANCH_PREFIX = "amosclaud-background-engineer/"
 AUTONOMOUS_REPAIR_MAX_FILES = 25
 AUTONOMOUS_REPAIR_PROTECTED_PREFIXES = (
     ".git/",
+    ".amosclaud/",
     ".github/",
     "Infrastructure/",
     "infrastructure/",
