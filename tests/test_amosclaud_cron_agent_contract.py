@@ -91,6 +91,27 @@ diff --git a/tests/test_example.py b/tests/test_example.py
     ]
 
 
+def test_patch_validation_normalizes_dot_slash_paths_for_runtime_check() -> None:
+    agent = _load_agent()
+    patch = """diff --git a/./src/example.py b/./src/example.py
+--- a/./src/example.py
++++ b/./src/example.py
+@@ -1 +1 @@
+-old = True
++old = False
+diff --git a/tests/test_example.py b/tests/test_example.py
+--- a/tests/test_example.py
++++ b/tests/test_example.py
+@@ -1 +1 @@
+-assert True
++assert not False
+"""
+
+    result = agent.validate_patch(patch)
+    assert "src/example.py" in result
+    assert "tests/test_example.py" in result
+
+
 def test_daily_workflow_has_narrow_write_permissions_and_pinned_actions() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 

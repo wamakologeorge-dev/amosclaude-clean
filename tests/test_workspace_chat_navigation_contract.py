@@ -44,6 +44,16 @@ def test_mobile_repository_navigation_is_fixed_and_visible() -> None:
     assert "grid-template-columns:1fr 1fr" in css
 
 
+def test_workspace_drawer_settings_buttons_activate_and_close_drawer() -> None:
+    html = (WEB / "workspace.html").read_text(encoding="utf-8")
+    source = (WEB / "workspace-chat.js").read_text(encoding="utf-8")
+
+    assert 'data-open-tab="chat"' in html
+    assert 'data-open-tab="autonomous"' in html
+    assert "data-open-tab" in source
+    assert "account-drawer" in source
+
+
 def test_autonomous_buttons_remain_connected_to_real_controls() -> None:
     html = (WEB / "workspace.html").read_text(encoding="utf-8")
     source = (WEB / "workspace.js").read_text(encoding="utf-8")
