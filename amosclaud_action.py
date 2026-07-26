@@ -20,9 +20,9 @@ def run_git_command(command: list[str]) -> bool:
     """Helper execution block to manage local workspace Git states safely."""
     try:
         result = subprocess.run(
-            command, 
-            capture_output=True, 
-            text=True, 
+            command,
+            capture_output=True,
+            text=True,
             check=True
         )
         if result.stdout:
@@ -39,12 +39,12 @@ def verify_codebase_integrity() -> bool:
     """
     log_status("CI Watchdog: Evaluating workspace files integrity...")
     success = True
-    
+
     for root, _, files in os.walk("."):
         # Ignore virtual environments or internal git configurations
         if any(ignored in root for ignored in [".git", "venv", "__pycache__"]):
             continue
-            
+
         for file in files:
             if file.endswith(".py"):
                 file_path = os.path.join(root, file)
@@ -88,13 +88,13 @@ def force_commit_and_push_changes():
     straight back up into the production tracking branch without pull request reviews.
     """
     log_status("Preparing bypass authentication layer for forced repository update...")
-    
-    # Target all mutated and repaired file components 
+
+    # Target all mutated and repaired file components
     run_git_command(["git", "add", "."])
-    
+
     # Establish a tracking signature for automated audits
     commit_msg = f"amosclaud-autonomous: auto-healed patch build [{datetime.now().strftime('%Y%m%d-%H%M%S')}]"
-    
+
     # Try committing; if nothing changed, exit smoothly
     if not run_git_command(["git", "commit", "-m", commit_msg]):
         log_status("No structural mutations to commit. Workspace is balanced.")
@@ -110,18 +110,18 @@ def run_watchdog_loop():
     log_status("Starting Amosclaud Action Watchdog Daemon Service Active")
     log_status(f"Targeting Local Branch: [{BRANCH_TARGET}] | Interlocking with: [{AMOSCLAUD_FIXER_MODULE}]")
     log_status("=========================================================")
-    
+
     while True:
         try:
             # 1. Evaluate code status
             is_pipeline_healthy = verify_codebase_integrity()
-            
+
             if not is_pipeline_healthy:
                 log_status("Workspace violation discovered. CI status set to: FAILED", "ERROR")
-                
+
                 # 2. Deploy autonomous fixer logic
                 fix_attempt = trigger_amosclaud_fixer()
-                
+
                 if fix_attempt:
                     # 3. Synchronize repairs securely with remote tracking repository
                     force_commit_and_push_changes()
@@ -129,11 +129,11 @@ def run_watchdog_loop():
                     log_status("Fixer cycle completed with unresolved system errors. Re-evaluating next round.", "ERROR")
             else:
                 log_status("Workspace validation passed. Standard CI standing status: HEALTHY")
-                
+
         except Exception as loop_exception:
             log_status(f"Unexpected fault inside runtime service tracker loop: {str(loop_exception)}", "CRITICAL")
             traceback.print_exc()
-            
+
         # Standard sleep delay to keep processing overhead low
         time.sleep(CHECK_INTERVAL_SECONDS)
 
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     # Ensure application has access to its API dependencies
     if not os.environ.get("ANTHROPIC_API_KEY"):
         log_status("ANTHROPIC_API_KEY environment variable missing. Autonomous fixing features may fail.", "WARNING")
-        
+
     try:
         run_watchdog_loop()
     except KeyboardInterrupt:
