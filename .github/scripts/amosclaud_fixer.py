@@ -39,6 +39,16 @@ PROTECTED_NAMES = {
     "credentials.json",
 }
 VERIFY_COMMANDS = [
+    [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-input",
+        "-e",
+        ".",
+    ],
     [sys.executable, "-m", "compileall", "-q", "amoscloud_ai", "src", "tests"],
     [sys.executable, "-m", "pytest", "-q", "--disable-warnings", "--maxfail=25"],
 ]
@@ -173,6 +183,7 @@ def request_patch(failure_log: str, previous_feedback: str) -> str:
 Return ONLY one unified git diff inside a ```diff fence.
 Repair the root cause shown by the failure evidence. Prefer the smallest correct change.
 Do not edit GitHub workflows, actions, secrets, environment files, generated files, or dependency lock files.
+You may repair a dependency manifest when installation evidence proves its constraints are invalid.
 Do not delete tests merely to make CI green. Update stale tests only when repository behavior is clearly intentional.
 Preserve public APIs unless the failure proves they are broken. Add or improve tests when useful.
 The patch must apply with `git apply` and must not contain commentary outside the diff.
@@ -217,6 +228,8 @@ def main() -> int:
                             "model": MODEL,
                             "attempts": attempts,
                             "changed_files": paths,
+                            "human_approval_required": False,
+                            "merge_policy": "auto-merge after required checks",
                         },
                         indent=2,
                     ),
@@ -233,7 +246,14 @@ def main() -> int:
     restore()
     REPORT_PATH.write_text(
         json.dumps(
-            {"status": "failed", "provider": "amosclaud", "model": MODEL, "attempts": attempts},
+            {
+                "status": "failed",
+                "provider": "amosclaud",
+                "model": MODEL,
+                "attempts": attempts,
+                "human_approval_required": False,
+                "next_action": "scheduled autonomous retry",
+            },
             indent=2,
         ),
         encoding="utf-8",
