@@ -67,3 +67,4 @@ def test_tcp_preflight_timeout_names_probe_timeout(monkeypatch):
     assert "AMOSCLAUD_MODEL_PROBE_TIMEOUT" in remediation
     assert "AMOSCLAUD_MODEL_TIMEOUT" not in remediation
     assert "private-network" in remediation
+    model_runtime.reset_cache()
