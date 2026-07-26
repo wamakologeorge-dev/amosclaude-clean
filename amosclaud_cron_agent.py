@@ -1,137 +1,469 @@
-import os
-import sys
+#!/usr/bin/env python3
+"""Create a verified Amosclaud change proposal on a review branch.
+
+The daily agent asks the Amosclaud-owned model gateway for one bounded unified
+diff, validates the patch, runs repository verification, and publishes a pull
+request. It never writes directly to the default branch and never force-pushes.
+"""
+
+from __future__ import annotations
+
 import json
+import os
+import re
+import shlex
 import subprocess
-import py_compile
-import requests
-from datetime import datetime
+import sys
+import urllib.error
+import urllib.request
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
-# Platform Target Configurations
-README_PATH = "README.md"
-GITHUB_REPO = "wamakologeorge-dev/amosclaude-clean"  # Replace with your owner/repo format
-BRANCH_TARGET = "main"
+ROOT = Path(__file__).resolve().parent
+API_URL = os.getenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/").rstrip("/")
+API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
+MODEL = os.getenv("AMOSCLAUD_CRON_MODEL", "amosclaud-agent").strip()
+GITHUB_REPOSITORY = os.getenv(
+    "GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean"
+).strip()
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+DEFAULT_BRANCH = os.getenv("AMOSCLAUD_DEFAULT_BRANCH", "main").strip()
+MAX_PATCH_BYTES = 250_000
+MAX_CHANGED_FILES = 12
+MAX_EVIDENCE_CHARS = 50_000
 
-def log_msg(text: str, status: str = "INFO"):
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{status}] {text}", flush=True)
+ALLOWED_PREFIXES = (
+    "amoscloud_ai/",
+    "src/",
+    "web/",
+    "api/",
+    "app/",
+    "tests/",
+    "docs/",
+)
+RUNTIME_PREFIXES = ("amoscloud_ai/", "src/", "web/", "api/", "app/")
+PROTECTED_PREFIXES = (
+    ".git/",
+    ".github/",
+    ".amosclaud/",
+    "Infrastructure/",
+    "infrastructure/",
+)
+PROTECTED_EXACT = {
+    "AGENTS.md",
+    "SECURITY.md",
+    "CODEOWNERS",
+    "Dockerfile",
+    "railway.json",
+    "vercel.json",
+}
+FORBIDDEN_PATCH_MARKERS = (
+    "GIT binary patch",
+    "new file mode 120000",
+    "new file mode 160000",
+    "old mode 120000",
+    "old mode 160000",
+)
 
-def read_readme_instructions() -> str:
-    """Reads the core project blueprints and execution targets."""
-    if not os.path.exists(README_PATH):
-        log_msg(f"Missing {README_PATH}. Initializing default profile.", "WARNING")
-        return "Build a modular application dashboard workspace."
-    with open(README_PATH, "r", encoding="utf-8") as f:
-        return f.read()
 
-def query_amosclaud_brain(prompt: str) -> str:
-    """
-    Connects to the Anthropic API layer to process the instructions
-    and output a raw functional code block or structural modification.
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        log_msg("Missing ANTHROPIC_API_KEY. Aborting brain generation loop.", "CRITICAL")
-        sys.exit(1)
+class CronAgentError(RuntimeError):
+    """Raised when the daily proposal cannot be produced safely."""
 
+
+def log(message: str, level: str = "INFO") -> None:
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds")
+    print(f"[{timestamp}] [{level}] {message}", flush=True)
+
+
+def run(
+    command: list[str], *, check: bool = False
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        command,
+        cwd=ROOT,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise CronAgentError(
+            f"Command failed ({result.returncode}): {' '.join(command)}\n"
+            f"{redact(result.stdout)}"
+        )
+    return result
+
+
+def redact(text: str) -> str:
+    patterns = (
+        r"gh[pousr]_[A-Za-z0-9_]{20,}",
+        r"amos_(?:svc|agent|auto)_[A-Za-z0-9_-]{16,}",
+        r"sk-[A-Za-z0-9_-]{16,}",
+    )
+    for pattern in patterns:
+        text = re.sub(pattern, "[REDACTED]", text)
+    text = re.sub(
+        r"(?i)\b(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s]+",
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        text,
+    )
+    if len(text) <= MAX_EVIDENCE_CHARS:
+        return text
+    half = MAX_EVIDENCE_CHARS // 2
+    return text[:half] + "\n...[truncated]...\n" + text[-half:]
+
+
+def read_repository_instructions() -> str:
+    sections: list[str] = []
+    for relative in ("AGENTS.md", "README.md"):
+        path = ROOT / relative
+        if path.is_file():
+            content = path.read_text(encoding="utf-8", errors="replace")
+            sections.append(f"=== {relative} ===\n{content[:25_000]}")
+    if not sections:
+        raise CronAgentError("AGENTS.md and README.md are both unavailable")
+    return "\n\n".join(sections)
+
+
+def repository_context() -> str:
+    tracked = run(["git", "ls-files"], check=True).stdout.splitlines()
+    relevant = [
+        path
+        for path in tracked
+        if path.startswith(ALLOWED_PREFIXES)
+        and path.endswith(
+            (".py", ".js", ".ts", ".html", ".css", ".json", ".md")
+        )
+    ][:600]
+    recent = run(
+        ["git", "log", "-8", "--pretty=format:%h %s"], check=True
+    ).stdout
+    return "Tracked change targets:\n" + "\n".join(relevant) + (
+        "\n\nRecent commits:\n" + recent
+    )
+
+
+def request_json(url: str, payload: dict[str, Any], token: str) -> dict[str, Any]:
+    data = json.dumps(payload).encode("utf-8")
     headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "Amosclaud-Cron-Agent/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
     }
+    request = urllib.request.Request(
+        url, data=data, headers=headers, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise CronAgentError(
+            f"GitHub API returned HTTP {error.code}: {redact(detail)}"
+        ) from error
+    except urllib.error.URLError as error:
+        raise CronAgentError(
+            f"GitHub API is unreachable: {error.reason}"
+        ) from error
 
+
+def call_amosclaud(prompt: str) -> str:
+    if not API_KEY:
+        raise CronAgentError("AMOSCLAUD_API_KEY is not configured")
     payload = {
-        "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": 2048,
-        "messages": [{
-            "role": "user",
-            "content": f"Based on these README instructions, generate a brand new Python file or update existing ones. Output ONLY the raw executable code without markdown wrapping:\n\n{prompt}"
-        }]
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are Amosclaud's scheduled repository engineer. "
+                    "Return exactly one unified git diff inside a diff code "
+                    "fence. Make one small, useful, backward-compatible change "
+                    "to an existing runtime component and update or add tests. "
+                    "Do not modify workflows, agent policy, secrets, environment "
+                    "files, infrastructure, dependency files, or instructions. "
+                    "Do not create an unused top-level module."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
     }
+    request = urllib.request.Request(
+        f"{API_URL}/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Amosclaud-Cron-Agent/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise CronAgentError(
+            f"Amosclaud gateway returned HTTP {error.code}: {redact(detail)}"
+        ) from error
+    except urllib.error.URLError as error:
+        raise CronAgentError(
+            f"Amosclaud gateway is unreachable: {error.reason}"
+        ) from error
 
     try:
-        response = requests.post("https://anthropic.com", json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
-        return response.json()["content"][0]["text"].strip()
-    except Exception as e:
-        log_msg(f"Failed to communicate with LLM provider: {str(e)}", "ERROR")
-        return ""
+        content = result["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as error:
+        raise CronAgentError(
+            "Amosclaud gateway returned an invalid completion payload"
+        ) from error
+    if not isinstance(content, str) or not content.strip():
+        raise CronAgentError("Amosclaud gateway returned no proposal")
+    return content
 
-def create_github_issue(title: str, body: str):
-    """Logs progress or error alerts natively to your GitHub repository timeline."""
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        log_msg("GITHUB_TOKEN not available. Skipping issue notification.", "WARNING")
+
+def extract_diff(response_text: str) -> str:
+    fenced = re.search(
+        r"```(?:diff|patch)?\s*(.*?)```", response_text, re.DOTALL
+    )
+    candidate = fenced.group(1) if fenced else response_text
+    start = candidate.find("diff --git ")
+    if start < 0:
+        raise CronAgentError(
+            "Amosclaud response did not contain a unified git diff"
+        )
+    return candidate[start:].strip() + "\n"
+
+
+def patch_paths(patch: str) -> list[str]:
+    paths: set[str] = set()
+    for line in patch.splitlines():
+        if not line.startswith("diff --git "):
+            continue
+        try:
+            parts = shlex.split(line)
+        except ValueError as error:
+            raise CronAgentError("Generated patch has invalid quoting") from error
+        if len(parts) != 4:
+            raise CronAgentError("Generated patch has an invalid diff header")
+        for item in parts[2:]:
+            if item.startswith(("a/", "b/")):
+                paths.add(item[2:])
+    return sorted(paths)
+
+
+def normalize_path(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
+def is_protected(path: str) -> bool:
+    normalized = normalize_path(path)
+    name = Path(normalized).name.lower()
+    return (
+        normalized in PROTECTED_EXACT
+        or normalized.startswith(PROTECTED_PREFIXES)
+        or name == ".env"
+        or name.startswith(".env.")
+        or name in {"secrets.json", "credentials.json"}
+    )
+
+
+def validate_patch(patch: str) -> list[str]:
+    if len(patch.encode("utf-8")) > MAX_PATCH_BYTES:
+        raise CronAgentError("Generated patch exceeds the size limit")
+    for marker in FORBIDDEN_PATCH_MARKERS:
+        if marker in patch:
+            raise CronAgentError(
+                f"Generated patch contains forbidden structure: {marker}"
+            )
+
+    paths = patch_paths(patch)
+    if not paths:
+        raise CronAgentError("Generated patch has no changed files")
+    if len(paths) > MAX_CHANGED_FILES:
+        raise CronAgentError("Generated patch changes too many files")
+
+    for path in paths:
+        normalized = normalize_path(path)
+        if (
+            not normalized
+            or Path(normalized).is_absolute()
+            or ".." in Path(normalized).parts
+            or "\x00" in normalized
+        ):
+            raise CronAgentError(f"Generated patch has unsafe path: {path}")
+        if is_protected(normalized):
+            raise CronAgentError(
+                f"Generated patch targets protected path: {normalized}"
+            )
+        if not normalized.startswith(ALLOWED_PREFIXES):
+            raise CronAgentError(
+                f"Generated patch targets an unsupported path: {normalized}"
+            )
+
+    if not any(path.startswith(RUNTIME_PREFIXES) for path in paths):
+        raise CronAgentError(
+            "Generated patch does not modify an existing runtime component"
+        )
+    if not any(path.startswith("tests/") for path in paths):
+        raise CronAgentError("Generated patch must include test coverage")
+    return paths
+
+
+def restore_workspace() -> None:
+    run(["git", "reset", "--hard", "HEAD"], check=True)
+    run(["git", "clean", "-fd"], check=True)
+
+
+def apply_and_verify(patch: str) -> list[str]:
+    paths = validate_patch(patch)
+    patch_file = ROOT / "amosclaud-cron-proposal.patch"
+    patch_file.write_text(patch, encoding="utf-8")
+    try:
+        run(["git", "apply", "--check", str(patch_file)], check=True)
+        run(
+            ["git", "apply", "--whitespace=fix", str(patch_file)],
+            check=True,
+        )
+    finally:
+        patch_file.unlink(missing_ok=True)
+
+    checks = (
+        ["git", "diff", "--check"],
+        [
+            sys.executable,
+            "-m",
+            "compileall",
+            "-q",
+            "amoscloud_ai",
+            "src",
+            "tests",
+        ],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "--disable-warnings",
+            "--maxfail=1",
+        ],
+    )
+    for command in checks:
+        result = run(command)
+        log(f"Verification command: {' '.join(command)}")
+        if result.stdout:
+            print(redact(result.stdout), flush=True)
+        if result.returncode != 0:
+            raise CronAgentError(
+                f"Verification failed: {' '.join(command)}"
+            )
+    return paths
+
+
+def create_issue(title: str, body: str) -> None:
+    if not GITHUB_TOKEN:
+        log("GITHUB_TOKEN is unavailable; issue report was not created", "WARNING")
         return
+    request_json(
+        f"https://api.github.com/repos/{GITHUB_REPOSITORY}/issues",
+        {"title": title, "body": body},
+        GITHUB_TOKEN,
+    )
 
-    url = f"https://github.com{GITHUB_REPO}/issues"
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    payload = {"title": title, "body": body}
 
+def publish_pull_request(paths: list[str]) -> str:
+    if not GITHUB_TOKEN:
+        raise CronAgentError("GITHUB_TOKEN is required to publish a proposal")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    branch = f"amosclaud-cron/{stamp}"
+
+    run(["git", "config", "user.name", "Amosclaud Cron Agent"], check=True)
+    run(
+        ["git", "config", "user.email", "cron-agent@amosclaud.internal"],
+        check=True,
+    )
+    run(["git", "checkout", "-b", branch], check=True)
+    run(["git", "add", "--", *paths], check=True)
+    if run(["git", "diff", "--cached", "--quiet"]).returncode == 0:
+        raise CronAgentError("Verified proposal produced no staged changes")
+    run(
+        [
+            "git",
+            "commit",
+            "-m",
+            "feat: add verified Amosclaud daily proposal",
+        ],
+        check=True,
+    )
+    run(["git", "push", "--set-upstream", "origin", branch], check=True)
+
+    result = request_json(
+        f"https://api.github.com/repos/{GITHUB_REPOSITORY}/pulls",
+        {
+            "title": "feat: verified Amosclaud daily proposal",
+            "head": branch,
+            "base": DEFAULT_BRANCH,
+            "body": (
+                "## Amosclaud daily proposal\n\n"
+                "This change was generated on an isolated branch and published "
+                "only after `git diff --check`, Python compilation, and the full "
+                "pytest suite passed.\n\n"
+                "Changed files:\n"
+                + "\n".join(f"- `{path}`" for path in paths)
+                + "\n\nNormal review and required CI checks are still required."
+            ),
+        },
+        GITHUB_TOKEN,
+    )
+    html_url = result.get("html_url")
+    if not isinstance(html_url, str) or not html_url:
+        raise CronAgentError("GitHub created a pull request without a URL")
+    return html_url
+
+
+def run_daily_cycle() -> int:
+    restore_workspace()
+    prompt = (
+        f"Repository operating instructions:\n{read_repository_instructions()}\n\n"
+        f"Repository context:\n{repository_context()}\n\n"
+        "Create one small production-quality improvement. Modify an existing "
+        "runtime component and include focused tests."
+    )
     try:
-        res = requests.post(url, json=payload, headers=headers, timeout=15)
-        if res.status_code == 201:
-            log_msg("Successfully posted progress update via GitHub Issues.")
-    except Exception as e:
-        log_msg(f"Could not connect to GitHub API: {str(e)}", "ERROR")
+        patch = extract_diff(call_amosclaud(prompt))
+        paths = apply_and_verify(patch)
+        pull_request_url = publish_pull_request(paths)
+    except Exception as error:
+        restore_workspace()
+        message = redact(f"{type(error).__name__}: {error}")
+        log(message, "ERROR")
+        try:
+            create_issue(
+                "Amosclaud daily proposal failed",
+                (
+                    "The scheduled agent stopped without publishing code.\n\n"
+                    f"Reason:\n```\n{message}\n```\n\n"
+                    "No direct default-branch write or force-push was attempted."
+                ),
+            )
+        except Exception as report_error:
+            log(
+                f"Failure report could not be created: "
+                f"{redact(str(report_error))}",
+                "ERROR",
+            )
+        return 1
 
-def self_heal_codebase(file_path: str) -> bool:
-    """Runs a quick compilation pass. If it fails, alerts the system."""
-    try:
-        py_compile.compile(file_path, doraise=True)
-        log_msg(f"File validation passed: {file_path}")
-        return True
-    except py_compile.PyCompileError as err:
-        log_msg(f"Syntax validation failure caught on {file_path}: {str(err)}", "ERROR")
-        return False
+    log(f"Published verified pull request: {pull_request_url}")
+    return 0
 
-def run_daily_autonomous_cycle():
-    log_msg("=== Initiating Daily Amosclaud Autonomous Pipeline ===")
-
-    # 1. Read guidelines
-    instructions = read_readme_instructions()
-
-    # 2. Query brain for a new architectural file update
-    log_msg("Analyzing system requirements and blueprints...")
-    generated_code = query_amosclaud_brain(f"Context: {instructions}\nTask: Generate a file named 'generated_features.py'.")
-
-    if not generated_code:
-        log_msg("Zero mutation output received. Exiting cycle.", "ERROR")
-        return
-
-    target_file = "generated_features.py"
-    with open(target_file, "w", encoding="utf-8") as f:
-        f.write(generated_code)
-    log_msg(f"Wrote generated changes directly into {target_file}")
-
-    # 3. Validate integrity and fix
-    is_healthy = self_heal_codebase(target_file)
-
-    if not is_healthy:
-        # Trigger an emergency repair prompt block
-        log_msg("Launching self-healing script loop...", "WARNING")
-        fixed_code = query_amosclaud_brain(f"The following code contains compilation issues. Please fix it perfectly:\n\n{generated_code}")
-        if fixed_code:
-            with open(target_file, "w", encoding="utf-8") as f:
-                f.write(fixed_code)
-            is_healthy = self_heal_codebase(target_file)
-
-    # 4. Synchronize remote files and post report
-    status_report = f"### Daily Run Report\n**Timestamp:** {datetime.now().isoformat()}\n"
-    if is_healthy:
-        status_report += f"✅ Successfully added and validated `{target_file}` based on your README guidelines."
-        title = "Amosclaud Automated Loop: Build Passed"
-
-        # Git synchronization block
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "cron-agent: added daily automated feature updates"], check=True)
-        subprocess.run(["git", "push", "origin", BRANCH_TARGET, "--force"], check=True)
-    else:
-        status_report += f"❌ Built `{target_file}` but syntax compilation checks remained unresolvable."
-        title = "Amosclaud Automated Loop: Attention Required"
-
-    create_github_issue(title, status_report)
 
 if __name__ == "__main__":
-    run_daily_autonomous_cycle()
+    raise SystemExit(run_daily_cycle())
