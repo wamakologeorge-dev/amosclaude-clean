@@ -138,6 +138,9 @@ jobs:
             python -m pytest -q --disable-warnings --maxfail=25
             pytest_status=$?
             echo "pytest_exit_code=$pytest_status"
+            if [ "$compile_status" -ne 0 ] || [ "$pytest_status" -ne 0 ]; then
+              exit 1
+            fi
           } 2>&1 | tee amosclaud-health.log
           pipeline_status=${PIPESTATUS[0]}
           set -e
