@@ -36,8 +36,24 @@ def test_verified_repairs_use_check_triggering_token_and_auto_merge() -> None:
     assert "GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}" in workflow
     assert 'gh pr merge "$pr_url" --auto --squash --delete-branch' in workflow
     assert "Human approval: not required" in workflow
+    assert "Direct default-branch writes: prohibited" in workflow
     assert "Human review is still required" not in workflow
     assert "needs owner review" not in workflow
+
+
+def test_daily_inspection_opens_issue_before_the_fixer_and_pull_request() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "cron: '17 4 * * *'" in workflow
+    assert "Inspect repository health before opening an issue" in workflow
+    issue_step = workflow.index(
+        "Create or update repair issue before Amosclaud Fixer runs"
+    )
+    fixer_step = workflow.index("Run Amosclaud autonomous background engineer")
+    publish_step = workflow.index("Publish verified repair and enable autonomous merge")
+    assert issue_step < fixer_step < publish_step
+    assert "Daily Amosclaud inspection passed. No issue" in workflow
+    assert "Repair issue: #${ISSUE_NUMBER}" in workflow
 
 
 def test_dependency_install_failure_is_handed_to_autonomous_repair() -> None:
@@ -52,6 +68,29 @@ def test_dependency_install_failure_is_handed_to_autonomous_repair() -> None:
     assert "SECTION_LIMIT" in bot
     assert '"pip",\n            "install"' in fixer
     assert '"-e",\n            "."' in fixer
+
+
+def test_fixer_follows_and_protects_repository_instructions() -> None:
+    fixer = _load_fixer()
+    source = FIXER.read_text(encoding="utf-8")
+    instruction_patch = """diff --git a/AGENTS.md b/AGENTS.md
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1 +1 @@
+-old
++new
+"""
+
+    assert "AGENTS.md" in fixer.repository_instructions()
+    assert "PYTHON AUTONOMOUS ENGINEERING BOOK" in fixer.repository_instructions()
+    assert "Follow AGENTS.md" in source
+    assert "Do not perform feature work" in source
+    try:
+        fixer.validate_patch(instruction_patch)
+    except ValueError as error:
+        assert "protected path" in str(error)
+    else:
+        raise AssertionError("repository instructions must be immutable to the fixer")
 
 
 def test_fixer_validates_deleted_and_self_protected_paths() -> None:
@@ -99,7 +138,7 @@ def test_retry_incidents_are_revision_scoped_and_close_only_after_merge() -> Non
     workflow = WORKFLOW.read_text(encoding="utf-8")
     fixer = FIXER.read_text(encoding="utf-8")
 
-    assert 'title="Amosclaud autonomous repair retry ${short_sha}"' in workflow
+    assert 'title="Amosclaud autonomous repair ${short_sha}"' in workflow
     assert "close-merged-repair-incident" in workflow
     assert "github.event.pull_request.merged == true" in workflow
     assert "remains open until GitHub confirms" in workflow
