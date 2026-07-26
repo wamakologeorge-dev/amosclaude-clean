@@ -63,6 +63,12 @@ def test_different_workflows_do_not_get_merged() -> None:
     assert module.canonical_key(first) != module.canonical_key(second)
 
 
+def test_provider_punctuation_is_normalized_consistently() -> None:
+    module = _load()
+
+    assert module._normalize("github_actions") == module._normalize("github-actions")
+
+
 def test_legacy_fixer_titles_are_stable_across_revisions() -> None:
     module = _load()
     first = {
@@ -103,6 +109,23 @@ def test_existing_marker_wins_even_when_canonical_is_closed() -> None:
     chosen = module._choose_canonical([closed_canonical, new_duplicate], marker)
 
     assert chosen["number"] == 1
+
+
+def test_closed_only_sweeps_do_not_reopen_resolved_incidents(monkeypatch) -> None:
+    module = _load()
+    closed = _incident(1, state="closed")
+    ensure_calls = []
+    monkeypatch.setattr(module, "_list_issues", lambda repository, token: [closed])
+    monkeypatch.setattr(
+        module,
+        "_ensure_canonical",
+        lambda *args, **kwargs: ensure_calls.append((args, kwargs)),
+    )
+
+    result = module.deduplicate("owner/repo", "token")
+
+    assert result == {"canonical": 0, "duplicates_closed": 0}
+    assert ensure_calls == []
 
 
 def test_workflow_is_bounded_and_does_not_create_issues() -> None:
