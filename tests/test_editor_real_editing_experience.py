@@ -24,7 +24,9 @@ def test_full_editor_opens_readme_and_selected_files() -> None:
 
     assert "params.get('path') || 'README.md'" in source
     assert "data-open-path" in source
-    assert "requestedMode === 'edit'" in source
+    assert "params.get('mode') === 'edit'" in source
+    assert "if (requestedMode !== 'edit') return" in source
+    assert "enterRequestedMode();" in source
     assert "editButton.click()" in source
     assert "eow-editor" in source
 
