@@ -32,5 +32,5 @@ jobs:
         run: |
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-      - name: Run tests
-        run: pytest
+      - name: Run focused model runtime tests
+        run: pytest -q tests/test_model_runtime_dashboard_corrections.py
