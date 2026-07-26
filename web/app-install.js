@@ -24,6 +24,15 @@
     });
   }
 
+  function loadCloudWorkspaceControls() {
+    if (!/^\/workspace\/\d+\/?$/.test(location.pathname)) return;
+    if (document.querySelector('script[data-amosclaud-cloud-workspace]')) return;
+    const script = document.createElement('script');
+    script.src = '/static/cloud-workspace.js';
+    script.dataset.amosclaudCloudWorkspace = 'true';
+    document.body.appendChild(script);
+  }
+
   function isStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   }
@@ -68,4 +77,5 @@
   activateRepositoryShortcuts();
   registerServiceWorker();
   createInstallButton();
+  loadCloudWorkspaceControls();
 })();
