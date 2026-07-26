@@ -1,0 +1,474 @@
+name: Amosclaud Pull Request CI Repair
+
+on:
+  workflow_run:
+    workflows:
+      - Amosclaud CI
+      - CI/CD — Test & Deploy
+      - Build and Verify
+      - Python package
+      - Amosclaud Workspace CI
+      - Amosclaud CI/CD Pipeline
+      - Docker Image CI
+      - 🏗️ Platform Build Check
+      - 🚀 Amosclaud AI - CI Pipeline
+    types: [completed]
+  status:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Pull request number to inspect
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: amosclaud-pr-ci-repair-${{ github.event.workflow_run.head_sha || github.event.sha || inputs.pull_request_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  repair-failed-pr-check:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.head_branch != github.event.repository.default_branch &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       !startsWith(github.event.workflow_run.head_branch, 'amosclaud-background-engineer/')) ||
+      (github.event_name == 'status' &&
+       (github.event.state == 'failure' || github.event.state == 'error') &&
+       startsWith(github.event.context, 'ci/circleci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Check out trusted Amosclaud repair engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Resolve and validate pull request target
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DISPATCH_PR: ${{ inputs.pull_request_number }}
+          EVENT_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          EVENT_SHA: ${{ github.event.workflow_run.head_sha || github.event.sha }}
+          EVENT_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          pr_number="$DISPATCH_PR"
+          if [ -z "$pr_number" ]; then
+            pr_number="$EVENT_PR"
+          fi
+          if [ -z "$pr_number" ] && [ -n "$EVENT_SHA" ]; then
+            pr_number="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "/repos/${REPOSITORY}/commits/${EVENT_SHA}/pulls" \
+              --jq 'map(select(.state == "open")) | .[0].number // empty')"
+          fi
+          if [ -z "$pr_number" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no open pull request resolves to the failed revision" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          state="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}" --jq '.state')"
+          head_repo="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.repo.full_name')"
+          head_sha="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.sha')"
+          head_ref="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}" --jq '.head.ref')"
+          base_ref="$(gh api "/repos/${REPOSITORY}/pulls/${pr_number}" --jq '.base.ref')"
+
+          if [ "$state" != "open" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=pull request is no longer open" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$head_repo" != "$REPOSITORY" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=fork pull requests are never executed with repair credentials" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$head_ref" = "$DEFAULT_BRANCH" ] || [[ "$head_ref" == amosclaud-background-engineer/* ]]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=branch is outside the pull-request repair boundary" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ -n "$EVENT_SHA" ] && [ "$head_sha" != "$EVENT_SHA" ]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=pull request moved after the failed run; stale evidence was discarded" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact failed pull request revision
+        if: steps.target.outputs.eligible == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.target.outputs.head_sha }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce bounded repair-attempt policy
+        if: steps.target.outputs.eligible == 'true'
+        id: budget
+        env:
+          BASE_REF: ${{ steps.target.outputs.base_ref }}
+        run: |
+          set -euo pipefail
+          maximum="$(python - <<'PY'
+          import json
+          from pathlib import Path
+          policy = json.loads(Path('trusted/.amosclaud/pr-ci-repair.json').read_text(encoding='utf-8'))
+          print(int(policy.get('max_repair_commits_per_pull_request', 3)))
+          PY
+          )"
+          git -C target fetch --no-tags origin "$BASE_REF"
+          count="$(git -C target log "origin/${BASE_REF}..HEAD" --format=%s \
+            | grep -c '^fix: Amosclaud CI repair' || true)"
+          if [ "$count" -ge "$maximum" ]; then
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=repair attempt limit reached (${count}/${maximum})" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+            echo "attempt=$((count + 1))" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify repair credentials are configured
+        if: >-
+          steps.target.outputs.eligible == 'true' &&
+          steps.budget.outputs.allowed == 'true'
+        id: configuration
+        env:
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_AUTONOMOUS_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$AMOSCLAUD_API_KEY" ] && [ -n "$AMOSCLAUD_AUTONOMOUS_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "AMOSCLAUD_API_KEY and AMOSCLAUD_AUTONOMOUS_TOKEN are both required."
+          fi
+
+      - name: Capture failed check evidence
+        if: >-
+          steps.target.outputs.eligible == 'true' &&
+          steps.budget.outputs.allowed == 'true' &&
+          steps.configuration.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
+          SOURCE_STATUS_CONTEXT: ${{ github.event.context }}
+          SOURCE_STATUS_DESCRIPTION: ${{ github.event.description }}
+          SOURCE_STATUS_URL: ${{ github.event.target_url }}
+          SOURCE_SHA: ${{ steps.target.outputs.head_sha }}
+          FAILURE_LOG: ${{ runner.temp }}/amosclaud-pr-failure.log
+        run: |
+          set -euo pipefail
+          {
+            echo "=== FAILED CHECK METADATA ==="
+            echo "event=${EVENT_NAME}"
+            echo "revision=${SOURCE_SHA}"
+            echo "workflow=${SOURCE_WORKFLOW}"
+            echo "status_context=${SOURCE_STATUS_CONTEXT}"
+            echo "status_description=${SOURCE_STATUS_DESCRIPTION}"
+            echo "status_url=${SOURCE_STATUS_URL}"
+            echo ""
+          } > "$FAILURE_LOG"
+          if [ "$EVENT_NAME" = "workflow_run" ] && [ -n "$SOURCE_RUN_ID" ]; then
+            {
+              echo "=== GITHUB ACTIONS FAILED JOB LOGS ==="
+              gh run view "$SOURCE_RUN_ID" --log-failed \
+                || gh run view "$SOURCE_RUN_ID" --log \
+                || echo "GitHub did not return job logs for this run."
+            } >> "$FAILURE_LOG" 2>&1
+          else
+            {
+              echo "=== EXTERNAL STATUS EVIDENCE ==="
+              echo "Detailed CircleCI logs require provider API access."
+              echo "Amosclaud will reproduce the repository checks locally before proposing a repair."
+            } >> "$FAILURE_LOG"
+          fi
+
+      - name: Reproduce failure without repair credentials
+        if: >-
+          steps.target.outputs.eligible == 'true' &&
+          steps.budget.outputs.allowed == 'true' &&
+          steps.configuration.outputs.ready == 'true'
+        id: reproduce
+        env:
+          FAILURE_LOG: ${{ runner.temp }}/amosclaud-pr-failure.log
+          VERIFY_ENV: ${{ runner.temp }}/amosclaud-pr-reproduce
+        run: |
+          set +e
+          rm -rf "$VERIFY_ENV"
+          python -m venv "$VERIFY_ENV"
+          py="$VERIFY_ENV/bin/python"
+          {
+            echo ""
+            echo "=== AMOSCLAUD LOCAL PRE-RUN REPRODUCTION ==="
+            "$py" -m pip install --disable-pip-version-check --no-input --upgrade pip setuptools wheel
+            bootstrap_status=$?
+            "$py" -m pip install --disable-pip-version-check --no-input flake8 pytest pytest-asyncio
+            tools_status=$?
+            "$py" -m pip install --disable-pip-version-check --no-input -e ./target
+            install_status=$?
+            (
+              cd target
+              "$py" -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+            )
+            lint_status=$?
+            "$py" -m compileall -q target/amoscloud_ai target/src target/tests
+            compile_status=$?
+            (
+              cd target
+              "$py" -m pytest -q --disable-warnings --maxfail=25
+            )
+            pytest_status=$?
+            echo "bootstrap_exit_code=$bootstrap_status"
+            echo "tools_exit_code=$tools_status"
+            echo "install_exit_code=$install_status"
+            echo "lint_exit_code=$lint_status"
+            echo "compile_exit_code=$compile_status"
+            echo "pytest_exit_code=$pytest_status"
+          } 2>&1 | tee -a "$FAILURE_LOG"
+          if [ "$bootstrap_status" -ne 0 ] || [ "$tools_status" -ne 0 ] || \
+             [ "$install_status" -ne 0 ] || [ "$lint_status" -ne 0 ] || \
+             [ "$compile_status" -ne 0 ] || [ "$pytest_status" -ne 0 ]; then
+            echo "reproduced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "reproduced=false" >> "$GITHUB_OUTPUT"
+          fi
+          git -C target reset --hard HEAD
+          git -C target clean -fdx
+          exit 0
+
+      - name: Generate bounded repair candidate
+        if: steps.reproduce.outputs.reproduced == 'true'
+        id: candidate
+        env:
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
+          FAILURE_LOG: ${{ runner.temp }}/amosclaud-pr-failure.log
+          REPORT_PATH: ${{ runner.temp }}/amosclaud-pr-repair-report.json
+          PATCH_PATH: ${{ runner.temp }}/amosclaud-pr-repair.patch
+        run: |
+          set +e
+          python -I trusted/.github/scripts/amosclaud_pr_ci_patch.py \
+            --target target \
+            --instructions-root trusted \
+            --policy trusted/.amosclaud/pr-ci-repair.json \
+            --failure-log "$FAILURE_LOG" \
+            --report "$REPORT_PATH" \
+            --patch-output "$PATCH_PATH" \
+            | tee "${RUNNER_TEMP}/amosclaud-pr-candidate-output.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "applied=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applied=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify candidate in a fresh credential-free pre-run
+        if: steps.candidate.outputs.applied == 'true'
+        id: verify
+        env:
+          VERIFY_ENV: ${{ runner.temp }}/amosclaud-pr-verify
+          VERIFY_LOG: ${{ runner.temp }}/amosclaud-pr-verification.log
+        run: |
+          set +e
+          rm -rf "$VERIFY_ENV"
+          python -m venv "$VERIFY_ENV"
+          py="$VERIFY_ENV/bin/python"
+          {
+            echo "=== AMOSCLAUD REPAIR PRE-RUN ==="
+            "$py" -m pip install --disable-pip-version-check --no-input --upgrade pip setuptools wheel
+            bootstrap_status=$?
+            "$py" -m pip install --disable-pip-version-check --no-input flake8 pytest pytest-asyncio
+            tools_status=$?
+            "$py" -m pip install --disable-pip-version-check --no-input -e ./target
+            install_status=$?
+            (
+              cd target
+              "$py" -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+            )
+            lint_status=$?
+            "$py" -m compileall -q target/amoscloud_ai target/src target/tests
+            compile_status=$?
+            (
+              cd target
+              "$py" -m pytest -q --disable-warnings --maxfail=25
+            )
+            pytest_status=$?
+            echo "bootstrap_exit_code=$bootstrap_status"
+            echo "tools_exit_code=$tools_status"
+            echo "install_exit_code=$install_status"
+            echo "lint_exit_code=$lint_status"
+            echo "compile_exit_code=$compile_status"
+            echo "pytest_exit_code=$pytest_status"
+          } 2>&1 | tee "$VERIFY_LOG"
+          if [ "$bootstrap_status" -eq 0 ] && [ "$tools_status" -eq 0 ] && \
+             [ "$install_status" -eq 0 ] && [ "$lint_status" -eq 0 ] && \
+             [ "$compile_status" -eq 0 ] && [ "$pytest_status" -eq 0 ]; then
+            echo "verified=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+          fi
+          find target -type d -name __pycache__ -prune -exec rm -rf {} + || true
+          rm -rf target/.pytest_cache target/.coverage
+          exit 0
+
+      - name: Redact and upload repair evidence
+        if: always() && steps.target.outputs.eligible == 'true'
+        env:
+          FAILURE_LOG: ${{ runner.temp }}/amosclaud-pr-failure.log
+          REPORT_PATH: ${{ runner.temp }}/amosclaud-pr-repair-report.json
+          VERIFY_LOG: ${{ runner.temp }}/amosclaud-pr-verification.log
+          CANDIDATE_LOG: ${{ runner.temp }}/amosclaud-pr-candidate-output.txt
+        run: |
+          python trusted/.github/scripts/redact_amosclaud_evidence.py \
+            "$FAILURE_LOG" "$REPORT_PATH" "$VERIFY_LOG" "$CANDIDATE_LOG"
+
+      - name: Upload PR repair evidence
+        if: always() && steps.target.outputs.eligible == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: amosclaud-pr-ci-repair-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/amosclaud-pr-failure.log
+            ${{ runner.temp }}/amosclaud-pr-repair-report.json
+            ${{ runner.temp }}/amosclaud-pr-verification.log
+            ${{ runner.temp }}/amosclaud-pr-candidate-output.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish verified repair to original pull request branch
+        if: steps.verify.outputs.verified == 'true'
+        id: publish
+        env:
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
+          SOURCE_SHA: ${{ steps.target.outputs.head_sha }}
+          HEAD_REF: ${{ steps.target.outputs.head_ref }}
+          PR_NUMBER: ${{ steps.target.outputs.pr_number }}
+          REPORT_PATH: ${{ runner.temp }}/amosclaud-pr-repair-report.json
+        run: |
+          set -euo pipefail
+          mapfile -t changed_files < <(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path(os.environ['REPORT_PATH']).read_text(encoding='utf-8'))
+          for item in report.get('changed_files', []):
+              if isinstance(item, str) and item:
+                  print(item)
+          PY
+          )
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "No verified files were reported."
+            exit 1
+          fi
+          if [ "$(git -C target rev-parse HEAD)" != "$SOURCE_SHA" ]; then
+            echo "Local target revision changed unexpectedly."
+            exit 1
+          fi
+          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
+          if [ "$remote_sha" != "$SOURCE_SHA" ]; then
+            echo "Remote pull request branch moved; refusing a stale push."
+            exit 1
+          fi
+
+          git -C target config user.name "Amosclaud Autonomous CI Repair"
+          git -C target config user.email "ci-repair@amosclaud.internal"
+          git -C target add -A -- "${changed_files[@]}"
+          git -C target diff --cached --quiet && {
+            echo "No verified changes were staged."
+            exit 1
+          }
+          mapfile -t staged_files < <(git -C target diff --cached --name-only)
+          for staged in "${staged_files[@]}"; do
+            allowed=false
+            for expected in "${changed_files[@]}"; do
+              if [ "$staged" = "$expected" ]; then
+                allowed=true
+                break
+              fi
+            done
+            if [ "$allowed" != true ]; then
+              echo "Refusing to publish unverified path: $staged"
+              exit 1
+            fi
+          done
+          git -C target commit -m "fix: Amosclaud CI repair for PR #${PR_NUMBER}"
+          gh auth setup-git
+          git -C target push origin "HEAD:refs/heads/${HEAD_REF}"
+          new_sha="$(git -C target rev-parse HEAD)"
+          echo "commit_sha=$new_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Report verified repair on pull request
+        if: steps.publish.outputs.commit_sha != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.target.outputs.pr_number }}
+          REPAIR_SHA: ${{ steps.publish.outputs.commit_sha }}
+          SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url || github.event.target_url }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "### Amosclaud Autonomous CI Repair\n\nA failed check was collected, reproduced, repaired, and passed the credential-free pre-run.\n\n- Repair commit: \`${REPAIR_SHA}\`\n- Failed check: ${SOURCE_RUN_URL}\n- Next state: GitHub and external checks are running again on the repaired branch."
+
+      - name: Report repair not published
+        if: >-
+          always() &&
+          steps.target.outputs.eligible == 'true' &&
+          steps.publish.outputs.commit_sha == '' &&
+          (steps.budget.outputs.allowed != 'true' ||
+           steps.configuration.outputs.ready != 'true' ||
+           steps.reproduce.outputs.reproduced != 'true' ||
+           steps.candidate.outputs.applied != 'true' ||
+           steps.verify.outputs.verified != 'true')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.target.outputs.pr_number }}
+          BUDGET_REASON: ${{ steps.budget.outputs.reason }}
+          CONFIG_READY: ${{ steps.configuration.outputs.ready }}
+          REPRODUCED: ${{ steps.reproduce.outputs.reproduced }}
+          CANDIDATE: ${{ steps.candidate.outputs.applied }}
+          VERIFIED: ${{ steps.verify.outputs.verified }}
+        run: |
+          body="### Amosclaud Autonomous CI Repair\n\nNo repair was pushed."
+          if [ -n "$BUDGET_REASON" ]; then
+            body="${body}\n\nReason: ${BUDGET_REASON}."
+          elif [ "$CONFIG_READY" != "true" ]; then
+            body="${body}\n\nReason: required Amosclaud repair credentials are not configured."
+          elif [ "$REPRODUCED" != "true" ]; then
+            body="${body}\n\nReason: the failure could not be reproduced by install, critical lint, compilation, or pytest checks. It may be external or intermittent."
+          elif [ "$CANDIDATE" != "true" ]; then
+            body="${body}\n\nReason: Amosclaud did not produce a safe, applicable patch."
+          elif [ "$VERIFIED" != "true" ]; then
+            body="${body}\n\nReason: the candidate failed the fresh credential-free pre-run and was discarded."
+            git -C target reset --hard HEAD || true
+            git -C target clean -fd || true
+          fi
+          body="${body}\n\nEvidence artifact: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh pr comment "$PR_NUMBER" --body "$body"
