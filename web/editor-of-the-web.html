@@ -6,6 +6,7 @@
   <title>The Editor of the Web · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/editor-of-the-web.css" />
+  <link rel="stylesheet" href="/static/editor-experience.css" />
 </head>
 <body>
   <header class="eow-topbar">
@@ -39,6 +40,9 @@
     </div>
   </section>
 
+  <p class="eow-editor-intro">
+    Open any file to read its complete contents. Tap <strong>Edit</strong> to write in a full-height editor, then commit the change to the selected branch. README.md opens automatically when it exists.
+  </p>
   <div id="eow-readonly" class="eow-notice" hidden>
     This mirror is read-only for your account. You can browse every path, but only an owner or developer can commit changes.
   </div>
@@ -59,7 +63,7 @@
     <section id="eow-editor-panel" class="eow-editor-panel" aria-label="File and folder editor">
       <div id="eow-empty" class="eow-empty">
         <strong>Select a file or folder</strong>
-        <span>Open any path in the mirror. Files can be edited; folders can be created, renamed, moved, or deleted.</span>
+        <span>Open any path in the mirror. Files can be read and edited; folders can be created, renamed, moved, or deleted.</span>
       </div>
 
       <div id="eow-shell" hidden>
@@ -69,7 +73,7 @@
             <strong id="eow-selected-path">Select a path</strong>
           </div>
           <div class="eow-selection-actions">
-            <button id="eow-view-mode" type="button" class="active">View</button>
+            <button id="eow-view-mode" type="button" class="active">Read</button>
             <button id="eow-edit-mode" type="button">Edit</button>
             <button id="eow-focus" type="button">Focus</button>
             <button id="eow-rename" type="button">Rename or move</button>
@@ -90,7 +94,7 @@
         <div id="eow-view" class="eow-view"></div>
 
         <div id="eow-edit" class="eow-edit" hidden>
-          <textarea id="eow-editor" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="File content"></textarea>
+          <textarea id="eow-editor" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Write the complete file contents here"></textarea>
           <div class="eow-commit">
             <label for="eow-commit-message">Commit message</label>
             <input id="eow-commit-message" type="text" maxlength="200" placeholder="Describe this change" />
@@ -119,6 +123,7 @@
       <section class="eow-card eow-help">
         <h2>Editor controls</h2>
         <p><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>S</kbd> commits the open file.</p>
+        <p>Focus mode hides the tree and inspector so the writing area fills your screen.</p>
         <p>Folder changes are committed to the selected branch. Empty folders are represented by a hidden <code>.gitkeep</code> marker because Git stores files, not empty directories.</p>
       </section>
     </aside>
@@ -139,5 +144,6 @@
 
   <script src="/static/highlight.js"></script>
   <script src="/static/editor-of-the-web.js"></script>
+  <script src="/static/editor-autostart.js"></script>
 </body>
 </html>
