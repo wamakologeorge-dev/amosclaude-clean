@@ -15,6 +15,7 @@ services:
     environment:
       AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN: ${AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN:?set AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN}
       AMOSCLAUD_REPOSITORY_STORAGE_ROOT: /var/lib/amosclaud/repositories
+      AMOSCLAUD_WORKSPACE_STATE_ROOT: /var/lib/amosclaud/runtime-state
       AMOSCLAUD_WORKSPACE_IMAGE: ${AMOSCLAUD_WORKSPACE_IMAGE:-amosclaud/workspace-base:latest}
       AMOSCLAUD_WORKSPACE_ALLOWED_ORIGINS: ${AMOSCLAUD_WORKSPACE_ALLOWED_ORIGINS:-https://amosclaud.com,https://www.amosclaud.com}
       AMOSCLAUD_WORKSPACE_NETWORK: ${AMOSCLAUD_WORKSPACE_NETWORK:-none}
@@ -28,6 +29,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${AMOSCLAUD_REPOSITORY_STORAGE_ROOT:-./data/repositories}:/var/lib/amosclaud/repositories
+      - workspace-runtime-state:/var/lib/amosclaud/runtime-state
     ports:
       - "127.0.0.1:${AMOSCLAUD_WORKSPACE_RUNTIME_PORT:-8080}:8080"
     healthcheck:
@@ -41,3 +43,6 @@ services:
 networks:
   workspace-control:
     internal: true
+
+volumes:
+  workspace-runtime-state:
