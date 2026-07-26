@@ -32,7 +32,7 @@ def run(command: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def verify_prerequisites() -> None:
+def verify_prerequisites(*, require_security: bool) -> None:
     missing = [
         str(path.relative_to(ROOT))
         for path in (BOOK, SECURED_FIXER)
@@ -40,6 +40,8 @@ def verify_prerequisites() -> None:
     ]
     if missing:
         raise RuntimeError("Missing bot prerequisites: " + ", ".join(missing))
+    if not require_security:
+        return
     if not os.getenv("AMOSCLAUD_API_KEY", "").strip():
         raise RuntimeError("AMOSCLAUD_API_KEY is required")
     if not os.getenv("AMOSCLAUD_FIXER_GRANT", "").strip():
@@ -101,9 +103,26 @@ def collect_failure_evidence() -> tuple[bool, str]:
     return passed, evidence
 
 
+def _prepared_evidence() -> str:
+    if not FAILURE_LOG.is_file():
+        raise RuntimeError("Prepared Amosclaud failure evidence is missing")
+    evidence = FAILURE_LOG.read_text(encoding="utf-8", errors="replace")
+    if not evidence.strip():
+        raise RuntimeError("Prepared Amosclaud failure evidence is empty")
+    return evidence
+
+
 def main() -> int:
-    verify_prerequisites()
-    passed, evidence = collect_failure_evidence()
+    prepare_only = os.getenv("AMOSCLAUD_PREPARE_ONLY", "") == "1"
+    use_prepared = os.getenv("AMOSCLAUD_USE_PREPARED_FAILURE", "") == "1"
+    verify_prerequisites(require_security=not prepare_only)
+
+    if use_prepared:
+        passed = False
+        evidence = _prepared_evidence()
+    else:
+        passed, evidence = collect_failure_evidence()
+
     if passed:
         BOT_REPORT.write_text(
             json.dumps(
@@ -117,6 +136,21 @@ def main() -> int:
             encoding="utf-8",
         )
         print("AMOSCLAUD_BACKGROUND_ENGINEER_STATUS=healthy")
+        return 0
+
+    if prepare_only:
+        BOT_REPORT.write_text(
+            json.dumps(
+                {
+                    "status": "repair-ready",
+                    "action": "issue-signed-grant",
+                    "failure_log": FAILURE_LOG.name,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        print("AMOSCLAUD_BACKGROUND_ENGINEER_STATUS=repair-ready")
         return 0
 
     env = os.environ.copy()
@@ -146,6 +180,7 @@ def main() -> int:
                 "security": {
                     "signed_command_chain": True,
                     "grant_material_exposed": False,
+                    "failure_evidence_frozen_before_grant": True,
                 },
             },
             indent=2,
