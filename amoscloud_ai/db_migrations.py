@@ -84,15 +84,50 @@ MIGRATIONS = (
             ON repository_collaborators(user_id, repository_id);
         """,
     ),
+    Migration(
+        3,
+        "github_repository_sync_schema",
+        "github repository mapping and synchronization evidence columns",
+    ),
 )
+
+_GITHUB_REPOSITORY_COLUMNS = {
+    "github_full_name": "TEXT",
+    "github_html_url": "TEXT",
+    "github_default_branch": "TEXT",
+    "github_last_sync_at": "TEXT",
+    "github_last_sync_attempt_at": "TEXT",
+    "github_sync_state": "TEXT",
+    "github_sync_detail": "TEXT",
+    "github_last_remote_sha": "TEXT",
+    "github_repository_id": "INTEGER",
+}
 
 
 def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
+def _migrate_github_repository_schema(db: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
+    }
+    for name, sql_type in _GITHUB_REPOSITORY_COLUMNS.items():
+        if name not in columns:
+            db.execute(f"ALTER TABLE repositories ADD COLUMN {name} {sql_type}")
+    db.execute(
+        """CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
+           ON repositories(github_repository_id)"""
+    )
+    db.execute(
+        """CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
+           ON repositories(github_full_name COLLATE NOCASE)"""
+    )
+
+
 def run_migrations(path: str | Path) -> list[int]:
     """Apply unapplied migrations atomically and reject edited history."""
+
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     applied: list[int] = []
@@ -119,7 +154,10 @@ def run_migrations(path: str | Path) -> list[int]:
                     )
                 continue
             with db:
-                db.executescript(migration.sql)
+                if migration.version == 3:
+                    _migrate_github_repository_schema(db)
+                else:
+                    db.executescript(migration.sql)
                 db.execute(
                     "INSERT INTO schema_migrations VALUES (?,?,?,?)",
                     (
