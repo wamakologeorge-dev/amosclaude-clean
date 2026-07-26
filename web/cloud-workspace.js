@@ -46,6 +46,8 @@
   let terminal = null;
   let socket = null;
   let loading = false;
+  let runtimeAvailable = false;
+  let currentRunning = false;
 
   function state(message, kind = '') {
     stateNode.textContent = message;
@@ -74,62 +76,77 @@
     return payload || {};
   }
 
-  function setRunning(running) {
-    startButton.disabled = loading || running;
-    connectButton.disabled = loading || !running;
-    stopButton.disabled = loading || !running;
+  function renderControls() {
+    startButton.disabled = loading || !runtimeAvailable || currentRunning;
+    connectButton.disabled = loading || !runtimeAvailable || !currentRunning;
+    stopButton.disabled = loading || !runtimeAvailable || !currentRunning;
   }
 
   function showContainer(container) {
-    const running = Boolean(container?.running);
-    setRunning(running);
-    if (!container) return;
+    currentRunning = Boolean(container?.running);
+    if (!container) {
+      renderControls();
+      return;
+    }
     boundaryNode.innerHTML = `<strong>Security boundary:</strong> developer user · ${container.cpu_limit || 2} CPU cores · ${container.memory_mb || 4096} MB RAM · ${container.pids_limit || 512} process limit · network ${container.network || 'none'}.`;
-    state(`Workspace ${container.status || 'unknown'} · persistent repository ${container.persistent_path || ''}`, running ? 'ready' : 'stopped');
+    state(
+      `Workspace ${container.status || 'unknown'} · persistent repository attached`,
+      currentRunning ? 'ready' : 'stopped',
+    );
+    renderControls();
   }
 
   async function refresh() {
     if (loading) return;
     loading = true;
-    setRunning(false);
+    renderControls();
     state('Checking the isolated workspace runtime…');
     try {
       const result = await request(`/api/v1/cloud-workspaces/repositories/${repositoryId}`);
+      runtimeAvailable = Boolean(result.runtime?.configured && result.runtime?.ok);
       if (!result.runtime?.configured) {
+        currentRunning = false;
         state('Workspace runtime is not configured on this deployment.', 'not-configured');
         return;
       }
       if (!result.runtime?.ok) {
+        currentRunning = false;
         state(result.runtime?.detail || 'Workspace runtime is unreachable.', 'error');
         return;
       }
       if (result.container) {
         showContainer(result.container);
       } else {
-        setRunning(false);
+        currentRunning = false;
         state('Workspace is ready to start. Files will remain on persistent storage.', 'stopped');
       }
     } catch (error) {
-      setRunning(false);
+      runtimeAvailable = false;
+      currentRunning = false;
       state(error.message, 'error');
     } finally {
       loading = false;
+      renderControls();
     }
   }
 
   async function start() {
-    if (loading) return;
+    if (loading || currentRunning || !runtimeAvailable) return;
     loading = true;
-    setRunning(false);
+    renderControls();
     state('Starting an isolated workspace…');
     try {
-      const result = await request(`/api/v1/cloud-workspaces/repositories/${repositoryId}/start`, { method: 'POST' });
+      const result = await request(
+        `/api/v1/cloud-workspaces/repositories/${repositoryId}/start`,
+        { method: 'POST' },
+      );
       showContainer(result.container);
     } catch (error) {
-      setRunning(false);
+      currentRunning = false;
       state(error.message, 'error');
     } finally {
       loading = false;
+      renderControls();
     }
   }
 
@@ -161,6 +178,7 @@
   }
 
   async function connect() {
+    if (!currentRunning || !runtimeAvailable) return;
     if (socket?.readyState === WebSocket.OPEN) {
       terminal?.focus();
       return;
@@ -170,7 +188,10 @@
     try {
       const [term, ticket] = await Promise.all([
         loadTerminal(),
-        request(`/api/v1/cloud-workspaces/repositories/${repositoryId}/terminal-ticket`, { method: 'POST' }),
+        request(
+          `/api/v1/cloud-workspaces/repositories/${repositoryId}/terminal-ticket`,
+          { method: 'POST' },
+        ),
       ]);
       socket = new WebSocket(ticket.websocket_url);
       socket.binaryType = 'arraybuffer';
@@ -188,35 +209,45 @@
       socket.onerror = () => state('Terminal connection failed.', 'error');
       socket.onclose = event => {
         state(event.reason || 'Terminal disconnected.', 'stopped');
-        connectButton.disabled = false;
+        renderControls();
       };
     } catch (error) {
-      connectButton.disabled = false;
       state(error.message, 'error');
+      renderControls();
     }
   }
 
   async function stop() {
-    if (loading) return;
+    if (loading || !currentRunning) return;
     loading = true;
+    renderControls();
     socket?.close(1000, 'Workspace stopped');
     state('Stopping workspace; persistent files will remain…');
     try {
-      const result = await request(`/api/v1/cloud-workspaces/repositories/${repositoryId}/stop`, { method: 'POST' });
+      const result = await request(
+        `/api/v1/cloud-workspaces/repositories/${repositoryId}/stop`,
+        { method: 'POST' },
+      );
       showContainer(result.container);
     } catch (error) {
       state(error.message, 'error');
     } finally {
       loading = false;
+      renderControls();
     }
   }
 
   terminalTab.addEventListener('click', () => {
-    document.querySelectorAll('.ws-tab').forEach(tab => tab.classList.toggle('active', tab === terminalTab));
-    document.querySelectorAll('.ws-panel').forEach(item => item.classList.toggle('active', item === panel));
+    document.querySelectorAll('.ws-tab').forEach(tab => {
+      tab.classList.toggle('active', tab === terminalTab);
+    });
+    document.querySelectorAll('.ws-panel').forEach(item => {
+      item.classList.toggle('active', item === panel);
+    });
     refresh();
   });
   startButton.addEventListener('click', start);
   connectButton.addEventListener('click', connect);
   stopButton.addEventListener('click', stop);
+  renderControls();
 })();
