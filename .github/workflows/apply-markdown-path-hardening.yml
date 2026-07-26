@@ -1,0 +1,36 @@
+name: Apply Markdown Path Hardening
+
+on:
+  push:
+    branches:
+      - agent/amosclaud-markdown-service
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/amosclaud-markdown-service
+          fetch-depth: 0
+
+      - name: Apply path hardening and regression test
+        run: python tools/apply_markdown_path_hardening.py
+
+      - name: Validate generated source
+        run: python -m py_compile amoscloud_ai/api/routes/repositories.py tests/test_amosclaud_markdown_service.py
+
+      - name: Remove one-time files
+        run: rm -f tools/apply_markdown_path_hardening.py .github/workflows/apply-markdown-path-hardening.yml
+
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Harden Markdown repository path resolution"
+          git push origin HEAD:agent/amosclaud-markdown-service
