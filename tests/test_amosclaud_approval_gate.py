@@ -1,12 +1,20 @@
+from pathlib import Path
+
 from amosclaud_bot.approval_gate import (
     APPROVAL_CONSUMED_MARKER,
     APPROVAL_RECORD_MARKER,
+    AUTONOMOUS_REPAIR_MARKER,
     _approval_decision,
     _approval_source,
     _high_risk_files,
+    _is_authorized_autonomous_repair,
     _is_sensitive_objective,
     _normalize_objective,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+APPROVAL_POLICY = ROOT / ".amosclaud" / "approvals.yml"
 
 
 class ApprovalBot:
@@ -19,6 +27,20 @@ class ApprovalBot:
         assert method == "GET"
         page = int(path.split("page=")[-1])
         return self.pages.get(page, [])
+
+
+def _autonomous_pr(
+    *,
+    head_ref: str = "amosclaud-background-engineer/abc12345-99",
+    head_repo: str = "owner/repo",
+    base_repo: str = "owner/repo",
+    body: str = AUTONOMOUS_REPAIR_MARKER,
+) -> dict[str, object]:
+    return {
+        "head": {"ref": head_ref, "repo": {"full_name": head_repo}},
+        "base": {"repo": {"full_name": base_repo}},
+        "body": body,
+    }
 
 
 def test_sensitive_fix_objective_detection() -> None:
@@ -34,6 +56,67 @@ def test_high_risk_pull_request_paths() -> None:
         {"filename": "SECURITY.md"},
     ]
     assert _high_risk_files(files) == [".github/workflows/deploy.yml", "SECURITY.md"]
+
+
+def test_marked_bounded_autonomous_repair_skips_separate_approval() -> None:
+    pull_request = _autonomous_pr(
+        body=f"{AUTONOMOUS_REPAIR_MARKER}\nVerified repair evidence"
+    )
+    files = [
+        {"filename": "amoscloud_ai/api/routes/auth.py"},
+        {"filename": "tests/test_auth.py"},
+    ]
+
+    assert _is_authorized_autonomous_repair(pull_request, files)
+
+
+def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
+    pull_request = _autonomous_pr()
+
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
+        [{"filename": ".github/workflows/deploy.yml"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
+        [{"filename": ".amosclaud/approvals.yml"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        pull_request,
+        [{"filename": "AGENTS.md"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        _autonomous_pr(head_ref="feature/not-autonomous"),
+        [{"filename": "src/service.py"}],
+    )
+
+
+def test_fork_and_protected_rename_cannot_forge_autonomous_authorization() -> None:
+    assert not _is_authorized_autonomous_repair(
+        _autonomous_pr(head_repo="attacker/repo"),
+        [{"filename": "src/service.py"}],
+    )
+    assert not _is_authorized_autonomous_repair(
+        _autonomous_pr(),
+        [
+            {
+                "filename": "docs/renamed-policy.md",
+                "previous_filename": "AGENTS.md",
+            }
+        ],
+    )
+
+
+def test_repository_policy_records_the_same_bounded_authorization() -> None:
+    policy = APPROVAL_POLICY.read_text(encoding="utf-8")
+
+    assert "authorized_autonomous_repairs:" in policy
+    assert 'branch_prefix: "amosclaud-background-engineer/"' in policy
+    assert AUTONOMOUS_REPAIR_MARKER in policy
+    assert "direct_default_branch_writes: false" in policy
+    assert '"AGENTS.md"' in policy
+    assert '".amosclaud/**"' in policy
+    assert '".github/**"' in policy
 
 
 def test_approval_source_is_bound_to_exact_normalized_objective() -> None:
