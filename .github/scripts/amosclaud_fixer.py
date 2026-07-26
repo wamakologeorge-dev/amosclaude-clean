@@ -156,8 +156,15 @@ def patch_paths(patch: str) -> list[str]:
     return sorted(paths)
 
 
+def _normalize_repo_path(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
 def _is_protected_path(path: str) -> bool:
-    normalized = path.lstrip("./")
+    normalized = _normalize_repo_path(path)
     name = Path(normalized).name.lower()
     return (
         normalized in PROTECTED_EXACT_PATHS
@@ -179,7 +186,7 @@ def validate_patch(patch: str) -> list[str]:
     for path in paths:
         if not path or "\x00" in path or "\n" in path or "\r" in path:
             raise ValueError("generated patch contains an invalid path")
-        normalized = path.lstrip("./")
+        normalized = _normalize_repo_path(path)
         if Path(normalized).is_absolute() or ".." in Path(normalized).parts:
             raise ValueError(f"generated patch contains unsafe path: {normalized}")
         if _is_protected_path(normalized):
