@@ -19,6 +19,7 @@ celery>=5.3,<6
 redis>=8.0.1,<9
 sqlalchemy>=2.0,<3
 alembic>=1.13,<2
+aiosqlite>=0.20,<1
 asyncpg>=0.28,<1
 aiosqlite>=0.19,<1
 psycopg2-binary>=2.9.9,<3
