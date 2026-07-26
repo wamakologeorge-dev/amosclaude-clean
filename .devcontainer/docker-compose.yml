@@ -12,6 +12,7 @@ services:
       AMOSCLAUD_ENV: development
       AUTH_COOKIE_SECURE: "false"
       DATABASE_URL: postgresql://amosclaud@postgres:5432/amosclaud
+      AMOSCLAUD_PLATFORM_DATABASE_URL: postgresql://amosclaud@postgres:5432/amosclaud
       AUTH_DB_PATH: /workspaces/amosclaude-clean/data/auth.db
       AMOSCLAUD_REPOSITORIES_ROOT: /workspaces/amosclaude-clean/data/repositories
       REPOSITORY_STORAGE_PATH: /workspaces/amosclaude-clean/data/repositories
