@@ -1,24 +1,42 @@
-import os
-import subprocess
-import shutil
-import time
 import logging
-from typing import Dict, Optional
+import os
+import shutil
+import subprocess
+import time
+from pathlib import Path
+from typing import Dict
+
+from amoscloud_ai.isolated_runner import (
+    RunnerConfigurationError,
+    UnsafeCommandError,
+    run_in_isolated_container,
+)
 from deployment_worker.config import WorkerConfig
+
 
 logger = logging.getLogger("deployment-worker")
 
+
 class DeploymentExecutor:
-    def __init__(self, task_id: str, repo_url: str, branch: str, env_vars: Dict[str, str]):
+    """Deployment worker that never executes user commands on the host shell."""
+
+    def __init__(
+        self,
+        task_id: str,
+        repo_url: str,
+        branch: str,
+        env_vars: Dict[str, str],
+    ):
         self.task_id = task_id
         self.repo_url = repo_url
         self.branch = branch
         self.env_vars = env_vars
-        self.app_dir = os.path.abspath(os.path.join(WorkerConfig.WORKSPACE_DIR, task_id))
-        self.process: Optional[subprocess.Popen] = None
-        self.logs_accumulator = []
+        self.app_dir = os.path.abspath(
+            os.path.join(WorkerConfig.WORKSPACE_DIR, task_id)
+        )
+        self.logs_accumulator: list[str] = []
 
-    def log(self, message: str):
+    def log(self, message: str) -> None:
         formatted = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}"
         self.logs_accumulator.append(formatted)
         logger.info(message)
@@ -28,21 +46,42 @@ class DeploymentExecutor:
 
     def clone_repo(self) -> bool:
         try:
-            self.log(f"Cloning branch '{self.branch}' from {self.repo_url}...")
+            self.log(f"Cloning branch '{self.branch}' from the configured repository.")
             if os.path.exists(self.app_dir):
-                self.log(f"Cleaning up existing workspace directory: {self.app_dir}")
+                self.log("Cleaning the existing isolated workspace.")
                 shutil.rmtree(self.app_dir)
             os.makedirs(self.app_dir, exist_ok=True)
-            
-            cmd = ["git", "clone", "-b", self.branch, self.repo_url, self.app_dir]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+            command = [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--single-branch",
+                "--branch",
+                self.branch,
+                self.repo_url,
+                self.app_dir,
+            ]
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=180,
+            )
+            if result.stdout:
+                self.log(result.stdout[-4_000:])
             self.log("Repository cloned successfully.")
             return True
-        except subprocess.CalledProcessError as e:
-            self.log(f"Git clone failed: {e.stderr}")
+        except subprocess.CalledProcessError as exc:
+            self.log(f"Git clone failed with exit code {exc.returncode}.")
             return False
-        except Exception as e:
-            self.log(f"Unexpected error during clone: {str(e)}")
+        except subprocess.TimeoutExpired:
+            self.log("Git clone timed out.")
+            return False
+        except Exception as exc:
+            self.log(f"Repository clone stopped safely: {type(exc).__name__}.")
             return False
 
     def run_build(self, build_command: str) -> bool:
@@ -50,61 +89,44 @@ class DeploymentExecutor:
             self.log("No build command specified. Skipping build stage.")
             return True
         try:
-            self.log(f"Executing build command: {build_command}")
-            env = {**os.environ, **self.env_vars}
-            result = subprocess.run(
+            self.log("Executing the build in an isolated runner container.")
+            result = run_in_isolated_container(
                 build_command,
-                shell=True,
-                cwd=self.app_dir,
-                capture_output=True,
-                text=True,
-                check=True,
-                env=env
+                workspace=Path(self.app_dir),
+                environment=self.env_vars,
+                timeout_seconds=int(
+                    os.getenv("AMOSCLAUD_DEPLOY_BUILD_TIMEOUT_SECONDS", "900")
+                ),
             )
-            if result.stdout:
-                self.log(f"Build stdout:\n{result.stdout}")
+            if result.output:
+                self.log(result.output)
+            if result.returncode != 0:
+                self.log(
+                    f"Isolated build failed with exit code {result.returncode}."
+                )
+                return False
             return True
-        except subprocess.CalledProcessError as e:
-            self.log(f"Build command failed with exit code {e.returncode}")
-            self.log(f"Build stderr:\n{e.stderr}")
-            self.log(f"Build stdout:\n{e.stdout}")
+        except (RunnerConfigurationError, UnsafeCommandError) as exc:
+            self.log(f"Build blocked by runner policy: {exc}")
             return False
-        except Exception as e:
-            self.log(f"Unexpected error during build execution: {str(e)}")
+        except Exception as exc:
+            self.log(f"Isolated build stopped safely: {type(exc).__name__}.")
             return False
 
     def start_app(self, start_command: str) -> bool:
-        try:
-            self.log(f"Starting application with command: {start_command}")
-            env = {**os.environ, **self.env_vars}
-            self.process = subprocess.Popen(
-                start_command,
-                shell=True,
-                cwd=self.app_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env
-            )
-            time.sleep(3)
-            poll_status = self.process.poll()
-            if poll_status is not None:
-                stdout, stderr = self.process.communicate()
-                self.log(f"Application process exited immediately with code {poll_status}")
-                self.log(f"Process stderr:\n{stderr}")
-                return False
-            self.log(f"Application running successfully. PID: {self.process.pid}")
-            return True
-        except Exception as e:
-            self.log(f"Failed to start application: {str(e)}")
-            return False
+        """Refuse to host generated applications inside the deployment worker.
 
-    def stop_app(self):
-        if self.process and self.process.poll() is None:
-            self.log(f"Stopping running process with PID: {self.process.pid}")
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-            self.log("Process stopped.")
+        Production previews must be published to the dedicated preview service.
+        Keeping this method provides a truthful compatibility result to legacy
+        callers without reintroducing host command execution.
+        """
+
+        del start_command
+        self.log(
+            "Application start was not executed. Publish the verified artifact "
+            "to the dedicated Amosclaud preview service instead."
+        )
+        return False
+
+    def stop_app(self) -> None:
+        self.log("No in-process application is running; no stop action is required.")
