@@ -79,9 +79,10 @@ def test_retries_update_one_revision_branch_and_pull_request() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert 'branch="amosclaud-background-engineer/${short_sha}"' in workflow
-    assert "${GITHUB_RUN_ID}" not in workflow.split(
-        'branch="amosclaud-background-engineer/${short_sha}"', 1
-    )[0].split("branch=", 1)[-1]
+    assert (
+        'branch="amosclaud-background-engineer/${short_sha}-${GITHUB_RUN_ID}"'
+        not in workflow
+    )
     assert 'git checkout -B "$branch"' in workflow
     assert 'git push --force-with-lease --set-upstream origin "$branch"' in workflow
     assert 'gh pr list --state open --head "$branch"' in workflow
