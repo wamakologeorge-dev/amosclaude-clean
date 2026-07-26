@@ -26,4 +26,4 @@ USER 65532:65532
 
 ENV AMOSCLAUD_PREVIEW_DATA=/data/previews
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn preview_service.app:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["python", "-m", "preview_service.server"]
