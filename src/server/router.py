@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import os
 from dataclasses import asdict
+from pathlib import Path
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -36,10 +37,18 @@ def require_self_key(value: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid Amosclaud Autonomous self key")
 
 
+def _safe_workspace(workspace: str) -> str:
+    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    candidate = (base / str(workspace or ".")).resolve()
+    if candidate != base and base not in candidate.parents:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+    return str(candidate)
+
+
 @router.post("/run", response_model=AutonomousTaskResponse)
 def run_task(payload: AutonomousTaskRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
     require_self_key(self_key)
-    return get_autonomous_kernel(payload.workspace).execute(
+    return get_autonomous_kernel(_safe_workspace(payload.workspace)).execute(
         objective=payload.objective,
         mode=payload.mode,
         authorized_writes=payload.authorized_writes,
@@ -50,7 +59,7 @@ def run_task(payload: AutonomousTaskRequest, self_key: str | None = Header(defau
 @router.post("/chat")
 def cloud_agent_chat(payload: CloudAgentChatRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
     require_self_key(self_key)
-    return get_autonomous_kernel(payload.workspace).assist(
+    return get_autonomous_kernel(_safe_workspace(payload.workspace)).assist(
         message=payload.message,
         evidence=payload.evidence,
         result_locations=payload.result_locations,
@@ -62,7 +71,7 @@ def cloud_agent_chat(payload: CloudAgentChatRequest, self_key: str | None = Head
 @router.post("/mini")
 def mini_autonomous(payload: MiniAutonomousRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
     require_self_key(self_key)
-    return get_autonomous_kernel(payload.workspace).repair(
+    return get_autonomous_kernel(_safe_workspace(payload.workspace)).repair(
         issue=payload.issue,
         authorized_writes=payload.authorized_writes,
     )
