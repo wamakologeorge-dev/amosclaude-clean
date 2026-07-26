@@ -288,7 +288,7 @@ def _check_amosclaud_provider() -> dict:
             OPERATIONAL,
             "The direct self-hosted model runtime is reachable and serves the "
             "first-party provider path, so the optional hosted Amosclaud API "
-            "and station network are not required.",
+            "and station network are not required, so the provider path is operational.",
             "model_runtime candidate 'self-hosted' passed its bounded preflight",
         )
 
