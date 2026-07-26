@@ -42,11 +42,11 @@ jobs:
           AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: 'true'
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
           AMOSCLAUD_PROVIDER_API_URL: ${{ secrets.AMOSCLAUD_PROVIDER_API_URL }}
-          # A repository can provide an explicit self-hosted endpoint. When only
-          # OLLAMA_API_KEY is present, use Ollama Cloud's OpenAI-compatible host.
-          AMOSCLAUD_MODEL_URL: ${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL || (secrets.OLLAMA_API_KEY && 'https://ollama.com') }}
-          AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY }}
-          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || (secrets.OLLAMA_API_KEY && 'qwen3-coder:480b') || 'qwen2.5-coder:1.5b' }}
+          # Preserve explicit self-hosted endpoints. If any recognized Ollama
+          # credential alias is present, use Ollama Cloud automatically.
+          AMOSCLAUD_MODEL_URL: ${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL || ((secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA) && 'https://ollama.com') }}
+          AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || ((secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA) && 'gpt-oss:120b') || 'qwen2.5-coder:1.5b' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
