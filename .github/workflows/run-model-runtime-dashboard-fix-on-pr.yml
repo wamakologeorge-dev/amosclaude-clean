@@ -23,41 +23,26 @@ jobs:
           fetch-depth: 1
           show-progress: false
 
-      - name: Apply structural corrections
+      - name: Apply corrections by function boundaries
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           from textwrap import dedent
-          import re
 
-          def replace_once(path: str, old: str, new: str) -> None:
+          def replace_between(path: str, start_marker: str, end_marker: str, replacement: str) -> None:
               file = Path(path)
               text = file.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
+              if text.count(start_marker) != 1 or text.count(end_marker) != 1:
                   raise SystemExit(
-                      f"Expected exactly one literal target in {path}, found {count}"
+                      f"Could not uniquely locate function boundaries in {path}: "
+                      f"start={text.count(start_marker)}, end={text.count(end_marker)}"
                   )
-              file.write_text(text.replace(old, new, 1), encoding="utf-8")
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              file.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
 
-          def regex_once(path: str, pattern: str, replacement: str) -> None:
-              file = Path(path)
-              text = file.read_text(encoding="utf-8")
-              updated, count = re.subn(
-                  pattern,
-                  lambda _: replacement,
-                  text,
-                  count=1,
-                  flags=re.DOTALL,
-              )
-              if count != 1:
-                  raise SystemExit(
-                      f"Expected exactly one structural target in {path}, found {count}"
-                  )
-              file.write_text(updated, encoding="utf-8")
-
-          provider_block = dedent('''\
+          platform_block = dedent('''\
           def _self_hosted_reachable() -> bool:
               cand = _find_candidate("self-hosted")
               return bool(
@@ -137,24 +122,22 @@ jobs:
 
           ''')
 
-          regex_once(
+          replace_between(
               "amoscloud_ai/api/routes/platform_services.py",
-              r"def _self_hosted_reachable\(\) -> bool:\n.*?(?=def _check_model_runtime\(\) -> dict:)",
-              provider_block,
+              "def _self_hosted_reachable() -> bool:\n",
+              "def _check_model_runtime() -> dict:\n",
+              platform_block,
           )
 
-          diagnose_old = dedent('''\
-          def diagnose(code: str, detail: str, candidate: Candidate) -> Diagnosis:
-              return Diagnosis(
-                  code=code,
-                  detail=redact(detail)[:300],
-                  remediation=remediation(code, candidate),
+          runtime_path = Path("amoscloud_ai/model_runtime.py")
+          runtime = runtime_path.read_text(encoding="utf-8")
+          status_marker = "def _status_code(error: BaseException) -> int | None:\n"
+          if runtime.count(status_marker) != 1:
+              raise SystemExit(
+                  f"Could not uniquely locate _status_code: {runtime.count(status_marker)}"
               )
-          ''')
 
-          preflight_helper = dedent('''\
-
-
+          helper = dedent('''\
           def _preflight_timeout_diagnosis(
               error: BaseException, candidate: Candidate
           ) -> Diagnosis:
@@ -173,27 +156,27 @@ jobs:
                       "larger connection budget."
                   ),
               )
-          ''')
 
-          replace_once(
-              "amoscloud_ai/model_runtime.py",
-              diagnose_old,
-              diagnose_old + preflight_helper,
+
+          ''')
+          runtime = runtime.replace(status_marker, helper + status_marker, 1)
+
+          tcp_start_marker = (
+              "    try:\n"
+              "        _tcp_connect(host, port, connect_budget_seconds())\n"
           )
-
-          preflight_old = dedent('''\
-              try:
-                  _tcp_connect(host, port, connect_budget_seconds())
-              except Exception as error:
-                  return CandidateHealth(
-                      candidate=candidate,
-                      reachable=False,
-                      diagnosis=classify(error, candidate),
-                      checked_at=now,
-                  )
-          ''')
-
-          preflight_new = dedent('''\
+          success_marker = (
+              "    return CandidateHealth(candidate=candidate, reachable=True, checked_at=now)\n"
+          )
+          if runtime.count(tcp_start_marker) != 1 or runtime.count(success_marker) != 1:
+              raise SystemExit(
+                  "Could not uniquely locate TCP preflight block: "
+                  f"start={runtime.count(tcp_start_marker)}, "
+                  f"success={runtime.count(success_marker)}"
+              )
+          tcp_start = runtime.index(tcp_start_marker)
+          tcp_end = runtime.index(success_marker, tcp_start)
+          tcp_block = dedent('''\
               try:
                   _tcp_connect(host, port, connect_budget_seconds())
               except Exception as error:
@@ -207,12 +190,8 @@ jobs:
                       checked_at=now,
                   )
           ''')
-
-          replace_once(
-              "amoscloud_ai/model_runtime.py",
-              preflight_old,
-              preflight_new,
-          )
+          runtime = runtime[:tcp_start] + tcp_block + runtime[tcp_end:]
+          runtime_path.write_text(runtime, encoding="utf-8")
 
           Path("tests/test_model_runtime_dashboard_corrections.py").write_text(
               dedent('''\
