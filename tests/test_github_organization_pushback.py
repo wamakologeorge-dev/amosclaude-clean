@@ -14,6 +14,7 @@ from amoscloud_ai.api.routes.github_organization_publish import (
 from amoscloud_ai.api.routes.real_repositories import RealRepositoryCreate
 from amoscloud_ai.cloud_configuration import load_cloud_configuration
 from amoscloud_ai.github_repository_sync import _synchronization_remote
+from amoscloud_ai.main import app
 from amoscloud_ai.route_discovery import route_paths
 
 
@@ -29,6 +30,13 @@ def test_organization_publish_routes_are_mounted() -> None:
 
     platform_paths = route_paths(platform_services.router.routes)
     assert "/platform/cloud-configuration" in platform_paths
+
+    application_paths = route_paths(app.routes)
+    assert "/api/v1/github/connect-organizations" in application_paths
+    assert "/api/v1/github/organizations" in application_paths
+    assert "/api/v1/github/repositories/{repository_id}/publish" in application_paths
+    assert "/api/v1/github/repositories/{repository_id}/sync-status" in application_paths
+    assert "/api/v1/platform/cloud-configuration" in application_paths
 
 
 def test_personal_and_organization_creation_paths_are_distinct() -> None:
@@ -139,12 +147,14 @@ def test_devcontainer_runs_app_postgres_redis_and_docker() -> None:
     assert services["redis"]["healthcheck"]
 
 
-def test_repository_ui_creates_and_publishes_to_selected_owner() -> None:
+def test_repository_ui_handles_plain_text_errors_and_existing_publish() -> None:
     source = (ROOT / "web/github-organization-publish.js").read_text(
         encoding="utf-8"
     )
     assert "/api/v1/github/organizations" in source
     assert "/api/v1/repositories/create-real" in source
+    assert "const text = await response.text()" in source
+    assert "payload = text ? JSON.parse(text) : null" in source
     assert "owner: createOwnerInput.value" in source
     assert "/api/v1/github/repositories/${encodeURIComponent(publishIdInput.value)}/publish" in source
     assert "/api/v1/github/repositories/${encodeURIComponent(repositoryId)}/push" in source
