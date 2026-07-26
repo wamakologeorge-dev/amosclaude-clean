@@ -89,6 +89,27 @@ MIGRATIONS = (
         "github_repository_sync_schema",
         "github repository mapping and synchronization evidence columns",
     ),
+    Migration(
+        4,
+        "cloud_workspaces",
+        """
+        CREATE TABLE IF NOT EXISTS cloud_workspaces (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL UNIQUE,
+            owner_id INTEGER NOT NULL,
+            runtime_status TEXT NOT NULL DEFAULT 'not_started',
+            runtime_detail TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_started_at TEXT,
+            last_stopped_at TEXT,
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_cloud_workspaces_owner
+            ON cloud_workspaces(owner_id, updated_at);
+        """,
+    ),
 )
 
 _GITHUB_REPOSITORY_COLUMNS = {
