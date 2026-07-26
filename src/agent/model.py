@@ -130,22 +130,28 @@ class AutonomousModelGateway:
     def complete(self, objective: str, evidence: list[str]) -> str:
         """Generate one bounded, machine-readable repair proposal."""
         user_content = (
-            "Create the smallest safe repository repair for the verified objective below.\n\n"
+            "Create the smallest safe repository repair for the verified "
+            "objective below.\n\n"
             f"OBJECTIVE\n{objective}\n\n"
             "VERIFIED REPOSITORY EVIDENCE\n"
             f"{self._bounded_evidence(evidence)}\n\n"
             "Return ONLY one JSON object with this exact shape:\n"
             '{"diagnosis":"verified root cause or remaining uncertainty",'
-            '"changes":[{"path":"relative/path","content":"complete replacement UTF-8 file content","reason":"why this file is required"}],'
+            '"changes":[{"path":"relative/path",'
+            '"content":"complete replacement UTF-8 file content",'
+            '"reason":"why this file is required"}],'
             '"verification":["focused command or check"]}\n\n'
             "Rules:\n"
             "- Propose at most 8 files and prefer fewer.\n"
-            "- Every content value must contain the COMPLETE final file, never a diff or ellipsis.\n"
-            "- Do not modify secrets, credentials, generated data, .git, deployment control files, "
-            "GitHub workflow files, CODEOWNERS, or security policy files.\n"
+            "- Every content value must contain the COMPLETE final file, "
+            "never a diff or ellipsis.\n"
+            "- Do not modify secrets, credentials, generated data, .git, "
+            "deployment control files, GitHub workflow files, CODEOWNERS, "
+            "or security policy files.\n"
             "- Preserve existing public behavior except for the requested repair.\n"
             "- Add or update a focused regression test when practical.\n"
-            "- When evidence is insufficient, return an empty changes list and explain what is missing.\n"
+            "- When evidence is insufficient, return an empty changes list "
+            "and explain what is missing.\n"
             "- Do not wrap the JSON in Markdown."
         )
         result = native_provider.reply(
@@ -170,7 +176,8 @@ class AutonomousModelGateway:
             plan.append(f"Prioritize the first verified blocker: {evidence[0][:160]}")
         plan.extend(
             [
-                "Ask the connected Ollama route for a structured minimal change proposal",
+                "Ask the connected Ollama route for a structured minimal "
+                "change proposal",
                 "Apply only authorized files inside the designated workspace",
                 "Run focused verification for the changed files before publishing",
                 "Create a branch and pull request only after verification passes",
