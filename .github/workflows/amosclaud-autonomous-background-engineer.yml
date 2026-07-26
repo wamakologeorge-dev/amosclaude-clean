@@ -339,6 +339,7 @@ jobs:
           gh auth setup-git
           git push --set-upstream origin "$branch"
           {
+            echo "<!-- amosclaud-autonomous-repair:v1 -->"
             echo "## Amosclaud Autonomous Background Engineer"
             echo ""
             echo "This repair was generated from issue #${ISSUE_NUMBER} and verified autonomously under AGENTS.md and the Python Autonomous Engineering Book."
