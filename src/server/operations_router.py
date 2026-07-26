@@ -1,6 +1,9 @@
 """API for Agent Operations Controller and Mission Control."""
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -18,13 +21,31 @@ class JobRequest(BaseModel):
     workspace: str = "."
 
 
+def _safe_workspace(workspace: str) -> str:
+    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    raw_workspace = str(workspace or ".").strip()
+    if "\x00" in raw_workspace:
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        raise HTTPException(status_code=400, detail="Workspace must be a relative path")
+
+    candidate = (base / workspace_path).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+    return str(candidate)
+
+
 @router.post("/jobs")
 def create_job(payload: JobRequest) -> dict:
     return controller.submit(
         objective=payload.objective,
         mode=payload.mode,
         authorized_writes=payload.authorized_writes,
-        workspace=payload.workspace,
+        workspace=_safe_workspace(payload.workspace),
     )
 
 

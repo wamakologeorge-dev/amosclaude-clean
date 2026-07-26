@@ -94,6 +94,8 @@ def load_model_config() -> ModelConfig:
 class AutonomousModelGateway:
     """Shared-provider gateway for planning, debugging, review, and repair prompts."""
 
+    MAX_EVIDENCE_CHARS = 32_000
+
     def __init__(self, config: ModelConfig | None = None) -> None:
         self.config = config or load_model_config()
 
@@ -112,11 +114,45 @@ class AutonomousModelGateway:
             "timeout_seconds": self.config.timeout_seconds,
         }
 
+    @classmethod
+    def _bounded_evidence(cls, evidence: list[str]) -> str:
+        selected: list[str] = []
+        remaining = cls.MAX_EVIDENCE_CHARS
+        for item in evidence:
+            text = str(item).strip()
+            if not text or remaining <= 0:
+                continue
+            fragment = text[:remaining]
+            selected.append(fragment)
+            remaining -= len(fragment)
+        return "\n\n---\n\n".join(selected)
+
     def complete(self, objective: str, evidence: list[str]) -> str:
-        """Generate through the shared native-first Amosclaud provider policy."""
+        """Generate one bounded, machine-readable repair proposal."""
         user_content = (
-            f"Objective: {objective}\nVerified evidence:\n"
-            + "\n".join(evidence)
+            "Create the smallest safe repository repair for the verified "
+            "objective below.\n\n"
+            f"OBJECTIVE\n{objective}\n\n"
+            "VERIFIED REPOSITORY EVIDENCE\n"
+            f"{self._bounded_evidence(evidence)}\n\n"
+            "Return ONLY one JSON object with this exact shape:\n"
+            '{"diagnosis":"verified root cause or remaining uncertainty",'
+            '"changes":[{"path":"relative/path",'
+            '"content":"complete replacement UTF-8 file content",'
+            '"reason":"why this file is required"}],'
+            '"verification":["focused command or check"]}\n\n'
+            "Rules:\n"
+            "- Propose at most 8 files and prefer fewer.\n"
+            "- Every content value must contain the COMPLETE final file, "
+            "never a diff or ellipsis.\n"
+            "- Do not modify secrets, credentials, generated data, .git, "
+            "deployment control files, GitHub workflow files, CODEOWNERS, "
+            "or security policy files.\n"
+            "- Preserve existing public behavior except for the requested repair.\n"
+            "- Add or update a focused regression test when practical.\n"
+            "- When evidence is insufficient, return an empty changes list "
+            "and explain what is missing.\n"
+            "- Do not wrap the JSON in Markdown."
         )
         result = native_provider.reply(
             [{"role": "user", "content": user_content}],
@@ -133,16 +169,18 @@ class AutonomousModelGateway:
         if not self.available():
             raise RuntimeError("Amosclaud execution model is not configured")
         plan = [
-            "Understand the objective and success criteria",
-            "Inspect repository evidence and dependency impact",
+            "Define the exact failure and observable success criteria",
+            "Inspect bounded repository files relevant to the objective",
         ]
         if evidence:
             plan.append(f"Prioritize the first verified blocker: {evidence[0][:160]}")
         plan.extend(
             [
-                "Ask the connected model API for a bounded change proposal",
-                "Execute only inside the designated workspace when authorized",
-                "Run focused verification and report exact evidence",
+                "Ask the connected Ollama route for a structured minimal "
+                "change proposal",
+                "Apply only authorized files inside the designated workspace",
+                "Run focused verification for the changed files before publishing",
+                "Create a branch and pull request only after verification passes",
             ]
         )
         return plan

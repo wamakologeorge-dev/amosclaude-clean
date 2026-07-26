@@ -6,17 +6,40 @@ from pathlib import Path
 
 
 class SafeFileManager:
-    PROTECTED = {".git", ".env", "data", "secrets"}
+    PROTECTED_PARTS = {".git", ".env", "data", "secrets", "credentials"}
+    PROTECTED_PREFIXES = (
+        ".github/workflows/",
+        ".github/actions/",
+    )
+    PROTECTED_FILES = {
+        "SECURITY.md",
+        ".github/SECURITY.md",
+        "CODEOWNERS",
+        ".github/CODEOWNERS",
+        "Dockerfile",
+        "railway.json",
+        "vercel.json",
+    }
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
 
     def resolve(self, relative_path: str) -> Path:
-        path = (self.workspace / relative_path).resolve()
+        normalized = str(relative_path or "").strip().replace("\\", "/")
+        if not normalized:
+            raise PermissionError("An explicit relative path is required")
+        path = (self.workspace / normalized).resolve()
         if self.workspace not in path.parents and path != self.workspace:
             raise PermissionError("Path escapes the controlled workspace")
-        if any(part in self.PROTECTED for part in path.relative_to(self.workspace).parts):
+        relative = path.relative_to(self.workspace).as_posix()
+        if any(part in self.PROTECTED_PARTS for part in Path(relative).parts):
             raise PermissionError("Protected path cannot be modified by Autonomous")
+        if relative in self.PROTECTED_FILES or any(
+            relative.startswith(prefix) for prefix in self.PROTECTED_PREFIXES
+        ):
+            raise PermissionError(
+                "Protected repair-control files require a separate maintenance pull request"
+            )
         return path
 
     def read(self, relative_path: str) -> str:

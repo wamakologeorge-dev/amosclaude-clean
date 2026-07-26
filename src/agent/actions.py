@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
 from amosclaud_os.agent.runtime_bridge import (
     run_native_coding_if_requested,
 )
@@ -110,6 +112,19 @@ class AutonomousOrchestrator:
         return outcome
 
 
+def _resolve_workspace(workspace: str) -> Path:
+    base = Path.cwd().resolve()
+    candidate = (base / workspace).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace must stay inside server root",
+        ) from exc
+    return candidate
+
+
 def run_autonomous(
     objective: str,
     mode: str = "plan",
@@ -117,12 +132,13 @@ def run_autonomous(
     workspace: str = ".",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    safe_workspace = _resolve_workspace(workspace)
     prepared = dict(metadata or {})
     native_result = run_native_coding_if_requested(
         objective=objective,
         mode=mode,
         authorized_writes=authorized_writes,
-        workspace=workspace,
+        workspace=str(safe_workspace),
         metadata=prepared,
     )
     if native_result is not None:
@@ -134,4 +150,4 @@ def run_autonomous(
         authorized_writes=authorized_writes,
         metadata=prepared,
     )
-    return AutonomousOrchestrator(Path(workspace)).run(task).to_dict()
+    return AutonomousOrchestrator(safe_workspace).run(task).to_dict()
