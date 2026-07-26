@@ -6,8 +6,9 @@
   <title>Repository · Amosclaud</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="/static/workspace.css" />
+  <link rel="stylesheet" href="/static/editor-experience.css" />
   <style>
-    .ws-settings-summary button{width:100%;padding:12px;text-align:left;border:1px solid #30363d;border-radius:9px;background:#0b1119;color:#e6edf3;cursor:pointer}.ws-settings-summary button:hover{background:#161b22;border-color:#58a6ff}.ws-settings-summary button strong,.ws-settings-summary button span{display:block}.ws-settings-summary button span{margin-top:5px;color:#8b949e;font-size:.8rem;line-height:1.45}.ws-tool-form{display:flex;gap:8px;flex-wrap:wrap}.ws-tool-form button,.ws-tool-list button{border:1px solid #30363d;border-radius:7px;background:#21262d;color:#e6edf3;padding:9px 12px;font-weight:700;cursor:pointer}.ws-tool-list{border:1px solid #30363d;border-radius:10px;background:#0b1119;overflow:hidden}.ws-tool-item{padding:14px 16px;border-bottom:1px solid #21262d}.ws-tool-item:last-child{border-bottom:0}.ws-tool-item strong,.ws-tool-item span{display:block}.ws-tool-item span{margin-top:5px;color:#8b949e;font-size:.82rem}.ws-tool-item-actions{margin-top:10px}.ws-agent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ws-agent-grid button{min-height:54px}.ws-agent-output{margin-top:14px;white-space:pre-wrap;min-height:120px;padding:14px;border:1px solid #30363d;border-radius:10px;background:#050a10;color:#c9d1d9}.ws-editor-launch{border:1px solid #1f6feb;border-radius:8px;background:#1f6feb24;color:#79c0ff;padding:9px 12px;text-decoration:none;font-weight:800;white-space:nowrap}.ws-editor-launch:hover{background:#1f6feb3d;color:#f0f6fc}@media(max-width:700px){.ws-agent-grid{grid-template-columns:1fr 1fr}.ws-tool-form{display:grid;grid-template-columns:1fr 1fr}.ws-tool-form button{min-height:52px}.ws-editor-launch{order:4;width:100%;box-sizing:border-box;text-align:center;min-height:50px;display:grid;place-items:center}}
+    .ws-settings-summary button{width:100%;padding:12px;text-align:left;border:1px solid #30363d;border-radius:9px;background:#0b1119;color:#e6edf3;cursor:pointer}.ws-settings-summary button:hover{background:#161b22;border-color:#58a6ff}.ws-settings-summary button strong,.ws-settings-summary button span{display:block}.ws-settings-summary button span{margin-top:5px;color:#8b949e;font-size:.8rem;line-height:1.45}.ws-tool-form{display:flex;gap:8px;flex-wrap:wrap}.ws-tool-form button,.ws-tool-list button{border:1px solid #30363d;border-radius:7px;background:#21262d;color:#e6edf3;padding:9px 12px;font-weight:700;cursor:pointer}.ws-tool-list{border:1px solid #30363d;border-radius:10px;background:#0b1119;overflow:hidden}.ws-tool-item{padding:14px 16px;border-bottom:1px solid #21262d}.ws-tool-item:last-child{border-bottom:0}.ws-tool-item strong,.ws-tool-item span{display:block}.ws-tool-item span{margin-top:5px;color:#8b949e;font-size:.82rem}.ws-tool-item-actions{margin-top:10px}.ws-agent-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ws-agent-grid button{min-height:54px}.ws-agent-output{margin-top:14px;white-space:pre-wrap;min-height:120px;padding:14px;border:1px solid #30363d;border-radius:10px;background:#050a10;color:#c9d1d9}.ws-editor-launch{border:1px solid #1f6feb;border-radius:8px;background:#1f6feb24;color:#79c0ff;padding:9px 12px;text-decoration:none;font-weight:800;white-space:nowrap}.ws-editor-launch:hover{background:#1f6feb3d;color:#f0f6fc}.ws-full-editor-note{margin:0 0 12px;padding:12px 14px;border:1px solid #1f6feb66;border-radius:9px;background:#1f6feb18;color:#a5d6ff;line-height:1.5}.ws-full-editor-note strong{color:#f0f6fc}@media(max-width:700px){.ws-agent-grid{grid-template-columns:1fr 1fr}.ws-tool-form{display:grid;grid-template-columns:1fr 1fr}.ws-tool-form button{min-height:52px}.ws-editor-launch{order:4;width:100%;box-sizing:border-box;text-align:center;min-height:54px;display:grid;place-items:center}.ws-full-editor-note{font-size:1rem}}
   </style>
 </head>
 <body>
@@ -16,7 +17,7 @@
     <a href="/repositories" class="ws-brand" aria-label="Back to repositories">A</a>
     <div class="ws-repo-identity"><strong id="ws-repo-name">Repository</strong><span id="ws-repo-meta">Loading…</span></div>
     <div id="ws-visibility" class="ws-visibility" hidden><span id="ws-visibility-state" class="ws-visibility-state is-private">Private</span><button id="ws-visibility-toggle" type="button">Publish</button></div>
-    <a id="ws-open-web-editor" class="ws-editor-launch" href="/repositories">Editor of the Web</a>
+    <a id="ws-open-web-editor" class="ws-editor-launch" href="/repositories">Open full editor</a>
     <div class="ws-branch-controls"><select id="ws-branch" aria-label="Branch" disabled></select><button id="ws-new-branch" type="button" disabled>New branch</button></div>
   </header>
 
@@ -47,11 +48,12 @@
       <strong>Repository not found</strong><span>This repository does not exist, was deleted, or your account does not have access.</span><a class="btn-primary" href="/repositories">Back to repositories</a>
     </section>
     <section class="ws-panel active" data-panel="code">
+      <p class="ws-full-editor-note"><strong>Real editing:</strong> tap a file and then tap <strong>Edit</strong>. Amosclaud will open the full-screen Editor of the Web, where you can read the complete file, change it, and commit it to the selected branch.</p>
       <div class="ws-code-toolbar"><div id="ws-breadcrumbs" class="ws-breadcrumbs"></div><div class="ws-code-actions"><input id="ws-file-search" type="search" placeholder="Find a file" aria-label="Find a file" disabled /><button id="ws-new-folder" type="button" disabled>New folder</button><button id="ws-new-file" type="button" disabled>New file</button></div></div>
       <div id="ws-status" class="ws-status" role="status" aria-live="polite">Loading repository…</div>
       <div class="ws-code-grid">
         <section class="ws-browser" aria-label="Repository files"><div class="ws-browser-head"><strong>Name</strong><span>Size</span></div><div id="ws-tree" class="ws-tree">Loading files…</div></section>
-        <section class="ws-editor-pane"><div class="ws-editor-empty" id="ws-editor-empty"><strong>Select a file to view or edit</strong><span>Folders are clickable. Changes are committed manually to the selected branch.</span></div><div id="ws-editor-shell" hidden><div class="ws-editor-toolbar"><span id="ws-current-file">Select a file</span><div class="ws-editor-modes"><button id="ws-mode-view" type="button" data-mode="view" class="active">View</button><button id="ws-mode-edit" type="button" data-mode="edit">Edit</button><button id="ws-mode-history" type="button" data-mode="history">History</button><button id="ws-mode-blame" type="button" data-mode="blame">Blame</button><button id="ws-rename" type="button" disabled>Rename or move</button><button id="ws-delete" type="button" disabled>Delete</button></div></div><div id="ws-view" class="ws-view"></div><div id="ws-edit" hidden><textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea><div class="ws-commit-box"><label for="ws-commit-message">Commit message</label><input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" /><button id="ws-save" type="button" disabled>Commit changes</button></div></div><div id="ws-history" class="ws-history" hidden></div><div id="ws-blame" class="ws-blame" hidden></div></div></section>
+        <section class="ws-editor-pane"><div class="ws-editor-empty" id="ws-editor-empty"><strong>Select a file to read or edit</strong><span>Tap a folder to open it. Tap a file to read it. Tap Edit to continue in the full-screen editor.</span></div><div id="ws-editor-shell" hidden><div class="ws-editor-toolbar"><span id="ws-current-file">Select a file</span><div class="ws-editor-modes"><button id="ws-mode-view" type="button" data-mode="view" class="active">Read</button><button id="ws-mode-edit" type="button" data-mode="edit">Edit full screen</button><button id="ws-mode-history" type="button" data-mode="history">History</button><button id="ws-mode-blame" type="button" data-mode="blame">Blame</button><button id="ws-rename" type="button" disabled>Rename or move</button><button id="ws-delete" type="button" disabled>Delete</button></div></div><div id="ws-view" class="ws-view"></div><div id="ws-edit" hidden><textarea id="ws-editor" spellcheck="false" placeholder="Choose a source file."></textarea><div class="ws-commit-box"><label for="ws-commit-message">Commit message</label><input id="ws-commit-message" type="text" value="Update source file" placeholder="Describe your changes" /><button id="ws-save" type="button" disabled>Commit changes</button></div></div><div id="ws-history" class="ws-history" hidden></div><div id="ws-blame" class="ws-blame" hidden></div></div></section>
       </div>
     </section>
     <section class="ws-panel" data-panel="commits"><div class="ws-section-head"><div><h2>Commit history</h2><p>Real commits recorded on the selected branch.</p></div></div><div id="ws-commits" class="ws-commit-list">Loading…</div></section>
@@ -70,8 +72,26 @@
         location.replace('/repositories');
         return;
       }
+
       const editorLink = document.getElementById('ws-open-web-editor');
-      if (editorLink) editorLink.href = `/static/editor-of-the-web.html?repository=${encodeURIComponent(repositoryId)}`;
+      const editorBase = `/static/editor-of-the-web.html?repository=${encodeURIComponent(repositoryId)}`;
+      if (editorLink) editorLink.href = editorBase;
+
+      const openFullEditor = event => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const fileLabel = document.getElementById('ws-current-file')?.textContent?.trim() || '';
+        const url = new URL(editorBase, location.origin);
+        if (fileLabel && fileLabel !== 'Select a file') url.searchParams.set('path', fileLabel);
+        url.searchParams.set('mode', 'edit');
+        location.assign(`${url.pathname}${url.search}`);
+      };
+
+      editorLink?.addEventListener('click', event => {
+        event.preventDefault();
+        location.assign(editorBase);
+      });
+      document.getElementById('ws-mode-edit')?.addEventListener('click', openFullEditor, true);
     })();
   </script>
   <script src="/static/highlight.js"></script><script src="/static/workspace.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
