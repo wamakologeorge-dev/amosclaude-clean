@@ -1,0 +1,7 @@
+platform_start=1
+platform_end=1
+status_marker=1
+tcp_start=1
+success_marker=2
+tcp_context=
+'       diagnosis=classify(error, candidate),\n            checked_at=now,\n        )\n    try:\n        _tcp_connect(host, port, connect_budget_seconds())\n    except Exception as error:\n        return CandidateHealth(\n            candidate=candidate,\n            reachable=False,\n            diagnosis=classify(error, candidate),\n            checked_at=now,\n      '
