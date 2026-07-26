@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from git import Repo
@@ -14,7 +15,13 @@ from amoscloud_ai.api.routes.github_repositories import (
     _decrypt_token,
     _public_remote_url,
 )
-from amoscloud_ai.api.routes.repositories import _repo_lock, _repo_path
+from amoscloud_ai.api.routes.repositories import (
+    _db as _repository_db,
+    _repo_lock,
+    _repo_path,
+)
+
+log = logging.getLogger(__name__)
 
 _SYNC_COLUMNS = {
     "github_sync_state": "TEXT",
@@ -28,8 +35,15 @@ def _now() -> str:
 
 
 def ensure_sync_columns() -> None:
-    """Add sync evidence fields without requiring a separate migration process."""
+    """Initialize the canonical repository schema, then add sync evidence fields.
 
+    GitHub push events can arrive on a fresh process before any repository route
+    has opened the application database. Initializing through repositories._db()
+    preserves the complete canonical schema instead of creating a partial table.
+    """
+
+    with _repository_db():
+        pass
     with _db() as db:
         columns = {
             row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
@@ -77,7 +91,7 @@ def _synchronization_remote(repo: Repo):
     raise ValueError("No GitHub synchronization remote is configured")
 
 
-def synchronize_github_push(
+def _synchronize_github_push(
     repository_full_name: str,
     ref: str,
     remote_sha: str | None,
@@ -216,3 +230,31 @@ def synchronize_github_push(
                     }
                 )
     return results
+
+
+def synchronize_github_push(
+    repository_full_name: str,
+    ref: str,
+    remote_sha: str | None,
+) -> list[dict]:
+    """Run a webhook synchronization without leaking exceptions to Starlette.
+
+    FastAPI executes this function after the webhook response has been returned.
+    A blank or temporarily unavailable database must not crash the webhook runner.
+    """
+
+    try:
+        return _synchronize_github_push(repository_full_name, ref, remote_sha)
+    except Exception as exc:  # pragma: no cover - final background-task boundary
+        log.exception(
+            "GitHub background synchronization failed for %s (%s)",
+            repository_full_name,
+            type(exc).__name__,
+        )
+        return [
+            {
+                "repository_id": None,
+                "state": "error",
+                "detail": f"Automatic GitHub pull failed: {type(exc).__name__}",
+            }
+        ]
