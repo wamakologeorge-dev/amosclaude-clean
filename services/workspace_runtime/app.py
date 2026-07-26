@@ -53,6 +53,15 @@ IDLE_TIMEOUT_SECONDS = min(
     max(int(os.getenv("AMOSCLAUD_WORKSPACE_IDLE_TIMEOUT_SECONDS", "1800")), 300),
     86400,
 )
+ALLOWED_ORIGINS = {
+    item.strip().rstrip("/")
+    for item in os.getenv(
+        "AMOSCLAUD_WORKSPACE_ALLOWED_ORIGINS",
+        "https://amosclaud.com,https://www.amosclaud.com,http://localhost:8000",
+    ).split(",")
+    if item.strip()
+}
+_USED_TICKETS: dict[str, int] = {}
 
 
 class WorkspaceStart(BaseModel):
@@ -66,6 +75,7 @@ class TerminalTicket(BaseModel):
     workspace_id: str
     user_id: int = Field(gt=0)
     expires_at: int = Field(gt=0)
+    nonce: str = Field(min_length=16, max_length=200)
     signature: str = Field(min_length=64, max_length=64)
 
 
@@ -159,7 +169,10 @@ def _public(container) -> dict[str, Any]:
 
 
 def _ticket_payload(ticket: TerminalTicket) -> bytes:
-    return f"{ticket.workspace_id}:{ticket.user_id}:{ticket.expires_at}".encode()
+    return (
+        f"{ticket.workspace_id}:{ticket.user_id}:"
+        f"{ticket.expires_at}:{ticket.nonce}"
+    ).encode()
 
 
 def _verify_ticket(ticket_value: str, workspace_id: str) -> TerminalTicket:
@@ -171,12 +184,18 @@ def _verify_ticket(ticket_value: str, workspace_id: str) -> TerminalTicket:
         ticket = TerminalTicket.model_validate(json.loads(raw))
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid terminal ticket") from exc
+    now = int(time.time())
+    for nonce, expires_at in list(_USED_TICKETS.items()):
+        if expires_at < now:
+            _USED_TICKETS.pop(nonce, None)
     if ticket.workspace_id != _workspace_id(workspace_id):
         raise HTTPException(
             status_code=401, detail="Terminal ticket workspace mismatch"
         )
-    if ticket.expires_at < int(time.time()):
+    if ticket.expires_at < now:
         raise HTTPException(status_code=401, detail="Terminal ticket expired")
+    if ticket.nonce in _USED_TICKETS:
+        raise HTTPException(status_code=401, detail="Terminal ticket was already used")
     expected = hmac.new(
         RUNTIME_TOKEN.encode(), _ticket_payload(ticket), hashlib.sha256
     ).hexdigest()
@@ -184,7 +203,14 @@ def _verify_ticket(ticket_value: str, workspace_id: str) -> TerminalTicket:
         raise HTTPException(
             status_code=401, detail="Invalid terminal ticket signature"
         )
+    _USED_TICKETS[ticket.nonce] = ticket.expires_at
     return ticket
+
+
+def _verify_origin(websocket: WebSocket) -> None:
+    origin = (websocket.headers.get("origin") or "").rstrip("/")
+    if origin not in ALLOWED_ORIGINS:
+        raise HTTPException(status_code=403, detail="Untrusted terminal origin")
 
 
 @app.get("/health")
@@ -204,6 +230,7 @@ def health() -> dict[str, Any]:
         "memory_mb": MEMORY_LIMIT,
         "pids_limit": PIDS_LIMIT,
         "network": WORKSPACE_NETWORK,
+        "allowed_origins": sorted(ALLOWED_ORIGINS),
     }
 
 
@@ -354,6 +381,7 @@ async def _write_terminal(master_fd: int, websocket: WebSocket) -> None:
 @app.websocket("/v1/terminal/{workspace_id}")
 async def terminal(websocket: WebSocket, workspace_id: str, ticket: str) -> None:
     try:
+        _verify_origin(websocket)
         _verify_ticket(ticket, workspace_id)
         container = _container(workspace_id)
         container.reload()
