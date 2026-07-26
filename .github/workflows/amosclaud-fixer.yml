@@ -164,9 +164,25 @@ jobs:
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
           AMOSCLAUD_FAILURE_LOG: amosclaud-failure.log
         run: |
-          python .github/scripts/amosclaud_fixer.py | tee amosclaud-fixer-output.txt
-          grep '^AMOSCLAUD_FIX_VERIFIED=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT"
-          grep '^AMOSCLAUD_CHANGED_FILES=' amosclaud-fixer-output.txt >> "$GITHUB_OUTPUT" || true
+          set +e
+          output_file="$RUNNER_TEMP/amosclaud-fixer-output.txt"
+          python .github/scripts/amosclaud_fixer.py 2>&1 | tee "$output_file"
+          fixer_status="${PIPESTATUS[0]}"
+          set -e
+
+          verified="$(grep -m1 '^AMOSCLAUD_FIX_VERIFIED=' "$output_file" | cut -d= -f2- || true)"
+          changed_files="$(grep -m1 '^AMOSCLAUD_CHANGED_FILES=' "$output_file" | cut -d= -f2- || true)"
+          if [[ "$verified" != "true" && "$verified" != "false" ]]; then
+            verified=false
+          fi
+
+          echo "AMOSCLAUD_FIX_VERIFIED=$verified" >> "$GITHUB_OUTPUT"
+          if [[ -n "$changed_files" ]]; then
+            echo "AMOSCLAUD_CHANGED_FILES=$changed_files" >> "$GITHUB_OUTPUT"
+          fi
+
+          cp "$output_file" amosclaud-fixer-output.txt
+          exit "$fixer_status"
 
       - name: Report missing Amosclaud credentials
         if: steps.credentials.outputs.configured == 'false'
