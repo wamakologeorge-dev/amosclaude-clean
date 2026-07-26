@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from git import Repo
@@ -108,7 +109,11 @@ def test_cloud_policy_is_server_managed_and_read_only() -> None:
     status = configuration.public_status()
 
     assert status["server_managed"] is True
-    assert "api.github.com" in status["network_domain_allowlist"]
+    allowlist_hosts = {
+        urlparse(entry).hostname if "://" in entry else entry
+        for entry in status["network_domain_allowlist"]
+    }
+    assert "api.github.com" in allowlist_hosts
     assert status["repository_sync"]["direction"] == "bidirectional"
     assert status["repository_sync"]["overwrite_dirty_workspaces"] is False
     assert status["repository_sync"]["overwrite_diverged_history"] is False
