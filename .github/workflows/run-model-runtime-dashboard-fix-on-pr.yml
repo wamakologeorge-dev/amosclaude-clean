@@ -26,7 +26,9 @@ jobs:
       - name: Extract and run correction script
         shell: bash
         run: |
-          python - <<'EXTRACT'
+          set +e
+          {
+            python - <<'EXTRACT'
           from pathlib import Path
 
           workflow = Path(
@@ -49,8 +51,20 @@ jobs:
           )
           print(f"Extracted {len(script.splitlines())} correction-script lines")
           EXTRACT
-          python -m py_compile /tmp/apply_model_runtime_fix.py
-          python /tmp/apply_model_runtime_fix.py
+            python -m py_compile /tmp/apply_model_runtime_fix.py
+            python /tmp/apply_model_runtime_fix.py
+          } > /tmp/model-runtime-fix.log 2>&1
+          status=$?
+          cat /tmp/model-runtime-fix.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/model-runtime-fix.log repair-workflow-error.txt
+            git config user.name "Amosclaud Repair Bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add repair-workflow-error.txt
+            git commit -m "Capture model runtime repair failure [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+            exit "$status"
+          fi
 
       - name: Validate focused correction
         shell: bash
@@ -68,6 +82,7 @@ jobs:
         run: |
           rm .github/workflows/apply-model-runtime-dashboard-fix.yml
           rm .github/workflows/run-model-runtime-dashboard-fix-on-pr.yml
+          rm -f repair-workflow-error.txt
           git config user.name "Amosclaud Repair Bot"
           git config user.email "actions@users.noreply.github.com"
           git add -A
