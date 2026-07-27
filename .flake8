@@ -1,0 +1,6 @@
+[flake8]
+# The stacked plugin route binds these two optional dependencies into the
+# extracted storage implementation at import time. Keep strict F821 checks for
+# every other file while documenting this narrow compatibility boundary.
+per-file-ignores =
+    amoscloud_ai/api/routes/storage_capacity_impl.py:F821
