@@ -82,6 +82,7 @@ def test_controller_request_requires_destructive_confirmation() -> None:
         "filesystem": "ext4",
         "filesystem_label": "amosclaud-data",
         "benchmark_size_gib": 10,
+        "directory_mode": "2770",
         "confirmation": "wrong",
     }
     with pytest.raises(VolumeProvisionError, match="confirmation"):
