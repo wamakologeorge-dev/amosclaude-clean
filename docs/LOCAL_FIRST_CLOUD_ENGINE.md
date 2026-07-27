@@ -73,7 +73,7 @@ The commands have fixed meanings:
 - `guard-build` runs the Docker build through the three-attempt repair loop.
 - `serve` starts the loopback FastAPI daemon.
 
-There is deliberately no command that accepts arbitrary shell text.
+The launcher invokes `python -m scripts.agent_guard_cli` from the repository root so local package imports resolve consistently. There is deliberately no command that accepts arbitrary shell text.
 
 ## API guarded actions
 
@@ -97,7 +97,7 @@ The backend owns the test or Docker command. The model cannot provide a shell co
 The guard rejects:
 
 - file creation, deletion, or renaming;
-- path traversal and symlink targets;
+- absolute paths, traversal segments, and any symlink component;
 - `.git`, `.hg`, `.svn`, `.amosclaud`, and `amosclaud_vault`;
 - `.env` files, databases, private keys, and certificates;
 - patches larger than the configured bounded size;
