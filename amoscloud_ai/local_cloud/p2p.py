@@ -187,7 +187,12 @@ class PeerEnvelope:
             encrypted_payload=sealed,
             signature="",
         )
-        return cls(**{**draft.__dict__, "signature": identity.sign(draft.canonical_bytes())})
+        return cls(
+            **{
+                **draft.__dict__,
+                "signature": identity.sign(draft.canonical_bytes()),
+            }
+        )
 
     @staticmethod
     def _aad(
