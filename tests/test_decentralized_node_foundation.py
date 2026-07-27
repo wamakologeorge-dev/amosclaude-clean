@@ -15,7 +15,7 @@ from amoscloud_ai.local_cloud.plugins import (
     canonical_manifest_bytes,
     create_manifest,
 )
-from amoscloud_ai.local_cloud.sandbox import SandboxPolicy
+from amoscloud_ai.local_cloud.sandbox import SandboxError, SandboxPolicy
 
 
 def test_peer_envelope_is_signed_encrypted_and_trusted(tmp_path: Path) -> None:
@@ -127,3 +127,19 @@ def test_sandbox_command_has_no_host_privileges_or_vault_mount(tmp_path: Path) -
     assert "amosclaud_vault" not in rendered
     assert f"src={workspace.resolve()}" in rendered
     assert "readonly" in rendered
+
+
+def test_sandbox_rejects_symlink_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    linked = tmp_path / "linked"
+    try:
+        linked.symlink_to(workspace, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this host")
+    with pytest.raises(SandboxError, match="symlink"):
+        SandboxPolicy().docker_command(
+            workspace=linked,
+            image="python:3.12-slim",
+            action="python_tests",
+        )
