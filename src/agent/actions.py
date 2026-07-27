@@ -283,25 +283,19 @@ def _resolve_workspace(workspace: str) -> Path:
     ).expanduser().resolve()
     allowed_roots = tuple(dict.fromkeys((base, repository_root)))
 
+    # Validate user-provided workspace text before constructing a filesystem path.
+    if raw_workspace.startswith("~"):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
     workspace_path = Path(raw_workspace)
-    if workspace_path.is_absolute():
-        candidate = workspace_path.resolve()
-        for root in allowed_roots:
-            try:
-                candidate.relative_to(root)
-                return candidate
-            except ValueError:
-                continue
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Workspace must stay inside the application or repository "
-                "storage root"
-            ),
-        )
+    if not workspace_path.is_absolute() and ".." in workspace_path.parts:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+
+    candidate = (
+        workspace_path if workspace_path.is_absolute() else (base / workspace_path)
+    ).resolve()
 
     for root in allowed_roots:
-        candidate = (root / workspace_path).resolve()
         try:
             candidate.relative_to(root)
             return candidate
