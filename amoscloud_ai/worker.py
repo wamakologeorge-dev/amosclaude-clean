@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from celery import Celery
+from celery.signals import worker_ready
 
 from amoscloud_ai.config import settings
 from amoscloud_ai.logger import log
@@ -32,6 +33,26 @@ celery_app.conf.update(
     task_track_started=True,
     imports=("amoscloud_ai.dashboard_worker",),
 )
+
+
+@worker_ready.connect
+def recover_durable_operations(**_kwargs) -> None:
+    """Resume persisted operations and outbound GitHub relays after worker restart."""
+    try:
+        from amoscloud_ai.cloud_task_runner import recover_cloud_tasks
+        from amoscloud_ai.github_relay_recovery import retry_pending_relays
+
+        tasks = recover_cloud_tasks()
+        relays = retry_pending_relays()
+        log.info(
+            "Recovered durable operations: tasks=%s relays=%s",
+            tasks,
+            relays,
+        )
+    except Exception:
+        # Recovery must not prevent the worker from starting. Persisted queued
+        # records remain available for the next readiness cycle or manual retry.
+        log.exception("Durable operation recovery failed safely during worker startup")
 
 
 @celery_app.task(name="amoscloud_ai.run_pipeline", bind=True, max_retries=3)
