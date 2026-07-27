@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -26,15 +26,33 @@ class JobCreate(BaseModel):
     confirmation: str = Field(min_length=1, max_length=200)
 
 
+class HealAndBuildCreate(BaseModel):
+    workspace_id: str = Field(pattern=r"^ws_[0-9a-f]{32}$")
+    target: Literal["verify_python", "docker_build"] = "verify_python"
+    confirmation: str = Field(min_length=1, max_length=200)
+
+
 def _state_dir() -> Path:
     configured = os.getenv("AMOSCLAUD_LOCAL_STATE_DIR", "~/.amosclaud/local-cloud")
     return Path(configured).expanduser().resolve()
 
 
+def _internal_agent_request(request: Request) -> bool:
+    if os.getenv("AMOSCLAUD_LOCAL_ALLOW_REMOTE_AGENT", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return True
+    host = request.client.host if request.client else ""
+    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
 def create_app() -> FastAPI:
     application = FastAPI(
         title="Amosclaud Self-Sovereign Cloud Engine",
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/docs",
         redoc_url=None,
     )
@@ -93,6 +111,7 @@ body{font-family:system-ui;max-width:900px;margin:40px auto;padding:0 18px;backg
             "state_dir": str(_state_dir()),
             "workspace_count": len(registry.list()),
             "actions": jobs.ACTIONS,
+            "agent_api": "/api/agent/heal-and-build",
             "external_identity_required": False,
             "raw_code_uploaded_by_control_plane": False,
         }
@@ -140,6 +159,42 @@ body{font-family:system-ui;max-width:900px;margin:40px auto;padding:0 18px;backg
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ExecutionError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @application.post(
+        "/api/agent/heal-and-build",
+        status_code=202,
+        dependencies=[Depends(require_token)],
+    )
+    def heal_and_build(body: HealAndBuildCreate, request: Request) -> dict[str, object]:
+        if not _internal_agent_request(request):
+            raise HTTPException(status_code=403, detail="Heal-and-build is loopback-only")
+        expected = f"HEAL {body.workspace_id} {body.target}"
+        if body.confirmation.strip() != expected:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Confirmation must exactly equal: {expected}",
+            )
+        action = {
+            "verify_python": "guarded_verify_python",
+            "docker_build": "guarded_docker_build",
+        }[body.target]
+        try:
+            workspace = registry.get(body.workspace_id)
+            job = jobs.create(
+                workspace=workspace,
+                action=action,
+                confirmation=jobs.required_confirmation(workspace.id, action),
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ExecutionError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            **job.__dict__,
+            "target": body.target,
+            "status_url": f"/v1/jobs/{job.id}",
+            "maximum_attempts": 3,
+        }
 
     @application.get("/v1/jobs", dependencies=[Depends(require_token)])
     def list_jobs() -> list[dict[str, object]]:
