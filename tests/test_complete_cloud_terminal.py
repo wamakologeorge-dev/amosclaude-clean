@@ -1,0 +1,117 @@
+import base64
+import hashlib
+import hmac
+import json
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+from amoscloud_ai import workspace_terminal
+from amoscloud_ai.main import create_app
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _source(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def test_complete_terminal_routes_are_registered() -> None:
+    paths = {getattr(route, "path", "") for route in create_app().routes}
+    assert {
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/terminal-ticket-v2",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub/messages",
+    }.issubset(paths)
+
+
+def test_terminal_v2_ticket_binds_session_profile_and_signature(monkeypatch) -> None:
+    token = "runtime-test-token-with-enough-entropy"
+    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", token)
+    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_URL", "https://private-runtime.example")
+    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_PUBLIC_URL", "https://terminal.amosclaud.com")
+    monkeypatch.setattr(workspace_terminal.time, "time", lambda: 1_700_000_000)
+
+    result = workspace_terminal.terminal_ticket(
+        {"id": "ws_0123456789abcdef", "repository_id": 7, "owner_id": 3},
+        11,
+        terminal_id="term_0123456789abcdef",
+        profile="bash",
+    )
+
+    parsed = urlparse(result["websocket_url"])
+    assert parsed.scheme == "wss"
+    assert parsed.netloc == "terminal.amosclaud.com"
+    assert parsed.path == "/v2/terminal/ws_0123456789abcdef"
+    raw_ticket = parse_qs(parsed.query)["ticket"][0]
+    raw = base64.urlsafe_b64decode(raw_ticket + "=" * (-len(raw_ticket) % 4))
+    ticket = json.loads(raw)
+
+    assert ticket["version"] == 2
+    assert ticket["terminal_id"] == "term_0123456789abcdef"
+    assert ticket["profile"] == "bash"
+    assert ticket["expires_at"] == 1_700_000_120
+    payload = (
+        "v2:ws_0123456789abcdef:11:1700000120:"
+        f"{ticket['nonce']}:term_0123456789abcdef:bash"
+    ).encode()
+    expected = hmac.new(token.encode(), payload, hashlib.sha256).hexdigest()
+    assert hmac.compare_digest(expected, ticket["signature"])
+
+
+def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> None:
+    loader = _source("web/cloud-workspace.js")
+    main = _source("web/cloud-terminal/main.js")
+    session = _source("web/cloud-terminal/session.js")
+    hub = _source("web/cloud-terminal/agent-hub.js")
+
+    assert "/static/cloud-terminal/main.js" in loader
+    assert "terminal-ticket-v2" in session
+    assert "new WebSocket(ticket.websocket_url)" in session
+    assert "ResizeObserver" in session
+    assert "exportTranscript" in session
+    assert "findNext" in session and "findPrevious" in session
+    assert "Split" in main
+    assert "tmux persistent sessions" in main
+    assert "Doctor, Fixer, Autonomous, and Underground" in main
+    assert "/agent-hub/messages" in hub
+    assert "Attach recent output from the active terminal" in hub
+    assert "Authorize verified repository changes" in hub
+
+
+def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None:
+    source = _source("services/workspace_runtime/terminal_runtime.py")
+    dockerfile = _source("services/workspace_runtime/workspace-image/Dockerfile")
+    service_dockerfile = _source("services/workspace_runtime/Dockerfile")
+
+    assert '@app.websocket("/v2/terminal/{workspace_id}")' in source
+    assert '"tmux",' in source
+    assert '"new-session",' in source
+    assert '"-A",' in source
+    assert "TIOCSWINSZ" in source
+    assert 'message_type not in {"resize", "ping", "terminate"}' in source
+    assert "kill-session" in source
+    assert "tmux" in dockerfile
+    assert "bash-completion" in dockerfile
+    assert 'CMD ["uvicorn", "terminal_runtime:app"' in service_dockerfile
+
+
+def test_agent_hub_redacts_terminal_secrets_and_disables_unsafe_escalation() -> None:
+    source = _source("amoscloud_ai/api/routes/cloud_workspaces.py")
+
+    assert 'Literal["doctor", "fixer", "autonomous", "underground"]' in source
+    assert "_safe_terminal_output" in source
+    assert "[redacted]" in source
+    assert '"allow_force_push": False' in source
+    assert '"allow_protected_branch_write": False' in source
+    assert '"require_verification": True' in source
+    assert "no force push" in source.lower()
+    assert "no protected-branch write" in source.lower()
+
+
+def test_shell_profile_exposes_repository_aware_prompt() -> None:
+    source = _source("services/workspace_runtime/workspace-image/terminal-profile.sh")
+
+    assert "git symbolic-ref --quiet --short HEAD" in source
+    assert "PROMPT_COMMAND='history -a; __amosclaud_prompt'" in source
+    assert "alias gs='git status --short --branch'" in source
