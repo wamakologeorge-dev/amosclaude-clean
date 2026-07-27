@@ -1,0 +1,41 @@
+name: Trigger Amosclaud GitHub Token Migration
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - .github/workflows/amosclaud-github-token-migration-trigger.yml
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-migration:
+    if: github.head_ref == 'agent/containerized-autonomous-repair-loop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the migration branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/containerized-autonomous-repair-loop
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Trigger migration push with Amosclaud publisher token
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AMOSCLAUD_GITHUB_TOKEN" ]; then
+            echo "Repository secret AMOSCLAUD_GITHUB_TOKEN is required."
+            exit 1
+          fi
+          printf '\n# publisher-trigger-run: %s\n' "$GITHUB_RUN_ID" >> .github/workflows/amosclaud-github-token-migration.yml
+          git config user.name "Amosclaud Token Trigger"
+          git config user.email "token-trigger@amosclaud.internal"
+          git add .github/workflows/amosclaud-github-token-migration.yml
+          git commit -m "ci: trigger token migration with Amosclaud credential"
+          git remote set-url origin "https://x-access-token:${AMOSCLAUD_GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
