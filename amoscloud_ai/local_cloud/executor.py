@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .agent_guard import AgentBuildGuard, AgentGuardError, model_from_environment
 from .workspaces import Workspace
 
 
@@ -40,6 +42,12 @@ class LocalJobManager:
         "verify_python": "Compile Python files and run pytest when available.",
         "docker_build": "Build a local production Docker image.",
         "docker_compose_up": "Start the repository through Docker Compose.",
+        "guarded_verify_python": (
+            "Compile and test with a local-model repair loop, maximum three attempts."
+        ),
+        "guarded_docker_build": (
+            "Build Docker with a local-model repair loop, maximum three attempts."
+        ),
     }
 
     def __init__(self) -> None:
@@ -121,6 +129,37 @@ class LocalJobManager:
             return [(["docker", "compose", "up", "--detach", "--build"], 3600)]
         raise ExecutionError("Unsupported local action")
 
+    @staticmethod
+    def _guarded_command(action: str, workspace: Workspace) -> tuple[list[str], str, int]:
+        root = Path(workspace.path)
+        if action == "guarded_verify_python":
+            verifier = (
+                "import compileall,pathlib,subprocess,sys; "
+                "ok=compileall.compile_dir('.',quiet=1); "
+                "sys.exit(1) if not ok else None; "
+                "raise SystemExit(subprocess.call([sys.executable,'-m','pytest','-q']) "
+                "if pathlib.Path('tests').is_dir() else 0)"
+            )
+            return [sys.executable, "-c", verifier], "guarded Python verification", 1800
+        if action == "guarded_docker_build":
+            if not shutil.which("docker"):
+                raise ExecutionError("Docker is not installed")
+            if not (root / "Dockerfile").is_file():
+                raise ExecutionError("Workspace has no Dockerfile")
+            image = f"amosclaud-local/{workspace.id}:latest"
+            return ["docker", "build", "--tag", image, "."], "guarded Docker build", 3600
+        raise ExecutionError("Unsupported guarded action")
+
+    def _execute_guarded(self, job: Job, workspace: Workspace) -> tuple[str, int, str]:
+        command, label, timeout = self._guarded_command(job.action, workspace)
+        model = model_from_environment()
+        guard = AgentBuildGuard(Path(workspace.path), model, maximum_attempts=3)
+        result = guard.run(command, label=label, timeout=timeout)
+        status = "succeeded" if result.status == "succeeded" else "failed"
+        return status, 0 if status == "succeeded" else 1, json.dumps(
+            result.to_dict(), indent=2, sort_keys=True
+        )
+
     def _execute(self, job_id: str, workspace: Workspace) -> None:
         with self._lock:
             job = self._jobs[job_id]
@@ -129,18 +168,22 @@ class LocalJobManager:
         outputs: list[str] = []
         exit_code = 0
         try:
-            for command, timeout in self._commands(job.action, workspace):
-                code, output = self._run(
-                    command,
-                    cwd=Path(workspace.path),
-                    timeout=timeout,
-                )
-                outputs.append(f"$ {' '.join(command)}\n{output}".strip())
-                if code != 0:
-                    exit_code = code
-                    break
-            status = "succeeded" if exit_code == 0 else "failed"
-        except (ExecutionError, OSError, subprocess.SubprocessError) as exc:
+            if job.action.startswith("guarded_"):
+                status, exit_code, output = self._execute_guarded(job, workspace)
+                outputs.append(output)
+            else:
+                for command, timeout in self._commands(job.action, workspace):
+                    code, output = self._run(
+                        command,
+                        cwd=Path(workspace.path),
+                        timeout=timeout,
+                    )
+                    outputs.append(f"$ {' '.join(command)}\n{output}".strip())
+                    if code != 0:
+                        exit_code = code
+                        break
+                status = "succeeded" if exit_code == 0 else "failed"
+        except (ExecutionError, AgentGuardError, OSError, subprocess.SubprocessError) as exc:
             status = "failed"
             exit_code = 1
             outputs.append(f"{type(exc).__name__}: {exc}")
