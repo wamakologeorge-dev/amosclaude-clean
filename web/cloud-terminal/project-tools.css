@@ -107,13 +107,21 @@
   background: #1f2937;
 }
 
-.terminal-project-command.project {
+.terminal-project-command.project,
+.terminal-custom-command button.project {
   border-color: #1f6feb66;
   background: #1f6feb17;
+  color: #79c0ff;
 }
 
 .terminal-project-command.git {
   border-color: #a371f755;
+}
+
+.terminal-custom-command button.debug {
+  border-color: #d2992266;
+  background: #d2992218;
+  color: #e3b341;
 }
 
 .terminal-project-command:disabled,
@@ -135,6 +143,7 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .terminal-custom-command input,
@@ -162,6 +171,12 @@
   border-color: #a371f7;
   background: #a371f722;
   color: #d2a8ff;
+}
+
+.terminal-project-actions button.sync {
+  border-color: #3fb950;
+  background: #238636;
+  color: #fff;
 }
 
 .terminal-project-result {
