@@ -338,13 +338,14 @@ class PluginRegistry:
             try:
                 payload = check()
                 results.append({"name": name, "plugin_id": plugin_id, "status": "ok", "result": payload})
-            except Exception as exc:
+            except Exception:
+                log.exception("Plugin health check failed: %s (%s)", plugin_id, name)
                 results.append(
                     {
                         "name": name,
                         "plugin_id": plugin_id,
                         "status": "failed",
-                        "error": f"{type(exc).__name__}: {exc}"[:1_000],
+                        "error": "Health check failed",
                     }
                 )
         return results
