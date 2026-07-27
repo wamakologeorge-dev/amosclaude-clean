@@ -75,6 +75,34 @@ The commands have fixed meanings:
 
 The launcher invokes `python -m scripts.agent_guard_cli` from the repository root so local package imports resolve consistently. There is deliberately no command that accepts arbitrary shell text.
 
+## Internal heal-and-build API
+
+The local dashboard or file watcher can queue the guarded loop through:
+
+```text
+POST /api/agent/heal-and-build
+```
+
+The route is authenticated with the local authority token and is loopback-only by default. It accepts a registered workspace ID and one fixed target; it never accepts a command string.
+
+```bash
+curl -X POST http://127.0.0.1:8765/api/agent/heal-and-build \
+  -H "Authorization: Bearer $AMOSCLAUD_LOCAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspace_id":"ws_REPLACE_ME",
+    "target":"verify_python",
+    "confirmation":"HEAL ws_REPLACE_ME verify_python"
+  }'
+```
+
+Supported target mapping:
+
+- `verify_python` queues `guarded_verify_python`.
+- `docker_build` queues `guarded_docker_build`.
+
+A successful request returns `202 Accepted`, a local job ID, and a `status_url`. Read that URL with the same bearer token to retrieve the completed guard evidence. The backend owns the command and caps the guard at three attempts.
+
 ## API guarded actions
 
 The FastAPI action catalog also includes:
@@ -84,10 +112,16 @@ guarded_verify_python
 guarded_docker_build
 ```
 
-Each API request still requires the exact confirmation form:
+Direct `/v1/jobs` requests require the exact confirmation form:
 
 ```text
 RUN <workspace_id> <action>
+```
+
+The dedicated internal trigger uses:
+
+```text
+HEAL <workspace_id> <target>
 ```
 
 ## Build-guard safety contract
