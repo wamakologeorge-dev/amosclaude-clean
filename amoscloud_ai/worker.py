@@ -261,6 +261,24 @@ def run_autonomous_feature_task(self, task_id: str) -> dict[str, str]:
 
 
 @celery_app.task(
+    name="amoscloud_ai.run_workforce_task",
+    bind=True,
+    max_retries=2,
+)
+def run_workforce_task(self, task_id: str) -> dict[str, str]:
+    """Execute one delegated engineering work order through the guarded workforce runner."""
+
+    try:
+        from amoscloud_ai.workforce_task_runner import execute_workforce_task
+
+        execute_workforce_task(task_id)
+        return {"task_id": task_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Autonomous workforce task %s failed in worker", task_id)
+        raise self.retry(exc=exc, countdown=10)
+
+
+@celery_app.task(
     name="amoscloud_ai.run_daily_autonomous_builder",
     bind=True,
     max_retries=1,
