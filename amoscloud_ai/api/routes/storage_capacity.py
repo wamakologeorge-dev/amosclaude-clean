@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -64,13 +65,17 @@ class ProvisionJobCreate(BaseModel):
     gcp_instance_name: str | None = Field(default=None, max_length=100)
     gcp_disk_name: str | None = Field(default=None, max_length=100)
     gcp_device_name: str | None = Field(default=None, max_length=100)
-    gcp_disk_type: Literal["pd-balanced", "pd-ssd", "pd-standard"] = "pd-balanced"
+    gcp_disk_type: Literal["pd-balanced", "pd-ssd", "pd-standard"] = (
+        "pd-balanced"
+    )
 
     aws_region: str | None = Field(default=None, max_length=100)
     aws_availability_zone: str | None = Field(default=None, max_length=100)
     aws_instance_id: str | None = Field(default=None, max_length=100)
     aws_volume_name: str | None = Field(default=None, max_length=128)
-    aws_volume_type: Literal["gp2", "gp3", "io1", "io2", "st1", "sc1"] = "gp3"
+    aws_volume_type: Literal["gp2", "gp3", "io1", "io2", "st1", "sc1"] = (
+        "gp3"
+    )
     aws_device_name: str = Field(default="/dev/sdf", max_length=20)
     aws_iops: int | None = Field(default=None, ge=100, le=256000)
     aws_throughput_mibps: int | None = Field(default=None, ge=125, le=2000)
@@ -239,6 +244,34 @@ def _provision_confirmation(
     )
 
 
+def _provision_controller_health() -> dict:
+    try:
+        response = httpx.get(
+            f"{storage_capacity._controller_url()}/provision-ready",
+            headers={
+                "Authorization": f"Bearer {storage_capacity._controller_token()}"
+            },
+            timeout=5,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return {
+            "reachable": True,
+            "status": payload.get("status") or "unknown",
+            "missing_tools": payload.get("missing_tools", []),
+            "supported_filesystems": payload.get("supported_filesystems", []),
+            "twenty_tib_profile_gib": payload.get("twenty_tib_profile_gib"),
+        }
+    except Exception as exc:
+        return {
+            "reachable": False,
+            "status": "unavailable",
+            "detail": f"Provisioning controller unavailable: {type(exc).__name__}",
+            "missing_tools": [],
+            "supported_filesystems": [],
+        }
+
+
 @router.get("/controller")
 def storage_controller_status(
     administrator: sqlite3.Row = Depends(admin._admin_user),
@@ -246,6 +279,7 @@ def storage_controller_status(
     del administrator
     return {
         **storage_capacity.controller_health(),
+        "provisioning_controller": _provision_controller_health(),
         "maximum_size_gib": _max_size_gib(),
         "twenty_tib_profile_gib": 20480,
         "new_volume_provisioning": True,
@@ -354,14 +388,6 @@ def create_provision_job(
         raise HTTPException(
             status_code=422,
             detail=f"Confirmation must exactly equal: {expected}",
-        )
-    if body.persist_mount and not os.getenv("AMOSCLAUD_STORAGE_FSTAB_PATH", "").strip():
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Persistent mounting requires AMOSCLAUD_STORAGE_FSTAB_PATH on the "
-                "private storage controller"
-            ),
         )
 
     job = storage_provisioning.create_job(
