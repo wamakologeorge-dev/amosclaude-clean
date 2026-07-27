@@ -8,18 +8,25 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        bash \
+       bash-completion \
        build-essential \
        ca-certificates \
        cmake \
        curl \
+       dnsutils \
        fd-find \
        file \
+       gdb \
        git \
        git-lfs \
+       iproute2 \
        jq \
        less \
        lsof \
        nano \
+       ncurses-term \
+       net-tools \
+       netcat-openbsd \
        nodejs \
        npm \
        openssh-client \
@@ -33,6 +40,8 @@ RUN apt-get update \
        rsync \
        shellcheck \
        sqlite3 \
+       strace \
+       tmux \
        tree \
        unzip \
        vim-tiny \
@@ -63,7 +72,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/workspace_runtime/workspace-image/entrypoint.sh /usr/local/bin/amosclaud-workspace-entrypoint
-RUN chmod 0755 /usr/local/bin/amosclaud-workspace-entrypoint
+COPY services/workspace_runtime/workspace-image/terminal-profile.sh /etc/profile.d/amosclaud-terminal.sh
+COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
+RUN chmod 0755 \
+      /usr/local/bin/amosclaud-workspace-entrypoint \
+      /etc/profile.d/amosclaud-terminal.sh \
+      /usr/local/bin/amos
 
 USER developer
 WORKDIR /workspace

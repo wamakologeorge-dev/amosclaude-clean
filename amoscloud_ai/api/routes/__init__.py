@@ -180,16 +180,18 @@ for _module in (solo_development, profile, native_git, repository_history):
         repositories.router.routes.append(_route)
         _native_keys |= _keys
 
-# Cloud workspace controls share the canonical repository surface so main.py
-# mounts them exactly once under /api/v1.
+# Cloud workspace controls and smart project tools share the canonical
+# repository surface so main.py mounts them exactly once under /api/v1.
 from amoscloud_ai.api.routes import cloud_workspaces as cloud_workspaces
+from amoscloud_ai.api.routes import terminal_tools as terminal_tools
 
-for _route in cloud_workspaces.router.routes:
-    _keys = _route_keys(_route)
-    if _keys & _native_keys:
-        continue
-    repositories.router.routes.append(_route)
-    _native_keys |= _keys
+for _module in (cloud_workspaces, terminal_tools):
+    for _route in _module.router.routes:
+        _keys = _route_keys(_route)
+        if _keys & _native_keys:
+            continue
+        repositories.router.routes.append(_route)
+        _native_keys |= _keys
 
 from amoscloud_ai.api.routes import auth as auth
 from amoscloud_ai.api.routes import account_recovery as account_recovery
