@@ -47,7 +47,26 @@ def _safe_mountpoint(value: str) -> str:
     path = Path(value).expanduser()
     if not path.is_absolute() or ".." in path.parts:
         raise HTTPException(status_code=422, detail="Mountpoint must be an absolute managed path")
-    return str(path)
+
+    normalized = path.resolve(strict=False)
+    allowed_roots_raw = os.getenv("AMOSCLOUD_STORAGE_ALLOWED_MOUNT_ROOTS", "/mnt,/media")
+    allowed_roots = [
+        Path(part.strip()).expanduser().resolve(strict=False)
+        for part in allowed_roots_raw.split(",")
+        if part.strip()
+    ]
+
+    for root in allowed_roots:
+        try:
+            normalized.relative_to(root)
+            return str(normalized)
+        except ValueError:
+            continue
+
+    raise HTTPException(
+        status_code=422,
+        detail="Mountpoint must be within configured managed roots",
+    )
 
 
 def _resource(body: ResizeJobCreate) -> tuple[dict, str]:
