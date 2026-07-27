@@ -49,6 +49,7 @@ from amoscloud_ai.api.routes import (
     feed,
     first_party_chat,
     github_app,
+    github_pull_requests,
     github_repositories,
     github_travel,
     health,
@@ -79,6 +80,7 @@ from amoscloud_ai.api.routes import (
     control_bus_dashboard,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
+from amoscloud_ai.autonomous_task_runner import install_dispatch_hook
 from amoscloud_ai.config import settings
 from amoscloud_ai.core.workspace import WorkspaceEngine
 from amoscloud_ai.server.cb import router as amosclaud_cb_router
@@ -106,6 +108,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    install_dispatch_hook()
     production = settings.environment.lower() in {"production", "prod"}
     app = FastAPI(
         title=settings.app_name,
@@ -202,6 +205,7 @@ def create_app() -> FastAPI:
     app.include_router(downloads.router, prefix="/api/v1")
     app.include_router(repositories.router, prefix="/api/v1")
     app.include_router(github_repositories.router, prefix="/api/v1")
+    app.include_router(github_pull_requests.router, prefix="/api/v1")
     app.include_router(github_app.router, prefix="/api/v1")
     app.include_router(hub_reports.router, prefix="/api/v1")
     app.include_router(hub_architecture.router, prefix="/api/v1")

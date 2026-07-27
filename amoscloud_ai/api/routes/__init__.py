@@ -253,7 +253,3 @@ for _route in autonomy.router.routes:
         continue
     task_router.router.routes.append(_route)
     _task_keys |= _keys
-
-from amoscloud_ai.autonomous_task_runner import install_dispatch_hook
-
-install_dispatch_hook()
