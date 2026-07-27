@@ -5,10 +5,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
+        build-essential \
         ca-certificates \
+        git \
         make \
         nodejs \
         npm \
+    && python -m pip install --no-cache-dir pytest \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 65532 amosrunner \
     && useradd \
