@@ -165,9 +165,7 @@ class AutonomousModelGateway:
         return result.reply
 
     def plan(self, objective: str, evidence: list[str]) -> list[str]:
-        """Return a stable plan while all model access stays behind this gateway."""
-        if not self.available():
-            raise RuntimeError("Amosclaud execution model is not configured")
+        """Return a stable plan without claiming that model execution occurred."""
         plan = [
             "Define the exact failure and observable success criteria",
             "Inspect bounded repository files relevant to the objective",
