@@ -243,9 +243,14 @@ def _resolve_workspace(workspace: str) -> Path:
     if "\x00" in raw_workspace:
         raise HTTPException(status_code=400, detail="Invalid workspace path")
 
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        raise HTTPException(status_code=400, detail="Workspace must be a relative path")
+    if ".." in workspace_path.parts:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+
     base = Path.cwd().resolve()
-    supplied = Path(raw_workspace).expanduser()
-    candidate = supplied.resolve() if supplied.is_absolute() else (base / supplied).resolve()
+    candidate = (base / workspace_path).resolve()
     repository_root = Path(
         os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
     ).resolve()
