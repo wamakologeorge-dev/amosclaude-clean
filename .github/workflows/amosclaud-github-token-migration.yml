@@ -1,0 +1,266 @@
+name: Amosclaud GitHub Token Migration
+
+on:
+  push:
+    branches:
+      - agent/containerized-autonomous-repair-loop
+    paths:
+      - .github/workflows/amosclaud-github-token-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-token-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out migration branch without persisted credentials
+        uses: actions/checkout@v7
+        with:
+          ref: agent/containerized-autonomous-repair-loop
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the Amosclaud GitHub credential
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AMOSCLAUD_GITHUB_TOKEN" ]; then
+            echo "Repository secret AMOSCLAUD_GITHUB_TOKEN is required."
+            exit 1
+          fi
+          echo "AMOSCLAUD_GITHUB_TOKEN is configured and masked by GitHub Actions."
+
+      - name: Apply repository-wide token contract
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import re
+          from pathlib import Path
+
+          root = Path.cwd()
+          workflows = root / ".github" / "workflows"
+          migration = workflows / "amosclaud-github-token-migration.yml"
+          old_builtin = "${" + "{ secrets.GITHUB_TOKEN }}"
+          old_autonomous = "${" + "{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}"
+          token_expr = "${" + "{ secrets.AMOSCLAUD_GITHUB_TOKEN || github.token }}"
+
+          privileged_markers = (
+              "git push",
+              "gh issue",
+              "gh pr",
+              "api.github.com",
+              "action-gh-release",
+              "GITHUB_TOKEN:",
+              "GH_TOKEN:",
+              "contents: write",
+              "issues: write",
+              "pull-requests: write",
+          )
+
+          def step_end(lines: list[str], start: int, step_indent: int) -> int:
+              for index in range(start + 1, len(lines)):
+                  stripped = lines[index].lstrip()
+                  indent = len(lines[index]) - len(stripped)
+                  if stripped.startswith("- ") and indent <= step_indent:
+                      return index
+              return len(lines)
+
+          def ensure_checkout_tokens(text: str) -> str:
+              lines = text.splitlines()
+              index = 0
+              while index < len(lines):
+                  line = lines[index]
+                  if "uses: actions/checkout@" not in line:
+                      index += 1
+                      continue
+                  stripped = line.lstrip()
+                  line_indent = len(line) - len(stripped)
+                  dash_form = stripped.startswith("- uses:")
+                  step_indent = line_indent if dash_form else max(0, line_indent - 2)
+                  end = step_end(lines, index, step_indent)
+                  segment = lines[index:end]
+                  if any(re.match(r"\s*token\s*:", item) for item in segment):
+                      for cursor in range(index, end):
+                          if re.match(r"\s*token\s*:", lines[cursor]):
+                              prefix = lines[cursor][: len(lines[cursor]) - len(lines[cursor].lstrip())]
+                              lines[cursor] = f"{prefix}token: {token_expr}"
+                      index = end
+                      continue
+                  with_index = next(
+                      (
+                          cursor
+                          for cursor in range(index + 1, end)
+                          if lines[cursor].strip() == "with:"
+                      ),
+                      None,
+                  )
+                  if with_index is not None:
+                      prefix = lines[with_index][: len(lines[with_index]) - len(lines[with_index].lstrip())]
+                      lines.insert(with_index + 1, f"{prefix}  token: {token_expr}")
+                      index = end + 1
+                  else:
+                      with_indent = line_indent + (2 if dash_form else 0)
+                      lines.insert(index + 1, " " * with_indent + "with:")
+                      lines.insert(index + 2, " " * (with_indent + 2) + f"token: {token_expr}")
+                      index = end + 2
+              return "\n".join(lines) + "\n"
+
+          def ensure_release_token(text: str) -> str:
+              lines = text.splitlines()
+              index = 0
+              while index < len(lines):
+                  if "uses: softprops/action-gh-release@" not in lines[index]:
+                      index += 1
+                      continue
+                  stripped = lines[index].lstrip()
+                  line_indent = len(lines[index]) - len(stripped)
+                  step_indent = line_indent if stripped.startswith("- uses:") else max(0, line_indent - 2)
+                  end = step_end(lines, index, step_indent)
+                  segment = lines[index:end]
+                  if any(item.strip() == "GITHUB_TOKEN: " + token_expr for item in segment):
+                      index = end
+                      continue
+                  env_index = next(
+                      (cursor for cursor in range(index + 1, end) if lines[cursor].strip() == "env:"),
+                      None,
+                  )
+                  if env_index is not None:
+                      prefix = lines[env_index][: len(lines[env_index]) - len(lines[env_index].lstrip())]
+                      lines.insert(env_index + 1, f"{prefix}  GITHUB_TOKEN: {token_expr}")
+                  else:
+                      env_indent = line_indent + (2 if stripped.startswith("- uses:") else 0)
+                      lines.insert(index + 1, " " * env_indent + "env:")
+                      lines.insert(index + 2, " " * (env_indent + 2) + f"GITHUB_TOKEN: {token_expr}")
+                  index = end + 2
+              return "\n".join(lines) + "\n"
+
+          changed_workflows: list[str] = []
+          for path in sorted(workflows.glob("*.y*ml")):
+              if path == migration:
+                  continue
+              original = path.read_text(encoding="utf-8")
+              text = original.replace(old_builtin, token_expr).replace(old_autonomous, token_expr)
+              privileged = any(marker in text for marker in privileged_markers)
+              if privileged:
+                  text = ensure_checkout_tokens(text)
+                  text = ensure_release_token(text)
+              if text != original:
+                  path.write_text(text, encoding="utf-8")
+                  changed_workflows.append(path.as_posix())
+
+          auth_module = root / "amoscloud_ai" / "github_auth.py"
+          auth_module.write_text(
+              '''"""Shared GitHub credential resolution for Amosclaud services.\n\nThe repository-level ``AMOSCLAUD_GITHUB_TOKEN`` is the preferred operator\ncredential. Standard ``GH_TOKEN`` and ``GITHUB_TOKEN`` aliases are populated\nwithout overwriting an explicitly supplied process credential. Token values are\nnever logged or returned.\n"""\nfrom __future__ import annotations\n\nimport os\nfrom collections.abc import MutableMapping\n\nTOKEN_ENV_NAMES = ("AMOSCLAUD_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")\n\n\ndef resolve_github_token(environment: MutableMapping[str, str] | None = None) -> str:\n    env = environment if environment is not None else os.environ\n    for name in TOKEN_ENV_NAMES:\n        value = str(env.get(name, "")).strip()\n        if value:\n            return value\n    return ""\n\n\ndef configure_github_token_aliases(\n    environment: MutableMapping[str, str] | None = None,\n) -> bool:\n    """Expose the preferred token under names used by Git and GitHub CLI."""\n    env = environment if environment is not None else os.environ\n    token = str(env.get("AMOSCLAUD_GITHUB_TOKEN", "")).strip()\n    if not token:\n        return bool(resolve_github_token(env))\n    env.setdefault("GH_TOKEN", token)\n    env.setdefault("GITHUB_TOKEN", token)\n    return True\n''',
+              encoding="utf-8",
+          )
+
+          package_init = root / "amoscloud_ai" / "__init__.py"
+          text = package_init.read_text(encoding="utf-8")
+          import_line = "from .github_auth import configure_github_token_aliases\n"
+          if import_line not in text:
+              text = text.replace(
+                  "from .repository_control import initialize_repository_control\n",
+                  import_line + "from .repository_control import initialize_repository_control\n",
+              )
+          call_line = "configure_github_token_aliases()\n"
+          if call_line not in text:
+              text = text.replace(
+                  "_configure_persistent_auth_storage()\n",
+                  "_configure_persistent_auth_storage()\nconfigure_github_token_aliases()\n",
+              )
+          package_init.write_text(text, encoding="utf-8")
+
+          bot_init = root / "amosclaud_bot" / "__init__.py"
+          text = bot_init.read_text(encoding="utf-8")
+          marker = "from amoscloud_ai.github_auth import configure_github_token_aliases\n\nconfigure_github_token_aliases()\n\n"
+          if marker not in text:
+              text = text.replace(
+                  "from typing import Any, Mapping\n\n",
+                  "from typing import Any, Mapping\n\n" + marker,
+              )
+          bot_init.write_text(text, encoding="utf-8")
+
+          issue_commands = root / "amoscloud_ai" / "github_issue_commands.py"
+          text = issue_commands.read_text(encoding="utf-8")
+          text = text.replace(
+              '("AMOSCLAUD_GITHUB_COMMENT_TOKEN", "GITHUB_TOKEN")',
+              '("AMOSCLAUD_GITHUB_TOKEN", "AMOSCLAUD_GITHUB_COMMENT_TOKEN", "GITHUB_TOKEN")',
+          )
+          issue_commands.write_text(text, encoding="utf-8")
+
+          entrypoint = root / "docker" / "production-entrypoint.sh"
+          text = entrypoint.read_text(encoding="utf-8")
+          bridge = '''\n# Make the repository-level Amosclaud credential available to every child\n# service and GitHub CLI process without printing its value.\nif [ -n "${AMOSCLAUD_GITHUB_TOKEN:-}" ]; then\n  export GH_TOKEN="${GH_TOKEN:-$AMOSCLAUD_GITHUB_TOKEN}"\n  export GITHUB_TOKEN="${GITHUB_TOKEN:-$AMOSCLAUD_GITHUB_TOKEN}"\nfi\n'''
+          if "AMOSCLAUD_GITHUB_TOKEN" not in text:
+              if "set -euo pipefail\n" in text:
+                  text = text.replace("set -euo pipefail\n", "set -euo pipefail\n" + bridge, 1)
+              else:
+                  text = bridge.lstrip() + text
+          entrypoint.write_text(text, encoding="utf-8")
+
+          compose = root / "docker-compose.yml"
+          text = compose.read_text(encoding="utf-8")
+          compose_line = "      AMOSCLAUD_GITHUB_TOKEN: ${AMOSCLAUD_GITHUB_TOKEN:-}\n"
+          if compose_line not in text:
+              text = text.replace(
+                  "      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}\n",
+                  "      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}\n" + compose_line,
+                  1,
+              )
+          compose.write_text(text, encoding="utf-8")
+
+          verifier = root / ".github" / "scripts" / "verify_amosclaud_github_token.py"
+          verifier.write_text(
+              '''"""Verify that privileged GitHub workflows use the Amosclaud token contract."""\nfrom __future__ import annotations\n\nfrom pathlib import Path\n\nCUSTOM_SECRET = "secrets.AMOSCLAUD_GITHUB_TOKEN"\nLEGACY_SECRETS = ("secrets.GITHUB_TOKEN", "secrets.AMOSCLAUD_AUTONOMOUS_TOKEN")\nPRIVILEGED_MARKERS = (\n    "git push",\n    "gh issue",\n    "gh pr",\n    "api.github.com",\n    "action-gh-release",\n    "GITHUB_TOKEN:",\n    "GH_TOKEN:",\n    "contents: write",\n    "issues: write",\n    "pull-requests: write",\n)\n\n\ndef verify(root: Path = Path(".")) -> list[str]:\n    errors: list[str] = []\n    for path in sorted((root / ".github" / "workflows").glob("*.y*ml")):\n        text = path.read_text(encoding="utf-8")\n        for legacy in LEGACY_SECRETS:\n            if legacy in text:\n                errors.append(f"{path}: legacy secret reference {legacy}")\n        if any(marker in text for marker in PRIVILEGED_MARKERS) and CUSTOM_SECRET not in text:\n            errors.append(f"{path}: privileged workflow does not reference {CUSTOM_SECRET}")\n    auth = (root / "amoscloud_ai" / "github_auth.py").read_text(encoding="utf-8")\n    if "AMOSCLAUD_GITHUB_TOKEN" not in auth or "GITHUB_TOKEN" not in auth or "GH_TOKEN" not in auth:\n        errors.append("amoscloud_ai/github_auth.py: token aliases are incomplete")\n    compose = (root / "docker-compose.yml").read_text(encoding="utf-8")\n    if "AMOSCLAUD_GITHUB_TOKEN: ${AMOSCLAUD_GITHUB_TOKEN:-}" not in compose:\n        errors.append("docker-compose.yml: application service token is not wired")\n    return errors\n\n\ndef main() -> int:\n    errors = verify()\n    if errors:\n        print("Amosclaud GitHub token contract failed:")\n        for error in errors:\n            print(f"- {error}")\n        return 1\n    print("Amosclaud GitHub token contract passed.")\n    return 0\n\n\nif __name__ == "__main__":\n    raise SystemExit(main())\n''',
+              encoding="utf-8",
+          )
+
+          test = root / "tests" / "test_amosclaud_github_token_contract.py"
+          test.write_text(
+              '''from pathlib import Path\n\nfrom amoscloud_ai.github_auth import configure_github_token_aliases, resolve_github_token\n\n\ndef test_custom_token_populates_standard_aliases() -> None:\n    environment = {"AMOSCLAUD_GITHUB_TOKEN": "masked-test-token"}\n    assert configure_github_token_aliases(environment) is True\n    assert environment["GH_TOKEN"] == "masked-test-token"\n    assert environment["GITHUB_TOKEN"] == "masked-test-token"\n    assert resolve_github_token(environment) == "masked-test-token"\n\n\ndef test_explicit_standard_token_is_not_overwritten() -> None:\n    environment = {\n        "AMOSCLAUD_GITHUB_TOKEN": "preferred",\n        "GITHUB_TOKEN": "explicit-runtime-token",\n    }\n    configure_github_token_aliases(environment)\n    assert environment["GITHUB_TOKEN"] == "explicit-runtime-token"\n    assert environment["GH_TOKEN"] == "preferred"\n\n\ndef test_repository_workflows_follow_token_contract() -> None:\n    from importlib.util import module_from_spec, spec_from_file_location\n\n    path = Path(".github/scripts/verify_amosclaud_github_token.py")\n    spec = spec_from_file_location("token_contract", path)\n    assert spec and spec.loader\n    module = module_from_spec(spec)\n    spec.loader.exec_module(module)\n    assert module.verify(Path(".")) == []\n''',
+              encoding="utf-8",
+          )
+
+          readme = root / "secrets" / "README.md"
+          text = readme.read_text(encoding="utf-8")
+          section = '''\n\n## Amosclaud GitHub token\n\nGitHub Actions and Amosclaud application services use the repository secret\n`AMOSCLAUD_GITHUB_TOKEN`. Workflows expose it only to privileged GitHub steps as\n`GH_TOKEN` and/or `GITHUB_TOKEN`. Runtime services resolve the same value without\nlogging it. For fork and Dependabot events, Actions intentionally falls back to\nthe event-scoped `github.token`, because repository secrets are not exposed to\nuntrusted code.\n'''
+          if "## Amosclaud GitHub token" not in text:
+              readme.write_text(text.rstrip() + section + "\n", encoding="utf-8")
+
+          migration.unlink()
+          print(f"Updated {len(changed_workflows)} workflow files.")
+          for path in changed_workflows:
+              print(path)
+          PY
+
+      - name: Validate token wiring and focused tests
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pytest
+          python .github/scripts/verify_amosclaud_github_token.py
+          python -m py_compile \
+            amoscloud_ai/github_auth.py \
+            amoscloud_ai/__init__.py \
+            amosclaud_bot/__init__.py \
+            amoscloud_ai/github_issue_commands.py \
+            .github/scripts/verify_amosclaud_github_token.py \
+            tests/test_amosclaud_github_token_contract.py
+          python -m pytest -q tests/test_amosclaud_github_token_contract.py
+          git diff --check
+
+      - name: Commit verified token migration
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "Amosclaud Token Migration"
+          git config user.email "token-migration@amosclaud.internal"
+          git add -A
+          git commit -m "chore: use Amosclaud GitHub token across services"
+          git remote set-url origin "https://x-access-token:${AMOSCLAUD_GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
