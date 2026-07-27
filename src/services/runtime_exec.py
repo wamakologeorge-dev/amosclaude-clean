@@ -18,6 +18,13 @@ from amoscloud_ai.isolated_runner import (
 ContainerRunner = Callable[..., IsolatedRunResult]
 
 
+def _configured_workspace_root() -> Path | None:
+    """Return the operator-managed workspace boundary when one is configured."""
+
+    raw = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
+    return Path(raw).resolve() if raw else None
+
+
 class RuntimeExecutor:
     """Run repository-derived checks in a locked-down ephemeral container.
 
@@ -31,14 +38,15 @@ class RuntimeExecutor:
         *,
         runner: ContainerRunner = run_in_isolated_container,
     ) -> None:
-        allowed_root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
         resolved_workspace = workspace.resolve()
-        if (
-            resolved_workspace != allowed_root
-            and allowed_root not in resolved_workspace.parents
-        ):
-            raise ValueError("Workspace escapes allowed root")
+        configured_root = _configured_workspace_root()
+        if configured_root is not None:
+            try:
+                resolved_workspace.relative_to(configured_root)
+            except ValueError as exc:
+                raise ValueError("Workspace escapes allowed root") from exc
         self.workspace = resolved_workspace
+        self.allowed_root = configured_root or resolved_workspace
         self.runner = runner
 
     def _safe_workspace_relative_paths(
@@ -136,9 +144,8 @@ class RuntimeExecutor:
             }
 
     def _package_scripts(self) -> dict[str, str]:
-        allowed_root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
-        workspace = self.workspace.resolve()
-        if workspace != allowed_root and allowed_root not in workspace.parents:
+        workspace = self.workspace
+        if workspace != self.allowed_root and self.allowed_root not in workspace.parents:
             return {}
         package = (workspace / "package.json").resolve()
         if package != workspace and workspace not in package.parents:
