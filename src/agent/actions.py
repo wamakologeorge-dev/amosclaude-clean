@@ -257,7 +257,23 @@ def _resolve_workspace(workspace: str) -> Path:
     if not workspace_path.is_absolute() and ".." in workspace_path.parts:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
 
-    anchored = workspace_path if workspace_path.is_absolute() else (base / workspace_path)
+    if workspace_path.is_absolute():
+        anchored: Path | None = None
+        for root in allowed_roots:
+            try:
+                workspace_path.relative_to(root)
+                anchored = workspace_path
+                break
+            except ValueError:
+                continue
+        if anchored is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Workspace must stay inside the application or repository storage root",
+            )
+    else:
+        anchored = base / workspace_path
+
     candidate = anchored.resolve()
 
     for root in allowed_roots:
