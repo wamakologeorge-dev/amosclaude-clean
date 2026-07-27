@@ -88,13 +88,14 @@ def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> N
     assert "Split" in main
     assert "writable repository" in main
     assert "nano and vim editors" in main
-    assert "Doctor, Fixer, Autonomous, and Underground" in main
+    assert "TerminalAgentHub" in main
     assert "ProjectToolbelt" in main
     assert "WorkspaceFeatureCells" in main
     assert "data-workspace-features" in main
     assert "/agent-hub/messages" in hub
     assert "Attach recent output from the active terminal" in hub
     assert "Authorize verified repository changes" in hub
+    assert "doctor" in hub and "fixer" in hub
     assert "/tools/commit" in project_tools
     assert "/tools/${action}" in project_tools
     assert "sync-push" in project_tools
