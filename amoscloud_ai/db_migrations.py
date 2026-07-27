@@ -84,6 +84,32 @@ MIGRATIONS = (
             ON repository_collaborators(user_id, repository_id);
         """,
     ),
+    Migration(
+        3,
+        "github_repository_sync_schema",
+        "-- Applied by ensure_github_repository_schema.",
+    ),
+    Migration(
+        4,
+        "cloud_workspaces",
+        """
+        CREATE TABLE IF NOT EXISTS cloud_workspaces (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL UNIQUE,
+            owner_id INTEGER NOT NULL,
+            runtime_status TEXT NOT NULL DEFAULT 'not_started',
+            runtime_detail TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_started_at TEXT,
+            last_stopped_at TEXT,
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_cloud_workspaces_owner
+            ON cloud_workspaces(owner_id, updated_at);
+        """,
+    ),
 )
 
 _GITHUB_REPOSITORY_COLUMNS = {
@@ -104,11 +130,7 @@ def _checksum(migration: Migration) -> str:
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
-    """Idempotently add GitHub account and repository synchronization schema.
-
-    Production calls this from migration 3 before traffic. Tests and legacy CLI
-    entry points may also call it after creating an isolated base schema.
-    """
+    """Idempotently add GitHub account and repository synchronization schema."""
 
     db.execute(
         """CREATE TABLE IF NOT EXISTS github_connections (

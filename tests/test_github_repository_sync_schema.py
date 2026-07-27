@@ -51,7 +51,10 @@ def test_sync_schema_initializes_a_blank_database(tmp_path: Path, monkeypatch) -
     }.issubset(columns)
 
 
-def test_success_and_failure_timestamps_are_separate(tmp_path: Path, monkeypatch) -> None:
+def test_success_and_failure_timestamps_are_separate(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     database = tmp_path / "timestamps.db"
     _point_repository_database(monkeypatch, database)
     github_repository_sync.ensure_sync_columns()
@@ -63,7 +66,13 @@ def test_success_and_failure_timestamps_are_separate(tmp_path: Path, monkeypatch
         )
         db.commit()
 
-    github_repository_sync._record(1, "synced", "first success", "abc", successful=True)
+    github_repository_sync._record(
+        1,
+        "synced",
+        "first success",
+        "abc",
+        successful=True,
+    )
     with sqlite3.connect(database) as db:
         first = db.execute(
             """SELECT github_last_sync_at,github_last_sync_attempt_at
@@ -112,7 +121,10 @@ def test_repository_mapping_prefers_immutable_id_and_updates_name(
     assert mapped == ("NewOwner/NewName", 9988)
 
 
-def test_repository_name_fallback_is_case_insensitive(tmp_path: Path, monkeypatch) -> None:
+def test_repository_name_fallback_is_case_insensitive(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     database = tmp_path / "case.db"
     _point_repository_database(monkeypatch, database)
     github_repository_sync.ensure_sync_columns()
@@ -127,12 +139,6 @@ def test_repository_name_fallback_is_case_insensitive(tmp_path: Path, monkeypatc
         db.commit()
     rows = github_repository_sync._mapped_rows("owner/project", None)
     assert [row["id"] for row in rows] == [1]
-
-
-        "github_sync_state",
-        "github_sync_detail",
-        "github_last_remote_sha",
-    }.issubset(columns)
 
 
 def test_background_sync_contains_unexpected_failures(monkeypatch) -> None:

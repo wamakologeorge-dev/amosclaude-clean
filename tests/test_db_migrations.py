@@ -8,7 +8,6 @@ from amoscloud_ai import db_migrations
 def test_migrations_are_idempotent(tmp_path):
     path = tmp_path / "auth.db"
     assert db_migrations.run_migrations(path) == [1, 2, 3, 4]
-    assert db_migrations.run_migrations(path) == [1, 2]
     assert db_migrations.run_migrations(path) == []
     with sqlite3.connect(path) as db:
         applied = db.execute(
@@ -94,7 +93,6 @@ def test_github_schema_helper_is_idempotent(tmp_path):
         }
     assert "github_repository_id" in columns
     assert "github_last_sync_attempt_at" in columns
-    } <= repository_columns
 
 
 def test_migrations_reject_checksum_drift(tmp_path, monkeypatch):

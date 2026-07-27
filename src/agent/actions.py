@@ -1,4 +1,5 @@
 """Single Autonomous orchestrator for all Amosclaud entry points."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -61,7 +62,10 @@ class AutonomousOrchestrator:
             max_attempts=2,
         )
 
-    def _fixer_write_authorized(self, task: AutonomousTask) -> tuple[bool, dict[str, Any]]:
+    def _fixer_write_authorized(
+        self,
+        task: AutonomousTask,
+    ) -> tuple[bool, dict[str, Any]]:
         """Consume the Autonomous -> Fixer grant before any write-capable loop."""
         if task.mode not in _WRITE_MODES:
             return False, {"required": False, "verified": False}
@@ -197,6 +201,9 @@ class AutonomousOrchestrator:
             ],
             evidence=[event.message for event in outcome.events],
         )
+        security_result = (
+            "verified and consumed." if write_authorized else "not authorized."
+        )
         outcome.lessons.extend(
             [
                 (
@@ -207,10 +214,7 @@ class AutonomousOrchestrator:
                     f"Practice Station: {practice.lesson}; score "
                     f"{practice.score}; status {practice.status}."
                 ),
-                (
-                    "Security chain: fixer grant "
-                    + ("verified and consumed." if write_authorized else "not authorized.")
-                ),
+                f"Security chain: fixer grant {security_result}",
             ]
         )
         self.foundation.memory.remember(
