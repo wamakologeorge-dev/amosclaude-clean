@@ -13,6 +13,10 @@ permissions:
   security-events: write
   packages: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: CodeQL (${{ matrix.language }})
@@ -28,11 +32,11 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Set up Python
         if: matrix.language == 'python'
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
