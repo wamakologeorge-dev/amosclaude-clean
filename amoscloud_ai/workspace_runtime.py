@@ -150,8 +150,12 @@ def runtime_health() -> dict[str, Any]:
     try:
         payload = _request("GET", "/health")
         return {"configured": True, **payload}
-    except RuntimeError as exc:
-        return {"configured": True, "ok": False, "detail": str(exc)}
+    except RuntimeError:
+        return {
+            "configured": True,
+            "ok": False,
+            "detail": "Workspace runtime health check failed.",
+        }
 
 
 def start_workspace(

@@ -51,8 +51,8 @@ def repository_workspace_status(
     if workspace_runtime.configured() and workspace["runtime_status"] != "not_started":
         try:
             payload["container"] = workspace_runtime.remote_status(workspace)
-        except RuntimeError as exc:
-            payload["container_error"] = str(exc)
+        except RuntimeError:
+            payload["container_error"] = "Unable to retrieve container status."
     return payload
 
 
@@ -79,7 +79,7 @@ def start_repository_workspace(
             },
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
     return {"workspace": workspace, "container": container}
 
 
@@ -92,7 +92,7 @@ def stop_repository_workspace(
     try:
         container = workspace_runtime.stop_workspace(workspace)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
     return {"workspace": workspace, "container": container}
 
 
@@ -110,7 +110,7 @@ def create_terminal_ticket(
             raise HTTPException(status_code=409, detail="Start the workspace first")
         return workspace_runtime.terminal_ticket(workspace, int(user["id"]))
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
 
 
 @router.delete("/repositories/{repository_id}", status_code=204)
@@ -128,7 +128,7 @@ def delete_repository_workspace(
         try:
             workspace_runtime.delete_workspace(workspace)
         except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
     with _db() as db:
         db.execute("DELETE FROM cloud_workspaces WHERE id=?", (workspace["id"],))
         db.commit()
