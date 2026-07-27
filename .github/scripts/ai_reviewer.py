@@ -196,8 +196,17 @@ def publish_comment(pull: Any, comment: str) -> None:
         return
 
     canonical = existing[-1]
-    canonical.edit(comment)
-    for duplicate in existing[:-1]:
+    try:
+        canonical.edit(comment)
+        duplicates = existing[:-1]
+    except Exception as exc:
+        # A repository PAT cannot edit a comment authored by github-actions[bot].
+        # Create a token-owned canonical comment, then remove old cards best-effort.
+        print(f"Could not edit prior review comment: {type(exc).__name__}")
+        pull.create_issue_comment(comment)
+        duplicates = existing
+
+    for duplicate in duplicates:
         try:
             duplicate.delete()
         except Exception as exc:
@@ -216,9 +225,7 @@ def main() -> None:
     if not DIFF_PATH.exists():
         raise SystemExit(f"Diff file not found: {DIFF_PATH}")
     if DIFF_PATH.stat().st_size > MAX_DIFF_BYTES:
-        diff = DIFF_PATH.read_text(encoding="utf-8", errors="replace")[
-            :MAX_DIFF_BYTES
-        ]
+        diff = DIFF_PATH.read_text(encoding="utf-8", errors="replace")[:MAX_DIFF_BYTES]
     else:
         diff = DIFF_PATH.read_text(encoding="utf-8", errors="replace")
 
