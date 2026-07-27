@@ -28,7 +28,7 @@ export class ProjectToolbelt {
       <div class="terminal-project-tools-head">
         <div>
           <h3>Project tools</h3>
-          <p>Smart commands, file editing, Git status, commit, pull, and push for the current repository.</p>
+          <p>Smart commands, run and debug, file editing, Git status, commit, pull, push, and one-click Sync &amp; Push.</p>
         </div>
         <span class="terminal-project-source" data-project-source>Loading project…</span>
       </div>
@@ -37,13 +37,16 @@ export class ProjectToolbelt {
       <div class="terminal-project-bottom">
         <div class="terminal-custom-command">
           <input data-project-command type="text" placeholder="Run any command, for example: python -m pytest -q" />
-          <button data-project-run type="button">Run</button>
+          <button data-project-run type="button">Run command</button>
+          <button data-project-run-app class="project" type="button">Run app</button>
+          <button data-project-debug class="debug" type="button">Debug</button>
           <button data-project-files type="button">Files</button>
           <button data-project-edit type="button">Edit file</button>
         </div>
         <div class="terminal-project-actions">
           <input data-project-message type="text" maxlength="200" value="Update from Amosclaud cloud terminal" aria-label="Commit message" />
           <button data-project-commit class="primary" type="button">Commit</button>
+          <button data-project-sync-push class="sync" type="button" hidden>Sync &amp; Push</button>
           <button data-project-pull class="github" type="button" hidden>Pull</button>
           <button data-project-push class="github" type="button" hidden>Push</button>
           <button data-project-refresh type="button">Refresh</button>
@@ -57,7 +60,10 @@ export class ProjectToolbelt {
     this.commandInput = this.root.querySelector('[data-project-command]');
     this.messageInput = this.root.querySelector('[data-project-message]');
     this.runButton = this.root.querySelector('[data-project-run]');
+    this.runAppButton = this.root.querySelector('[data-project-run-app]');
+    this.debugButton = this.root.querySelector('[data-project-debug]');
     this.commitButton = this.root.querySelector('[data-project-commit]');
+    this.syncPushButton = this.root.querySelector('[data-project-sync-push]');
     this.pullButton = this.root.querySelector('[data-project-pull]');
     this.pushButton = this.root.querySelector('[data-project-push]');
     this.result = this.root.querySelector('[data-project-result]');
@@ -69,11 +75,14 @@ export class ProjectToolbelt {
         this.run(this.commandInput.value);
       }
     });
+    this.runAppButton.addEventListener('click', () => this.runDetected('run'));
+    this.debugButton.addEventListener('click', () => this.runDetected('debug'));
     this.root.querySelector('[data-project-files]').addEventListener('click', () => {
       this.run("find . -path './.git' -prune -o -type f -maxdepth 4 -print | sort | sed 's#^./##' | head -300");
     });
     this.root.querySelector('[data-project-edit]').addEventListener('click', () => this.editFile());
     this.commitButton.addEventListener('click', () => this.commit());
+    this.syncPushButton.addEventListener('click', () => this.sync('sync-push'));
     this.pullButton.addEventListener('click', () => this.sync('pull'));
     this.pushButton.addEventListener('click', () => this.sync('push'));
     this.root.querySelector('[data-project-refresh]').addEventListener('click', () => this.load());
@@ -119,9 +128,9 @@ export class ProjectToolbelt {
     ];
     if (Number.isInteger(status.ahead)) chips.push(`Ahead: ${status.ahead}`);
     if (Number.isInteger(status.behind)) chips.push(`Behind: ${status.behind}`);
-    chips.forEach((text, index) => {
+    chips.forEach((textValue, index) => {
       const chip = document.createElement('span');
-      chip.textContent = text;
+      chip.textContent = textValue;
       if (index === 2) chip.className = status.dirty ? 'dirty' : 'clean';
       this.summary.appendChild(chip);
     });
@@ -140,6 +149,7 @@ export class ProjectToolbelt {
     const github = source === 'github';
     this.pullButton.hidden = !github;
     this.pushButton.hidden = !github;
+    this.syncPushButton.hidden = !github;
     this.commitButton.textContent = github ? 'Commit' : 'Save commit';
     this.commitButton.title = github
       ? 'Commit changes locally, then push them to GitHub.'
@@ -151,6 +161,21 @@ export class ProjectToolbelt {
     const session = await this.ensureTerminal();
     if (!session) throw new Error('A terminal session could not be created.');
     return session;
+  }
+
+  detectedRunCommand() {
+    const commands = this.payload?.commands || [];
+    const preferredIds = ['npm-dev', 'npm-start', 'make-dev', 'make-run', 'django'];
+    for (const id of preferredIds) {
+      const command = commands.find(item => item.id === id)?.command;
+      if (command) return command;
+    }
+    return 'amos run';
+  }
+
+  async runDetected(mode) {
+    const command = mode === 'debug' ? 'amos debug' : this.detectedRunCommand();
+    await this.run(command);
   }
 
   async run(command) {
@@ -208,7 +233,12 @@ export class ProjectToolbelt {
   async sync(action) {
     if (this.busy) return;
     this.setBusy(true);
-    this.setResult(`${action === 'push' ? 'Pushing to' : 'Pulling from'} GitHub…`);
+    const labels = {
+      pull: 'Pulling from GitHub…',
+      push: 'Pushing to GitHub…',
+      'sync-push': 'Synchronizing remote changes, rebasing safely, and pushing to GitHub…',
+    };
+    this.setResult(labels[action] || 'Synchronizing GitHub…');
     try {
       const payload = await apiRequest(terminalApi(this.repositoryId, `/tools/${action}`), {
         method: 'POST',
@@ -217,7 +247,8 @@ export class ProjectToolbelt {
           commit_message: this.messageInput.value.trim() || 'Update from Amosclaud cloud terminal',
         }),
       });
-      this.setResult(`${action === 'push' ? 'Pushed' : 'Pulled'} ${payload.branch || selectedBranch()} at ${String(payload.commit || '').slice(0, 12)}.`, 'success');
+      const verb = action === 'pull' ? 'Pulled' : action === 'push' ? 'Pushed' : 'Synchronized and pushed';
+      this.setResult(`${verb} ${payload.branch || selectedBranch()} at ${String(payload.commit || '').slice(0, 12)}.`, 'success');
       await this.load();
     } catch (error) {
       this.setResult(error.message, 'error');
