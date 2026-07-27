@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 from pathlib import Path
 from typing import Any, Callable
@@ -30,7 +31,14 @@ class RuntimeExecutor:
         *,
         runner: ContainerRunner = run_in_isolated_container,
     ) -> None:
-        self.workspace = workspace.resolve()
+        allowed_root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+        resolved_workspace = workspace.resolve()
+        if (
+            resolved_workspace != allowed_root
+            and allowed_root not in resolved_workspace.parents
+        ):
+            raise ValueError("Workspace escapes allowed root")
+        self.workspace = resolved_workspace
         self.runner = runner
 
     def _safe_workspace_relative_paths(
