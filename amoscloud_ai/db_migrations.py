@@ -130,12 +130,25 @@ def _checksum(migration: Migration) -> str:
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
-    """Idempotently add GitHub mapping fields on a canonical repositories table.
+    """Idempotently add GitHub account and repository synchronization schema.
 
     Production calls this from migration 3 before traffic. Tests and legacy CLI
     entry points may also call it after creating an isolated base schema.
     """
 
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS github_connections (
+            user_id INTEGER PRIMARY KEY,
+            github_user_id INTEGER NOT NULL,
+            github_login TEXT NOT NULL,
+            avatar_url TEXT,
+            access_token_ciphertext TEXT NOT NULL,
+            scopes TEXT NOT NULL DEFAULT '',
+            connected_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )"""
+    )
     columns = {
         row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
     }
