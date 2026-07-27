@@ -2,11 +2,14 @@ import base64
 import hashlib
 import hmac
 import json
+import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from amoscloud_ai import workspace_terminal
+from amoscloud_ai import managed_terminal, workspace_runtime, workspace_terminal
 from amoscloud_ai.main import create_app
+from src.agent.actions import _resolve_workspace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +23,7 @@ def test_complete_terminal_routes_are_registered() -> None:
     paths = {getattr(route, "path", "") for route in create_app().routes}
     assert {
         "/api/v1/cloud-workspaces/repositories/{repository_id}/terminal-ticket-v2",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/managed-terminal/{terminal_id}",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub/messages",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/tools",
@@ -83,11 +87,17 @@ def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> N
     assert "new WebSocket(ticket.websocket_url)" in session
     assert "ResizeObserver" in session
     assert "runCommand" in session
+    assert "interrupt()" in session
+    assert "registerOscHandler(777" in session
+    assert "amos:finish" in session
     assert "exportTranscript" in session
     assert "findNext" in session and "findPrevious" in session
     assert "Split" in main
     assert "writable repository" in main
-    assert "nano and vim editors" in main
+    assert "nano and vim" in main
+    assert "Running now" in main
+    assert "Stop process" in main
+    assert "Managed runtime connected" in main
     assert "TerminalAgentHub" in main
     assert "ProjectToolbelt" in main
     assert "WorkspaceFeatureCells" in main
@@ -132,17 +142,84 @@ def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None
     assert 'CMD ["uvicorn", "terminal_runtime:app"' in service_dockerfile
 
 
-def test_agent_hub_redacts_terminal_secrets_and_disables_unsafe_escalation() -> None:
+def test_managed_runtime_is_available_without_external_workspace_service(monkeypatch) -> None:
+    monkeypatch.delenv("AMOSCLAUD_WORKSPACE_RUNTIME_URL", raising=False)
+    monkeypatch.delenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", raising=False)
+    monkeypatch.setenv("AMOSCLAUD_MANAGED_TERMINAL_ENABLED", "true")
+
+    result = managed_terminal.health(external=workspace_runtime.runtime_health())
+
+    assert result["configured"] is True
+    assert result["ok"] is True
+    assert result["provider"] == "managed"
+    assert result["managed_fallback"] is True
+    assert "scrubbed environment" in result["security_boundary"]
+
+
+def test_workspace_table_repairs_legacy_schema_and_duplicates(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "auth.db"
+    with sqlite3.connect(database) as db:
+        db.executescript(
+            """
+            CREATE TABLE cloud_workspaces (
+                id TEXT PRIMARY KEY,
+                repository_id INTEGER NOT NULL,
+                owner_id INTEGER NOT NULL,
+                runtime_status TEXT
+            );
+            INSERT INTO cloud_workspaces(id,repository_id,owner_id,runtime_status)
+            VALUES ('ws_old',7,3,'not_started'),('ws_duplicate',7,3,'running');
+            """
+        )
+
+    @contextmanager
+    def test_db():
+        connection = sqlite3.connect(database)
+        connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    monkeypatch.setattr(workspace_runtime, "_db", test_db)
+    workspace_runtime.ensure_workspace_table()
+    workspace = workspace_runtime.workspace_for_repository(7, 3)
+
+    with test_db() as db:
+        rows = db.execute(
+            "SELECT * FROM cloud_workspaces WHERE repository_id=7"
+        ).fetchall()
+        indexes = db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
+    assert len(rows) == 1
+    assert workspace["id"] == "ws_old"
+    assert workspace["created_at"]
+    assert any(bool(row["unique"]) for row in indexes)
+
+
+def test_agent_hub_redacts_secrets_handles_help_and_disables_unsafe_escalation() -> None:
     source = _source("amoscloud_ai/api/routes/cloud_workspaces.py")
 
     assert 'Literal["doctor", "fixer", "autonomous", "underground"]' in source
     assert "_safe_terminal_output" in source
     assert "[redacted]" in source
+    assert "_HELP_REQUEST" in source
+    assert "_agent_help_response" in source
+    assert "Read-only diagnosis: repository write authority is not granted." in source
+    assert "Diagnosis only: do not modify repository files." not in source
     assert '"allow_force_push": False' in source
     assert '"allow_protected_branch_write": False' in source
     assert '"require_verification": True' in source
     assert "no force push" in source.lower()
     assert "no protected-branch write" in source.lower()
+
+
+def test_autonomous_workspace_accepts_persistent_repository_root(tmp_path, monkeypatch) -> None:
+    repository_root = tmp_path / "repositories"
+    repository = repository_root / "7"
+    repository.mkdir(parents=True)
+    monkeypatch.setenv("REPOSITORY_STORAGE_PATH", str(repository_root))
+
+    assert _resolve_workspace(str(repository)) == repository.resolve()
 
 
 def test_project_tools_support_native_and_github_repository_workflows() -> None:
@@ -168,6 +245,7 @@ def test_project_tools_support_native_and_github_repository_workflows() -> None:
 def test_shell_profile_and_amos_command_make_editing_and_debugging_simple() -> None:
     profile = _source("services/workspace_runtime/workspace-image/terminal-profile.sh")
     command = _source("services/workspace_runtime/workspace-image/amos")
+    dockerfile = _source("Dockerfile")
 
     assert "git symbolic-ref --quiet --short HEAD" in profile
     assert "PROMPT_COMMAND='history -a; __amosclaud_prompt'" in profile
@@ -180,7 +258,11 @@ def test_shell_profile_and_amos_command_make_editing_and_debugging_simple() -> N
     assert "amos network" in command
     assert "python3 -m pdb" in command
     assert "NODE_OPTIONS=--inspect" in command
+    assert "[Amosclaud Debug] Starting" in command
     assert "exec nano" in command
     assert "exec vim" in command
     assert "git commit -m" in command
     assert "Sync & Push" in command
+    assert "AMOSCLAUD_MANAGED_TERMINAL_ENABLED=true" in dockerfile
+    assert "COPY services/workspace_runtime/workspace-image/amos" in dockerfile
+    assert "gdb" in dockerfile and "strace" in dockerfile

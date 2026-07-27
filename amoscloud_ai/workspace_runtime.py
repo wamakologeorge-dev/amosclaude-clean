@@ -35,11 +35,19 @@ def configured() -> bool:
 
 
 def ensure_workspace_table() -> None:
+    """Create and repair the workspace record table without losing user data.
+
+    Older deployments created this table before ``repository_id`` was unique.
+    ``INSERT ... ON CONFLICT(repository_id)`` then raised an OperationalError and
+    the Terminal page only showed the generic server-error message. The repair is
+    intentionally idempotent so an existing Railway volume upgrades in place.
+    """
+
     with _db() as db:
         db.execute(
             """CREATE TABLE IF NOT EXISTS cloud_workspaces (
                 id TEXT PRIMARY KEY,
-                repository_id INTEGER NOT NULL UNIQUE,
+                repository_id INTEGER NOT NULL,
                 owner_id INTEGER NOT NULL,
                 runtime_status TEXT NOT NULL DEFAULT 'not_started',
                 runtime_detail TEXT,
@@ -51,6 +59,51 @@ def ensure_workspace_table() -> None:
                 FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
             )"""
         )
+        columns = {
+            str(row["name"])
+            for row in db.execute("PRAGMA table_info(cloud_workspaces)").fetchall()
+        }
+        additions = {
+            "runtime_status": "TEXT NOT NULL DEFAULT 'not_started'",
+            "runtime_detail": "TEXT",
+            "created_at": "TEXT",
+            "updated_at": "TEXT",
+            "last_started_at": "TEXT",
+            "last_stopped_at": "TEXT",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                db.execute(
+                    f"ALTER TABLE cloud_workspaces ADD COLUMN {name} {declaration}"
+                )
+
+        now = _now()
+        db.execute(
+            """UPDATE cloud_workspaces
+               SET created_at=COALESCE(NULLIF(created_at,''), ?),
+                   updated_at=COALESCE(NULLIF(updated_at,''), ?),
+                   runtime_status=COALESCE(NULLIF(runtime_status,''), 'not_started')""",
+            (now, now),
+        )
+
+        # Preserve the oldest workspace identifier for each repository and remove
+        # duplicate records left by pre-unique deployments.
+        duplicates = db.execute(
+            """SELECT repository_id, MIN(rowid) AS keep_rowid
+               FROM cloud_workspaces
+               GROUP BY repository_id
+               HAVING COUNT(*) > 1"""
+        ).fetchall()
+        for duplicate in duplicates:
+            db.execute(
+                "DELETE FROM cloud_workspaces WHERE repository_id=? AND rowid<>?",
+                (duplicate["repository_id"], duplicate["keep_rowid"]),
+            )
+        db.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS
+               idx_cloud_workspaces_repository_unique
+               ON cloud_workspaces(repository_id)"""
+        )
         db.commit()
 
 
@@ -60,10 +113,9 @@ def workspace_for_repository(repository_id: int, owner_id: int) -> dict[str, Any
     workspace_id = f"ws_{secrets.token_hex(12)}"
     with _db() as db:
         db.execute(
-            """INSERT INTO cloud_workspaces
+            """INSERT OR IGNORE INTO cloud_workspaces
                (id, repository_id, owner_id, runtime_status, created_at, updated_at)
-               VALUES (?, ?, ?, 'not_started', ?, ?)
-               ON CONFLICT(repository_id) DO NOTHING""",
+               VALUES (?, ?, ?, 'not_started', ?, ?)""",
             (workspace_id, repository_id, owner_id, now, now),
         )
         db.commit()
@@ -101,6 +153,25 @@ def _record(
             values,
         )
         db.commit()
+
+
+def record_workspace_status(
+    workspace_id: str,
+    status: str,
+    detail: str | None = None,
+    *,
+    started: bool = False,
+    stopped: bool = False,
+) -> None:
+    """Public status recorder used by both external and managed runtimes."""
+
+    _record(
+        workspace_id,
+        status,
+        detail,
+        started=started,
+        stopped=stopped,
+    )
 
 
 def _headers() -> dict[str, str]:
@@ -180,6 +251,7 @@ def start_workspace(
     _record(
         workspace["id"],
         str(result.get("status") or "running"),
+        "provider=external",
         started=True,
     )
     return result
@@ -194,6 +266,7 @@ def stop_workspace(workspace: dict[str, Any]) -> dict[str, Any]:
     _record(
         workspace["id"],
         str(result.get("status") or "exited"),
+        "provider=external",
         stopped=True,
     )
     return result
@@ -205,7 +278,11 @@ def delete_workspace(workspace: dict[str, Any]) -> None:
 
 def remote_status(workspace: dict[str, Any]) -> dict[str, Any]:
     result = _request("GET", f"/v1/workspaces/{workspace['id']}")
-    _record(workspace["id"], str(result.get("status") or "unknown"))
+    _record(
+        workspace["id"],
+        str(result.get("status") or "unknown"),
+        "provider=external",
+    )
     return result
 
 
@@ -260,4 +337,5 @@ def terminal_ticket(workspace: dict[str, Any], user_id: int) -> dict[str, Any]:
         "workspace_id": workspace["id"],
         "expires_at": expires_at,
         "websocket_url": _public_websocket_url(workspace["id"], encoded),
+        "provider": "external",
     }

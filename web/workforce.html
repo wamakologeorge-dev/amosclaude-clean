@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autonomous Engineering Workforce · Amosclaud</title>
+  <link rel="stylesheet" href="/static/workforce.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/cloud/agent">Amosclaud</a>
+    <nav aria-label="Primary">
+      <a href="/cloud/agent">Command Center</a>
+      <a href="/repositories">Repositories</a>
+      <a href="/static/workforce.html" aria-current="page">Workforce</a>
+    </nav>
+  </header>
+
+  <main>
+    <header class="hero">
+      <p class="eyebrow">From cloud IDE to autonomous software ownership</p>
+      <h1>Autonomous Engineering Workforce</h1>
+      <p>Delegate a complete epic, product requirement, bug, or refactor. The single Amosclaud Autonomous core plans, works in isolation, tests, self-corrects, verifies, and opens a draft pull request. Human attention is requested only for authorization, blockers, and final sign-off.</p>
+      <div class="hero-actions">
+        <button id="refresh-all" type="button">Refresh live state</button>
+        <span id="last-refresh" class="muted">Not checked yet</span>
+      </div>
+    </header>
+
+    <p id="notice" class="notice" role="status" aria-live="polite">Loading the workforce control plane…</p>
+
+    <section class="metric-grid" aria-label="Workforce overview">
+      <article><span>Queued or running</span><strong id="metric-active">—</strong><small>Durable engineering tasks</small></article>
+      <article><span>Human attention</span><strong id="metric-attention">—</strong><small>Approval, blocker, or final review</small></article>
+      <article><span>Software assets</span><strong id="metric-assets">—</strong><small>Monitored autonomous assets</small></article>
+      <article><span>Execution fabric</span><strong id="metric-fabric">—</strong><small>Edge-first, cloud fallback</small></article>
+    </section>
+
+    <section class="layout two-column">
+      <article class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Delegate ownership</p><h2>New engineering work order</h2></div>
+          <span class="badge">One autonomous core</span>
+        </div>
+        <form id="delegation-form" class="stack">
+          <label>Connected GitHub repository
+            <select id="delegation-repository" required disabled>
+              <option value="">Loading connected repositories…</option>
+            </select>
+          </label>
+          <div class="form-grid">
+            <label>Work type
+              <select id="delegation-kind">
+                <option value="epic">Epic</option>
+                <option value="feature">Feature</option>
+                <option value="bug">Bug fix</option>
+                <option value="refactor">Refactor</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="requirement">Product requirement</option>
+              </select>
+            </label>
+            <label>Operation
+              <select id="delegation-mode">
+                <option value="build">Build</option>
+                <option value="fix">Fix</option>
+                <option value="test">Test only</option>
+                <option value="review">Review only</option>
+              </select>
+            </label>
+            <label>Execution
+              <select id="delegation-execution">
+                <option value="auto">Automatic edge/cloud selection</option>
+                <option value="edge">Require local edge runner</option>
+                <option value="github">Controlled GitHub/cloud runner</option>
+                <option value="cloud">Cloud runner</option>
+              </select>
+            </label>
+          </div>
+          <label>Title
+            <input id="delegation-title" required maxlength="200" placeholder="Repair recurring deployment failures">
+          </label>
+          <label>Complete requirement
+            <textarea id="delegation-requirement" required maxlength="20000" rows="8" placeholder="Describe the intended outcome, constraints, user impact, and what must not change."></textarea>
+          </label>
+          <label>Acceptance criteria <small>one item per line</small>
+            <textarea id="delegation-criteria" required rows="5" placeholder="All existing tests pass&#10;A focused regression test is added&#10;A verified draft pull request is opened"></textarea>
+          </label>
+          <label>GitHub issue or source reference <small>optional</small>
+            <input id="delegation-source" maxlength="500" placeholder="https://github.com/owner/repo/issues/123">
+          </label>
+          <label class="check-row">
+            <input id="delegation-authorize" type="checkbox">
+            <span>Authorize bounded repository changes now. Without this, Amosclaud prepares the work order and waits for approval.</span>
+          </label>
+          <button id="delegate-button" class="primary" type="submit">Delegate to Amosclaud</button>
+        </form>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">Hybrid execution</p><h2>Edge + cloud fabric</h2></div><span id="fabric-state" class="status">Checking</span></div>
+        <p id="fabric-rule" class="muted"></p>
+        <div id="fabric-cards" class="card-list"></div>
+        <h3>Immutable safety contract</h3>
+        <ul id="guardrail-summary" class="guardrail-list"></ul>
+        <details class="guardrail-editor">
+          <summary>Edit bounded paths and repair limit</summary>
+          <form id="guardrail-form" class="stack">
+            <label>Allowed paths <small>one prefix per line</small><textarea id="guardrail-allowed" rows="5"></textarea></label>
+            <label>Additional protected paths <small>one prefix per line</small><textarea id="guardrail-protected" rows="5"></textarea></label>
+            <label>Protected branches <small>one branch per line</small><textarea id="guardrail-branches" rows="4"></textarea></label>
+            <label>Work branch prefix<input id="guardrail-prefix" maxlength="80"></label>
+            <label>Maximum self-correction attempts<select id="guardrail-attempts"><option>1</option><option>2</option><option selected>3</option></select></label>
+            <button type="submit">Save bounded guardrails</button>
+          </form>
+        </details>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><p class="eyebrow">Live ownership queue</p><h2>Delegated engineering work</h2></div><span id="delegation-count" class="badge">0</span></div>
+      <div id="delegation-list" class="work-list"><p class="empty">No delegated work yet.</p></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><p class="eyebrow">Self-sustaining software</p><h2>Asset Dashboard</h2></div><span id="asset-count" class="badge">0</span></div>
+      <p class="muted">Track uptime, latency, CPU, memory, errors, usage, autonomous patch success, and Revenue telemetry. Telemetry credentials are hashed and shown only once.</p>
+      <div class="layout asset-layout">
+        <form id="asset-form" class="stack asset-form">
+          <h3>Register software asset</h3>
+          <label>Name<input id="asset-name" required maxlength="160" placeholder="Billing API"></label>
+          <label>Repository<select id="asset-repository"><option value="">No repository link</option></select></label>
+          <div class="form-grid">
+            <label>Type<select id="asset-type"><option value="service">Service</option><option value="micro_saas">Micro-SaaS</option><option value="data_pipeline">Data pipeline</option><option value="agent">Algorithmic agent</option><option value="library">Library</option><option value="website">Website</option></select></label>
+            <label>Environment<select id="asset-environment"><option value="production">Production</option><option value="staging">Staging</option><option value="development">Development</option></select></label>
+          </div>
+          <label>Target URL <small>stored for identity; Amosclaud does not probe arbitrary URLs from this form</small><input id="asset-url" type="url" maxlength="1000" placeholder="https://api.example.com/health"></label>
+          <label>License reference <small>optional</small><input id="asset-license" maxlength="500"></label>
+          <label>Transfer notes <small>optional, secrets are not allowed</small><textarea id="asset-transfer" rows="4" maxlength="5000"></textarea></label>
+          <button type="submit">Register asset</button>
+        </form>
+        <div>
+          <div id="asset-token" class="token-box" hidden>
+            <strong>Copy this telemetry credential now</strong>
+            <code id="asset-token-value"></code>
+            <p>Send it as <code>Authorization: Bearer …</code> to the asset telemetry endpoint. It cannot be displayed again.</p>
+          </div>
+          <div id="asset-list" class="asset-grid"><p class="empty">No software assets registered.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/static/workforce.js"></script>
+</body>
+</html>

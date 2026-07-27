@@ -22,21 +22,26 @@ class JobRequest(BaseModel):
 
 
 def _safe_workspace(workspace: str) -> str:
-    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
     raw_workspace = str(workspace or ".").strip()
     if "\x00" in raw_workspace:
         raise HTTPException(status_code=400, detail="Invalid workspace path")
 
-    workspace_path = Path(raw_workspace)
+    workspace_path = Path(raw_workspace).expanduser()
     if workspace_path.is_absolute():
         raise HTTPException(status_code=400, detail="Workspace must be a relative path")
 
-    candidate = (base / workspace_path).resolve()
+    normalized = Path(os.path.normpath(workspace_path.as_posix()))
+    if normalized == Path("") or str(normalized) == "":
+        normalized = Path(".")
+
+    base_workspace = Path.cwd().resolve()
+    candidate_workspace = (base_workspace / normalized).resolve(strict=False)
     try:
-        candidate.relative_to(base)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
-    return str(candidate)
+        safe_relative = candidate_workspace.relative_to(base_workspace)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root") from exc
+
+    return safe_relative.as_posix() or "."
 
 
 @router.post("/jobs")

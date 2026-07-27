@@ -24,15 +24,23 @@ function safeFilename(value) {
     .replace(/^-+|-+$/g, '') || 'terminal';
 }
 
+function commandToken() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `cmd_${Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
 export class CloudTerminalSession {
-  constructor({ repositoryId, id, profile, title, onState, onFocus }) {
+  constructor({ repositoryId, id, profile, title, onState, onFocus, onActivity }) {
     this.repositoryId = repositoryId;
     this.id = id;
     this.profile = profile;
     this.title = title;
     this.onState = onState;
     this.onFocus = onFocus;
+    this.onActivity = onActivity;
     this.state = 'disconnected';
+    this.provider = '';
     this.socket = null;
     this.terminal = null;
     this.fitAddon = null;
@@ -42,11 +50,39 @@ export class CloudTerminalSession {
     this.disposables = [];
     this.connectAttempt = 0;
     this.connectPromise = null;
+    this.activity = null;
   }
 
   setState(state, detail = '') {
     this.state = state;
     this.onState?.(this, state, detail);
+  }
+
+  setActivity(payload) {
+    this.activity = payload;
+    this.onActivity?.(this, payload);
+  }
+
+  finishActivity(state, status = null) {
+    if (!this.activity) return;
+    const payload = {
+      ...this.activity,
+      state,
+      status,
+      finishedAt: Date.now(),
+    };
+    this.setActivity(payload);
+  }
+
+  handleOsc(data) {
+    const value = String(data || '');
+    if (value === 'amos:pong') return true;
+    const match = /^amos:finish:(cmd_[a-f0-9]{16}):(-?\d+)$/.exec(value);
+    if (!match) return false;
+    if (!this.activity || this.activity.token !== match[1]) return true;
+    const status = Number.parseInt(match[2], 10);
+    this.finishActivity(status === 0 ? 'success' : 'failed', status);
+    return true;
   }
 
   isConnected() {
@@ -95,7 +131,7 @@ export class CloudTerminalSession {
     this.terminal.loadAddon(this.searchAddon);
     this.terminal.loadAddon(new WebLinksAddon());
     this.terminal.open(host);
-    this.terminal.writeln('\x1b[1;36mAmosclaud cloud terminal\x1b[0m');
+    this.terminal.writeln('\x1b[1;36mAmosclaud developer terminal\x1b[0m');
     this.terminal.writeln(`Persistent ${this.profile} session · ${this.id}\r\n`);
 
     this.disposables.push(
@@ -104,6 +140,7 @@ export class CloudTerminalSession {
       }),
       this.terminal.onFocus(() => this.onFocus?.(this)),
       this.terminal.onResize(size => this.sendControl({ type: 'resize', ...size })),
+      this.terminal.parser.registerOscHandler(777, data => this.handleOsc(data)),
     );
 
     this.resizeObserver = new ResizeObserver(() => this.fit());
@@ -120,13 +157,14 @@ export class CloudTerminalSession {
     if (this.connectPromise) return this.connectPromise;
 
     const attempt = ++this.connectAttempt;
-    this.setState('connecting', 'Requesting a signed cloud terminal ticket…');
+    this.setState('connecting', 'Requesting a signed Amosclaud terminal ticket…');
     this.connectPromise = (async () => {
       const ticket = await apiRequest(terminalApi(this.repositoryId, '/terminal-ticket-v2'), {
         method: 'POST',
         body: JSON.stringify({ terminal_id: this.id, profile: this.profile }),
       });
       if (attempt !== this.connectAttempt) return;
+      this.provider = ticket.provider || 'external';
 
       await new Promise((resolve, reject) => {
         const socket = new WebSocket(ticket.websocket_url);
@@ -137,7 +175,10 @@ export class CloudTerminalSession {
         socket.onopen = () => {
           if (socket !== this.socket) return;
           opened = true;
-          this.setState('connected', 'Connected to the Amosclaud cloud runtime.');
+          const label = this.provider === 'managed'
+            ? 'Connected to the Amosclaud managed runtime.'
+            : 'Connected to the isolated Amosclaud runtime.';
+          this.setState('connected', label);
           this.fit();
           this.sendControl({
             type: 'resize',
@@ -153,13 +194,16 @@ export class CloudTerminalSession {
         };
         socket.onerror = () => {
           if (socket !== this.socket) return;
-          this.setState('error', 'Cloud terminal connection failed.');
-          if (!opened) reject(new Error('Cloud terminal connection failed.'));
+          this.setState('error', 'Terminal transport failed to connect.');
+          if (!opened) reject(new Error('Terminal transport failed to connect.'));
         };
         socket.onclose = event => {
           if (socket !== this.socket) return;
           this.socket = null;
-          const detail = event.reason || (event.wasClean ? 'Terminal disconnected.' : 'Cloud connection closed unexpectedly.');
+          if (this.activity?.state === 'running') this.finishActivity('interrupted');
+          const detail = event.reason || (event.wasClean
+            ? 'Terminal disconnected.'
+            : 'Terminal connection closed unexpectedly.');
           this.setState(event.wasClean ? 'disconnected' : 'error', detail);
           if (!opened) reject(new Error(detail));
         };
@@ -186,7 +230,40 @@ export class CloudTerminalSession {
     if (!prepared) return false;
     await this.connect();
     if (!this.isConnected()) throw new Error('Terminal is not connected.');
-    this.socket.send(`${prepared}\r`);
+
+    if (this.profile === 'python') {
+      this.socket.send(`${prepared}\r`);
+      this.focus();
+      return true;
+    }
+
+    const token = commandToken();
+    this.setActivity({
+      token,
+      command: prepared,
+      state: 'running',
+      startedAt: Date.now(),
+      terminalId: this.id,
+      terminalTitle: this.title,
+      provider: this.provider,
+    });
+    const wrapped = [
+      `printf '\\033]777;amos:running;${token}\\007'`,
+      `( ${prepared} )`,
+      '__amos_status=$?',
+      `printf '\\033]777;amos:finish;${token};%s\\007' "$__amos_status"`,
+    ].join('; ');
+    this.socket.send(`${wrapped}\r`);
+    this.focus();
+    return true;
+  }
+
+  interrupt() {
+    if (!this.isConnected()) return false;
+    this.socket.send('\x03');
+    if (this.activity?.state === 'running') {
+      this.setActivity({ ...this.activity, state: 'stopping' });
+    }
     this.focus();
     return true;
   }
@@ -216,6 +293,9 @@ export class CloudTerminalSession {
       } catch (_error) {
         // The socket may already be closed.
       }
+    }
+    if (this.activity?.state === 'running' || this.activity?.state === 'stopping') {
+      this.finishActivity('interrupted');
     }
     this.setState('disconnected', reason);
   }

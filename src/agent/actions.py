@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,41 @@ from .react_integration import AutonomousReactController
 from .react_loop import ReactOutcome
 
 _WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
+_MAX_BRAIN_LEVEL = 100
+_MAX_ACADEMY_LEVEL = 5000
+
+
+def _bounded_int(value: Any, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(1, min(parsed, maximum))
+
+
+def _resolve_learning_level(metadata: dict[str, Any]) -> int:
+    """Map a simple 1-100 Codex profile onto the 1-5000 curriculum.
+
+    The profile adjusts learning, evidence, and practice depth only. It never
+    bypasses write authorization, protected branches, or human merge controls.
+    """
+
+    if "academy_level" in metadata:
+        return _bounded_int(
+            metadata["academy_level"],
+            default=1,
+            maximum=_MAX_ACADEMY_LEVEL,
+        )
+    configured = metadata.get(
+        "codex_brain_level",
+        os.getenv("AMOSCLAUD_CODEX_BRAIN_LEVEL", "100"),
+    )
+    brain_level = _bounded_int(
+        configured,
+        default=100,
+        maximum=_MAX_BRAIN_LEVEL,
+    )
+    return min(_MAX_ACADEMY_LEVEL, brain_level * 50)
 
 
 @dataclass
@@ -145,7 +181,7 @@ class AutonomousOrchestrator:
             return self.run_react(task)
         write_authorized, security = self._fixer_write_authorized(task)
         task.metadata["security"] = security
-        level = int(task.metadata.get("academy_level", 1))
+        level = _resolve_learning_level(task.metadata)
         founder_verified = bool(task.metadata.get("founder_verified", False))
         context = self.foundation.prepare(
             task.objective,
@@ -229,16 +265,54 @@ class AutonomousOrchestrator:
 
 
 def _resolve_workspace(workspace: str) -> Path:
-    base = Path.cwd().resolve()
-    candidate = (base / workspace).resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError as exc:
+    """Resolve only server-managed application or repository workspaces.
+
+    Calls coming from API routes should already be canonicalized to the
+    configured workspace root. We still defensively re-validate that the final
+    resolved path stays under one of the trusted roots, including after symlink
+    resolution.
+    """
+
+    raw_workspace = str(workspace or ".").strip()
+    if not raw_workspace or "\x00" in raw_workspace:
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
+    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).expanduser().resolve()
+    repository_root = Path(
+        os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
+    ).expanduser().resolve()
+    allowed_roots = tuple(dict.fromkeys((base, repository_root)))
+
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        candidate = workspace_path.resolve()
+        for root in allowed_roots:
+            try:
+                candidate.relative_to(root)
+                return candidate
+            except ValueError:
+                continue
         raise HTTPException(
             status_code=400,
-            detail="Workspace must stay inside server root",
-        ) from exc
-    return candidate
+            detail=(
+                "Workspace must stay inside the application or repository "
+                "storage root"
+            ),
+        )
+
+    for root in allowed_roots:
+        candidate = (root / workspace_path).resolve()
+        try:
+            candidate.relative_to(root)
+            return candidate
+        except ValueError:
+            continue
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Workspace must stay inside the application or repository storage root"
+        ),
+    )
 
 
 def run_autonomous(
@@ -264,16 +338,14 @@ def run_autonomous(
         security_target_sha=security_target_sha,
         security_parent_command_id=security_parent_command_id,
     )
-    orchestrator = AutonomousOrchestrator(safe_workspace)
-    if mode in _WRITE_MODES:
-        return orchestrator.run(task).to_dict()
-    native_result = run_native_coding_if_requested(
+    native = run_native_coding_if_requested(
         objective=objective,
         mode=mode,
-        authorized_writes=False,
-        workspace=str(safe_workspace),
+        workspace=safe_workspace,
+        authorized_writes=authorized_writes,
         metadata=prepared,
     )
-    if native_result is not None:
-        return native_result
-    return orchestrator.run(task).to_dict()
+    if native is not None:
+        return native
+    outcome = AutonomousOrchestrator(safe_workspace).run(task)
+    return outcome.to_dict()

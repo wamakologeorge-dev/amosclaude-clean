@@ -39,9 +39,21 @@ def require_self_key(value: str | None) -> None:
 
 def _safe_workspace(workspace: str) -> Path:
     base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
-    candidate = (base / str(workspace or ".")).resolve()
-    if candidate != base and base not in candidate.parents:
+    raw_workspace = str(workspace or ".").strip()
+    if "\x00" in raw_workspace:
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        raise HTTPException(status_code=400, detail="Workspace must be a relative path")
+    if ".." in workspace_path.parts:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+
+    candidate = (base / workspace_path).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root") from exc
     return candidate
 
 

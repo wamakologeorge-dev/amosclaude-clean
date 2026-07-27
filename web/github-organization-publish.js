@@ -44,7 +44,11 @@
     <label>Commit message
       <input id="publish-github-commit" type="text" maxlength="200" value="Publish Amosclaud work to GitHub" />
     </label>
-    <small id="publish-github-note">GitHub verifies your organization permission when publishing.</small>
+    <small id="publish-github-note">GitHub verifies permission when publishing.</small>
+    <div id="publish-github-reconnect" class="modal-actions hidden">
+      <span id="publish-github-reconnect-message"></span>
+      <button id="btn-reconnect-publish-github" class="btn-primary" type="button">Reconnect GitHub and continue</button>
+    </div>
     <div class="modal-actions">
       <button id="btn-cancel-publish-github" class="btn-ghost" type="button">Cancel</button>
       <button id="btn-confirm-publish-github" class="btn-primary" type="button">Publish and push</button>
@@ -59,9 +63,18 @@
   const publishVisibilityInput = publishModal.querySelector('#publish-github-visibility');
   const publishCommitInput = publishModal.querySelector('#publish-github-commit');
   const confirmPublishButton = publishModal.querySelector('#btn-confirm-publish-github');
+  const reconnectPanel = publishModal.querySelector('#publish-github-reconnect');
+  const reconnectMessage = publishModal.querySelector('#publish-github-reconnect-message');
+  const reconnectButton = publishModal.querySelector('#btn-reconnect-publish-github');
 
+  const PENDING_PUBLISH_KEY = 'amosclaud-pending-github-publish';
   let targets = [];
   let targetsLoaded = false;
+  let targetResult = {
+    reconnect_required: false,
+    reconnect_url: '/api/v1/github/connect-organizations',
+    permission_note: '',
+  };
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -84,7 +97,7 @@
       document.body.appendChild(container);
     }
     container.appendChild(node);
-    setTimeout(() => node.remove(), 5000);
+    setTimeout(() => node.remove(), 6500);
   }
 
   function showModal(modal) {
@@ -116,9 +129,48 @@
       payload = { detail: text };
     }
     if (!response.ok) {
-      throw new Error(payload?.detail || `Request failed (${response.status})`);
+      const error = new Error(payload?.detail || `Request failed (${response.status})`);
+      error.status = response.status;
+      error.payload = payload;
+      throw error;
     }
     return payload;
+  }
+
+  function targetFor(login = publishOwnerInput.value) {
+    return targets.find(target => target.login === login) || null;
+  }
+
+  function permissionText(target, visibility = publishVisibilityInput.value) {
+    if (!target) return 'Choose the GitHub account that should own this repository.';
+    if (target.kind === 'user') {
+      return visibility === 'private'
+        ? `Publishing a private repository to ${target.login} requires GitHub repository access. Workflow access is also required when the project contains GitHub Actions files.`
+        : `Publishing a public repository to ${target.login} requires public repository access. Workflow access is also required when the project contains GitHub Actions files.`;
+    }
+    return `Publishing to ${target.login} requires repository access plus approval from that GitHub organization. Organization policy or SSO may require an additional approval step.`;
+  }
+
+  function clearReconnectAction() {
+    reconnectPanel.classList.add('hidden');
+    reconnectMessage.textContent = '';
+  }
+
+  function showReconnectAction(message) {
+    reconnectMessage.textContent = message;
+    reconnectPanel.classList.remove('hidden');
+  }
+
+  function updatePermissionNote() {
+    const target = targetFor();
+    const base = permissionText(target);
+    if (targetResult.reconnect_required) {
+      publishNote.textContent = `${base} Your current GitHub authorization may be missing one of these permissions.`;
+      showReconnectAction('Approve the requested GitHub repository and workflow permissions, then Amosclaud will restore this publish form.');
+    } else {
+      publishNote.textContent = targetResult.permission_note || base;
+      clearReconnectAction();
+    }
   }
 
   function ownerOptions() {
@@ -128,6 +180,11 @@
   }
 
   function renderTargets(result) {
+    targetResult = {
+      reconnect_required: Boolean(result.reconnect_required),
+      reconnect_url: result.reconnect_url || '/api/v1/github/connect-organizations',
+      permission_note: result.permission_note || '',
+    };
     targets = Array.isArray(result.targets) ? result.targets : [];
     const options = ownerOptions();
     createOwnerInput.innerHTML = options || '<option value="">No authorized owners</option>';
@@ -136,12 +193,14 @@
     publishOwnerInput.disabled = targets.length === 0;
     targetsLoaded = targets.length > 0;
 
-    const reconnect = 'Organization visibility or workflow publishing is not fully authorized. <a href="/api/v1/github/connect-organizations">Reconnect GitHub for organization publishing</a>.';
-    const note = result.reconnect_required
-      ? reconnect
-      : escapeHtml(result.permission_note || 'GitHub verifies your permission when the repository is created.');
-    createOwnerNote.innerHTML = note;
-    publishNote.innerHTML = note;
+    const createTarget = targets.find(target => target.login === createOwnerInput.value) || targets[0];
+    const createBase = permissionText(createTarget, document.getElementById('repository-visibility-input')?.value || 'private');
+    if (targetResult.reconnect_required) {
+      createOwnerNote.innerHTML = `${escapeHtml(createBase)} <a href="${escapeHtml(targetResult.reconnect_url)}">Reconnect GitHub</a>.`;
+    } else {
+      createOwnerNote.textContent = targetResult.permission_note || createBase;
+    }
+    updatePermissionNote();
   }
 
   async function loadTargets(force = false) {
@@ -150,17 +209,64 @@
     publishOwnerInput.disabled = true;
     createOwnerInput.innerHTML = '<option value="">Loading GitHub owners…</option>';
     publishOwnerInput.innerHTML = '<option value="">Loading GitHub owners…</option>';
-    createOwnerNote.textContent = 'Checking the organizations available to your GitHub authorization.';
+    createOwnerNote.textContent = 'Checking the GitHub permissions available to this account.';
     publishNote.textContent = createOwnerNote.textContent;
     try {
       renderTargets(await request('/api/v1/github/organizations'));
     } catch (error) {
+      targetResult.reconnect_required = true;
       const reconnect = `${escapeHtml(error.message)} <a href="/api/v1/github/connect-organizations">Reconnect GitHub</a>.`;
       createOwnerInput.innerHTML = '<option value="">GitHub reconnect required</option>';
       publishOwnerInput.innerHTML = '<option value="">GitHub reconnect required</option>';
       createOwnerNote.innerHTML = reconnect;
       publishNote.innerHTML = reconnect;
+      showReconnectAction('Reconnect GitHub to restore repository publishing access.');
     }
+  }
+
+  function pendingPublish() {
+    return {
+      repositoryId: publishIdInput.value,
+      owner: publishOwnerInput.value,
+      branch: publishBranchInput.value || 'main',
+      name: publishNameInput.value.trim(),
+      visibility: publishVisibilityInput.value,
+      commitMessage: publishCommitInput.value.trim() || 'Publish Amosclaud work to GitHub',
+    };
+  }
+
+  function savePendingPublish() {
+    const pending = pendingPublish();
+    if (pending.repositoryId && pending.owner && pending.name) {
+      sessionStorage.setItem(PENDING_PUBLISH_KEY, JSON.stringify(pending));
+    }
+  }
+
+  async function restorePendingPublish() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github') !== 'connected') return;
+    let pending = null;
+    try {
+      pending = JSON.parse(sessionStorage.getItem(PENDING_PUBLISH_KEY) || 'null');
+    } catch {
+      sessionStorage.removeItem(PENDING_PUBLISH_KEY);
+    }
+    if (!pending?.repositoryId || !pending?.name) return;
+    await loadTargets(true);
+    publishIdInput.value = pending.repositoryId;
+    publishBranchInput.value = pending.branch || 'main';
+    publishNameInput.value = pending.name;
+    publishVisibilityInput.value = pending.visibility || 'private';
+    publishCommitInput.value = pending.commitMessage || 'Publish Amosclaud work to GitHub';
+    if (targets.some(target => target.login === pending.owner)) {
+      publishOwnerInput.value = pending.owner;
+    }
+    targetResult.reconnect_required = false;
+    updatePermissionNote();
+    publishNote.textContent = 'GitHub authorization returned successfully. Review the details, then tap Publish and push.';
+    clearReconnectAction();
+    showModal(publishModal);
+    toast('GitHub reconnected. Your publish details were restored.', 'success');
   }
 
   function enhanceRepositoryCards() {
@@ -206,6 +312,8 @@
       publishNameInput.value = name;
       publishVisibilityInput.value = 'private';
       publishCommitInput.value = 'Publish Amosclaud work to GitHub';
+      clearReconnectAction();
+      updatePermissionNote();
       showModal(publishModal);
     } catch (error) {
       toast(error.message, 'error');
@@ -216,6 +324,15 @@
   }
 
   createButton.addEventListener('click', () => { loadTargets(); });
+  createOwnerInput.addEventListener('change', () => renderTargets({ ...targetResult, targets }));
+  document.getElementById('repository-visibility-input')?.addEventListener('change', () => renderTargets({ ...targetResult, targets }));
+  publishOwnerInput.addEventListener('change', updatePermissionNote);
+  publishVisibilityInput.addEventListener('change', updatePermissionNote);
+
+  reconnectButton.addEventListener('click', () => {
+    savePendingPublish();
+    window.location.assign(targetResult.reconnect_url || '/api/v1/github/connect-organizations');
+  });
 
   confirmCreateButton.addEventListener('click', async event => {
     event.preventDefault();
@@ -245,7 +362,15 @@
       toast(`Created and pushed ${repository.github_full_name} with Amosclaud CI`, 'success');
       window.location.assign(repository.workspace_url || `/workspace/${encodeURIComponent(repository.id)}`);
     } catch (error) {
-      toast(error.message, 'error');
+      const personal = targetFor(createOwnerInput.value)?.kind !== 'organization';
+      if (error.status === 403) {
+        const message = personal
+          ? `GitHub did not allow repository creation in ${createOwnerInput.value}. Reconnect GitHub and approve repository access.`
+          : `GitHub did not allow repository creation in ${createOwnerInput.value}. An organization owner may also need to approve Amosclaud.`;
+        toast(message, 'error');
+      } else {
+        toast(error.message, 'error');
+      }
     } finally {
       confirmCreateButton.disabled = false;
       confirmCreateButton.textContent = 'Create repository';
@@ -265,6 +390,7 @@
     if (!publishNameInput.value.trim()) return toast('Repository name is required', 'error');
     confirmPublishButton.disabled = true;
     confirmPublishButton.textContent = 'Publishing…';
+    clearReconnectAction();
     try {
       const result = await request(`/api/v1/github/repositories/${encodeURIComponent(publishIdInput.value)}/publish`, {
         method: 'POST',
@@ -276,11 +402,21 @@
           commit_message: publishCommitInput.value.trim() || 'Publish Amosclaud work to GitHub',
         }),
       });
+      sessionStorage.removeItem(PENDING_PUBLISH_KEY);
       hidePublishModal();
       toast(`Published ${result.github_full_name} at ${String(result.commit).slice(0, 7)}`, 'success');
       window.location.reload();
     } catch (error) {
-      toast(error.message, 'error');
+      const target = targetFor();
+      if (error.status === 401 || error.status === 403) {
+        const message = target?.kind === 'organization'
+          ? `GitHub did not authorize publishing to ${publishOwnerInput.value}. Reconnect GitHub; the organization may also need to approve Amosclaud and allow your role to create repositories.`
+          : `GitHub did not authorize ${publishVisibilityInput.value} repository creation in your personal account ${publishOwnerInput.value}. Reconnect GitHub and approve repository access${publishVisibilityInput.value === 'private' ? ' for private repositories' : ''}.`;
+        showReconnectAction(message);
+        toast('GitHub permission needs approval. Use Reconnect GitHub and continue in this window.', 'error');
+      } else {
+        toast(error.message, 'error');
+      }
     } finally {
       confirmPublishButton.disabled = false;
       confirmPublishButton.textContent = 'Publish and push';
@@ -295,4 +431,5 @@
     subtree: true,
   });
   enhanceRepositoryCards();
+  restorePendingPublish();
 })();
