@@ -239,8 +239,12 @@ def _resolve_workspace(workspace: str) -> Path:
     accepted; arbitrary absolute paths remain blocked.
     """
 
+    raw_workspace = str(workspace or ".").strip()
+    if "\x00" in raw_workspace:
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
     base = Path.cwd().resolve()
-    supplied = Path(workspace).expanduser()
+    supplied = Path(raw_workspace).expanduser()
     candidate = supplied.resolve() if supplied.is_absolute() else (base / supplied).resolve()
     repository_root = Path(
         os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
