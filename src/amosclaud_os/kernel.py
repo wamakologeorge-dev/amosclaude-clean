@@ -46,7 +46,7 @@ class AutonomousKernel:
     WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
     def __init__(self, workspace: Path | str = ".") -> None:
-        self.workspace = Path(workspace).resolve()
+        self.workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
         self.identity = SystemIdentity()
         self._lock = RLock()
         self._orchestrator = AutonomousOrchestrator(self.workspace)
@@ -514,10 +514,11 @@ _KERNELS_LOCK = RLock()
 
 def get_autonomous_kernel(workspace: Path | str = ".") -> AutonomousKernel:
     """Return one process-wide Autonomous instance per resolved workspace."""
-    key = str(Path(workspace).resolve())
+    resolved_workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+    key = str(resolved_workspace)
     with _KERNELS_LOCK:
         kernel = _KERNELS.get(key)
         if kernel is None:
-            kernel = AutonomousKernel(key)
+            kernel = AutonomousKernel(resolved_workspace)
             _KERNELS[key] = kernel
         return kernel
