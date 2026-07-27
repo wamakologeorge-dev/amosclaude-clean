@@ -79,7 +79,7 @@ case "$command_name" in
   files)
     depth="${1:-4}"
     [[ "$depth" =~ ^[1-9][0-9]?$ ]] || { echo "Depth must be 1-99." >&2; exit 2; }
-    find . -path './.git' -prune -o -type f -maxdepth "$depth" -print \
+    find . -maxdepth "$depth" -path './.git' -prune -o -type f -print \
       | sed 's#^./##' | sort | head -500
     ;;
   edit|vim)
