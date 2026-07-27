@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from amoscloud_ai.isolated_runner import IsolatedRunResult, RunnerConfigurationError
+from amoscloud_ai.isolated_runner import (
+    IsolatedRunResult,
+    RunnerConfigurationError,
+    parse_allowed_command,
+)
 from src.services.runtime_exec import RuntimeExecutor
 
 
@@ -49,9 +53,27 @@ def test_runtime_wraps_git_execution_inside_the_container(tmp_path: Path) -> Non
     assert "git" in calls[0] and "diff" in calls[0]
 
 
+def test_runtime_keeps_metacharacters_inside_one_argument(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    suspicious = "src/widget;touch-owned.py"
+    (tmp_path / suspicious).write_text("VALUE = 1\n", encoding="utf-8")
+    calls = []
+
+    def fake_runner(command, **kwargs):
+        calls.append(parse_allowed_command(command, {"python"}))
+        return IsolatedRunResult(0, "compiled")
+
+    results = RuntimeExecutor(tmp_path, runner=fake_runner).verify([suspicious])
+
+    assert results[0]["passed"] is True
+    assert calls == [["python", "-m", "py_compile", suspicious]]
+
+
 def test_runtime_selects_frontend_typecheck_tests_and_build(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "app.ts").write_text("export const value = 1;\n", encoding="utf-8")
+    (tmp_path / "src" / "app.ts").write_text(
+        "export const value = 1;\n", encoding="utf-8"
+    )
     (tmp_path / "package.json").write_text(
         json.dumps(
             {
