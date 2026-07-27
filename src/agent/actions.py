@@ -269,7 +269,10 @@ def _resolve_workspace(workspace: str) -> Path:
         if anchored is None:
             raise HTTPException(
                 status_code=400,
-                detail="Workspace must stay inside the application or repository storage root",
+                detail=(
+                    "Workspace must stay inside the application or repository "
+                    "storage root"
+                ),
             )
     else:
         anchored = base / workspace_path
@@ -284,7 +287,9 @@ def _resolve_workspace(workspace: str) -> Path:
             continue
     raise HTTPException(
         status_code=400,
-        detail="Workspace must stay inside the application or repository storage root",
+        detail=(
+            "Workspace must stay inside the application or repository storage root"
+        ),
     )
 
 
