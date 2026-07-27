@@ -144,9 +144,8 @@ def _workspace_id(value: str) -> str:
 
 def _workspace_activity_filename(workspace_id: str) -> str:
     workspace = _workspace_id(workspace_id)
-    if not re.fullmatch(r"[a-z0-9_-]+", workspace):
-        raise HTTPException(status_code=422, detail="Invalid workspace identifier")
-    return f"{workspace}.activity"
+    digest = hashlib.sha256(workspace.encode("utf-8")).hexdigest()
+    return f"{digest}.activity"
 
 
 def _repository_path(repository_id: int) -> Path:
