@@ -26,14 +26,21 @@ def test_complete_terminal_routes_are_registered() -> None:
         "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/commit",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/pull",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/push",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/sync-push",
     }.issubset(paths)
 
 
 def test_terminal_v2_ticket_binds_session_profile_and_signature(monkeypatch) -> None:
     token = "runtime-test-token-with-enough-entropy"
     monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", token)
-    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_RUNTIME_URL", "https://private-runtime.example")
-    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_PUBLIC_URL", "https://terminal.amosclaud.com")
+    monkeypatch.setenv(
+        "AMOSCLAUD_WORKSPACE_RUNTIME_URL",
+        "https://private-runtime.example",
+    )
+    monkeypatch.setenv(
+        "AMOSCLAUD_WORKSPACE_PUBLIC_URL",
+        "https://terminal.amosclaud.com",
+    )
     monkeypatch.setattr(workspace_terminal.time, "time", lambda: 1_700_000_000)
 
     result = workspace_terminal.terminal_ticket(
@@ -69,6 +76,7 @@ def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> N
     session = _source("web/cloud-terminal/session.js")
     hub = _source("web/cloud-terminal/agent-hub.js")
     project_tools = _source("web/cloud-terminal/project-tools.js")
+    features = _source("web/cloud-terminal/workspace-features.js")
 
     assert "/static/cloud-terminal/main.js" in loader
     assert "terminal-ticket-v2" in session
@@ -82,13 +90,23 @@ def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> N
     assert "nano and vim editors" in main
     assert "Doctor, Fixer, Autonomous, and Underground" in main
     assert "ProjectToolbelt" in main
+    assert "WorkspaceFeatureCells" in main
+    assert "data-workspace-features" in main
     assert "/agent-hub/messages" in hub
     assert "Attach recent output from the active terminal" in hub
     assert "Authorize verified repository changes" in hub
     assert "/tools/commit" in project_tools
     assert "/tools/${action}" in project_tools
+    assert "sync-push" in project_tools
+    assert "Run app" in project_tools
+    assert "Debug" in project_tools
     assert "Edit file" in project_tools
     assert "Run any command" in project_tools
+    for label in ("Ports", "Problems", "Connectors", "Network"):
+        assert f">{label}<" in features
+    assert "ss -ltnp" in features
+    assert "git diff --check" in features
+    assert "ip -brief address" in features
 
 
 def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None:
@@ -106,6 +124,9 @@ def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None
     assert "tmux" in dockerfile
     assert "bash-completion" in dockerfile
     assert "nano" in dockerfile and "vim-tiny" in dockerfile
+    assert "iproute2" in dockerfile and "net-tools" in dockerfile
+    assert "dnsutils" in dockerfile and "netcat-openbsd" in dockerfile
+    assert "gdb" in dockerfile and "strace" in dockerfile
     assert "/usr/local/bin/amos" in dockerfile
     assert 'CMD ["uvicorn", "terminal_runtime:app"' in service_dockerfile
 
@@ -130,15 +151,20 @@ def test_project_tools_support_native_and_github_repository_workflows() -> None:
     assert '@router.post("/repositories/{repository_id}/tools/commit")' in source
     assert '@router.post("/repositories/{repository_id}/tools/pull")' in source
     assert '@router.post("/repositories/{repository_id}/tools/push")' in source
+    assert '@router.post("/repositories/{repository_id}/tools/sync-push")' in source
     assert '"source": "github" if github_full_name else "amosclaud"' in source
     assert "push_github_repository" in source
     assert "pull_github_repository" in source
+    assert "authenticated_git" in source
+    assert "repo.git.fetch" in source
+    assert "repo.git.rebase" in source
+    assert '"force_push": False' in source
     assert "git status --short --branch" in source
     assert "python -m pytest -q" in source
     assert "npm run" in source
 
 
-def test_shell_profile_and_amos_command_make_editing_simple() -> None:
+def test_shell_profile_and_amos_command_make_editing_and_debugging_simple() -> None:
     profile = _source("services/workspace_runtime/workspace-image/terminal-profile.sh")
     command = _source("services/workspace_runtime/workspace-image/amos")
 
@@ -146,7 +172,14 @@ def test_shell_profile_and_amos_command_make_editing_simple() -> None:
     assert "PROMPT_COMMAND='history -a; __amosclaud_prompt'" in profile
     assert "alias gs='git status --short --branch'" in profile
     assert "amos edit <path>" in command
+    assert "amos debug" in command
+    assert "amos ports" in command
+    assert "amos problems" in command
+    assert "amos connectors" in command
+    assert "amos network" in command
+    assert "python3 -m pdb" in command
+    assert "NODE_OPTIONS=--inspect" in command
     assert "exec nano" in command
     assert "exec vim" in command
     assert "git commit -m" in command
-    assert "GitHub pull and push are available from the browser Project tools" in command
+    assert "Sync & Push" in command
