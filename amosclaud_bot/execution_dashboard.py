@@ -37,6 +37,13 @@ class TestCard:
     detail: str = ""
 
 
+def _safe(value: str, *, strip_backticks: bool = False) -> str:
+    text = str(value or "")
+    if strip_backticks:
+        text = text.replace("`", "")
+    return escape(text, quote=False)
+
+
 def _icon(status: str) -> str:
     return {
         "passed": "🟩",
@@ -84,7 +91,7 @@ def _result_label(outcome: str) -> str:
         "passed": "🟩 VERIFIED",
         "failed": "🟥 FAILED",
         "running": "🟨 RUNNING",
-    }.get(outcome, "⬜ PENDING")
+    }[outcome]
 
 
 def _test_summary(tests: list[TestCard]) -> str:
@@ -94,21 +101,19 @@ def _test_summary(tests: list[TestCard]) -> str:
     for card in tests:
         status = card.status.lower()
         counts[status if status in counts else "pending"] += 1
-    parts = []
-    for status in ("passed", "running", "failed", "pending"):
-        if counts[status]:
-            parts.append(f"{counts[status]} {status}")
-    return " · ".join(parts)
+    return " · ".join(
+        f"{counts[status]} {status}"
+        for status in ("passed", "running", "failed", "pending")
+        if counts[status]
+    )
 
 
 def _stage_badges(current_stage: str, outcome: str) -> str:
-    badges = []
-    for stage in STAGES:
-        status = _stage_status(stage, current_stage, outcome)
-        badges.append(
-            f"<kbd>{_icon(status)} {escape(STAGE_SHORT_LABELS[stage])}</kbd>"
-        )
-    return " → ".join(badges)
+    return " → ".join(
+        f"<kbd>{_icon(_stage_status(stage, current_stage, outcome))} "
+        f"{_safe(STAGE_SHORT_LABELS[stage])}</kbd>"
+        for stage in STAGES
+    )
 
 
 def _render_3d_card(
@@ -124,10 +129,9 @@ def _render_3d_card(
     branch: str,
 ) -> list[str]:
     delivery = "PUBLISHED" if commit or pull_request else "PENDING"
-    safe_objective = escape(objective.replace("\n", " "), quote=False)
-    safe_stage = escape(STAGE_LABELS[current_stage])
-    safe_branch = escape(branch or "not recorded yet", quote=False)
-    safe_delivery = escape(delivery)
+    safe_objective = _safe(objective.replace("\n", " "))
+    safe_stage = _safe(STAGE_LABELS[current_stage])
+    safe_branch = _safe(branch or "not recorded yet", strip_backticks=True)
     return [
         '<table role="presentation">',
         "<tr>",
@@ -158,11 +162,11 @@ def _render_3d_card(
         "</tr>",
         "<tr>",
         '<td align="center"><strong>TESTS</strong><br>',
-        f"<code>{escape(_test_summary(tests))}</code></td>",
+        f"<code>{_safe(_test_summary(tests))}</code></td>",
         '<td align="center"><strong>FILES</strong><br>',
         f"<code>{len(files)} changed</code></td>",
         '<td align="center"><strong>DELIVERY</strong><br>',
-        f"<code>{safe_delivery}</code></td>",
+        f"<code>{delivery}</code></td>",
         "</tr>",
         "<tr>",
         '<td colspan="3">',
@@ -193,7 +197,10 @@ def render_dashboard(
     files = files or []
     tests = tests or []
     progress = _progress(current_stage, outcome)
-    safe_objective = escape(objective.replace("\n", " "), quote=False)
+    safe_objective = _safe(objective.replace("\n", " "))
+    safe_branch = _safe(branch or "not recorded yet", strip_backticks=True)
+    safe_commit = _safe(commit or "not created yet", strip_backticks=True)
+    safe_pull_request = _safe(pull_request or "not opened yet", strip_backticks=True)
 
     lines = [DASHBOARD_MARKER]
     lines.extend(
@@ -239,11 +246,8 @@ def render_dashboard(
     if tests:
         lines.extend(["| Check | Result | Evidence |", "|---|---|---|"])
         for card in tests:
-            name = escape(card.name, quote=False).replace("|", "\\|")
-            detail = (
-                escape(card.detail, quote=False).replace("|", "\\|")
-                or "Recorded by the workflow"
-            )
+            name = _safe(card.name).replace("|", "\\|")
+            detail = _safe(card.detail).replace("|", "\\|") or "Recorded by the workflow"
             lines.append(
                 f"| {_icon(card.status)} **{name}** | `{card.status.upper()}` | {detail} |"
             )
@@ -253,7 +257,7 @@ def render_dashboard(
     lines.extend(["", "## 📁 Repository impact", ""])
     if files:
         for path in files[:12]:
-            lines.append(f"- `{path.replace('`', '')}`")
+            lines.append(f"- `{_safe(path, strip_backticks=True)}`")
         if len(files) > 12:
             lines.append(f"- …and {len(files) - 12} more files")
     else:
@@ -264,9 +268,9 @@ def render_dashboard(
             "",
             "## 📦 Delivery",
             "",
-            f"- **Branch:** `{branch.replace('`', '') or 'not recorded yet'}`",
-            f"- **Commit:** `{commit.replace('`', '') or 'not created yet'}`",
-            f"- **Pull request:** {pull_request or 'not opened yet'}",
+            f"- **Branch:** `{safe_branch}`",
+            f"- **Commit:** `{safe_commit}`",
+            f"- **Pull request:** {safe_pull_request}",
             "",
             "<sub>Every state shown above is generated from the active GitHub Actions run. Amosclaud never reports PASS before the corresponding command succeeds.</sub>",
             "",
