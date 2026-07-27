@@ -114,7 +114,9 @@ class FolderPluginRegistry:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             signature = signature_path.read_text(encoding="ascii").strip()
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise PluginPackageError("Plugin manifest or signature is unreadable") from exc
+            raise PluginPackageError(
+                "Plugin manifest or signature is unreadable"
+            ) from exc
         if not isinstance(manifest, dict):
             raise PluginPackageError("Plugin manifest must be an object")
         required = {
@@ -146,10 +148,14 @@ class FolderPluginRegistry:
         for raw_path, expected_digest in files.items():
             relative = _safe_relative_path(str(raw_path))
             if relative.name in _RESERVED:
-                raise PluginPackageError("Reserved metadata files cannot be plugin payload")
+                raise PluginPackageError(
+                    "Reserved metadata files cannot be plugin payload"
+                )
             source = root / relative
             if source.is_symlink() or not source.is_file():
-                raise PluginPackageError("Plugin payload must contain regular files only")
+                raise PluginPackageError(
+                    "Plugin payload must contain regular files only"
+                )
             if _sha256_file(source) != str(expected_digest):
                 raise PluginPackageError(f"Plugin file digest mismatch: {relative}")
             declared.add(relative)
@@ -163,7 +169,9 @@ class FolderPluginRegistry:
                 if relative.name not in _RESERVED:
                     actual.add(relative)
         if actual != declared:
-            raise PluginPackageError("Plugin package contains undeclared or missing files")
+            raise PluginPackageError(
+                "Plugin package contains undeclared or missing files"
+            )
 
         public_key = self.trust_store.public_key(publisher)
         try:
