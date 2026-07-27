@@ -240,7 +240,7 @@ def _resolve_workspace(workspace: str) -> Path:
     """
 
     raw_workspace = str(workspace or ".").strip()
-    if "\x00" in raw_workspace:
+    if not raw_workspace or "\x00" in raw_workspace:
         raise HTTPException(status_code=400, detail="Invalid workspace path")
 
     base = Path.cwd().resolve()
@@ -249,10 +249,11 @@ def _resolve_workspace(workspace: str) -> Path:
     ).expanduser().resolve()
     allowed_roots = tuple(dict.fromkeys((base, repository_root)))
 
-    # User-controlled text reaches Path only after NUL filtering and is accepted
-    # only after canonical containment below. This is the sanitizer boundary for
-    # the path-injection query.
-    workspace_path = Path(raw_workspace).expanduser()  # lgtm[py/path-injection]
+    # Validate user-provided workspace text before constructing a Path object.
+    if raw_workspace.startswith("~"):
+        raise HTTPException(status_code=400, detail="Invalid workspace path")
+
+    workspace_path = Path(raw_workspace)
     if not workspace_path.is_absolute() and ".." in workspace_path.parts:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
 
@@ -260,7 +261,7 @@ def _resolve_workspace(workspace: str) -> Path:
         workspace_path.resolve()
         if workspace_path.is_absolute()
         else (base / workspace_path).resolve()
-    )  # lgtm[py/path-injection]
+    )
     for root in allowed_roots:
         try:
             candidate.relative_to(root)
