@@ -51,12 +51,15 @@ def test_shell_execution_is_reported():
 
 
 class FakeComment:
-    def __init__(self, body):
+    def __init__(self, body, *, fail_edit=False):
         self.body = body
+        self.fail_edit = fail_edit
         self.edits = []
         self.deleted = False
 
     def edit(self, body):
+        if self.fail_edit:
+            raise PermissionError("comment belongs to another GitHub identity")
         self.body = body
         self.edits.append(body)
 
@@ -73,7 +76,10 @@ class FakePull:
         return list(self.comments)
 
     def create_issue_comment(self, body):
+        created = FakeComment(body)
         self.created.append(body)
+        self.comments.append(created)
+        return created
 
 
 def test_publish_review_updates_one_comment_and_removes_duplicates():
@@ -89,4 +95,18 @@ def test_publish_review_updates_one_comment_and_removes_duplicates():
 
     assert pull.created == []
     assert latest.edits == [body]
+    assert old.deleted is True
+
+
+def test_publish_review_recreates_comment_owned_by_another_identity():
+    old = FakeComment(
+        "### Amosclaud automated review\n\nOld",
+        fail_edit=True,
+    )
+    pull = FakePull([old])
+    body = reviewer.build_comment([])
+
+    reviewer.publish_comment(pull, body)
+
+    assert pull.created == [body]
     assert old.deleted is True
