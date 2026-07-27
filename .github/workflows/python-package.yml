@@ -24,48 +24,6 @@ jobs:
           echo "=================================================="
           echo "🟢 Live & Active"
 
-  token-migration-trigger:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.head_ref == 'agent/containerized-autonomous-repair-loop'
-    runs-on: ubuntu-latest
-    name: Amosclaud GitHub token migration trigger
-    timeout-minutes: 5
-    steps:
-      - name: Check out the migration branch
-        uses: actions/checkout@v7
-        with:
-          ref: agent/containerized-autonomous-repair-loop
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Trigger migration with the privileged Amosclaud token
-        env:
-          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          migration=.github/workflows/amosclaud-github-token-migration.yml
-          if [ ! -f "$migration" ]; then
-            echo "Token migration already completed."
-            exit 0
-          fi
-          if grep -q '^# privileged-token-triggered: true$' "$migration"; then
-            echo "Token migration push was already triggered."
-            exit 0
-          fi
-          if [ -z "$AMOSCLAUD_GITHUB_TOKEN" ]; then
-            echo "Repository secret AMOSCLAUD_GITHUB_TOKEN is required."
-            exit 1
-          fi
-          printf '\n# privileged-token-triggered: true\n' >> "$migration"
-          git config user.name "Amosclaud Token Trigger"
-          git config user.email "token-trigger@amosclaud.internal"
-          git add "$migration"
-          git commit -m "ci: trigger token migration with Amosclaud credential"
-          git remote set-url origin "https://x-access-token:${AMOSCLAUD_GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push origin "HEAD:${GITHUB_HEAD_REF}"
-          git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
-
   build:
     runs-on: ubuntu-latest
     strategy:
