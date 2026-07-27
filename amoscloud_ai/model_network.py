@@ -93,6 +93,43 @@ def _expire_requests(db) -> None:
     db.commit()
 
 
+def _station_is_offline(station) -> bool:
+    """Mirror the liveness check in ``_eligible_station`` without the capability checks."""
+    if station["revoked_at"]:
+        return True
+    try:
+        seen = datetime.fromisoformat(station["last_seen_at"] or "")
+    except ValueError:
+        return True
+    return datetime.now(timezone.utc) - seen > ONLINE_WINDOW
+
+
+def _recover_abandoned_claims(db) -> None:
+    """Return a claimed request to the queue once its station can no longer serve it.
+
+    A request is only requeued when the station that claimed it is gone,
+    revoked, or offline (stale ``last_seen_at``). A station that is still
+    online keeps its claim untouched, however long inference takes.
+    """
+    rows = db.execute(
+        """SELECT id,station_id FROM model_network_requests
+           WHERE status='claimed' AND expires_at>? AND station_id IS NOT NULL""",
+        (_now(),),
+    ).fetchall()
+    for row in rows:
+        station = db.execute(
+            "SELECT * FROM task_runners WHERE id=?", (row["station_id"],)
+        ).fetchone()
+        if station is None or _station_is_offline(station):
+            db.execute(
+                """UPDATE model_network_requests
+                   SET status='queued',station_id=NULL,claimed_at=NULL
+                   WHERE id=? AND status='claimed'""",
+                (row["id"],),
+            )
+    db.commit()
+
+
 def _owner_id() -> int | None:
     raw = os.getenv("AMOSCLAUD_NETWORK_OWNER_USER_ID", "").strip()
     try:
@@ -153,6 +190,7 @@ def request_inference(
     with _connect() as db:
         _ensure_network_schema(db)
         _expire_requests(db)
+        _recover_abandoned_claims(db)
         rows = db.execute("SELECT * FROM task_runners WHERE user_id=?", (owner_id,)).fetchall()
         if not any(_eligible_station(row) for row in rows):
             return None
@@ -211,6 +249,8 @@ def claim_model_request(
         station = _runner_auth(db, station_id, authorization)
         if not _eligible_station(station):
             return None
+        _expire_requests(db)
+        _recover_abandoned_claims(db)
         db.execute("BEGIN IMMEDIATE")
         row = db.execute(
             """SELECT * FROM model_network_requests
@@ -249,6 +289,16 @@ def complete_model_request(
             (request_id, station_id, station["user_id"]),
         ).fetchone()
         if not row:
+            fallback = db.execute(
+                """SELECT status FROM model_network_requests
+                   WHERE id=? AND station_id=? AND owner_user_id=?""",
+                (request_id, station_id, station["user_id"]),
+            ).fetchone()
+            if fallback:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Model request is no longer claimable (status={fallback['status']})",
+                )
             raise HTTPException(status_code=404, detail="Claimed model request not found")
         if body.status == "completed" and not (body.reply or "").strip():
             raise HTTPException(status_code=422, detail="Completed inference requires a reply")
