@@ -129,9 +129,18 @@ def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
-def _create_github_connections(db: sqlite3.Connection) -> None:
+def _create_github_connections(
+    db: sqlite3.Connection,
+    *,
+    include_user_foreign_key: bool = True,
+) -> None:
+    foreign_key = (
+        ",\n            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE"
+        if include_user_foreign_key
+        else ""
+    )
     db.execute(
-        """CREATE TABLE IF NOT EXISTS github_connections (
+        f"""CREATE TABLE IF NOT EXISTS github_connections (
             user_id INTEGER PRIMARY KEY,
             github_user_id INTEGER,
             github_id TEXT,
@@ -140,52 +149,98 @@ def _create_github_connections(db: sqlite3.Connection) -> None:
             access_token_ciphertext TEXT NOT NULL,
             scopes TEXT NOT NULL DEFAULT '',
             connected_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            updated_at TEXT NOT NULL{foreign_key}
         )"""
     )
 
 
 def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
-    """Accept both historical ``github_id`` and current ``github_user_id`` rows."""
+    """Accept both historical ``github_id`` and current ``github_user_id`` rows.
 
-    _create_github_connections(db)
+    Isolated synchronization databases may intentionally omit the account
+    ``users`` table. Their connection table remains standalone and therefore
+    must not acquire a foreign key to a table that does not exist.
+    """
+
+    users_table_exists = bool(
+        db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'"
+        ).fetchone()
+    )
+    _create_github_connections(
+        db,
+        include_user_foreign_key=users_table_exists,
+    )
     info = {
         row[1]: row
         for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
     }
-    current_id = info.get("github_user_id")
-    compatible = "github_id" in info and current_id and current_id[3] == 0
-    if compatible:
-        return
+    if "github_user_id" not in info:
+        db.execute("ALTER TABLE github_connections ADD COLUMN github_user_id INTEGER")
+    if "github_id" not in info:
+        db.execute("ALTER TABLE github_connections ADD COLUMN github_id TEXT")
 
-    db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
-    _create_github_connections(db)
-    legacy = {
-        row[1]
-        for row in db.execute(
-            "PRAGMA table_info(github_connections_legacy)"
-        ).fetchall()
+    info = {
+        row[1]: row
+        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
     }
-    github_user_expr = (
-        "github_user_id"
-        if "github_user_id" in legacy
-        else "CAST(github_id AS INTEGER)"
+    table_empty = (
+        db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
     )
-    github_id_expr = (
-        "github_id"
-        if "github_id" in legacy
-        else "CAST(github_user_id AS TEXT)"
+    current_id = info.get("github_user_id")
+    should_rebuild = bool(
+        current_id
+        and current_id[3] == 1
+        and (users_table_exists or table_empty)
+    )
+    if should_rebuild:
+        db.execute(
+            "ALTER TABLE github_connections RENAME TO github_connections_legacy"
+        )
+        _create_github_connections(
+            db,
+            include_user_foreign_key=users_table_exists,
+        )
+        legacy = {
+            row[1]
+            for row in db.execute(
+                "PRAGMA table_info(github_connections_legacy)"
+            ).fetchall()
+        }
+        if not table_empty:
+            github_user_expr = (
+                "github_user_id"
+                if "github_user_id" in legacy
+                else "CAST(github_id AS INTEGER)"
+            )
+            github_id_expr = (
+                "github_id"
+                if "github_id" in legacy
+                else "CAST(github_user_id AS TEXT)"
+            )
+            db.execute(
+                f"""INSERT INTO github_connections
+                    (user_id,github_user_id,github_id,github_login,avatar_url,
+                     access_token_ciphertext,scopes,connected_at,updated_at)
+                    SELECT user_id,{github_user_expr},{github_id_expr},github_login,
+                           avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+                    FROM github_connections_legacy"""
+            )
+        db.execute("DROP TABLE github_connections_legacy")
+
+    db.execute(
+        """UPDATE github_connections
+           SET github_user_id=CAST(github_id AS INTEGER)
+           WHERE github_user_id IS NULL
+             AND github_id IS NOT NULL
+             AND TRIM(github_id) <> ''"""
     )
     db.execute(
-        f"""INSERT INTO github_connections
-            (user_id,github_user_id,github_id,github_login,avatar_url,
-             access_token_ciphertext,scopes,connected_at,updated_at)
-            SELECT user_id,{github_user_expr},{github_id_expr},github_login,avatar_url,
-                   access_token_ciphertext,scopes,connected_at,updated_at
-            FROM github_connections_legacy"""
+        """UPDATE github_connections
+           SET github_id=CAST(github_user_id AS TEXT)
+           WHERE github_id IS NULL
+             AND github_user_id IS NOT NULL"""
     )
-    db.execute("DROP TABLE github_connections_legacy")
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:

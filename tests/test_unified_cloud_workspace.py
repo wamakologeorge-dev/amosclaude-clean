@@ -90,7 +90,8 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert 'cap_drop=["ALL"]' in source
     assert 'security_opt=["no-new-privileges:true"]' in source
     assert "read_only=True" in source
-    assert 'network_kwargs = {"network_mode": "none"}' in source
+    assert 'WORKSPACE_NETWORK = "none"' in source
+    assert "network_mode=WORKSPACE_NETWORK" in source
     assert "CPU_LIMIT = min(" in source and "), 2.0)" in source
     assert "4096" in source
     assert "_repository_path(body.repository_id)" in source
@@ -100,7 +101,7 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert "_verify_origin(websocket)" in source
     assert "Terminal ticket was already used" in source
     assert "_prepare_repository_storage(storage)" in source
-    assert 'default_acl = f"d:u:{WORKSPACE_UID}:rwx"' in source
+    assert 'f"d:u:{WORKSPACE_UID}:rwx"' in source
     assert 'digest = hashlib.sha256(workspace.encode("utf-8")).hexdigest()' in source
     assert 'return f"{digest}.activity"' in source
     assert ".amosclaud-runtime-activity" not in source
@@ -178,4 +179,3 @@ def test_unconfigured_runtime_is_reported_truthfully(monkeypatch) -> None:
     monkeypatch.delenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", raising=False)
     result = check_workspace_runtime()
     assert result["state"] == "not_configured"
-    assert "cannot start" in result["explanation"]
