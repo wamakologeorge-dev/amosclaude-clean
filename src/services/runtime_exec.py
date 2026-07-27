@@ -1,23 +1,43 @@
-"""Restricted command execution for deterministic repair verification."""
+"""Container-isolated command execution for deterministic repair verification."""
 
 from __future__ import annotations
 
-import subprocess
-import sys
+import json
+import shlex
 from pathlib import Path
+from typing import Any, Callable
+
+from amoscloud_ai.isolated_runner import (
+    IsolatedRunResult,
+    RunnerConfigurationError,
+    UnsafeCommandError,
+    run_in_isolated_container,
+)
+
+ContainerRunner = Callable[..., IsolatedRunResult]
 
 
 class RuntimeExecutor:
-    """Run a bounded, repository-derived verification plan without shell=True."""
+    """Run repository-derived checks in a locked-down ephemeral container.
 
-    def __init__(self, workspace: Path) -> None:
+    Verification fails closed when the isolated runner is unavailable or rejects a
+    command. There is deliberately no host-process fallback.
+    """
+
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        runner: ContainerRunner = run_in_isolated_container,
+    ) -> None:
         self.workspace = workspace.resolve()
+        self.runner = runner
 
     def _safe_workspace_relative_paths(
         self, changed_files: list[str] | None
     ) -> list[str]:
         safe_paths: list[str] = []
-        for item in (changed_files or []):
+        for item in changed_files or []:
             raw = str(item).strip().replace("\\", "/")
             if not raw:
                 continue
@@ -29,6 +49,11 @@ class RuntimeExecutor:
             safe_paths.append(relative.as_posix())
         return safe_paths
 
+    @staticmethod
+    def _summary(output: str) -> str:
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        return lines[-1] if lines else "No output"
+
     def _run(
         self,
         command: list[str],
@@ -36,44 +61,88 @@ class RuntimeExecutor:
         *,
         name: str | None = None,
     ) -> dict[str, object]:
+        command_text = shlex.join(command)
+        runner_command = command
+        if command[:3] == ["git", "diff", "--check"]:
+            runner_command = [
+                "python",
+                "-c",
+                (
+                    "import subprocess,sys; "
+                    "sys.exit(subprocess.run(['git','diff','--check']).returncode)"
+                ),
+            ]
+        runner_command_text = shlex.join(runner_command)
+        check_name = name or command[0]
+        environment = {
+            "CI": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+            "npm_config_audit": "false",
+            "npm_config_fund": "false",
+        }
         try:
-            result = subprocess.run(
-                command,
-                cwd=self.workspace,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
+            result = self.runner(
+                runner_command_text,
+                workspace=self.workspace,
+                environment=environment,
+                timeout_seconds=timeout,
             )
-            output = (result.stdout + "\n" + result.stderr).strip()
+            output = str(result.output or "").strip()
             return {
-                "name": name or command[0],
-                "command": " ".join(command),
+                "name": check_name,
+                "command": command_text,
                 "passed": result.returncode == 0,
                 "exit_code": result.returncode,
-                "summary": output.splitlines()[-1] if output else "No output",
+                "summary": self._summary(output),
                 "output": output[-12_000:],
+                "isolated": True,
+                "runtime": "docker",
+                "timed_out": bool(result.timed_out),
             }
-        except subprocess.TimeoutExpired as exc:
+        except (RunnerConfigurationError, UnsafeCommandError) as exc:
+            output = f"Isolated verification blocked: {type(exc).__name__}: {exc}"
             return {
-                "name": name or command[0],
-                "command": " ".join(command),
+                "name": check_name,
+                "command": command_text,
                 "passed": False,
-                "exit_code": 124,
-                "summary": f"Verification timed out after {timeout} seconds",
-                "output": str(exc)[-12_000:],
+                "exit_code": 126,
+                "summary": output,
+                "output": output,
+                "isolated": True,
+                "runtime": "docker",
+                "timed_out": False,
             }
-        except FileNotFoundError as exc:
+        except Exception as exc:  # pragma: no cover - final fail-closed boundary
+            output = f"Isolated verification stopped safely: {type(exc).__name__}: {exc}"
             return {
-                "name": name or command[0],
-                "command": " ".join(command),
+                "name": check_name,
+                "command": command_text,
                 "passed": False,
-                "exit_code": 127,
-                "summary": (
-                    f"Verification executable is unavailable: {command[0]}"
-                ),
-                "output": str(exc),
+                "exit_code": 125,
+                "summary": output,
+                "output": output,
+                "isolated": True,
+                "runtime": "docker",
+                "timed_out": False,
             }
+
+    def _package_scripts(self) -> dict[str, str]:
+        package = self.workspace / "package.json"
+        if not package.is_file():
+            return {}
+        try:
+            payload: Any = json.loads(package.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        scripts = payload.get("scripts", {}) if isinstance(payload, dict) else {}
+        if not isinstance(scripts, dict):
+            return {}
+        return {
+            str(name): str(value)
+            for name, value in scripts.items()
+            if isinstance(name, str) and isinstance(value, str)
+        }
 
     def verification_commands(
         self, changed_files: list[str] | None = None
@@ -92,7 +161,7 @@ class RuntimeExecutor:
             commands.append(
                 (
                     "Python compilation",
-                    [sys.executable, "-m", "py_compile", *python_files],
+                    ["python", "-m", "py_compile", *python_files],
                     90,
                 )
             )
@@ -123,7 +192,7 @@ class RuntimeExecutor:
             commands.append(
                 (
                     "Focused pytest",
-                    [sys.executable, "-m", "pytest", "-q", *selected_tests],
+                    ["python", "-m", "pytest", "-q", *selected_tests],
                     300,
                 )
             )
@@ -131,10 +200,33 @@ class RuntimeExecutor:
             commands.append(
                 (
                     "Repository pytest",
-                    [sys.executable, "-m", "pytest", "-q"],
+                    ["python", "-m", "pytest", "-q"],
                     300,
                 )
             )
+
+        frontend_suffixes = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
+        frontend_metadata = {
+            "package.json",
+            "package-lock.json",
+            "pnpm-lock.yaml",
+            "yarn.lock",
+        }
+        frontend_changed = any(
+            Path(item).suffix.lower() in frontend_suffixes or item in frontend_metadata
+            for item in normalized
+        )
+        if frontend_changed:
+            scripts = self._package_scripts()
+            if "typecheck" in scripts:
+                commands.append(
+                    ("Frontend typecheck", ["npm", "run", "typecheck"], 300)
+                )
+            if "test" in scripts:
+                commands.append(("Frontend tests", ["npm", "test"], 300))
+            if "build" in scripts:
+                commands.append(("Frontend build", ["npm", "run", "build"], 600))
+
         return commands
 
     def verify(
