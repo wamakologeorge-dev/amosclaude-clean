@@ -104,6 +104,12 @@ def _safe_mountpoint(value: str) -> Path:
     if not os.path.isabs(cleaned):
         raise HTTPException(status_code=422, detail="mountpoint must be an absolute path")
 
+    parts = [part for part in cleaned.split("/") if part]
+    if any(part == ".." for part in parts):
+        raise HTTPException(status_code=422, detail="mountpoint contains forbidden traversal segments")
+    if any(not re.fullmatch(r"[A-Za-z0-9._-]+", part) for part in parts):
+        raise HTTPException(status_code=422, detail="mountpoint contains invalid path characters")
+
     candidate = Path(cleaned).expanduser().resolve(strict=False)
     for root in _allowed_mount_roots():
         try:
@@ -184,7 +190,11 @@ def filesystem_plan(mountpoint: Path, expected_device: str | None = None) -> Fil
             or not _DEVICE_PATH.fullmatch(expected)
         ):
             raise RuntimeError("expected_device must be a valid block-device path under /dev")
-        if Path(source).resolve() != Path(expected).resolve():
+        source_real = os.path.realpath(source)
+        expected_real = os.path.realpath(expected)
+        if not expected_real.startswith("/dev/"):
+            raise RuntimeError("expected_device must resolve to a valid block-device path under /dev")
+        if source_real != expected_real:
             raise RuntimeError("Mounted block device does not match the expected device")
     if fstype not in {"ext2", "ext3", "ext4", "xfs"}:
         raise RuntimeError(f"Unsupported filesystem type: {fstype or 'unknown'}")
