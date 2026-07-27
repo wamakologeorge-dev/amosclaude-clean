@@ -9,6 +9,10 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ai-feedback:
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -30,15 +34,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install PyGithub pytest
 
-      - name: Require the Amosclaud GitHub credential
+      - name: Select repository credential
         env:
-          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          test -n "$AMOSCLAUD_GITHUB_TOKEN" || {
-            echo "AMOSCLAUD_GITHUB_TOKEN is required for repository-owned pull requests."
-            exit 1
-          }
+          test -n "$AMOSCLAUD_GITHUB_TOKEN"
+          echo "A repository credential is available for the same-repository pull request."
 
       - name: Get pull request code diff
         env:
@@ -54,9 +56,9 @@ jobs:
 
       - name: Run Amosclaud reviewer engine
         env:
-          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN || github.token }}
           GITHUB_FALLBACK_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
