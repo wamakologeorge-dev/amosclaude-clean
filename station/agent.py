@@ -228,6 +228,13 @@ class StationAgent:
                 self.log.info("reported request=%s status=%s", request_id, status)
                 return True
             except HttpError as failure:
+                if failure.status == 409:
+                    self.log.warning(
+                        "request=%s is no longer claimable, platform expired the lease: %s",
+                        request_id,
+                        failure,
+                    )
+                    return False
                 self.log.error(
                     "completion rejected request=%s status=%s: %s",
                     request_id,

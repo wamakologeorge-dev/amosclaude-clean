@@ -254,6 +254,45 @@ def _failure_case(chat_route):
     return platform.requests[-1]["body"]
 
 
+def test_late_completion_409_is_logged_as_expired_not_a_generic_failure(caplog):
+    request_id = "modelreq_late"
+    queue = [{"id": request_id, "messages": [{"role": "user", "content": "hi"}],
+              "model": "amosclaud-folder-v1", "max_tokens": 100, "temperature": 0.2}]
+    routes = _platform_routes(claim=lambda _r: (200, queue.pop(0) if queue else None))
+    routes[_complete_path(request_id)] = lambda _r: (
+        409,
+        {"detail": "Model request is no longer claimable (status=failed)"},
+    )
+    with stub_server(ollama_routes(MODEL, reply="a reply")) as backend, stub_server(
+        routes
+    ) as platform:
+        agent = StationAgent(_config(platform.url, backend.url))
+        agent.probe_backend()
+        with caplog.at_level("WARNING", logger=agent.log.name):
+            outcome = agent.poll_once()
+        # A late completion is not a crash and not a generic failure: the
+        # station simply moves on to its next poll cycle.
+        assert outcome == HANDLED
+        assert agent.completed == 0
+        assert agent.failed == 0
+        # It should be logged as expired/no-longer-claimable, and only once
+        # (no tight retry loop), and never with the bearer token in it.
+        completions = [r for r in platform.requests if r["path"].endswith("/complete")]
+        assert len(completions) == 1
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("no longer claimable" in message for message in messages)
+    assert not any(TOKEN in message for message in messages)
+    assert not any("completion rejected" in message for message in messages)
+
+    # The loop keeps running normally afterwards.
+    with stub_server(ollama_routes(MODEL)) as backend, stub_server(
+        _platform_routes()
+    ) as platform:
+        agent = StationAgent(_config(platform.url, backend.url))
+        agent.probe_backend()
+        assert agent.run(handle_signals=False, max_cycles=2) == 2
+
+
 def test_backend_error_is_reported_as_failed_completion():
     body = _failure_case(lambda _r: (500, {"error": "cuda out of memory"}))
     assert body["status"] == "failed"
