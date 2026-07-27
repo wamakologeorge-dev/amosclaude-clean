@@ -32,6 +32,9 @@
     <div id="cloud-workspace-boundaries" class="ws-full-editor-note">
       <strong>Security boundary:</strong> developer user · maximum 2 CPU cores · maximum 4 GB RAM · no internal platform network access.
     </div>
+    <div class="ws-full-editor-note">
+      <strong>Developer toolchain:</strong> Git and Git LFS · Python, pip and virtual environments · Node.js and npm · C/C++ build tools and CMake · ripgrep and fd · jq and SQLite · ShellCheck · editors, archive tools and process diagnostics.
+    </div>
     <p id="cloud-workspace-state" class="ws-status" role="status" aria-live="polite">Open this tab to check the isolated runtime.</p>
     <div id="cloud-terminal" style="height:480px;min-height:320px;border:1px solid #30363d;border-radius:10px;background:#050a10;padding:8px;overflow:hidden"></div>`;
   main.appendChild(panel);
@@ -97,7 +100,7 @@
   }
 
   async function refresh() {
-    if (loading) return;
+    if (loading) return currentRunning;
     loading = true;
     renderControls();
     state('Checking the isolated workspace runtime…');
@@ -106,13 +109,16 @@
       runtimeAvailable = Boolean(result.runtime?.configured && result.runtime?.ok);
       if (!result.runtime?.configured) {
         currentRunning = false;
-        state('Workspace runtime is not configured on this deployment.', 'not-configured');
-        return;
+        state(
+          'Terminal deployment is incomplete. Configure the separate Docker workspace runtime and the control-plane runtime URL and token.',
+          'not-configured',
+        );
+        return false;
       }
       if (!result.runtime?.ok) {
         currentRunning = false;
         state(result.runtime?.detail || 'Workspace runtime is unreachable.', 'error');
-        return;
+        return false;
       }
       if (result.container) {
         showContainer(result.container);
@@ -120,10 +126,12 @@
         currentRunning = false;
         state('Workspace is ready to start. Files will remain on persistent storage.', 'stopped');
       }
+      return currentRunning;
     } catch (error) {
       runtimeAvailable = false;
       currentRunning = false;
       state(error.message, 'error');
+      return false;
     } finally {
       loading = false;
       renderControls();
@@ -135,12 +143,14 @@
     loading = true;
     renderControls();
     state('Starting an isolated workspace…');
+    let started = false;
     try {
       const result = await request(
         `/api/v1/cloud-workspaces/repositories/${repositoryId}/start`,
         { method: 'POST' },
       );
       showContainer(result.container);
+      started = currentRunning;
     } catch (error) {
       currentRunning = false;
       state(error.message, 'error');
@@ -148,6 +158,7 @@
       loading = false;
       renderControls();
     }
+    if (started) await connect();
   }
 
   async function loadTerminal() {
@@ -170,7 +181,7 @@
     });
     terminal.open(terminalHost);
     terminal.writeln('\x1b[1;36mAmosclaud isolated terminal\x1b[0m');
-    terminal.writeln('Connect to begin a non-root shell in /workspace.\r\n');
+    terminal.writeln('Connecting a non-root developer shell in /workspace…\r\n');
     terminal.onData(data => {
       if (socket?.readyState === WebSocket.OPEN) socket.send(data);
     });
@@ -196,7 +207,7 @@
       socket = new WebSocket(ticket.websocket_url);
       socket.binaryType = 'arraybuffer';
       socket.onopen = () => {
-        state('Terminal connected. The ticket expires for new connections after two minutes.', 'ready');
+        state('Terminal connected. Commands run as the non-root developer user.', 'ready');
         term.focus();
       };
       socket.onmessage = event => {
@@ -208,6 +219,7 @@
       };
       socket.onerror = () => state('Terminal connection failed.', 'error');
       socket.onclose = event => {
+        socket = null;
         state(event.reason || 'Terminal disconnected.', 'stopped');
         renderControls();
       };
@@ -237,14 +249,15 @@
     }
   }
 
-  terminalTab.addEventListener('click', () => {
+  terminalTab.addEventListener('click', async () => {
     document.querySelectorAll('.ws-tab').forEach(tab => {
       tab.classList.toggle('active', tab === terminalTab);
     });
     document.querySelectorAll('.ws-panel').forEach(item => {
       item.classList.toggle('active', item === panel);
     });
-    refresh();
+    const running = await refresh();
+    if (running) await connect();
   });
   startButton.addEventListener('click', start);
   connectButton.addEventListener('click', connect);

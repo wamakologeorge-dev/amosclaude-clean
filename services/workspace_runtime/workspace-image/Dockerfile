@@ -10,15 +10,36 @@ RUN apt-get update \
        bash \
        build-essential \
        ca-certificates \
+       cmake \
        curl \
+       fd-find \
+       file \
        git \
+       git-lfs \
        jq \
+       less \
+       lsof \
+       nano \
        nodejs \
        npm \
        openssh-client \
+       pkg-config \
+       procps \
        python3 \
+       python3-dev \
        python3-pip \
        python3-venv \
+       ripgrep \
+       rsync \
+       shellcheck \
+       sqlite3 \
+       tree \
+       unzip \
+       vim-tiny \
+       wget \
+       zip \
+    && git lfs install --system \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && if getent passwd 1000 >/dev/null; then \
          existing_user="$(getent passwd 1000 | cut -d: -f1)"; \
          existing_group="$(getent group 1000 | cut -d: -f1)"; \
