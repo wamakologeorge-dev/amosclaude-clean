@@ -94,7 +94,15 @@ _PROTECTED_NAMES = {
     "runtime.db",
     "vault.db",
 }
-_PROTECTED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".db", ".sqlite", ".sqlite3"}
+_PROTECTED_SUFFIXES = {
+    ".pem",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+}
 _HEADER = re.compile(r"^(?:---|\+\+\+)\s+([^\t\n]+)", re.MULTILINE)
 _TRACE_PATHS = (
     re.compile(r'File\s+"(?P<path>[^"\n]+)",\s+line\s+\d+'),
@@ -284,16 +292,31 @@ class AgentBuildGuard:
         cleaned = value.strip()
         if cleaned.startswith(("a/", "b/")):
             cleaned = cleaned[2:]
-        if not cleaned or cleaned == "/dev/null" or "\x00" in cleaned:
-            raise AgentGuardError("Patches may edit existing files only")
-        candidate = (self.workspace / cleaned).resolve(strict=True)
+        relative = Path(cleaned)
+        if (
+            not cleaned
+            or cleaned == "/dev/null"
+            or "\x00" in cleaned
+            or relative.is_absolute()
+            or ".." in relative.parts
+        ):
+            raise AgentGuardError("Patch path must be a relative existing file")
+
+        lexical = self.workspace / relative
+        cursor = self.workspace
+        for part in relative.parts:
+            cursor = cursor / part
+            if cursor.is_symlink():
+                raise AgentGuardError("Patch target cannot traverse a symlink")
+
         try:
-            relative = candidate.relative_to(self.workspace)
-        except ValueError as exc:
+            candidate = lexical.resolve(strict=True)
+            checked_relative = candidate.relative_to(self.workspace)
+        except (OSError, ValueError) as exc:
             raise AgentGuardError("Patch path escapes the workspace") from exc
-        if candidate.is_symlink() or not candidate.is_file():
-            raise AgentGuardError("Patch target must be a regular non-symlink file")
-        if any(part in _PROTECTED_PARTS for part in relative.parts):
+        if not candidate.is_file():
+            raise AgentGuardError("Patch target must be an existing regular file")
+        if any(part in _PROTECTED_PARTS for part in checked_relative.parts):
             raise AgentGuardError("Patch targets a protected workspace path")
         if candidate.name in _PROTECTED_NAMES:
             raise AgentGuardError("Patch targets protected secret material")
@@ -330,15 +353,17 @@ class AgentBuildGuard:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".diff") as handle:
             handle.write(patch)
             handle.flush()
-            check = subprocess.run(
+            checked = subprocess.run(
                 ["git", "apply", "--check", "--whitespace=error-all", handle.name],
                 cwd=self.workspace,
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            if check.returncode != 0:
-                raise AgentGuardError(f"Model patch was rejected: {check.stderr[-1000:]}")
+            if checked.returncode != 0:
+                raise AgentGuardError(
+                    f"Model patch was rejected: {checked.stderr[-1000:]}"
+                )
             applied = subprocess.run(
                 ["git", "apply", "--whitespace=nowarn", handle.name],
                 cwd=self.workspace,
@@ -347,7 +372,9 @@ class AgentBuildGuard:
                 check=False,
             )
             if applied.returncode != 0:
-                raise AgentGuardError(f"Model patch could not be applied: {applied.stderr[-1000:]}")
+                raise AgentGuardError(
+                    f"Model patch could not be applied: {applied.stderr[-1000:]}"
+                )
         return {path.relative_to(self.workspace).as_posix() for path in targets}
 
     @staticmethod
