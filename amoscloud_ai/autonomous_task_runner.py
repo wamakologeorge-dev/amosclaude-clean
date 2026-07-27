@@ -71,7 +71,6 @@ def execute_autonomous_task(task_id: str) -> None:
         return
 
     record_task_started(task_id)
-    repository = None
     tempdir: Path | None = None
     try:
         repository = _repository(task)
@@ -142,6 +141,7 @@ def execute_autonomous_task(task_id: str) -> None:
         finally:
             remote.set_url(_public_remote_url(repository["github_full_name"]))
 
+        feature_title = task["objective"].splitlines()[2]
         response = httpx.post(
             f"https://api.github.com/repos/{repository['github_full_name']}/pulls",
             headers={
@@ -150,7 +150,7 @@ def execute_autonomous_task(task_id: str) -> None:
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             json={
-                "title": f"Amosclaud daily: {task['objective'].splitlines()[2][:72]}",
+                "title": f"Amosclaud daily: {feature_title[:72]}",
                 "head": branch,
                 "base": base,
                 "draft": True,
@@ -240,3 +240,22 @@ def dispatch_autonomous_task(task_id: str) -> None:
             daemon=True,
         )
         thread.start()
+
+
+def install_dispatch_hook() -> None:
+    """Route only tagged autonomous tasks away from the general cloud runner."""
+
+    from amoscloud_ai import cloud_task_runner
+
+    current = cloud_task_runner.dispatch_cloud_task
+    if getattr(current, "_amosclaud_autonomy_router", False):
+        return
+
+    def routed_dispatch(task_id: str) -> None:
+        if _is_autonomous_task(task_id):
+            dispatch_autonomous_task(task_id)
+        else:
+            current(task_id)
+
+    routed_dispatch._amosclaud_autonomy_router = True  # type: ignore[attr-defined]
+    cloud_task_runner.dispatch_cloud_task = routed_dispatch
