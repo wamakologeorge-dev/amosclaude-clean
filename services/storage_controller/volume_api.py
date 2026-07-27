@@ -8,12 +8,20 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from controller import _authorize, _enabled, _safe_mountpoint
-from volume_provisioner import (
-    VolumeProvisionError,
-    expected_confirmation,
-    provision_volume,
-)
+try:  # Package imports used by tests and installed modules.
+    from .controller import _authorize, _enabled, _safe_mountpoint
+    from .volume_provisioner import (
+        VolumeProvisionError,
+        expected_confirmation,
+        provision_volume,
+    )
+except ImportError:  # Top-level imports used by the controller container.
+    from controller import _authorize, _enabled, _safe_mountpoint
+    from volume_provisioner import (
+        VolumeProvisionError,
+        expected_confirmation,
+        provision_volume,
+    )
 
 router = APIRouter()
 
@@ -25,7 +33,11 @@ class ProvisionRequest(BaseModel):
     resource: dict[str, Any]
     mountpoint: str = Field(min_length=1, max_length=500)
     filesystem: Literal["ext4", "xfs"] = "ext4"
-    filesystem_label: str = Field(default="amosclaud-data", min_length=1, max_length=16)
+    filesystem_label: str = Field(
+        default="amosclaud-data",
+        min_length=1,
+        max_length=16,
+    )
     owner_uid: int = Field(default=1000, ge=0, le=65535)
     owner_gid: int = Field(default=1000, ge=0, le=65535)
     directory_mode: str = Field(default="2770", pattern=r"^[0-7]{3,4}$")
@@ -92,13 +104,19 @@ def provision(request: ProvisionRequest) -> dict[str, Any]:
         result = provision_volume(payload, mountpoint=mountpoint)
     except VolumeProvisionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Provisioning failed safely: {type(exc).__name__}",
+        ) from exc
+    cloud = result.get("cloud") or {}
     return {
         "operation_id": f"provision_{request.request_id}",
         "request_id": request.request_id,
         "status": "planned" if request.dry_run else "completed",
         **result,
         "safety": {
-            "cloud_resource_created_for_this_request": True,
+            "cloud_resource_created_for_this_request": bool(cloud.get("created")),
             "blank_device_and_root_disk_checks_required": True,
             "gpt_partition_table_required": True,
             "arbitrary_commands_allowed": False,
