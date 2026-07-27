@@ -22,6 +22,10 @@ def test_complete_terminal_routes_are_registered() -> None:
         "/api/v1/cloud-workspaces/repositories/{repository_id}/terminal-ticket-v2",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub",
         "/api/v1/cloud-workspaces/repositories/{repository_id}/agent-hub/messages",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/tools",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/commit",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/pull",
+        "/api/v1/cloud-workspaces/repositories/{repository_id}/tools/push",
     }.issubset(paths)
 
 
@@ -64,19 +68,27 @@ def test_browser_terminal_is_modular_cloud_connected_and_feature_complete() -> N
     main = _source("web/cloud-terminal/main.js")
     session = _source("web/cloud-terminal/session.js")
     hub = _source("web/cloud-terminal/agent-hub.js")
+    project_tools = _source("web/cloud-terminal/project-tools.js")
 
     assert "/static/cloud-terminal/main.js" in loader
     assert "terminal-ticket-v2" in session
     assert "new WebSocket(ticket.websocket_url)" in session
     assert "ResizeObserver" in session
+    assert "runCommand" in session
     assert "exportTranscript" in session
     assert "findNext" in session and "findPrevious" in session
     assert "Split" in main
-    assert "tmux persistent sessions" in main
+    assert "writable repository" in main
+    assert "nano and vim editors" in main
     assert "Doctor, Fixer, Autonomous, and Underground" in main
+    assert "ProjectToolbelt" in main
     assert "/agent-hub/messages" in hub
     assert "Attach recent output from the active terminal" in hub
     assert "Authorize verified repository changes" in hub
+    assert "/tools/commit" in project_tools
+    assert "/tools/${action}" in project_tools
+    assert "Edit file" in project_tools
+    assert "Run any command" in project_tools
 
 
 def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None:
@@ -93,6 +105,8 @@ def test_runtime_supports_persistent_tmux_sessions_and_resize_protocol() -> None
     assert "kill-session" in source
     assert "tmux" in dockerfile
     assert "bash-completion" in dockerfile
+    assert "nano" in dockerfile and "vim-tiny" in dockerfile
+    assert "/usr/local/bin/amos" in dockerfile
     assert 'CMD ["uvicorn", "terminal_runtime:app"' in service_dockerfile
 
 
@@ -109,9 +123,30 @@ def test_agent_hub_redacts_terminal_secrets_and_disables_unsafe_escalation() -> 
     assert "no protected-branch write" in source.lower()
 
 
-def test_shell_profile_exposes_repository_aware_prompt() -> None:
-    source = _source("services/workspace_runtime/workspace-image/terminal-profile.sh")
+def test_project_tools_support_native_and_github_repository_workflows() -> None:
+    source = _source("amoscloud_ai/api/routes/terminal_tools.py")
 
-    assert "git symbolic-ref --quiet --short HEAD" in source
-    assert "PROMPT_COMMAND='history -a; __amosclaud_prompt'" in source
-    assert "alias gs='git status --short --branch'" in source
+    assert '@router.get("/repositories/{repository_id}/tools")' in source
+    assert '@router.post("/repositories/{repository_id}/tools/commit")' in source
+    assert '@router.post("/repositories/{repository_id}/tools/pull")' in source
+    assert '@router.post("/repositories/{repository_id}/tools/push")' in source
+    assert '"source": "github" if github_full_name else "amosclaud"' in source
+    assert "push_github_repository" in source
+    assert "pull_github_repository" in source
+    assert "git status --short --branch" in source
+    assert "python -m pytest -q" in source
+    assert "npm run" in source
+
+
+def test_shell_profile_and_amos_command_make_editing_simple() -> None:
+    profile = _source("services/workspace_runtime/workspace-image/terminal-profile.sh")
+    command = _source("services/workspace_runtime/workspace-image/amos")
+
+    assert "git symbolic-ref --quiet --short HEAD" in profile
+    assert "PROMPT_COMMAND='history -a; __amosclaud_prompt'" in profile
+    assert "alias gs='git status --short --branch'" in profile
+    assert "amos edit <path>" in command
+    assert "exec nano" in command
+    assert "exec vim" in command
+    assert "git commit -m" in command
+    assert "GitHub pull and push are available from the browser Project tools" in command
