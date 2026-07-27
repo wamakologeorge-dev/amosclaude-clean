@@ -1,0 +1,73 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/amosclaude-clean:cached
+      - amosclaud-data:/workspaces/amosclaude-clean/data
+    environment:
+      ENVIRONMENT: development
+      AMOSCLAUD_ENV: development
+      AUTH_COOKIE_SECURE: "false"
+      DATABASE_URL: postgresql://amosclaud@postgres:5432/amosclaud
+      AUTH_DB_PATH: /workspaces/amosclaude-clean/data/auth.db
+      AMOSCLAUD_REPOSITORIES_ROOT: /workspaces/amosclaude-clean/data/repositories
+      REPOSITORY_STORAGE_PATH: /workspaces/amosclaude-clean/data/repositories
+      AMOSCLAUD_MODEL_HOME: /workspaces/amosclaude-clean/data/model
+      AMOSCLAUD_MODEL_URL: http://127.0.0.1:8091
+      AMOSCLAUD_MODEL_HEALTH_URL: http://127.0.0.1:8091/health
+      AMOSCLAUD_API_URL: http://127.0.0.1:8000
+      AMOSCLAUD_API_HEALTH_URL: http://127.0.0.1:8000/health
+      AMOSCLAUD_API_METRICS_URL: http://127.0.0.1:8000/metrics
+      AMOSCLAUD_METRICS_DB: /workspaces/amosclaude-clean/data/metrics.db
+      AMOSCLAUD_GATEWAY_CONFIG: /workspaces/amosclaude-clean/config/gateway.yaml
+      AMOSCLAUD_ORGANIZATION_SETTINGS: /workspaces/amosclaude-clean/config/organization-settings.json
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - amosclaud-dev
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: amosclaud
+      POSTGRES_USER: amosclaud
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amosclaud -d amosclaud"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - amosclaud-dev
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis-data:/data
+    networks:
+      - amosclaud-dev
+
+networks:
+  amosclaud-dev:
+
+volumes:
+  amosclaud-data:
+  postgres-data:
+  redis-data:

@@ -133,8 +133,6 @@ def _flat_include_router(
             )
             continue
 
-        # Preserve Starlette mounts and ordinary routes, but do not duplicate the
-        # same object when a compatibility alias includes a parent router twice.
         if route not in target.routes:
             target.routes.append(route)
 
@@ -151,7 +149,9 @@ from amoscloud_ai.api.routes import doctor_travel as doctor_travel
 from amoscloud_ai.api.routes import repository_templates as repository_templates
 from amoscloud_ai.api.routes import real_repositories as real_repositories
 
-_existing_paths = {getattr(route, "path", None) for route in repository_templates.router.routes}
+_existing_paths = {
+    getattr(route, "path", None) for route in repository_templates.router.routes
+}
 for _route in real_repositories.router.routes:
     if getattr(_route, "path", None) not in _existing_paths:
         repository_templates.router.routes.append(_route)
@@ -162,11 +162,7 @@ from amoscloud_ai.api.routes import repository_history as repository_history
 from amoscloud_ai.api.routes import solo_development as solo_development
 from repository import git_server as native_git
 
-# De-duplicate by (path, method): a path may legitimately expose several
-# methods (e.g. GET list + POST create on the same collection). Keying on the
-# path alone silently dropped sibling handlers such as the GET issue and GET
-# pull-request listings, which then surfaced to the browser as a raw
-# "Method Not Allowed" (HTTP 405). Keep every distinct path+method pair.
+
 def _route_keys(route):
     path = getattr(route, "path", None)
     methods = getattr(route, "methods", None) or [None]
@@ -184,8 +180,6 @@ for _module in (solo_development, profile, native_git, repository_history):
         repositories.router.routes.append(_route)
         _native_keys |= _keys
 
-# Keep account creation and recovery under the one canonical authentication
-# router. This avoids a second app while making the routes visible to tools.
 from amoscloud_ai.api.routes import auth as auth
 from amoscloud_ai.api.routes import account_recovery as account_recovery
 
@@ -194,3 +188,29 @@ for _route in account_recovery.router.routes:
     if getattr(_route, "path", None) not in _auth_paths:
         auth.router.routes.append(_route)
         _auth_paths.add(getattr(_route, "path", None))
+
+from amoscloud_ai.api.routes import github_repositories as github_repositories
+from amoscloud_ai.api.routes import github_organization_publish as github_organization_publish
+
+_github_keys = set()
+for _route in github_repositories.router.routes:
+    _github_keys |= _route_keys(_route)
+for _route in github_organization_publish.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _github_keys:
+        continue
+    github_repositories.router.routes.append(_route)
+    _github_keys |= _keys
+
+from amoscloud_ai.api.routes import platform_services as platform_services
+from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
+
+_platform_keys = set()
+for _route in platform_services.router.routes:
+    _platform_keys |= _route_keys(_route)
+for _route in cloud_configuration.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _platform_keys:
+        continue
+    platform_services.router.routes.append(_route)
+    _platform_keys |= _keys

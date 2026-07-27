@@ -11,6 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from git.remote import PushInfo
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.api.routes.github_organization_publish import (
+    _creation_path,
+    _validated_owner,
+)
 from amoscloud_ai.api.routes.github_repositories import (
     _authenticated_clone_url,
     _connection,
@@ -38,6 +42,7 @@ class RealRepositoryCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     visibility: Literal["private", "public"] = "private"
+    owner: str | None = Field(default=None, max_length=100)
     initialize_readme: bool = True
     initialize_gitignore: bool = True
     license: str = "none"
@@ -109,7 +114,10 @@ def _headers(token: str) -> dict[str, str]:
 def _token_for(user_id: int) -> tuple[str, str]:
     with _github_db() as db:
         connection = _connection(db, user_id)
-        return _decrypt_token(connection["access_token_ciphertext"]), connection["github_login"]
+        return (
+            _decrypt_token(connection["access_token_ciphertext"]),
+            connection["github_login"],
+        )
 
 
 def _remove_local_repository(repository_id: int) -> None:
@@ -122,14 +130,49 @@ def _remove_local_repository(repository_id: int) -> None:
 def _push_or_raise(remote, branch: str) -> None:
     results = remote.push(refspec=f"{branch}:{branch}", set_upstream=True)
     if not results or any(result.flags & PushInfo.ERROR for result in results):
-        summary = "; ".join(result.summary for result in results) or "No push result was returned"
-        raise HTTPException(status_code=502, detail=f"GitHub repository was created but the initial push failed: {summary}")
+        summary = "; ".join(result.summary for result in results)
+        if not summary:
+            summary = "No push result was returned"
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "GitHub repository was created but the initial push failed: "
+                f"{summary}"
+            ),
+        )
+
+
+def _creation_error(response: httpx.Response, owner: str) -> HTTPException:
+    if response.status_code in {401, 403}:
+        return HTTPException(
+            status_code=403,
+            detail=(
+                f"GitHub authorization cannot create repositories for {owner}. "
+                "Reconnect GitHub with organization access, approve Amosclaud for "
+                "the organization, and confirm your organization role permits creation."
+            ),
+        )
+    if response.status_code == 422:
+        try:
+            detail = response.json().get(
+                "message",
+                "GitHub repository creation was rejected",
+            )
+        except ValueError:
+            detail = "GitHub repository creation was rejected"
+        return HTTPException(status_code=409, detail=detail)
+    return HTTPException(status_code=502, detail="GitHub repository creation failed")
 
 
 @router.post("/create-real", status_code=201)
-def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_user)) -> dict:
-    """Create a local working copy, a real GitHub repository, and push CI-enabled initial history."""
+def create_real_repository(
+    body: RealRepositoryCreate,
+    user=Depends(_current_user),
+) -> dict:
+    """Create a local working copy, a GitHub repository, and CI-enabled history."""
+
     token, github_login = _token_for(user["id"])
+    owner = _validated_owner(body.owner or github_login)
     local = create_repository(
         RepositoryCreate(
             name=body.name,
@@ -140,7 +183,7 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
         user,
     )
     repository_id = local.id
-    full_name = f"{github_login}/{local.name}"
+    full_name = f"{owner}/{local.name}"
     remote_created = False
     try:
         initialize_repository_template(
@@ -153,7 +196,12 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
             user,
         )
         repo = _open(repository_id)
-        workflow = _repo_path(repository_id) / ".github" / "workflows" / "amosclaud-ci.yml"
+        workflow = (
+            _repo_path(repository_id)
+            / ".github"
+            / "workflows"
+            / "amosclaud-ci.yml"
+        )
         workflow.parent.mkdir(parents=True, exist_ok=True)
         workflow.write_text(CI_WORKFLOW, encoding="utf-8")
         repo.git.add(A=True)
@@ -165,7 +213,7 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
 
         with httpx.Client(timeout=30) as client:
             response = client.post(
-                "https://api.github.com/user/repos",
+                f"https://api.github.com{_creation_path(owner, github_login)}",
                 headers=_headers(token),
                 json={
                     "name": local.name,
@@ -174,13 +222,8 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
                     "auto_init": False,
                 },
             )
-        if response.status_code in {401, 403}:
-            raise HTTPException(status_code=401, detail="GitHub authorization cannot create repositories; reconnect GitHub with repository access")
-        if response.status_code == 422:
-            detail = response.json().get("message", "GitHub repository creation was rejected")
-            raise HTTPException(status_code=409, detail=detail)
         if response.status_code >= 400:
-            raise HTTPException(status_code=502, detail="GitHub repository creation failed")
+            raise _creation_error(response, owner)
         metadata = response.json()
         remote_created = True
         full_name = str(metadata.get("full_name") or full_name)
@@ -189,7 +232,10 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
             remote = repo.remote("origin")
             remote.set_url(_authenticated_clone_url(full_name, token))
         else:
-            remote = repo.create_remote("origin", _authenticated_clone_url(full_name, token))
+            remote = repo.create_remote(
+                "origin",
+                _authenticated_clone_url(full_name, token),
+            )
         _push_or_raise(remote, local.default_branch)
         remote.set_url(_public_remote_url(full_name))
 
@@ -214,6 +260,12 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
             **local.model_dump(),
             "github_full_name": full_name,
             "github_html_url": metadata.get("html_url"),
+            "github_owner": owner,
+            "github_owner_type": (
+                "user"
+                if owner.casefold() == str(github_login).casefold()
+                else "organization"
+            ),
             "commit": repo.head.commit.hexsha,
             "ci_workflow": ".github/workflows/amosclaud-ci.yml",
             "workspace_url": f"/workspace/{repository_id}",
@@ -223,7 +275,10 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
         if remote_created:
             try:
                 with httpx.Client(timeout=20) as client:
-                    client.delete(f"https://api.github.com/repos/{full_name}", headers=_headers(token))
+                    client.delete(
+                        f"https://api.github.com/repos/{full_name}",
+                        headers=_headers(token),
+                    )
             except Exception:
                 pass
         _remove_local_repository(repository_id)
@@ -231,8 +286,12 @@ def create_real_repository(body: RealRepositoryCreate, user=Depends(_current_use
 
 
 @router.get("/{repository_id}/real-status")
-def real_repository_status(repository_id: int, user=Depends(_current_user)) -> dict:
-    """Return persisted remote identity and the latest real GitHub Actions result."""
+def real_repository_status(
+    repository_id: int,
+    user=Depends(_current_user),
+) -> dict:
+    """Return persisted remote identity and the latest GitHub Actions result."""
+
     token, _ = _token_for(user["id"])
     with _github_db() as db:
         row = db.execute(
@@ -251,7 +310,10 @@ def real_repository_status(repository_id: int, user=Depends(_current_user)) -> d
             params={"per_page": 1},
         )
     if response.status_code >= 400:
-        raise HTTPException(status_code=502, detail="Unable to read GitHub Actions results")
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to read GitHub Actions results",
+        )
     runs = response.json().get("workflow_runs") or []
     run = runs[0] if runs else None
     return {
@@ -260,7 +322,9 @@ def real_repository_status(repository_id: int, user=Depends(_current_user)) -> d
         "github_full_name": full_name,
         "github_html_url": row["github_html_url"],
         "last_sync_at": row["github_last_sync_at"],
-        "ci": None if not run else {
+        "ci": None
+        if not run
+        else {
             "id": run.get("id"),
             "name": run.get("name"),
             "status": run.get("status"),

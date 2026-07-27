@@ -53,6 +53,37 @@ MIGRATIONS = (
             ON webhook_deliveries(webhook_id, event_id);
         """,
     ),
+    Migration(
+        2,
+        "native_repository_base_schema",
+        """
+        CREATE TABLE IF NOT EXISTS repositories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_id INTEGER NOT NULL,
+            name TEXT NOT NULL COLLATE NOCASE,
+            description TEXT NOT NULL DEFAULT '',
+            visibility TEXT NOT NULL DEFAULT 'private',
+            default_branch TEXT NOT NULL DEFAULT 'main',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(owner_id, name),
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_repositories_owner
+            ON repositories(owner_id, updated_at);
+        CREATE TABLE IF NOT EXISTS repository_collaborators (
+            repository_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('developer','viewer')),
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(repository_id, user_id),
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_repository_collaborators_user
+            ON repository_collaborators(user_id, repository_id);
+        """,
+    ),
 )
 
 
@@ -67,12 +98,14 @@ def run_migrations(path: str | Path) -> list[int]:
     applied: list[int] = []
     with sqlite3.connect(db_path) as db:
         db.execute("PRAGMA foreign_keys = ON")
-        db.execute("""CREATE TABLE IF NOT EXISTS schema_migrations (
+        db.execute(
+            """CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 checksum TEXT NOT NULL,
                 applied_at TEXT NOT NULL
-            )""")
+            )"""
+        )
         for migration in MIGRATIONS:
             existing = db.execute(
                 "SELECT checksum FROM schema_migrations WHERE version=?",

@@ -1,0 +1,33 @@
+version: 1
+server_managed: true
+
+profiles:
+  default:
+    model_route: first-party
+    telemetry: operational
+    execution_mode: isolated
+
+routing:
+  github_api: https://api.github.com
+  public_platform: https://www.amosclaud.com
+  model_strategy:
+    - model-station
+    - self-hosted
+    - provider-api
+
+network:
+  domain_allowlist:
+    - api.github.com
+    - github.com
+    - objects.githubusercontent.com
+    - www.amosclaud.com
+
+sandbox:
+  default_image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+  docker_enabled: true
+  privileged_by_default: false
+
+telemetry:
+  enabled: true
+  redact_secrets: true
+  record_repository_sync_events: true

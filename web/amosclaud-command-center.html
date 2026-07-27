@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Unified Amosclaud autonomous engineering command center">
+  <title>Amosclaud Command Center</title>
+  <link rel="stylesheet" href="/static/amosclaud-command-center.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Unified developer platform</p>
+      <h1>Amosclaud Command Center</h1>
+    </div>
+    <a class="back" href="/cloud/agent">Return to workspace</a>
+  </header>
+
+  <main>
+    <section class="hero panel">
+      <div>
+        <p class="eyebrow">One canonical program</p>
+        <h2>Repositories, autonomous work, cloud workspaces, and delivery in one platform.</h2>
+        <p>The former Amosclaud1 dashboard is now part of the production Amosclaud application. Live status is loaded from the authenticated platform instead of hard-coded repository cards.</p>
+      </div>
+      <a class="primary" href="/repositories">Open repositories</a>
+    </section>
+
+    <section class="metrics" aria-label="System metrics">
+      <article class="metric panel"><span>Platform</span><strong id="platform-state">Checking</strong><small>amosclaude-clean</small></article>
+      <article class="metric panel"><span>Repositories</span><strong id="repository-count">—</strong><small>Accessible to your account</small></article>
+      <article class="metric panel"><span>Workspaces</span><strong id="workspace-count">—</strong><small>Isolated developer environments</small></article>
+      <article class="metric panel"><span>GitHub sync</span><strong id="github-state">Checking</strong><small>Bidirectional delivery</small></article>
+    </section>
+
+    <section class="grid">
+      <article class="panel wide">
+        <div class="section-heading"><div><p class="eyebrow">Repositories</p><h2>Connected work</h2></div><a href="/repositories">Manage</a></div>
+        <div id="repositories" class="repo-list"><p class="muted">Loading repository records…</p></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Autonomous work</p><h2>Execution path</h2></div></div>
+        <ol class="timeline">
+          <li class="done">Authorize repository</li>
+          <li class="done">Plan isolated change</li>
+          <li class="done">Edit in workspace</li>
+          <li class="done">Run verification</li>
+          <li class="active">Publish reviewed work</li>
+        </ol>
+      </article>
+
+      <article class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Security</p><h2>Workspace boundaries</h2></div></div>
+        <div class="checks">
+          <div><span>Non-root containers</span><b>REQUIRED</b></div>
+          <div><span>CPU limit</span><b>2 CORES</b></div>
+          <div><span>Memory limit</span><b>4 GB</b></div>
+          <div><span>Private network</span><b>ENFORCED</b></div>
+          <div><span>GitHub webhook signature</span><b>VERIFIED</b></div>
+        </div>
+      </article>
+
+      <article class="panel wide">
+        <div class="section-heading"><div><p class="eyebrow">Repository convergence</p><h2>Amosclaud1 is now a legacy entry point</h2></div></div>
+        <p class="muted">The production engine, Command Center, repository hosting, Markdown service, GitHub synchronization, and workspace control plane now live in one canonical repository: <strong>amosclaude-clean</strong>.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer>Amosclaud · Autonomous software engineering and isolated cloud workspaces</footer>
+  <script src="/static/amosclaud-command-center.js"></script>
+</body>
+</html>
