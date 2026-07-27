@@ -136,9 +136,12 @@ class RuntimeExecutor:
             }
 
     def _package_scripts(self) -> dict[str, str]:
-        root = Path(__import__("os").getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
-        package = (self.workspace / "package.json").resolve()
-        if package != root and root not in package.parents:
+        allowed_root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+        workspace = self.workspace.resolve()
+        if workspace != allowed_root and allowed_root not in workspace.parents:
+            return {}
+        package = (workspace / "package.json").resolve()
+        if package != workspace and workspace not in package.parents:
             return {}
         if not package.is_file():
             return {}
