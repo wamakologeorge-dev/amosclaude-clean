@@ -13,15 +13,20 @@ RUN apt-get update \
        ca-certificates \
        cmake \
        curl \
+       dnsutils \
        fd-find \
        file \
+       gdb \
        git \
        git-lfs \
+       iproute2 \
        jq \
        less \
        lsof \
        nano \
        ncurses-term \
+       net-tools \
+       netcat-openbsd \
        nodejs \
        npm \
        openssh-client \
@@ -35,6 +40,7 @@ RUN apt-get update \
        rsync \
        shellcheck \
        sqlite3 \
+       strace \
        tmux \
        tree \
        unzip \
