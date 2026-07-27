@@ -10,12 +10,14 @@ services:
     environment:
       AMOSCLAUD_STORAGE_CONTROLLER_ENABLED: "true"
       AMOSCLAUD_STORAGE_CONTROLLER_TOKEN: ${AMOSCLAUD_STORAGE_CONTROLLER_TOKEN:?set AMOSCLAUD_STORAGE_CONTROLLER_TOKEN}
+      AMOSCLAUD_STORAGE_CONTROLLER_BIND: 127.0.0.1
+      AMOSCLAUD_STORAGE_CONTROLLER_PORT: 8090
       AMOSCLAUD_STORAGE_ALLOWED_MOUNTS: /mnt/amosclaud-volumes,/var/lib/amosclaud/repositories,/data/repositories
       AMOSCLAUD_STORAGE_FSTAB_PATH: /host/etc/fstab
     volumes:
       - /dev:/dev
       - /run/udev:/run/udev:ro
-      - /etc/fstab:/host/etc/fstab
+      - /etc:/host/etc
       - /mnt/amosclaud-volumes:/mnt/amosclaud-volumes:rshared
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/live', timeout=3)"]
