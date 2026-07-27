@@ -16,7 +16,8 @@ RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install -r requirements.txt
 
 COPY services/workspace_runtime/app.py ./app.py
+COPY services/workspace_runtime/terminal_runtime.py ./terminal_runtime.py
 
 EXPOSE 8080
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
+CMD ["uvicorn", "terminal_runtime:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]
