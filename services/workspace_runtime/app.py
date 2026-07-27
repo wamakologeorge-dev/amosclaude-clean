@@ -142,6 +142,13 @@ def _workspace_id(value: str) -> str:
     return candidate
 
 
+def _workspace_activity_filename(workspace_id: str) -> str:
+    workspace = _workspace_id(workspace_id)
+    if not re.fullmatch(r"[a-z0-9_-]+", workspace):
+        raise HTTPException(status_code=422, detail="Invalid workspace identifier")
+    return f"{workspace}.activity"
+
+
 def _repository_path(repository_id: int) -> Path:
     if isinstance(repository_id, bool) or repository_id <= 0:
         raise HTTPException(status_code=422, detail="Invalid repository identifier")
@@ -155,7 +162,8 @@ def _repository_path(repository_id: int) -> Path:
 
 def _activity_path(workspace_id: str) -> Path:
     RUNTIME_STATE_ROOT.mkdir(parents=True, exist_ok=True)
-    target = (RUNTIME_STATE_ROOT / f"{_workspace_id(workspace_id)}.activity").resolve()
+    activity_filename = _workspace_activity_filename(workspace_id)
+    target = (RUNTIME_STATE_ROOT / activity_filename).resolve()
     try:
         target.relative_to(RUNTIME_STATE_ROOT)
     except ValueError as exc:
