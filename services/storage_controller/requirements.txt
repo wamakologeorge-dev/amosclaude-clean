@@ -1,0 +1,5 @@
+fastapi>=0.139.2,<1
+uvicorn[standard]>=0.29,<1
+pydantic>=2.13.4,<3
+boto3>=1.43,<2
+google-cloud-compute>=1.39,<2
