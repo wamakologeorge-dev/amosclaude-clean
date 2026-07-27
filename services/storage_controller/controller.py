@@ -94,7 +94,15 @@ def _allowed_mount_roots() -> tuple[Path, ...]:
 
 
 def _safe_mountpoint(value: str) -> Path:
-    candidate = Path(value).expanduser().resolve()
+    cleaned = value.strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="mountpoint is required")
+    if "\x00" in cleaned:
+        raise HTTPException(status_code=422, detail="mountpoint contains invalid characters")
+    if not os.path.isabs(cleaned):
+        raise HTTPException(status_code=422, detail="mountpoint must be an absolute path")
+
+    candidate = Path(cleaned).expanduser().resolve(strict=False)
     for root in _allowed_mount_roots():
         try:
             candidate.relative_to(root)
