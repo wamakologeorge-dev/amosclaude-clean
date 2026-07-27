@@ -134,6 +134,11 @@ class GovernanceEngine:
                 blocked.append(action)
             elif action in self.ALWAYS_ALLOWED:
                 allowed.append(action)
+            elif action == "write" and authorized_writes:
+                # The upstream Bot -> Autonomous -> Fixer chain already scopes and
+                # authorizes repository file writes. Higher-impact owner controls
+                # remain separately founder-verified below.
+                allowed.append(action)
             elif action in self.OWNER_REQUIRED and authorized_writes and founder_verified:
                 allowed.append(action)
             else:
