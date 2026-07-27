@@ -133,6 +133,16 @@ def test_celery_beat_has_one_daily_autonomous_selection_pass() -> None:
 
 def test_policy_check_occurs_before_git_push_and_draft_pr_is_forced() -> None:
     source = Path("amoscloud_ai/autonomous_task_runner.py").read_text(encoding="utf-8")
-    assert source.index("enforce_task_path_policy") < source.index("repo.git.push")
+    policy_call = "enforce_task_path_policy(task, changed_files)"
+    assert source.index(policy_call) < source.index("repo.git.push")
     assert '"draft": True' in source
     assert "auto_merge" in source
+
+
+def test_repair_loop_is_bounded_and_policy_failures_are_not_retried() -> None:
+    source = Path("amoscloud_ai/autonomous_task_runner.py").read_text(encoding="utf-8")
+    assert "max(1, min(int(policy.get(\"max_repair_attempts\") or 1), 3))" in source
+    assert "for attempt in range(1, max_attempts + 1):" in source
+    policy_handler = source.index("except AutonomousPolicyError:")
+    generic_handler = source.index("except (EngineeringAgentError, RuntimeError) as exc:")
+    assert policy_handler < generic_handler
