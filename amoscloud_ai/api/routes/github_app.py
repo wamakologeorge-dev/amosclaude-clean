@@ -77,10 +77,12 @@ def _webhook_secret() -> str:
 
 
 def _production() -> bool:
-    return os.getenv("AMOSCLAUD_ENV", "development").lower() in {
-        "production",
-        "prod",
-    }
+    environment = (
+        os.getenv("AMOSCLAUD_ENV")
+        or os.getenv("ENVIRONMENT")
+        or "development"
+    )
+    return environment.strip().lower() in {"production", "prod"}
 
 
 def _verify_signature(payload: bytes, signature_header: str | None) -> None:
@@ -266,7 +268,7 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
     if event == "check_suite":
         suite = payload.get("check_suite") or {}
         title = (
-            "Check suite "
+            f"Check suite "
             f"{str(suite.get('conclusion') or suite.get('status') or action)}"
         )
         return action, title, title
@@ -432,8 +434,7 @@ async def app_status(request: Request) -> dict:
         )
     with _connect() as db:
         row = db.execute(
-            "SELECT COUNT(*) AS events, MAX(received_at) AS last_event_at "
-            "FROM github_events"
+            "SELECT COUNT(*) AS events, MAX(received_at) AS last_event_at FROM github_events"
         ).fetchone()
     enabled, policy = _github_to_platform_policy()
     return {
