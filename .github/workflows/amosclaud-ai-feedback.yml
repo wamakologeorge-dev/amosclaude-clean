@@ -57,7 +57,11 @@ jobs:
           AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GITHUB_FALLBACK_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           DIFF_PATH: pr_diff.txt
-        run: python .github/scripts/ai_reviewer.py
+        run: |
+          set -o pipefail
+          python .github/scripts/ai_reviewer.py | tee /tmp/amosclaud-review.md
+          cat /tmp/amosclaud-review.md >> "$GITHUB_STEP_SUMMARY"
