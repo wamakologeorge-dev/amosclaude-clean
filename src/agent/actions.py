@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -229,16 +230,32 @@ class AutonomousOrchestrator:
 
 
 def _resolve_workspace(workspace: str) -> Path:
+    """Resolve an application or persistent repository workspace safely.
+
+    Railway stores native repositories under ``/data/repositories`` while the
+    application source lives under ``/app``. The old resolver only allowed paths
+    below the process cwd, which rejected every real persistent repository with
+    "Workspace must stay inside server root". Both server-managed roots are now
+    accepted; arbitrary absolute paths remain blocked.
+    """
+
     base = Path.cwd().resolve()
-    candidate = (base / workspace).resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Workspace must stay inside server root",
-        ) from exc
-    return candidate
+    supplied = Path(workspace).expanduser()
+    candidate = supplied.resolve() if supplied.is_absolute() else (base / supplied).resolve()
+    repository_root = Path(
+        os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
+    ).resolve()
+    allowed_roots = (base, repository_root)
+    for root in allowed_roots:
+        try:
+            candidate.relative_to(root)
+            return candidate
+        except ValueError:
+            continue
+    raise HTTPException(
+        status_code=400,
+        detail="Workspace must stay inside the application or repository storage root",
+    )
 
 
 def run_autonomous(
@@ -264,16 +281,14 @@ def run_autonomous(
         security_target_sha=security_target_sha,
         security_parent_command_id=security_parent_command_id,
     )
-    orchestrator = AutonomousOrchestrator(safe_workspace)
-    if mode in _WRITE_MODES:
-        return orchestrator.run(task).to_dict()
-    native_result = run_native_coding_if_requested(
+    native = run_native_coding_if_requested(
         objective=objective,
         mode=mode,
-        authorized_writes=False,
-        workspace=str(safe_workspace),
+        workspace=safe_workspace,
+        authorized_writes=authorized_writes,
         metadata=prepared,
     )
-    if native_result is not None:
-        return native_result
-    return orchestrator.run(task).to_dict()
+    if native is not None:
+        return native
+    outcome = AutonomousOrchestrator(safe_workspace).run(task)
+    return outcome.to_dict()
