@@ -5,8 +5,9 @@ from __future__ import annotations
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
 
-from amoscloud_ai import workspace_runtime
+from amoscloud_ai import workspace_runtime, workspace_terminal
 from amoscloud_ai.api.routes.repositories import (
     _access,
     _current_user,
@@ -16,6 +17,11 @@ from amoscloud_ai.api.routes.repositories import (
 )
 
 router = APIRouter(prefix="/cloud-workspaces", tags=["cloud-workspaces"])
+
+
+class TerminalTicketV2Request(BaseModel):
+    terminal_id: str = Field(pattern=r"^term_[a-z0-9]{8,32}$")
+    profile: str = Field(default="bash", pattern=r"^(bash|sh|python)$")
 
 
 def _repository(repository_id: int, user_id: int) -> sqlite3.Row:
@@ -29,6 +35,22 @@ def _workspace(repository_id: int, user: sqlite3.Row) -> dict:
     return workspace_runtime.workspace_for_repository(
         int(repository["id"]), int(repository["owner_id"])
     )
+
+
+def _running_workspace(repository_id: int, user: sqlite3.Row) -> dict:
+    workspace = _workspace(repository_id, user)
+    if not workspace_runtime.configured():
+        raise HTTPException(status_code=503, detail="Workspace runtime is not configured")
+    try:
+        container = workspace_runtime.remote_status(workspace)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace runtime is currently unavailable.",
+        ) from exc
+    if not container.get("running"):
+        raise HTTPException(status_code=409, detail="Start the workspace first")
+    return workspace
 
 
 @router.get("/runtime")
@@ -79,7 +101,10 @@ def start_repository_workspace(
             },
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace runtime is currently unavailable.",
+        ) from exc
     return {"workspace": workspace, "container": container}
 
 
@@ -92,7 +117,10 @@ def stop_repository_workspace(
     try:
         container = workspace_runtime.stop_workspace(workspace)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace runtime is currently unavailable.",
+        ) from exc
     return {"workspace": workspace, "container": container}
 
 
@@ -101,16 +129,37 @@ def create_terminal_ticket(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict:
-    workspace = _workspace(repository_id, user)
-    if not workspace_runtime.configured():
-        raise HTTPException(status_code=503, detail="Workspace runtime is not configured")
+    workspace = _running_workspace(repository_id, user)
     try:
-        container = workspace_runtime.remote_status(workspace)
-        if not container.get("running"):
-            raise HTTPException(status_code=409, detail="Start the workspace first")
         return workspace_runtime.terminal_ticket(workspace, int(user["id"]))
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace runtime is currently unavailable.",
+        ) from exc
+
+
+@router.post("/repositories/{repository_id}/terminal-ticket-v2")
+def create_terminal_ticket_v2(
+    repository_id: int,
+    body: TerminalTicketV2Request,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
+    """Create a session-bound ticket for the complete browser terminal."""
+
+    workspace = _running_workspace(repository_id, user)
+    try:
+        return workspace_terminal.terminal_ticket(
+            workspace,
+            int(user["id"]),
+            terminal_id=body.terminal_id,
+            profile=body.profile,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Workspace terminal is currently unavailable.",
+        ) from exc
 
 
 @router.delete("/repositories/{repository_id}", status_code=204)
@@ -128,7 +177,10 @@ def delete_repository_workspace(
         try:
             workspace_runtime.delete_workspace(workspace)
         except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail="Workspace runtime is currently unavailable.") from exc
+            raise HTTPException(
+                status_code=503,
+                detail="Workspace runtime is currently unavailable.",
+            ) from exc
     with _db() as db:
         db.execute("DELETE FROM cloud_workspaces WHERE id=?", (workspace["id"],))
         db.commit()
