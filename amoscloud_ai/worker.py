@@ -225,12 +225,38 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
 def run_global_task(self, task_id: str) -> dict[str, str]:
     """Execute one approved Global Task Router job."""
     try:
-        from amoscloud_ai.cloud_task_runner import execute_cloud_task
+        from amoscloud_ai.autonomous_task_runner import (
+            _is_autonomous_task,
+            execute_autonomous_task,
+        )
 
-        execute_cloud_task(task_id)
+        if _is_autonomous_task(task_id):
+            execute_autonomous_task(task_id)
+        else:
+            from amoscloud_ai.cloud_task_runner import execute_cloud_task
+
+            execute_cloud_task(task_id)
         return {"task_id": task_id, "dispatched": "true"}
     except Exception as exc:
         log.exception("Global task %s failed in worker", task_id)
+        raise self.retry(exc=exc, countdown=10)
+
+
+@celery_app.task(
+    name="amoscloud_ai.run_autonomous_feature",
+    bind=True,
+    max_retries=2,
+)
+def run_autonomous_feature_task(self, task_id: str) -> dict[str, str]:
+    """Execute one Daily Autonomous Builder task through its dedicated policy runner."""
+
+    try:
+        from amoscloud_ai.autonomous_task_runner import execute_autonomous_task
+
+        execute_autonomous_task(task_id)
+        return {"task_id": task_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Autonomous feature task %s failed in worker", task_id)
         raise self.retry(exc=exc, countdown=10)
 
 
