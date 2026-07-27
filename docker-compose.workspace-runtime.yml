@@ -25,7 +25,7 @@ services:
       - ./config/organization-settings.json:/etc/amosclaud/organization-settings.json:ro
       - workspace-runtime-state:/var/lib/amosclaud/runtime-state
     ports:
-      - "${AMOSCLAUD_WORKSPACE_RUNTIME_BIND:-127.0.0.1}:${AMOSCLAUD_WORKSPACE_RUNTIME_PORT:-8080}:8080"
+      - "127.0.0.1:${AMOSCLAUD_WORKSPACE_RUNTIME_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/live', timeout=3)"]
       interval: 15s
