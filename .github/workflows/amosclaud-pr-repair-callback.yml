@@ -8,6 +8,14 @@ on:
       - "Python package"
       - "Build and Verify"
       - "Amosclaud Workspace CI"
+      - "Docker Image CI"
+      - "CodeQL"
+      - "Fortify AST Scan"
+      - "Real Operations Audit"
+      - "Amosclaud AI Feedback Loop"
+      - "Amosclaud CI/CD Pipeline"
+      - "Amosclaud Bot"
+      - "🏗️ Platform Build Check"
       - "🚀 Amosclaud AI — Live Server Check"
       - "🚀 Amosclaud AI - CI Pipeline"
     types: [completed]
@@ -42,6 +50,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install focused test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Verify callback policy before privileged use
+        run: python -m pytest -q tests/test_ci_repair_callback.py
+
       - name: Require the Amosclaud GitHub credential
         env:
           AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
@@ -52,10 +66,10 @@ jobs:
             exit 1
           }
 
-      - name: Prepare bounded repair callback
+      - name: Prepare bounded repair callback from trusted metadata
         id: prepare
         env:
-          GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -68,17 +82,25 @@ jobs:
             exit 0
           fi
 
+          gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}" > /tmp/amosclaud-pull-request.json
           gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" > /tmp/amosclaud-pr-comments.json
           if ! gh run view "$RUN_ID" --repo "$REPOSITORY" --log-failed > /tmp/amosclaud-failed.log 2>&1; then
-            printf 'Failed workflow logs were unavailable. Inspect run %s in the Actions tab.\n' "$RUN_ID" > /tmp/amosclaud-failed.log
+            {
+              printf 'Failed workflow logs were unavailable for run %s.\n' "$RUN_ID"
+              gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs" \
+                --jq '.jobs[] | select(.conclusion == "failure") | "JOB: \(.name)\n" + ([.steps[] | select(.conclusion == "failure") | "  STEP: \(.name)"] | join("\n"))' \
+                || true
+            } > /tmp/amosclaud-failed.log
           fi
 
           python -m amosclaud_bot.ci_repair_callback \
             --event "$GITHUB_EVENT_PATH" \
+            --pull-request /tmp/amosclaud-pull-request.json \
             --comments /tmp/amosclaud-pr-comments.json \
             --logs /tmp/amosclaud-failed.log \
             --comment-output /tmp/amosclaud-callback.md \
-            --decision-output /tmp/amosclaud-decision.json
+            --decision-output /tmp/amosclaud-decision.json \
+            --max-attempts 5
 
           STATUS=$(python -c 'import json; print(json.load(open("/tmp/amosclaud-decision.json"))["status"])')
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
