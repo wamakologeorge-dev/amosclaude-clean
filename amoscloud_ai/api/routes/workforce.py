@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Query
@@ -128,7 +129,10 @@ def _repository_for_user(db: sqlite3.Connection, user_id: int, value: str | None
         (user_id, repository, repository),
     ).fetchone()
     if not row:
-        raise HTTPException(status_code=404, detail="Repository is not available in this Amosclaud account")
+        raise HTTPException(
+            status_code=404,
+            detail="Repository is not available in this Amosclaud account",
+        )
     return row
 
 
@@ -139,6 +143,63 @@ def _clean_criteria(values: list[str]) -> list[str]:
     return criteria
 
 
+def _safe_data(value: Any, *, depth: int = 0) -> Any:
+    """Recursively redact likely credentials before telemetry details are stored."""
+
+    if depth > 8:
+        return "[truncated]"
+    if isinstance(value, str):
+        return redact(value, 8_000)
+    if isinstance(value, dict):
+        return {
+            str(key)[:200]: _safe_data(item, depth=depth + 1)
+            for key, item in list(value.items())[:200]
+        }
+    if isinstance(value, (list, tuple)):
+        return [_safe_data(item, depth=depth + 1) for item in list(value)[:200]]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return redact(str(value), 2_000)
+
+
+def _observed_at(value: str | None) -> str:
+    if not value:
+        return _now()
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="Asset telemetry observed_at must be an ISO-8601 timestamp",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _mark_delegation_blocked_if_created(delegation_id: str) -> None:
+    """Record a queueing blocker only after the delegation row exists."""
+
+    with task_router._connect() as db:
+        ensure_workforce_schema(db, commit=False)
+        row = db.execute(
+            "SELECT id FROM workforce_delegations WHERE id=?",
+            (delegation_id,),
+        ).fetchone()
+        if row:
+            db.execute(
+                "UPDATE workforce_delegations SET status='blocked',updated_at=? WHERE id=?",
+                (_now(), delegation_id),
+            )
+            add_delegation_event(
+                db,
+                delegation_id,
+                "delegation.blocked",
+                "The delegation could not enter the execution queue.",
+            )
+        db.commit()
+
+
 @router.get("/overview")
 def get_workforce_overview(
     amos_session: str | None = Cookie(default=None),
@@ -147,6 +208,27 @@ def get_workforce_overview(
     user_id = _actor(amos_session, authorization)
     with task_router._connect() as db:
         return workforce_overview(db, user_id)
+
+
+@router.get("/repositories")
+def list_workforce_repositories(
+    amos_session: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> list[dict]:
+    """Return only imported GitHub repositories eligible for workforce delivery."""
+
+    user_id = _actor(amos_session, authorization)
+    with task_router._connect() as db:
+        ensure_workforce_schema(db)
+        rows = db.execute(
+            """SELECT id,name,github_full_name,github_html_url,github_default_branch,
+                      visibility,updated_at
+               FROM repositories
+               WHERE owner_id=? AND github_full_name IS NOT NULL
+               ORDER BY updated_at DESC""",
+            (user_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 @router.get("/execution-fabric")
@@ -282,6 +364,12 @@ def create_delegation(
             guardrails=guardrails,
         )
         require_approval = writes_repository and not body.authorize_changes
+
+        # Development uses the same guarded adapter rather than falling through to
+        # the generic task runner. Production also verifies the tag in the worker.
+        from amoscloud_ai.workforce_task_runner import install_workforce_dispatch_hook
+
+        install_workforce_dispatch_hook()
         task = task_router.create_task(
             task_router.TaskCreate(
                 objective=objective,
@@ -305,21 +393,10 @@ def create_delegation(
             authorization=authorization,
         )
     except WorkforcePolicyError as exc:
+        _mark_delegation_blocked_if_created(delegation_id)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except HTTPException:
-        with task_router._connect() as db:
-            ensure_workforce_schema(db, commit=False)
-            db.execute(
-                "UPDATE workforce_delegations SET status='blocked',updated_at=? WHERE id=?",
-                (_now(), delegation_id),
-            )
-            add_delegation_event(
-                db,
-                delegation_id,
-                "delegation.blocked",
-                "The delegation could not enter the execution queue.",
-            )
-            db.commit()
+        _mark_delegation_blocked_if_created(delegation_id)
         raise
 
     with task_router._connect() as db:
@@ -449,7 +526,12 @@ def cancel_delegation(
             "UPDATE workforce_delegations SET status='cancelled',updated_at=? WHERE id=?",
             (_now(), delegation_id),
         )
-        add_delegation_event(db, delegation_id, "delegation.cancelled", "Delegation cancelled before execution.")
+        add_delegation_event(
+            db,
+            delegation_id,
+            "delegation.cancelled",
+            "Delegation cancelled before execution.",
+        )
         db.commit()
         return delegation_dict(db, _owned_delegation(db, delegation_id, user_id))
 
@@ -492,7 +574,7 @@ def create_asset(
                 target_url,
                 token_hash,
                 token_prefix,
-                body.license_reference,
+                redact(body.license_reference or "", 500) or None,
                 redact(body.transfer_notes or "", 5_000) or None,
                 now,
                 now,
@@ -502,7 +584,9 @@ def create_asset(
         row = _owned_asset(db, asset_id, user_id)
         result = asset_dict(db, row)
     result["telemetry_token"] = telemetry_token
-    result["warning"] = "Copy this asset telemetry credential now. Amosclaud stores only its hash."
+    result["warning"] = (
+        "Copy this asset telemetry credential now. Amosclaud stores only its hash."
+    )
     return result
 
 
@@ -558,10 +642,12 @@ def submit_asset_telemetry(
     try:
         with task_router._connect() as db:
             ensure_workforce_schema(db, commit=False)
-            asset = authenticate_asset(db, asset_id, authorization)
-            observed_at = body.observed_at or _now()
+            authenticate_asset(db, asset_id, authorization)
+            observed_at = _observed_at(body.observed_at)
             revenue_cents = (
-                int(round(body.revenue_usd * 100)) if body.revenue_usd is not None else None
+                int(round(body.revenue_usd * 100))
+                if body.revenue_usd is not None
+                else None
             )
             db.execute(
                 """INSERT INTO software_asset_telemetry(
@@ -583,7 +669,7 @@ def submit_asset_telemetry(
                     revenue_cents,
                     body.patch_success_count,
                     body.patch_failure_count,
-                    _json(body.metadata),
+                    _json(_safe_data(body.metadata)),
                 ),
             )
             db.execute(
@@ -591,6 +677,10 @@ def submit_asset_telemetry(
                 (_now(), asset_id),
             )
             db.commit()
+            asset = db.execute(
+                "SELECT * FROM software_assets WHERE id=?",
+                (asset_id,),
+            ).fetchone()
             return {
                 "accepted": True,
                 "asset_id": asset_id,
@@ -619,11 +709,14 @@ def submit_asset_event(
                     body.severity,
                     body.event_type.strip(),
                     redact(body.message),
-                    _json(body.details),
+                    _json(_safe_data(body.details)),
                     _now(),
                 ),
             )
-            db.execute("UPDATE software_assets SET updated_at=? WHERE id=?", (_now(), asset_id))
+            db.execute(
+                "UPDATE software_assets SET updated_at=? WHERE id=?",
+                (_now(), asset_id),
+            )
             db.commit()
         return {"accepted": True, "asset_id": asset_id}
     except WorkforcePolicyError as exc:
@@ -650,7 +743,9 @@ def rotate_asset_token(
     return {
         "asset_id": asset_id,
         "telemetry_token": token,
-        "warning": "The previous telemetry credential is now invalid. Copy this credential now.",
+        "warning": (
+            "The previous telemetry credential is now invalid. Copy this credential now."
+        ),
     }
 
 
@@ -685,5 +780,7 @@ def asset_transfer_manifest(
         },
         "health_snapshot": item["health"],
         "secrets_included": False,
-        "transfer_rule": "Credentials and environment secrets must be re-authorized by the recipient.",
+        "transfer_rule": (
+            "Credentials and environment secrets must be re-authorized by the recipient."
+        ),
     }
