@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command_name="${1:-help}"
+shift || true
+
+usage() {
+  cat <<'EOF'
+Amosclaud terminal tools
+
+  amos status               Show branch and changed files
+  amos files [depth]        List repository files
+  amos edit <path>          Open or create a file in nano
+  amos vim <path>           Open or create a file in vim
+  amos changed              Review changed files and diff
+  amos test                 Detect and run the project tests
+  amos build                Detect and run the project build
+  amos lint                 Detect and run the project linter
+  amos run                  Detect and run the development app
+  amos commit [message]     Commit current repository changes
+  amos help                 Show this help
+
+GitHub pull and push are available from the browser Project tools. Credentials
+remain in the Amosclaud control plane and are never placed inside this container.
+EOF
+}
+
+inside_workspace() {
+  case "$(pwd -P)" in
+    /workspace|/workspace/*) ;;
+    *) echo "Run Amosclaud tools inside /workspace." >&2; exit 2 ;;
+  esac
+}
+
+project_script() {
+  local action="$1"
+  if [[ -f package.json ]] && command -v npm >/dev/null 2>&1 \
+      && node -e "const p=require('./package.json'); process.exit(p.scripts&&p.scripts['$action']?0:1)" 2>/dev/null; then
+    printf 'npm run %s\n' "$action"
+    return 0
+  fi
+  if [[ -f Makefile || -f makefile ]]; then
+    if make -qp 2>/dev/null | grep -Eq "^${action}:([^=]|$)"; then
+      printf 'make %s\n' "$action"
+      return 0
+    fi
+  fi
+  case "$action" in
+    test)
+      if [[ -d tests || -f pytest.ini ]] && command -v python3 >/dev/null 2>&1; then printf 'python3 -m pytest -q\n'; return 0; fi
+      if [[ -f Cargo.toml ]] && command -v cargo >/dev/null 2>&1; then printf 'cargo test\n'; return 0; fi
+      if [[ -f go.mod ]] && command -v go >/dev/null 2>&1; then printf 'go test ./...\n'; return 0; fi
+      ;;
+    build)
+      if [[ -f Cargo.toml ]] && command -v cargo >/dev/null 2>&1; then printf 'cargo build\n'; return 0; fi
+      if [[ -f go.mod ]] && command -v go >/dev/null 2>&1; then printf 'go build ./...\n'; return 0; fi
+      ;;
+    lint)
+      if [[ -f pyproject.toml ]] && grep -q '\[tool.ruff' pyproject.toml && python3 -c 'import ruff' >/dev/null 2>&1; then printf 'python3 -m ruff check .\n'; return 0; fi
+      ;;
+    run)
+      if [[ -f package.json ]] && command -v npm >/dev/null 2>&1 \
+          && node -e "const p=require('./package.json'); process.exit(p.scripts&&p.scripts.dev?0:1)" 2>/dev/null; then printf 'npm run dev\n'; return 0; fi
+      if [[ -f manage.py ]]; then printf 'python3 manage.py runserver 0.0.0.0:8000\n'; return 0; fi
+      ;;
+  esac
+  return 1
+}
+
+inside_workspace
+
+case "$command_name" in
+  help|-h|--help)
+    usage
+    ;;
+  status)
+    git status --short --branch
+    ;;
+  files)
+    depth="${1:-4}"
+    [[ "$depth" =~ ^[1-9][0-9]?$ ]] || { echo "Depth must be 1-99." >&2; exit 2; }
+    find . -path './.git' -prune -o -type f -maxdepth "$depth" -print \
+      | sed 's#^./##' | sort | head -500
+    ;;
+  edit|vim)
+    path="${1:-}"
+    [[ -n "$path" ]] || { echo "Usage: amos $command_name <path>" >&2; exit 2; }
+    [[ "$path" != /* && "$path" != *"../"* && "$path" != ".." ]] \
+      || { echo "The file must stay inside /workspace." >&2; exit 2; }
+    mkdir -p -- "$(dirname -- "$path")"
+    if [[ "$command_name" == "vim" ]]; then exec vim -- "$path"; else exec nano -- "$path"; fi
+    ;;
+  changed)
+    git status --short --branch
+    printf '\n'
+    git diff --stat
+    git diff
+    ;;
+  test|build|lint|run)
+    if detected="$(project_script "$command_name")"; then
+      echo "+ $detected"
+      exec bash -lc "$detected"
+    fi
+    echo "No standard $command_name command was detected. Use the browser Project tools or run the project command directly." >&2
+    exit 3
+    ;;
+  commit)
+    message="${*:-Update from Amosclaud terminal}"
+    git add -A
+    if git diff --cached --quiet; then
+      echo "No changes to commit."
+      exit 0
+    fi
+    git commit -m "$message"
+    ;;
+  *)
+    echo "Unknown Amosclaud tool: $command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
