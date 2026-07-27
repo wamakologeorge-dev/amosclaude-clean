@@ -81,3 +81,21 @@ def test_guard_rejects_protected_paths(tmp_path: Path) -> None:
     with pytest.raises(AgentGuardError, match="protected"):
         guard.run(["python", "-m", "pytest"], label="test", timeout=60)
     assert (tmp_path / ".env").read_text(encoding="utf-8") == "SECRET=old\n"
+
+
+def test_guard_rejects_symlink_targets(tmp_path: Path) -> None:
+    target = tmp_path / "real.py"
+    target.write_text("broken = True\n", encoding="utf-8")
+    link = tmp_path / "app.py"
+    try:
+        link.symlink_to(target)
+    except OSError:
+        pytest.skip("symlink creation is unavailable on this platform")
+
+    def runner(command, cwd, env, timeout):
+        return CommandResult(1, "", 'File "app.py", line 1\nAssertionError')
+
+    guard = AgentBuildGuard(tmp_path, FixModel(), runner=runner)
+    with pytest.raises(AgentGuardError, match="symlink"):
+        guard.run(["python", "-m", "pytest"], label="test", timeout=60)
+    assert target.read_text(encoding="utf-8") == "broken = True\n"
