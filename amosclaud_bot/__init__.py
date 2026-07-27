@@ -3,8 +3,7 @@
 import os
 from typing import Any, Mapping
 
-from src.amosclaud_os.kernel import get_autonomous_kernel
-
+from . import bot as bot_module
 from .autonomous_brain import GitHubAutonomousBrain
 from .bot import AmosclaudBot, BotResponse, parse_command
 
@@ -21,7 +20,7 @@ def _legacy_kernel_call(
 ) -> dict[str, Any]:
     """Support simple test/extension kernels that predate signed-grant kwargs."""
 
-    kernel = get_autonomous_kernel(self.workspace)
+    kernel = bot_module.get_autonomous_kernel(self.workspace)
     if command == "fix":
         if not allow_writes:
             return {
