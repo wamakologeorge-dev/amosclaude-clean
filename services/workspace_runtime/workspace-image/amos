@@ -3,6 +3,7 @@ set -euo pipefail
 
 command_name="${1:-help}"
 shift || true
+workspace_root="${AMOSCLAUD_WORKSPACE_ROOT:-/workspace}"
 
 usage() {
   cat <<'EOF'
@@ -26,15 +27,18 @@ Amosclaud terminal tools
   amos help                 Show this help
 
 GitHub pull, push, and Sync & Push are available from the browser Project tools.
-Credentials remain in the Amosclaud control plane and are never placed inside
-this container.
+Credentials remain in the Amosclaud control plane and are never placed in the
+terminal process.
 EOF
 }
 
 inside_workspace() {
-  case "$(pwd -P)" in
-    /workspace|/workspace/*) ;;
-    *) echo "Run Amosclaud tools inside /workspace." >&2; exit 2 ;;
+  local root current
+  root="$(readlink -f -- "$workspace_root")"
+  current="$(pwd -P)"
+  case "$current" in
+    "$root"|"$root"/*) ;;
+    *) echo "Run Amosclaud tools inside $root." >&2; exit 2 ;;
   esac
 }
 
@@ -135,7 +139,7 @@ case "$command_name" in
     path="${1:-}"
     [[ -n "$path" ]] || { echo "Usage: amos $command_name <path>" >&2; exit 2; }
     [[ "$path" != /* && "$path" != *"../"* && "$path" != ".." ]] \
-      || { echo "The file must stay inside /workspace." >&2; exit 2; }
+      || { echo "The file must stay inside $workspace_root." >&2; exit 2; }
     mkdir -p -- "$(dirname -- "$path")"
     if [[ "$command_name" == "vim" ]]; then exec vim -- "$path"; else exec nano -- "$path"; fi
     ;;
@@ -147,7 +151,7 @@ case "$command_name" in
     ;;
   test|build|lint|run)
     if detected="$(project_script "$command_name")"; then
-      echo "+ $detected"
+      echo "[Amosclaud] Starting $command_name: $detected"
       exec bash -lc "$detected"
     fi
     echo "No standard $command_name command was detected. Use the browser Project tools or run the project command directly." >&2
@@ -155,7 +159,8 @@ case "$command_name" in
     ;;
   debug)
     if detected="$(debug_script)"; then
-      echo "+ $detected"
+      echo "[Amosclaud Debug] Starting: $detected"
+      echo "[Amosclaud Debug] Live debugger input and output will remain in this terminal."
       exec bash -lc "$detected"
     fi
     echo "No standard debug entry point was detected. Run the debugger directly, for example: python3 -m pdb <file.py>, node --inspect-brk <file.js>, or gdb <binary>." >&2
@@ -189,9 +194,10 @@ case "$command_name" in
   connectors)
     printf '=== Amosclaud connectors ===\n'
     git remote -v 2>/dev/null || true
-    printf '\nGitHub credentials: control-plane only (not present in this container)\n'
+    printf '\nGitHub credentials: control-plane only (not present in this terminal)\n'
     printf 'Agent connector: Amosclaud terminal agent hub\n'
-    printf 'Repository connector: persistent /workspace mount\n'
+    printf 'Repository connector: persistent repository storage\n'
+    printf 'Terminal provider: %s\n' "${AMOSCLAUD_TERMINAL_PROVIDER:-isolated}"
     ;;
   network)
     printf '=== Amosclaud network diagnostics ===\n'
@@ -203,7 +209,7 @@ case "$command_name" in
     getent hosts github.com 2>/dev/null || true
     printf '\nOutbound HTTPS:\n'
     curl -I --max-time 5 https://github.com 2>/dev/null | head -8 || true
-    printf '\nNetwork access follows the server-managed sandbox policy.\n'
+    printf '\nNetwork access follows the server-managed workspace policy.\n'
     ;;
   commit)
     message="${*:-Update from Amosclaud terminal}"
