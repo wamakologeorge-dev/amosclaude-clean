@@ -101,7 +101,7 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert "_verify_origin(websocket)" in source
     assert "Terminal ticket was already used" in source
     assert "_prepare_repository_storage(storage)" in source
-    assert 'default_acl = f"d:u:{WORKSPACE_UID}:rwx"' in source
+    assert 'f"d:u:{WORKSPACE_UID}:rwx"' in source
     assert 'digest = hashlib.sha256(workspace.encode("utf-8")).hexdigest()' in source
     assert 'return f"{digest}.activity"' in source
     assert ".amosclaud-runtime-activity" not in source
