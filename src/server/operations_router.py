@@ -34,10 +34,14 @@ def _safe_workspace(workspace: str) -> str:
     if normalized == Path("") or str(normalized) == "":
         normalized = Path(".")
 
-    if any(part == ".." for part in normalized.parts):
-        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+    base_workspace = Path.cwd().resolve()
+    candidate_workspace = (base_workspace / normalized).resolve(strict=False)
+    try:
+        safe_relative = candidate_workspace.relative_to(base_workspace)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root") from exc
 
-    return normalized.as_posix()
+    return safe_relative.as_posix() or "."
 
 
 @router.post("/jobs")
