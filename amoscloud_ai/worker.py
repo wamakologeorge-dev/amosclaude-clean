@@ -8,10 +8,12 @@ process-local dictionary for a user-visible task.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import worker_ready
 
 from amoscloud_ai.config import settings
@@ -33,6 +35,23 @@ celery_app.conf.update(
     task_track_started=True,
     imports=("amoscloud_ai.dashboard_worker",),
 )
+
+
+def _autonomy_hour_utc() -> int:
+    try:
+        value = int(os.getenv("AMOSCLAUD_AUTONOMY_HOUR_UTC", "3"))
+    except ValueError:
+        value = 3
+    return max(0, min(value, 23))
+
+
+celery_app.conf.beat_schedule = {
+    **dict(getattr(celery_app.conf, "beat_schedule", {}) or {}),
+    "amosclaud-daily-autonomous-builder": {
+        "task": "amoscloud_ai.run_daily_autonomous_builder",
+        "schedule": crontab(hour=_autonomy_hour_utc(), minute=0),
+    },
+}
 
 
 @worker_ready.connect
@@ -206,13 +225,58 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
 def run_global_task(self, task_id: str) -> dict[str, str]:
     """Execute one approved Global Task Router job."""
     try:
-        from amoscloud_ai.cloud_task_runner import execute_cloud_task
+        from amoscloud_ai.autonomous_task_runner import (
+            _is_autonomous_task,
+            execute_autonomous_task,
+        )
 
-        execute_cloud_task(task_id)
+        if _is_autonomous_task(task_id):
+            execute_autonomous_task(task_id)
+        else:
+            from amoscloud_ai.cloud_task_runner import execute_cloud_task
+
+            execute_cloud_task(task_id)
         return {"task_id": task_id, "dispatched": "true"}
     except Exception as exc:
         log.exception("Global task %s failed in worker", task_id)
         raise self.retry(exc=exc, countdown=10)
+
+
+@celery_app.task(
+    name="amoscloud_ai.run_autonomous_feature",
+    bind=True,
+    max_retries=2,
+)
+def run_autonomous_feature_task(self, task_id: str) -> dict[str, str]:
+    """Execute one Daily Autonomous Builder task through its dedicated policy runner."""
+
+    try:
+        from amoscloud_ai.autonomous_task_runner import execute_autonomous_task
+
+        execute_autonomous_task(task_id)
+        return {"task_id": task_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Autonomous feature task %s failed in worker", task_id)
+        raise self.retry(exc=exc, countdown=10)
+
+
+@celery_app.task(
+    name="amoscloud_ai.run_daily_autonomous_builder",
+    bind=True,
+    max_retries=1,
+)
+def run_daily_autonomous_builder_task(self) -> dict[str, Any]:
+    """Select and queue each enabled account's daily bounded feature task."""
+
+    try:
+        from amoscloud_ai.autonomous_builder import run_enabled_users
+
+        result = run_enabled_users()
+        log.info("Daily Autonomous Builder result: %s", result)
+        return result
+    except Exception as exc:
+        log.exception("Daily Autonomous Builder stopped safely")
+        raise self.retry(exc=exc, countdown=60)
 
 
 def main() -> None:
