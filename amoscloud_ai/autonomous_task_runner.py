@@ -131,6 +131,11 @@ def execute_autonomous_task(task_id: str) -> None:
             evidence=["No autonomous policy metadata was available."],
         )
         return
+    if policy.get("auto_merge") is not False:
+        summary = "Autonomous policy blocked publication: auto_merge must be false."
+        _finish(task_id, "failed", summary, evidence=[summary])
+        record_task_completion(task_id, "failed", summary)
+        return
 
     record_task_started(task_id)
     tempdir: Path | None = None
