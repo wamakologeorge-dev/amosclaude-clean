@@ -2,7 +2,7 @@
 
 # Reproducible development and release tooling
 build>=1.2,<2
-bandit>=1.7,<2
+bandit>=1.9.4,<2
 black>=24.4,<27
 flake8>=6,<8
 isort>=8.0.1,<9
