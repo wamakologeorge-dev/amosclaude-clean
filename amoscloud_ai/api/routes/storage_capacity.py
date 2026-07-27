@@ -12,6 +12,8 @@ from typing import Any
 from amoscloud_ai import feature_flags, storage_provisioning
 from amoscloud_ai.api.routes import storage_capacity_impl as _impl
 
+_HIGH_CAPACITY_THRESHOLD_GIB = _impl._HIGH_CAPACITY_THRESHOLD_GIB
+
 
 def _high_capacity_decision(administrator: Any) -> dict[str, Any]:
     """Evaluate the administrator-scoped ``storage.high_capacity`` flag."""
