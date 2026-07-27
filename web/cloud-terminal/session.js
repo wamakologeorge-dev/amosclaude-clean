@@ -41,11 +41,16 @@ export class CloudTerminalSession {
     this.resizeObserver = null;
     this.disposables = [];
     this.connectAttempt = 0;
+    this.connectPromise = null;
   }
 
   setState(state, detail = '') {
     this.state = state;
     this.onState?.(this, state, detail);
+  }
+
+  isConnected() {
+    return this.socket?.readyState === WebSocket.OPEN;
   }
 
   async mount(host) {
@@ -95,7 +100,7 @@ export class CloudTerminalSession {
 
     this.disposables.push(
       this.terminal.onData(data => {
-        if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(data);
+        if (this.isConnected()) this.socket.send(data);
       }),
       this.terminal.onFocus(() => this.onFocus?.(this)),
       this.terminal.onResize(size => this.sendControl({ type: 'resize', ...size })),
@@ -108,57 +113,82 @@ export class CloudTerminalSession {
 
   async connect() {
     if (!this.terminal) throw new Error('Terminal session is not mounted.');
-    if (this.socket?.readyState === WebSocket.OPEN) {
+    if (this.isConnected()) {
       this.focus();
       return;
     }
+    if (this.connectPromise) return this.connectPromise;
+
     const attempt = ++this.connectAttempt;
     this.setState('connecting', 'Requesting a signed cloud terminal ticket…');
-    try {
+    this.connectPromise = (async () => {
       const ticket = await apiRequest(terminalApi(this.repositoryId, '/terminal-ticket-v2'), {
         method: 'POST',
         body: JSON.stringify({ terminal_id: this.id, profile: this.profile }),
       });
       if (attempt !== this.connectAttempt) return;
-      const socket = new WebSocket(ticket.websocket_url);
-      this.socket = socket;
-      socket.binaryType = 'arraybuffer';
-      socket.onopen = () => {
-        if (socket !== this.socket) return;
-        this.setState('connected', 'Connected to the Amosclaud cloud runtime.');
-        this.fit();
-        this.sendControl({
-          type: 'resize',
-          cols: this.terminal.cols,
-          rows: this.terminal.rows,
-        });
-        this.focus();
-      };
-      socket.onmessage = event => {
-        if (typeof event.data === 'string') {
-          this.terminal.write(event.data);
-        } else {
-          this.terminal.write(new Uint8Array(event.data));
-        }
-      };
-      socket.onerror = () => {
-        if (socket === this.socket) this.setState('error', 'Cloud terminal connection failed.');
-      };
-      socket.onclose = event => {
-        if (socket !== this.socket) return;
-        this.socket = null;
-        const detail = event.reason || (event.wasClean ? 'Terminal disconnected.' : 'Cloud connection closed unexpectedly.');
-        this.setState(event.wasClean ? 'disconnected' : 'error', detail);
-      };
+
+      await new Promise((resolve, reject) => {
+        const socket = new WebSocket(ticket.websocket_url);
+        this.socket = socket;
+        socket.binaryType = 'arraybuffer';
+        let opened = false;
+
+        socket.onopen = () => {
+          if (socket !== this.socket) return;
+          opened = true;
+          this.setState('connected', 'Connected to the Amosclaud cloud runtime.');
+          this.fit();
+          this.sendControl({
+            type: 'resize',
+            cols: this.terminal.cols,
+            rows: this.terminal.rows,
+          });
+          this.focus();
+          resolve();
+        };
+        socket.onmessage = event => {
+          if (typeof event.data === 'string') this.terminal.write(event.data);
+          else this.terminal.write(new Uint8Array(event.data));
+        };
+        socket.onerror = () => {
+          if (socket !== this.socket) return;
+          this.setState('error', 'Cloud terminal connection failed.');
+          if (!opened) reject(new Error('Cloud terminal connection failed.'));
+        };
+        socket.onclose = event => {
+          if (socket !== this.socket) return;
+          this.socket = null;
+          const detail = event.reason || (event.wasClean ? 'Terminal disconnected.' : 'Cloud connection closed unexpectedly.');
+          this.setState(event.wasClean ? 'disconnected' : 'error', detail);
+          if (!opened) reject(new Error(detail));
+        };
+      });
+    })();
+
+    try {
+      await this.connectPromise;
     } catch (error) {
       this.setState('error', error.message);
       throw error;
+    } finally {
+      this.connectPromise = null;
     }
   }
 
   sendControl(payload) {
-    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    if (!this.isConnected()) return;
     this.socket.send(JSON.stringify(payload));
+  }
+
+  async runCommand(command) {
+    const prepared = String(command || '').replace(/\x00/g, '').trim();
+    if (!prepared) return false;
+    await this.connect();
+    if (!this.isConnected()) throw new Error('Terminal is not connected.');
+    this.socket.send(`${prepared}\r`);
+    this.focus();
+    return true;
   }
 
   fit() {
@@ -177,6 +207,7 @@ export class CloudTerminalSession {
 
   disconnect(reason = 'Terminal disconnected') {
     this.connectAttempt += 1;
+    this.connectPromise = null;
     if (this.socket) {
       const socket = this.socket;
       this.socket = null;
