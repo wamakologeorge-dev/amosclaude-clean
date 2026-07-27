@@ -202,16 +202,18 @@ for _route in account_recovery.router.routes:
 
 from amoscloud_ai.api.routes import github_repositories as github_repositories
 from amoscloud_ai.api.routes import github_organization_publish as github_organization_publish
+from amoscloud_ai.api.routes import github_pull_requests as github_pull_requests
 
 _github_keys = set()
 for _route in github_repositories.router.routes:
     _github_keys |= _route_keys(_route)
-for _route in github_organization_publish.router.routes:
-    _keys = _route_keys(_route)
-    if _keys & _github_keys:
-        continue
-    github_repositories.router.routes.append(_route)
-    _github_keys |= _keys
+for _module in (github_organization_publish, github_pull_requests):
+    for _route in _module.router.routes:
+        _keys = _route_keys(_route)
+        if _keys & _github_keys:
+            continue
+        github_repositories.router.routes.append(_route)
+        _github_keys |= _keys
 
 from amoscloud_ai.api.routes import platform_services as platform_services
 from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
