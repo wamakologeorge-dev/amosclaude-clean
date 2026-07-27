@@ -236,3 +236,18 @@ if not any(item[0] == "workspace-runtime" for item in platform_services._CHECKS)
             workspace_runtime_service.check,
         ),
     )
+
+# The Daily Autonomous Builder is part of the canonical Global Task Router
+# surface, so main.py continues to mount one durable task control plane.
+from amoscloud_ai.api.routes import autonomy as autonomy
+from amoscloud_ai.api.routes import task_router as task_router
+
+_task_keys = set()
+for _route in task_router.router.routes:
+    _task_keys |= _route_keys(_route)
+for _route in autonomy.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _task_keys:
+        continue
+    task_router.router.routes.append(_route)
+    _task_keys |= _keys
