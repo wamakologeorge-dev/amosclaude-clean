@@ -162,10 +162,11 @@ def _repository_path(repository_id: int) -> Path:
 
 def _activity_path(workspace_id: str) -> Path:
     RUNTIME_STATE_ROOT.mkdir(parents=True, exist_ok=True)
+    root = RUNTIME_STATE_ROOT.resolve()
     activity_filename = _workspace_activity_filename(workspace_id)
-    target = (RUNTIME_STATE_ROOT / activity_filename).resolve()
+    target = (root / activity_filename).resolve()
     try:
-        target.relative_to(RUNTIME_STATE_ROOT)
+        target.relative_to(root)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid runtime state path") from exc
     return target
