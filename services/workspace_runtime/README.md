@@ -31,7 +31,30 @@ The complete terminal supports:
 - terminal search, copy, clear, and transcript export;
 - repository-aware prompt and Git branch indicator;
 - 10,000 lines of browser scrollback;
-- a short-lived signed WebSocket ticket bound to workspace, user, terminal ID, and profile.
+- a short-lived signed WebSocket ticket bound to workspace, user, terminal ID, and profile;
+- detected **Run app** and **Debug** controls;
+- separate GitHub Pull and Push controls plus a safe **Sync & Push** action;
+- four terminal feature cells for **Ports**, **Problems**, **Connectors**, and **Network**.
+
+### Workspace feature cells
+
+- **Ports** scans local listening TCP ports with `ss`, `netstat`, or `lsof`. It does not silently publish a project port to the internet. Any future forwarding remains controlled by server policy.
+- **Problems** runs `git diff --check` and the repository's detected lint, type-check, and test commands, then directs unresolved failures to Amosclaud Doctor.
+- **Connectors** shows whether the repository is Amosclaud-native or GitHub-backed and opens the governed terminal agent hub. GitHub credentials remain outside the project container.
+- **Network** reports the workspace network mode and can inspect interfaces, routes, DNS, and outbound HTTPS behavior without exposing internal platform networks.
+
+The `amos` helper exposes the same workflow inside the shell:
+
+```text
+amos run
+amos debug
+amos ports
+amos problems
+amos connectors
+amos network
+```
+
+For GitHub-backed repositories, **Sync & Push** commits authorized working-tree changes, fetches the remote, safely rebases when required, and pushes without force. A rebase conflict is aborted and returned to the user for resolution.
 
 The adjacent support hub provides four governed roles:
 
@@ -108,7 +131,7 @@ The host paths can differ, but they must refer to the same durable files. A stop
 
 ## Network access
 
-The project-container network remains `none`. This prevents project commands from reaching the public internet and internal platform services. Package downloads should later use a separately designed allowlisted egress proxy; project containers must never join the database, authentication, billing, model, or control-plane networks.
+The project-container network remains `none`. This prevents project commands from reaching the public internet and internal platform services. The Network feature cell truthfully displays that policy and shows the resulting diagnostics. Package downloads should later use a separately designed allowlisted egress proxy; project containers must never join the database, authentication, billing, model, or control-plane networks.
 
 ## Operational checks
 
