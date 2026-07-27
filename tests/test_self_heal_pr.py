@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 
@@ -8,6 +9,7 @@ MODULE_PATH = Path(__file__).parents[1] / ".github" / "scripts" / "self_heal_pr.
 SPEC = importlib.util.spec_from_file_location("self_heal_pr", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 self_heal_pr = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = self_heal_pr
 SPEC.loader.exec_module(self_heal_pr)
 
 
