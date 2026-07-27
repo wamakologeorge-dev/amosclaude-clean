@@ -89,31 +89,42 @@ def _max_size_gib() -> int:
     return max(10, min(configured, 65536))
 
 
+_MOUNTPOINT_PATTERN = re.compile(r"^/[A-Za-z0-9._/\-]+$")
+
+
 def _safe_mountpoint(value: str) -> str:
-    if "\x00" in value:
+    if not isinstance(value, str):
         raise HTTPException(status_code=422, detail="Mountpoint is invalid")
-    path = Path(value).expanduser()
+    candidate = value.strip()
+    if not candidate or "\x00" in candidate:
+        raise HTTPException(status_code=422, detail="Mountpoint is invalid")
+    if not _MOUNTPOINT_PATTERN.fullmatch(candidate):
+        raise HTTPException(
+            status_code=422,
+            detail="Mountpoint contains unsupported characters",
+        )
+
+    path = Path(os.path.realpath(os.path.expanduser(candidate)))
     if not path.is_absolute() or ".." in path.parts:
         raise HTTPException(
             status_code=422,
             detail="Mountpoint must be an absolute managed path",
         )
 
-    normalized = path.resolve(strict=False)
     allowed_roots_raw = os.getenv(
         "AMOSCLOUD_STORAGE_ALLOWED_MOUNT_ROOTS",
         "/mnt/amosclaud-volumes,/mnt,/media",
     )
     allowed_roots = [
-        Path(part.strip()).expanduser().resolve(strict=False)
+        Path(os.path.realpath(os.path.expanduser(part.strip())))
         for part in allowed_roots_raw.split(",")
         if part.strip()
     ]
 
     for root in allowed_roots:
         try:
-            normalized.relative_to(root)
-            return str(normalized)
+            path.relative_to(root)
+            return str(path)
         except ValueError:
             continue
 
