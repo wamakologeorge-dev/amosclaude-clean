@@ -67,9 +67,11 @@ RUN apt-get update \
 
 COPY services/workspace_runtime/workspace-image/entrypoint.sh /usr/local/bin/amosclaud-workspace-entrypoint
 COPY services/workspace_runtime/workspace-image/terminal-profile.sh /etc/profile.d/amosclaud-terminal.sh
+COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
 RUN chmod 0755 \
       /usr/local/bin/amosclaud-workspace-entrypoint \
-      /etc/profile.d/amosclaud-terminal.sh
+      /etc/profile.d/amosclaud-terminal.sh \
+      /usr/local/bin/amos
 
 USER developer
 WORKDIR /workspace
