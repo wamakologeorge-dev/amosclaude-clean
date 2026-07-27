@@ -2,6 +2,7 @@ import { apiRequest, repositoryIdFromLocation, terminalApi } from './api.js';
 import { TerminalAgentHub } from './agent-hub.js';
 import { ProjectToolbelt } from './project-tools.js';
 import { CloudTerminalSession } from './session.js';
+import { WorkspaceFeatureCells } from './workspace-features.js';
 
 const repositoryId = repositoryIdFromLocation();
 const tabs = document.querySelector('.ws-tabs');
@@ -19,6 +20,7 @@ function addStyle(href, marker) {
 
 addStyle('/static/cloud-workspace.css', 'data-amosclaud-terminal-style');
 addStyle('/static/cloud-terminal/project-tools.css', 'data-amosclaud-project-tools-style');
+addStyle('/static/cloud-terminal/workspace-features.css', 'data-amosclaud-workspace-features-style');
 addStyle('https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css', 'data-amosclaud-xterm-style');
 
 const terminalTab = document.createElement('button');
@@ -35,7 +37,7 @@ panel.innerHTML = `
   <div class="ws-section-head">
     <div>
       <h2>Amosclaud cloud terminal</h2>
-      <p>A simple Codespaces-style workspace: edit files, run commands, test, build, commit, sync GitHub, and work with Amosclaud agents.</p>
+      <p>A complete Codespaces-style workspace: edit files, run, debug, inspect ports and problems, verify connectors and network, commit, and safely sync GitHub.</p>
     </div>
     <div class="ws-tool-form">
       <button data-start type="button">Start workspace</button>
@@ -43,7 +45,7 @@ panel.innerHTML = `
     </div>
   </div>
   <div data-boundary class="ws-full-editor-note"><strong>Security boundary:</strong> non-root developer · 2 CPU · 4 GB RAM · 512 processes · isolated network.</div>
-  <div class="ws-full-editor-note"><strong>Full developer terminal:</strong> writable repository · nano and vim editors · Git and Git LFS · Python · Node.js and npm · C/C++ and CMake · tmux · ripgrep · fd · jq · SQLite · ShellCheck · archives and diagnostics. Run <code>amos help</code> for built-in tools.</div>
+  <div class="ws-full-editor-note"><strong>Full developer terminal:</strong> writable repository · nano and vim editors · Git and Git LFS · Python · Node.js and npm · C/C++ and CMake · run and debug tools · tmux · ripgrep · fd · jq · SQLite · ShellCheck · port and network diagnostics. Run <code>amos help</code> for built-in tools.</div>
   <p data-state class="ws-status" role="status" aria-live="polite">Open this tab to connect to the Amosclaud cloud runtime.</p>
   <div class="cloud-terminal-shell">
     <div class="cloud-terminal-toolbar">
@@ -67,6 +69,7 @@ panel.innerHTML = `
       <button data-search-close type="button">Close</button>
     </div>
     <section class="terminal-project-tools" data-project-tools aria-label="Project tools"></section>
+    <section class="workspace-feature-cells" data-workspace-features aria-label="Ports problems connectors and network"></section>
     <div class="cloud-terminal-workbench">
       <div class="cloud-terminal-grid" data-grid><div class="cloud-terminal-empty" data-empty>Create a terminal session to begin.</div></div>
       <aside class="terminal-agent-hub" data-agent-hub></aside>
@@ -83,6 +86,7 @@ const ui = {
   cloud: q('[data-cloud]'), tabs: q('[data-tabs]'), search: q('[data-search]'), searchInput: q('[data-search-input]'),
   searchPrev: q('[data-search-prev]'), searchNext: q('[data-search-next]'), searchClose: q('[data-search-close]'),
   grid: q('[data-grid]'), empty: q('[data-empty]'), agentHub: q('[data-agent-hub]'), projectTools: q('[data-project-tools]'),
+  workspaceFeatures: q('[data-workspace-features]'),
 };
 
 const sessions = new Map();
@@ -197,6 +201,7 @@ async function refresh() {
     const result = await apiRequest(terminalApi(repositoryId));
     runtimeAvailable = Boolean(result.runtime?.configured && result.runtime?.ok);
     workspaceRunning = Boolean(result.container?.running);
+    featureCells.setRuntime(result.container || { running: false, network: result.runtime?.network || 'unknown' });
     if (!result.runtime?.configured) setState('Cloud terminal runtime is not configured. Set the runtime URL, public URL, and shared token.', 'not-configured');
     else if (!result.runtime?.ok) setState(result.runtime?.detail || 'Cloud runtime is unreachable.', 'error');
     else if (workspaceRunning) {
@@ -207,7 +212,7 @@ async function refresh() {
     } else setState('Cloud workspace is ready to start. Repository files remain persistent.', 'stopped');
     return workspaceRunning;
   } catch (error) {
-    runtimeAvailable = false; workspaceRunning = false; setState(error.message, 'error'); setCloud('Cloud unavailable', 'error'); return false;
+    runtimeAvailable = false; workspaceRunning = false; featureCells.setRuntime({ running: false, network: 'unavailable' }); setState(error.message, 'error'); setCloud('Cloud unavailable', 'error'); return false;
   } finally { loading = false; controls(); }
 }
 
@@ -216,9 +221,10 @@ async function startWorkspace() {
   try {
     const result = await apiRequest(terminalApi(repositoryId, '/start'), { method: 'POST' });
     workspaceRunning = Boolean(result.container?.running);
-    setState('Cloud workspace started. You can edit and run the repository now.', 'ready'); setCloud('Cloud runtime ready', 'connected');
+    featureCells.setRuntime(result.container || { running: workspaceRunning, network: 'unknown' });
+    setState('Cloud workspace started. You can edit, run, debug, inspect, and synchronize the repository now.', 'ready'); setCloud('Cloud runtime ready', 'connected');
     if (!sessions.size) await createSession();
-    await projectTools.load();
+    await Promise.all([projectTools.load(), featureCells.load()]);
   } catch (error) { setState(error.message, 'error'); }
   finally { loading = false; controls(); }
 }
@@ -228,7 +234,7 @@ async function stopWorkspace() {
   stopAllSessions();
   try {
     await apiRequest(terminalApi(repositoryId, '/stop'), { method: 'POST' });
-    workspaceRunning = false; setState('Cloud workspace stopped. Persistent files and commits remain.', 'stopped'); setCloud('Cloud disconnected');
+    workspaceRunning = false; featureCells.setRuntime({ running: false, network: featureCells.runtime?.network || 'none' }); setState('Cloud workspace stopped. Persistent files and commits remain.', 'stopped'); setCloud('Cloud disconnected');
   } catch (error) { setState(error.message, 'error'); }
   finally { loading = false; controls(); }
 }
@@ -241,6 +247,18 @@ const projectTools = new ProjectToolbelt({
 });
 projectTools.load();
 
+const featureCells = new WorkspaceFeatureCells({
+  root: ui.workspaceFeatures,
+  repositoryId,
+  ensureTerminal,
+  isWorkspaceRunning: () => workspaceRunning,
+  focusAgentHub: () => {
+    ui.agentHub.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    ui.agentHub.querySelector('textarea, input, button')?.focus();
+  },
+});
+featureCells.load();
+
 const agentHub = new TerminalAgentHub({
   root: ui.agentHub,
   repositoryId,
@@ -252,7 +270,7 @@ terminalTab.addEventListener('click', async () => {
   document.querySelectorAll('.ws-tab').forEach(tab => tab.classList.toggle('active', tab === terminalTab));
   document.querySelectorAll('.ws-panel').forEach(item => item.classList.toggle('active', item === panel));
   const running = await refresh();
-  await projectTools.load();
+  await Promise.all([projectTools.load(), featureCells.load()]);
   if (running && !sessions.size) await createSession();
   else active()?.fit();
 });
