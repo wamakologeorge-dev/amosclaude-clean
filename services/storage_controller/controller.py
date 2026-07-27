@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="Amosclaud Storage Controller", version="1")
 
+_DEVICE_PATH = re.compile(r"^/dev/(?:mapper/[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+)$")
+
 _GCP_DISK = re.compile(
     r"(?:https://www\.googleapis\.com/compute/v1/)?projects/(?P<project>[A-Za-z0-9:_-]+)/"
     r"(?P<scope>zones|regions)/(?P<location>[A-Za-z0-9_-]+)/disks/(?P<disk>[A-Za-z0-9_-]+)$"
@@ -94,7 +96,15 @@ def _allowed_mount_roots() -> tuple[Path, ...]:
 
 
 def _safe_mountpoint(value: str) -> Path:
-    candidate = Path(value).expanduser().resolve()
+    cleaned = value.strip()
+    if not cleaned:
+        raise HTTPException(status_code=422, detail="mountpoint is required")
+    if "\x00" in cleaned:
+        raise HTTPException(status_code=422, detail="mountpoint contains invalid characters")
+    if not os.path.isabs(cleaned):
+        raise HTTPException(status_code=422, detail="mountpoint must be an absolute path")
+
+    candidate = Path(cleaned).expanduser().resolve(strict=False)
     for root in _allowed_mount_roots():
         try:
             candidate.relative_to(root)
@@ -165,8 +175,17 @@ def filesystem_plan(mountpoint: Path, expected_device: str | None = None) -> Fil
         raise RuntimeError("Resolved filesystem target does not match the approved mountpoint")
     if not source.startswith("/dev/"):
         raise RuntimeError("Filesystem source is not a directly attached block device")
-    if expected_device and Path(source).resolve() != Path(expected_device).resolve():
-        raise RuntimeError("Mounted block device does not match the expected device")
+    if expected_device:
+        expected = expected_device.strip()
+        if (
+            not expected
+            or not expected.startswith("/dev/")
+            or ".." in expected
+            or not _DEVICE_PATH.fullmatch(expected)
+        ):
+            raise RuntimeError("expected_device must be a valid block-device path under /dev")
+        if Path(source).resolve() != Path(expected).resolve():
+            raise RuntimeError("Mounted block device does not match the expected device")
     if fstype not in {"ext2", "ext3", "ext4", "xfs"}:
         raise RuntimeError(f"Unsupported filesystem type: {fstype or 'unknown'}")
 
