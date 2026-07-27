@@ -54,6 +54,68 @@ def _pull_request_body(task: dict, policy: dict, evidence: list[str]) -> str:
     )
 
 
+def _bounded_engineering_loop(
+    repo: Repo,
+    root: Path,
+    task: dict,
+    policy: dict,
+) -> tuple[list[str], list[str]]:
+    """Apply, diagnose, and correct within the account's fixed attempt limit."""
+
+    max_attempts = max(1, min(int(policy.get("max_repair_attempts") or 1), 3))
+    objective = str(task["objective"])
+    diagnostic = ""
+    evidence: list[str] = []
+    successful_paths: list[str] = []
+
+    for attempt in range(1, max_attempts + 1):
+        attempt_objective = objective
+        if diagnostic:
+            attempt_objective += (
+                "\n\nThe previous isolated verification attempt failed. "
+                "Correct the existing working tree without weakening tests or policy.\n"
+                "Failure evidence:\n" + diagnostic[-8_000:]
+            )
+        evidence.append(f"Autonomous engineering attempt {attempt}/{max_attempts} started.")
+        try:
+            run = run_engineering_agent(root, attempt_objective, apply_changes=True)
+            evidence.extend(run.evidence)
+            evidence.extend(
+                f"attempt {attempt} · {check.get('name', 'check')}: "
+                f"{'passed' if check.get('passed') else 'failed'}"
+                for check in run.checks
+            )
+            if any(not check.get("passed", False) for check in run.checks):
+                raise RuntimeError("Engineering checks failed before isolated verification")
+
+            changed_files = _changed_paths(repo)
+            if not changed_files:
+                raise RuntimeError("Autonomous feature task produced no repository changes")
+            enforce_task_path_policy(task, changed_files)
+            verification_evidence, _checks = _run_verification(root, changed_files)
+            evidence.extend(
+                f"attempt {attempt} · {item}" for item in verification_evidence
+            )
+            evidence.append(f"Autonomous engineering attempt {attempt} passed.")
+            successful_paths = changed_files
+            break
+        except AutonomousPolicyError:
+            raise
+        except (EngineeringAgentError, RuntimeError) as exc:
+            diagnostic = str(exc)
+            evidence.append(
+                f"Autonomous engineering attempt {attempt} failed: {type(exc).__name__}."
+            )
+            if attempt >= max_attempts:
+                raise RuntimeError(
+                    f"Autonomous verification failed after {max_attempts} bounded attempts"
+                ) from exc
+
+    if not successful_paths:
+        raise RuntimeError("Autonomous engineering loop ended without verified changes")
+    return successful_paths, evidence
+
+
 def execute_autonomous_task(task_id: str) -> None:
     """Execute one queued autonomous build with pre-publication policy checks."""
 
@@ -95,23 +157,9 @@ def execute_autonomous_task(task_id: str) -> None:
         repo.remote("origin").set_url(_public_remote_url(repository["github_full_name"]))
         repo.git.checkout("-b", branch)
 
-        run = run_engineering_agent(tempdir, task["objective"], apply_changes=True)
-        evidence = list(run.evidence)
-        evidence.extend(
-            f"{check.get('name', 'check')}: "
-            f"{'passed' if check.get('passed') else 'failed'}"
-            for check in run.checks
-        )
-        if any(not check.get("passed", False) for check in run.checks):
-            raise RuntimeError("Engineering verification failed before repository publication")
-
-        changed_files = _changed_paths(repo)
-        if not changed_files:
-            raise RuntimeError("Autonomous feature task produced no repository changes")
+        changed_files, evidence = _bounded_engineering_loop(repo, tempdir, task, policy)
         enforce_task_path_policy(task, changed_files)
 
-        verification_evidence, _checks = _run_verification(tempdir, changed_files)
-        evidence.extend(verification_evidence)
         diff = repo.git.diff("HEAD", "--", ".")
         artifacts = [
             {
