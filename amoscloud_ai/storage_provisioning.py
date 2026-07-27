@@ -20,9 +20,13 @@ import httpx
 from amoscloud_ai import storage_capacity
 from amoscloud_ai.api.routes import auth
 
-_TERMINAL_STATES = {"completed", "failed", "cancelled"}
-_RECOVERABLE_STATES = {
-    "queued",
+_TERMINAL_STATES = {
+    "completed",
+    "failed",
+    "cancelled",
+    "operator_review_required",
+}
+_ACTIVE_STATES = {
     "running",
     "creating",
     "attaching",
@@ -298,8 +302,12 @@ def execute_job(job_id: str) -> None:
         ).fetchone()
     if not row:
         return
-    public_job = job_dict(row)
-    if public_job["status"] in _TERMINAL_STATES:
+    status = str(row["status"])
+    if status in _TERMINAL_STATES:
+        return
+    if status != "queued":
+        # Provisioning includes non-idempotent host formatting. A duplicate worker
+        # must never replay an active or interrupted job.
         return
 
     _update(
@@ -400,28 +408,53 @@ def dispatch_job(job_id: str) -> None:
 
 
 def recover_jobs() -> int:
+    """Recover queued work but never replay interrupted formatting operations."""
+
+    queued_ids: list[str] = []
+    interrupted = 0
     with _connect() as db:
         ensure_schema(db, commit=False)
-        placeholders = ",".join("?" for _ in _RECOVERABLE_STATES)
-        rows = db.execute(
+        queued = db.execute(
+            """SELECT id FROM storage_provision_jobs
+               WHERE status='queued' ORDER BY created_at"""
+        ).fetchall()
+        queued_ids = [str(row["id"]) for row in queued]
+
+        placeholders = ",".join("?" for _ in _ACTIVE_STATES)
+        active = db.execute(
             f"""SELECT id,status FROM storage_provision_jobs
                 WHERE status IN ({placeholders}) ORDER BY created_at""",
-            tuple(sorted(_RECOVERABLE_STATES)),
+            tuple(sorted(_ACTIVE_STATES)),
         ).fetchall()
-        for row in rows:
+        for row in active:
             db.execute(
                 """UPDATE storage_provision_jobs
-                   SET status='queued',updated_at=? WHERE id=?""",
-                (_now(), row["id"]),
+                   SET status='operator_review_required',
+                       error=?,finished_at=?,updated_at=? WHERE id=?""",
+                (
+                    (
+                        "Worker restart interrupted a non-idempotent provisioning "
+                        "operation. Inspect the cloud volume and host device before "
+                        "creating any replacement job."
+                    ),
+                    _now(),
+                    _now(),
+                    row["id"],
+                ),
             )
             _event(
                 db,
                 row["id"],
-                "job.recovered",
-                "Provisioning job was recovered after a worker restart.",
+                "job.operator_review_required",
+                (
+                    "Provisioning was interrupted and was not replayed because cloud "
+                    "attachment and filesystem formatting are not safe to repeat blindly."
+                ),
                 {"previous_status": row["status"]},
             )
+            interrupted += 1
         db.commit()
-    for row in rows:
-        dispatch_job(str(row["id"]))
-    return len(rows)
+
+    for job_id in queued_ids:
+        dispatch_job(job_id)
+    return len(queued_ids) + interrupted
