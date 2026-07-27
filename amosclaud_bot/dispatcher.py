@@ -4,13 +4,18 @@ import json
 import os
 from pathlib import Path
 
-from .approval_gate import handle_approval_event
+from .approval_gate import (
+    _find_approved_request,
+    _is_sensitive_objective,
+    handle_approval_event,
+)
 from .autonomous_planning import announce_plan, resolve_continuation
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 from .comment_style import compact_public_comment
 from .intelligence_router import handle_intelligence_request
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
+from .security_context import record_human_approval
 from .status_board import handle_status_request
 
 PRIVATE_ROUTE_MARKER = Path("/tmp/amosclaud-private-routed")
@@ -87,8 +92,30 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
     return 0
 
 
+def _pending_sensitive_approval(bot: AmosclaudBot, payload: dict, event_name: str) -> tuple[int, str, int, str] | None:
+    if event_name != "issue_comment":
+        return None
+    comment = payload.get("comment") or {}
+    command, objective = parse_command(str(comment.get("body") or ""))
+    if command != "fix" or not objective or not _is_sensitive_objective(objective):
+        return None
+    issue = payload.get("issue") or {}
+    source_number = issue.get("number")
+    if not isinstance(source_number, int):
+        return None
+    approved = _find_approved_request(
+        bot,
+        source_number=source_number,
+        objective=objective,
+    )
+    if approved is None:
+        return None
+    association = str(comment.get("author_association") or "NONE").upper()
+    return source_number, objective, approved, association
+
+
 def run_dispatcher_from_environment() -> int:
-    """Route GitHub events through privacy, Brain v3 intelligence, status, approval, planning, review, and base handling."""
+    """Route GitHub events through privacy, intelligence, approval, planning, and execution."""
     _install_compact_comment_mode()
 
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
@@ -106,7 +133,6 @@ def run_dispatcher_from_environment() -> int:
     if event_name == "issue_comment":
         if resolve_continuation(bot, payload):
             return 0
-
         privacy_result = _handle_private_issue_comment(bot, payload)
         if privacy_result is not None:
             return privacy_result
@@ -124,9 +150,18 @@ def run_dispatcher_from_environment() -> int:
     if PRIVATE_ROUTE_MARKER.exists():
         return 0
 
+    pending_approval = _pending_sensitive_approval(bot, payload, event_name)
     approval_result = handle_approval_event(bot, payload, event_name)
     if approval_result is not None:
         return approval_result
+    if pending_approval is not None:
+        source_number, objective, approval_number, association = pending_approval
+        record_human_approval(
+            source_number=source_number,
+            approval_number=approval_number,
+            objective=objective,
+            actor_association=association,
+        )
 
     if event_name == "issue_comment":
         announce_plan(bot, payload)

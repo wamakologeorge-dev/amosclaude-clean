@@ -9,8 +9,24 @@
 <body>
   <header class="topbar"><a href="/cloud/agent" class="brand">Amosclaud</a><nav aria-label="Primary"><a href="/repositories">Repositories</a><a href="/cloud/agent">Agent</a><a href="/cloud/agent/legacy" class="legacy-link">Legacy hub</a></nav></header>
   <main>
-    <header class="page-heading"><p class="eyebrow">Authenticated workspace</p><h1>Command Center</h1><p>Choose a repository, record an issue, or request an agent task with that repository as context.</p></header>
+    <header class="page-heading"><p class="eyebrow">One unified Amosclaud developer platform</p><h1>Command Center</h1><p>The former Amosclaud1 dashboard and the amosclaude-clean engine now operate as one program: repositories, autonomous work, GitHub synchronization, isolated workspaces, verification, and deployment.</p></header>
     <p id="notice" class="notice" role="status" aria-live="polite">Loading repositories…</p>
+
+    <section class="panel unified-overview" aria-label="Unified Amosclaud architecture">
+      <div class="unified-header"><div><p class="eyebrow">Control plane</p><h2>One repository. One runtime model. One evidence trail.</h2></div><a class="unified-primary" href="/repositories">Open a workspace</a></div>
+      <div class="unified-metrics">
+        <article><span>Core platform</span><strong>amosclaude-clean</strong><small>Canonical source repository</small></article>
+        <article><span>Command Center</span><strong>Integrated</strong><small>Absorbed from Amosclaud1</small></article>
+        <article><span>Cloud workspaces</span><strong>Isolated</strong><small>2 CPU · 4 GB · non-root</small></article>
+        <article><span>GitHub lifecycle</span><strong>Bidirectional</strong><small>Signed webhook · safe push</small></article>
+      </div>
+      <div class="unified-grid">
+        <article class="unified-card"><h3>Connected system</h3><ul class="architecture-list"><li><b>Browser editor and Xterm.js</b><span>Authenticated repository workspace</span></li><li><b>Amosclaud control plane</b><span>Accounts, repositories, agents, GitHub, policy</span></li><li><b>Workspace runtime</b><span>Dedicated Docker host with no public platform database access</span></li><li><b>Persistent repository storage</b><span>One file tree shared by editor, Git, agent, and terminal</span></li></ul></article>
+        <article class="unified-card"><h3>Execution path</h3><ol class="execution-path"><li>Authorize user and repository</li><li>Start isolated developer container</li><li>Edit or run commands as <code>developer</code></li><li>Commit and push through the connected GitHub account</li><li>Receive signed GitHub webhook</li><li>Fast-forward only after safety checks</li></ol></article>
+        <article class="unified-card"><h3>Security gates</h3><div class="safety-gates"><span>Non-root user <b>ENFORCED</b></span><span>CPU and RAM caps <b>ENFORCED</b></span><span>Linux capabilities <b>DROPPED</b></span><span>Internal network <b>BLOCKED</b></span><span>Dirty/diverged overwrite <b>BLOCKED</b></span></div></article>
+      </div>
+      <p class="runtime-note">Amosclaud1 remains only as a recovery source until this unified change passes every required check. No separate production runtime is created from it.</p>
+    </section>
 
     <section id="services-dashboard" class="panel services-dashboard" aria-label="All platform services">
       <div class="services-header">

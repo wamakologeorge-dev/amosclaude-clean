@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
-from urllib.parse import urlparse
 
+import pytest
 import yaml
+from fastapi import HTTPException
 from git import Repo
 
 from amoscloud_ai.api.routes import github_app, github_repositories, platform_services
@@ -10,6 +11,8 @@ from amoscloud_ai.api.routes.github_organization_publish import (
     GitHubOrganizationPublishRequest,
     _canonical_origin,
     _creation_path,
+    _github_remote_full_name,
+    _selected_local_branch,
     _validated_owner,
 )
 from amoscloud_ai.api.routes.real_repositories import RealRepositoryCreate
@@ -66,21 +69,37 @@ def test_webhook_signature_uses_full_sha256_header(monkeypatch) -> None:
     )
 
 
-def test_push_webhook_queues_fast_forward_sync() -> None:
+def test_production_webhook_fails_closed_with_environment_variable(monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_APP_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("AMOSCLAUD_ENV", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    with pytest.raises(HTTPException) as error:
+        github_app._verify_signature(b"{}", None)
+    assert error.value.status_code == 503
+
+
+def test_push_webhook_enforces_policy_and_passes_immutable_id() -> None:
     source = (ROOT / "amoscloud_ai/api/routes/github_app.py").read_text(
         encoding="utf-8"
     )
+    assert "_github_to_platform_policy()" in source
     assert "background_tasks.add_task" in source
     assert "synchronize_github_push" in source
+    assert "repository_id," in source
     assert 'event == "push"' in source
+    assert '"repository"' in source
+    assert "_refresh_repository_mapping(payload, event, action)" in source
 
     sync_source = (ROOT / "amoscloud_ai/github_repository_sync.py").read_text(
         encoding="utf-8"
     )
     assert "repo.is_dirty(untracked_files=True)" in sync_source
+    assert "_detached_head_is_referenced(repo)" in sync_source
     assert "repo.is_ancestor(local_ref, remote_ref)" in sync_source
     assert "automatic pull was blocked" in sync_source
     assert "repo.head.reset(remote_ref, index=True, working_tree=True)" in sync_source
+    assert "github_last_sync_attempt_at" in sync_source
+    assert "COLLATE NOCASE" in sync_source
 
 
 def test_publish_keeps_github_as_canonical_origin(tmp_path: Path) -> None:
@@ -88,6 +107,42 @@ def test_publish_keeps_github_as_canonical_origin(tmp_path: Path) -> None:
     origin = _canonical_origin(repo, "example/project")
     assert origin.name == "origin"
     assert origin.url == "https://github.com/example/project.git"
+
+
+def test_publish_refuses_non_github_and_mismatched_origins(tmp_path: Path) -> None:
+    assert _github_remote_full_name("git@github.com:Example/Project.git") == "Example/Project"
+    assert _github_remote_full_name("https://github.com/Example/Project.git") == "Example/Project"
+    with pytest.raises(HTTPException, match="not hosted on GitHub"):
+        _github_remote_full_name("https://gitlab.com/example/project.git")
+
+    repo = Repo.init(tmp_path / "mismatch")
+    repo.create_remote("origin", "https://github.com/other/project.git")
+    with pytest.raises(HTTPException, match="local origin points"):
+        _canonical_origin(repo, "example/project")
+
+
+def test_publish_uses_the_requested_existing_local_branch(tmp_path: Path) -> None:
+    repo = Repo.init(tmp_path / "branches", initial_branch="main")
+    (tmp_path / "branches" / "README.md").write_text("main\n", encoding="utf-8")
+    repo.index.add(["README.md"])
+    repo.index.commit("main")
+    repo.create_head("release")
+
+    assert _selected_local_branch(repo, "release", "main") == "release"
+    with pytest.raises(HTTPException, match="does not exist"):
+        _selected_local_branch(repo, "missing", "main")
+
+
+def test_publisher_holds_lock_preserves_visibility_and_pushes_named_ref() -> None:
+    source = (ROOT / "amoscloud_ai/api/routes/github_organization_publish.py").read_text(
+        encoding="utf-8"
+    )
+    assert "with _repo_lock(repository_id):" in source
+    assert "existing_visibility != body.visibility" in source
+    assert 'refspec = f"refs/heads/{branch}:refs/heads/{branch}"' in source
+    assert "github_repository_id" in source
+    assert "github_default_branch" in source
+    assert "_rollback_created_repository" in source
 
 
 def test_sync_supports_imported_and_legacy_published_remotes(tmp_path: Path) -> None:
@@ -109,21 +164,9 @@ def test_cloud_policy_is_server_managed_and_read_only() -> None:
     status = configuration.public_status()
 
     assert status["server_managed"] is True
-
-    def _normalized_host(entry: str) -> str | None:
-        parsed = urlparse(entry)
-        host = parsed.hostname
-        if host is None:
-            host = urlparse(f"//{entry}").hostname
-        return host.rstrip(".").lower() if host else None
-
-    allowlist_hosts = {
-        host
-        for entry in status["network_domain_allowlist"]
-        for host in [_normalized_host(entry)]
-        if host is not None
-    }
-    assert "api.github.com" in allowlist_hosts
+    allowlist = status["network_domain_allowlist"]
+    assert isinstance(allowlist, (list, tuple, set))
+    assert any(domain == "api.github.com" for domain in allowlist)
     assert status["repository_sync"]["direction"] == "bidirectional"
     assert status["repository_sync"]["overwrite_dirty_workspaces"] is False
     assert status["repository_sync"]["overwrite_diverged_history"] is False
@@ -156,8 +199,10 @@ def test_devcontainer_runs_app_postgres_redis_and_docker() -> None:
 
     services = compose["services"]
     assert {"app", "postgres", "redis"}.issubset(services)
-    assert services["app"]["environment"]["REDIS_URL"] == "redis://redis:6379/0"
-    assert "postgres:5432" in services["app"]["environment"]["DATABASE_URL"]
+    environment = services["app"]["environment"]
+    assert environment["REDIS_URL"] == "redis://redis:6379/0"
+    assert "postgres:5432" in environment["DATABASE_URL"]
+    assert environment["AMOSCLAUD_PLATFORM_DATABASE_URL"] == environment["DATABASE_URL"]
     assert services["postgres"]["healthcheck"]
     assert services["redis"]["healthcheck"]
 

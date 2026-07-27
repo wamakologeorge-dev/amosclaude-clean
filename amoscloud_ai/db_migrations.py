@@ -84,15 +84,133 @@ MIGRATIONS = (
             ON repository_collaborators(user_id, repository_id);
         """,
     ),
+    Migration(
+        3,
+        "github_repository_sync_schema",
+        "-- Applied by ensure_github_repository_schema.",
+    ),
+    Migration(
+        4,
+        "cloud_workspaces",
+        """
+        CREATE TABLE IF NOT EXISTS cloud_workspaces (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL UNIQUE,
+            owner_id INTEGER NOT NULL,
+            runtime_status TEXT NOT NULL DEFAULT 'not_started',
+            runtime_detail TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_started_at TEXT,
+            last_stopped_at TEXT,
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
+            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_cloud_workspaces_owner
+            ON cloud_workspaces(owner_id, updated_at);
+        """,
+    ),
 )
+
+_GITHUB_REPOSITORY_COLUMNS = {
+    "github_full_name": "TEXT",
+    "github_html_url": "TEXT",
+    "github_default_branch": "TEXT",
+    "github_last_sync_at": "TEXT",
+    "github_last_sync_attempt_at": "TEXT",
+    "github_sync_state": "TEXT",
+    "github_sync_detail": "TEXT",
+    "github_last_remote_sha": "TEXT",
+    "github_repository_id": "INTEGER",
+}
 
 
 def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
+def _create_github_connections(db: sqlite3.Connection) -> None:
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS github_connections (
+            user_id INTEGER PRIMARY KEY,
+            github_user_id INTEGER,
+            github_id TEXT,
+            github_login TEXT NOT NULL,
+            avatar_url TEXT,
+            access_token_ciphertext TEXT NOT NULL,
+            scopes TEXT NOT NULL DEFAULT '',
+            connected_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )"""
+    )
+
+
+def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
+    """Accept both historical ``github_id`` and current ``github_user_id`` rows."""
+
+    _create_github_connections(db)
+    info = {
+        row[1]: row
+        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
+    }
+    current_id = info.get("github_user_id")
+    compatible = "github_id" in info and current_id and current_id[3] == 0
+    if compatible:
+        return
+
+    db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
+    _create_github_connections(db)
+    legacy = {
+        row[1]
+        for row in db.execute(
+            "PRAGMA table_info(github_connections_legacy)"
+        ).fetchall()
+    }
+    github_user_expr = (
+        "github_user_id"
+        if "github_user_id" in legacy
+        else "CAST(github_id AS INTEGER)"
+    )
+    github_id_expr = (
+        "github_id"
+        if "github_id" in legacy
+        else "CAST(github_user_id AS TEXT)"
+    )
+    db.execute(
+        f"""INSERT INTO github_connections
+            (user_id,github_user_id,github_id,github_login,avatar_url,
+             access_token_ciphertext,scopes,connected_at,updated_at)
+            SELECT user_id,{github_user_expr},{github_id_expr},github_login,avatar_url,
+                   access_token_ciphertext,scopes,connected_at,updated_at
+            FROM github_connections_legacy"""
+    )
+    db.execute("DROP TABLE github_connections_legacy")
+
+
+def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
+    """Idempotently add GitHub account and repository synchronization schema."""
+
+    _ensure_github_connections_schema(db)
+    columns = {
+        row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
+    }
+    for name, sql_type in _GITHUB_REPOSITORY_COLUMNS.items():
+        if name not in columns:
+            db.execute(f"ALTER TABLE repositories ADD COLUMN {name} {sql_type}")
+    db.execute(
+        """CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
+           ON repositories(github_repository_id)"""
+    )
+    db.execute(
+        """CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
+           ON repositories(github_full_name COLLATE NOCASE)"""
+    )
+
+
 def run_migrations(path: str | Path) -> list[int]:
     """Apply unapplied migrations atomically and reject edited history."""
+
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     applied: list[int] = []
@@ -119,7 +237,10 @@ def run_migrations(path: str | Path) -> list[int]:
                     )
                 continue
             with db:
-                db.executescript(migration.sql)
+                if migration.version == 3:
+                    ensure_github_repository_schema(db)
+                else:
+                    db.executescript(migration.sql)
                 db.execute(
                     "INSERT INTO schema_migrations VALUES (?,?,?,?)",
                     (

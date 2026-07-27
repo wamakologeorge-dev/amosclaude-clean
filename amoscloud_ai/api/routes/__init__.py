@@ -180,6 +180,17 @@ for _module in (solo_development, profile, native_git, repository_history):
         repositories.router.routes.append(_route)
         _native_keys |= _keys
 
+# Cloud workspace controls share the canonical repository surface so main.py
+# mounts them exactly once under /api/v1.
+from amoscloud_ai.api.routes import cloud_workspaces as cloud_workspaces
+
+for _route in cloud_workspaces.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _native_keys:
+        continue
+    repositories.router.routes.append(_route)
+    _native_keys |= _keys
+
 from amoscloud_ai.api.routes import auth as auth
 from amoscloud_ai.api.routes import account_recovery as account_recovery
 
@@ -204,6 +215,7 @@ for _route in github_organization_publish.router.routes:
 
 from amoscloud_ai.api.routes import platform_services as platform_services
 from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
+from amoscloud_ai import workspace_runtime_service
 
 _platform_keys = set()
 for _route in platform_services.router.routes:
@@ -214,3 +226,13 @@ for _route in cloud_configuration.router.routes:
         continue
     platform_services.router.routes.append(_route)
     _platform_keys |= _keys
+
+if not any(item[0] == "workspace-runtime" for item in platform_services._CHECKS):
+    platform_services._CHECKS = (
+        *platform_services._CHECKS,
+        (
+            "workspace-runtime",
+            "Isolated cloud workspace runtime",
+            workspace_runtime_service.check,
+        ),
+    )
