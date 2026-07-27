@@ -129,9 +129,18 @@ def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
-def _create_github_connections(db: sqlite3.Connection) -> None:
+def _create_github_connections(
+    db: sqlite3.Connection,
+    *,
+    include_user_foreign_key: bool = True,
+) -> None:
+    foreign_key = (
+        ",\n            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE"
+        if include_user_foreign_key
+        else ""
+    )
     db.execute(
-        """CREATE TABLE IF NOT EXISTS github_connections (
+        f"""CREATE TABLE IF NOT EXISTS github_connections (
             user_id INTEGER PRIMARY KEY,
             github_user_id INTEGER,
             github_id TEXT,
@@ -140,8 +149,7 @@ def _create_github_connections(db: sqlite3.Connection) -> None:
             access_token_ciphertext TEXT NOT NULL,
             scopes TEXT NOT NULL DEFAULT '',
             connected_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            updated_at TEXT NOT NULL{foreign_key}
         )"""
     )
 
@@ -150,12 +158,19 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
     """Accept both historical ``github_id`` and current ``github_user_id`` rows.
 
     Isolated synchronization databases may intentionally omit the account
-    ``users`` table. An empty legacy table can still be rebuilt safely; a
-    populated table without its parent account table is preserved rather than
-    risking data loss or an invalid foreign-key copy.
+    ``users`` table. Their connection table remains standalone and therefore
+    must not acquire a foreign key to a table that does not exist.
     """
 
-    _create_github_connections(db)
+    users_table_exists = bool(
+        db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'"
+        ).fetchone()
+    )
+    _create_github_connections(
+        db,
+        include_user_foreign_key=users_table_exists,
+    )
     info = {
         row[1]: row
         for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
@@ -169,11 +184,6 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
         row[1]: row
         for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
     }
-    users_table_exists = bool(
-        db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'"
-        ).fetchone()
-    )
     table_empty = (
         db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
     )
@@ -187,7 +197,10 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
         db.execute(
             "ALTER TABLE github_connections RENAME TO github_connections_legacy"
         )
-        _create_github_connections(db)
+        _create_github_connections(
+            db,
+            include_user_foreign_key=users_table_exists,
+        )
         legacy = {
             row[1]
             for row in db.execute(
