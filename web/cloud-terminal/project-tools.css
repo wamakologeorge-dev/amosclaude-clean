@@ -1,0 +1,199 @@
+.terminal-project-tools {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  background: #0b1119;
+}
+
+.terminal-project-tools-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.terminal-project-tools-head h3 {
+  margin: 0;
+  color: #f0f6fc;
+  font-size: .95rem;
+}
+
+.terminal-project-tools-head p {
+  margin: 4px 0 0;
+  color: #8b949e;
+  font-size: .78rem;
+}
+
+.terminal-project-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  background: #161b22;
+  color: #c9d1d9;
+  padding: 4px 10px;
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.terminal-project-source.github {
+  border-color: #a371f766;
+  color: #d2a8ff;
+}
+
+.terminal-project-source.amosclaud {
+  border-color: #1f6feb66;
+  color: #79c0ff;
+}
+
+.terminal-project-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #8b949e;
+  font-size: .75rem;
+}
+
+.terminal-project-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #050a10;
+  padding: 3px 8px;
+}
+
+.terminal-project-summary .dirty {
+  border-color: #d2992266;
+  color: #e3b341;
+}
+
+.terminal-project-summary .clean {
+  border-color: #3fb95055;
+  color: #56d364;
+}
+
+.terminal-project-commands {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.terminal-project-command,
+.terminal-project-actions button,
+.terminal-custom-command button {
+  min-height: 36px;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #161b22;
+  color: #e6edf3;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.terminal-project-command:hover,
+.terminal-project-actions button:hover,
+.terminal-custom-command button:hover {
+  border-color: #58a6ff;
+  background: #1f2937;
+}
+
+.terminal-project-command.project {
+  border-color: #1f6feb66;
+  background: #1f6feb17;
+}
+
+.terminal-project-command.git {
+  border-color: #a371f755;
+}
+
+.terminal-project-command:disabled,
+.terminal-project-actions button:disabled,
+.terminal-custom-command button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.terminal-project-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, .8fr);
+  gap: 10px;
+}
+
+.terminal-custom-command,
+.terminal-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.terminal-custom-command input,
+.terminal-project-actions input {
+  min-width: 0;
+  flex: 1;
+  min-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid #30363d;
+  border-radius: 7px;
+  background: #050a10;
+  color: #e6edf3;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: .8rem;
+}
+
+.terminal-project-actions button.primary {
+  border-color: #1f6feb;
+  background: #1f6feb;
+  color: #fff;
+}
+
+.terminal-project-actions button.github {
+  border-color: #a371f7;
+  background: #a371f722;
+  color: #d2a8ff;
+}
+
+.terminal-project-result {
+  min-height: 18px;
+  color: #8b949e;
+  font-size: .74rem;
+  line-height: 1.4;
+}
+
+.terminal-project-result.success {
+  color: #56d364;
+}
+
+.terminal-project-result.error {
+  color: #ff7b72;
+}
+
+@media (max-width: 900px) {
+  .terminal-project-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .terminal-custom-command,
+  .terminal-project-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .terminal-custom-command input,
+  .terminal-project-actions input {
+    grid-column: 1 / -1;
+  }
+}
