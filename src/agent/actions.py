@@ -29,6 +29,41 @@ from .react_integration import AutonomousReactController
 from .react_loop import ReactOutcome
 
 _WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
+_MAX_BRAIN_LEVEL = 100
+_MAX_ACADEMY_LEVEL = 5000
+
+
+def _bounded_int(value: Any, *, default: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(1, min(parsed, maximum))
+
+
+def _resolve_learning_level(metadata: dict[str, Any]) -> int:
+    """Map a simple 1-100 Codex profile onto the 1-5000 curriculum.
+
+    The profile adjusts learning, evidence, and practice depth only. It never
+    bypasses write authorization, protected branches, or human merge controls.
+    """
+
+    if "academy_level" in metadata:
+        return _bounded_int(
+            metadata["academy_level"],
+            default=1,
+            maximum=_MAX_ACADEMY_LEVEL,
+        )
+    configured = metadata.get(
+        "codex_brain_level",
+        os.getenv("AMOSCLAUD_CODEX_BRAIN_LEVEL", "100"),
+    )
+    brain_level = _bounded_int(
+        configured,
+        default=100,
+        maximum=_MAX_BRAIN_LEVEL,
+    )
+    return min(_MAX_ACADEMY_LEVEL, brain_level * 50)
 
 
 @dataclass
@@ -146,7 +181,7 @@ class AutonomousOrchestrator:
             return self.run_react(task)
         write_authorized, security = self._fixer_write_authorized(task)
         task.metadata["security"] = security
-        level = int(task.metadata.get("academy_level", 1))
+        level = _resolve_learning_level(task.metadata)
         founder_verified = bool(task.metadata.get("founder_verified", False))
         context = self.foundation.prepare(
             task.objective,
@@ -239,7 +274,7 @@ def _resolve_workspace(workspace: str) -> Path:
     """
 
     raw_workspace = str(workspace or ".").strip()
-    if "\x00" in raw_workspace:
+    if not raw_workspace or "\x00" in raw_workspace:
         raise HTTPException(status_code=400, detail="Invalid workspace path")
 
     base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).expanduser().resolve()
@@ -250,9 +285,19 @@ def _resolve_workspace(workspace: str) -> Path:
 
     workspace_path = Path(raw_workspace)
     if workspace_path.is_absolute():
+        candidate = workspace_path.resolve()
+        for root in allowed_roots:
+            try:
+                candidate.relative_to(root)
+                return candidate
+            except ValueError:
+                continue
         raise HTTPException(
             status_code=400,
-            detail="Workspace must be a relative path inside allowed roots",
+            detail=(
+                "Workspace must stay inside the application or repository "
+                "storage root"
+            ),
         )
 
     for root in allowed_roots:
@@ -264,7 +309,9 @@ def _resolve_workspace(workspace: str) -> Path:
             continue
     raise HTTPException(
         status_code=400,
-        detail="Workspace must stay inside the application or repository storage root",
+        detail=(
+            "Workspace must stay inside the application or repository storage root"
+        ),
     )
 
 
