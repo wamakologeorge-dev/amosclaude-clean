@@ -41,7 +41,7 @@ class WorkspaceRegistry:
     def _allowed_roots(self) -> tuple[Path, ...]:
         configured = os.getenv("AMOSCLAUD_LOCAL_ALLOWED_ROOTS", "").strip()
         if not configured:
-            return ()
+            return (Path.home().resolve(),)
         roots: list[Path] = []
         for value in configured.split(os.pathsep):
             if value.strip():
