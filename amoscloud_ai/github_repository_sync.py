@@ -5,24 +5,29 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import HTTPException
 from git import Repo
 from git.exc import GitCommandError
 
 from amoscloud_ai.api.routes.github_repositories import (
+    _authenticated_clone_url,
     _connection,
     _db,
     _decrypt_token,
+    _public_remote_url,
 )
 from amoscloud_ai.api.routes.repositories import (
     _db as _repository_db,
     _repo_lock,
     _repo_path,
 )
-from amoscloud_ai.db_migrations import ensure_github_repository_schema
-from amoscloud_ai.github_git_auth import authenticated_git
 
 log = logging.getLogger(__name__)
+
+_SYNC_COLUMNS = {
+    "github_sync_state": "TEXT",
+    "github_sync_detail": "TEXT",
+    "github_last_remote_sha": "TEXT",
+}
 
 
 def _now() -> str:
@@ -30,53 +35,36 @@ def _now() -> str:
 
 
 def ensure_sync_columns() -> None:
-    """Initialize the canonical schema for isolated tests and legacy entry points.
+    """Initialize the canonical repository schema, then add sync evidence fields.
 
-    Production applies migration 3 in the application lifespan before accepting
-    traffic, so webhook requests do not race to add columns.
+    GitHub push events can arrive on a fresh process before any repository route
+    has opened the application database. Initializing through repositories._db()
+    preserves the complete canonical schema instead of creating a partial table.
     """
 
-    with _repository_db() as db:
-        ensure_github_repository_schema(db)
+    with _repository_db():
+        pass
+    with _db() as db:
+        columns = {
+            row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
+        }
+        for name, sql_type in _SYNC_COLUMNS.items():
+            if name not in columns:
+                db.execute(f"ALTER TABLE repositories ADD COLUMN {name} {sql_type}")
         db.commit()
 
 
-def _record(
-    repository_id: int,
-    state: str,
-    detail: str,
-    remote_sha: str | None,
-    *,
-    successful: bool = False,
-) -> None:
+def _record(repository_id: int, state: str, detail: str, remote_sha: str | None) -> None:
     ensure_sync_columns()
     now = _now()
     with _db() as db:
-        if successful:
-            db.execute(
-                """UPDATE repositories
-                   SET github_sync_state=?, github_sync_detail=?,
-                       github_last_remote_sha=?, github_last_sync_attempt_at=?,
-                       github_last_sync_at=?, updated_at=?
-                   WHERE id=?""",
-                (
-                    state,
-                    detail[:1000],
-                    remote_sha,
-                    now,
-                    now,
-                    now,
-                    repository_id,
-                ),
-            )
-        else:
-            db.execute(
-                """UPDATE repositories
-                   SET github_sync_state=?, github_sync_detail=?,
-                       github_last_remote_sha=?, github_last_sync_attempt_at=?
-                   WHERE id=?""",
-                (state, detail[:1000], remote_sha, now, repository_id),
-            )
+        db.execute(
+            """UPDATE repositories
+               SET github_sync_state=?, github_sync_detail=?, github_last_remote_sha=?,
+                   github_last_sync_at=?, updated_at=?
+               WHERE id=?""",
+            (state, detail[:1000], remote_sha, now, now, repository_id),
+        )
         db.commit()
 
 
@@ -84,9 +72,8 @@ def sync_status(repository_id: int, owner_id: int) -> dict:
     ensure_sync_columns()
     with _db() as db:
         row = db.execute(
-            """SELECT id,github_repository_id,github_full_name,
-                      github_last_sync_at,github_last_sync_attempt_at,
-                      github_sync_state,github_sync_detail,github_last_remote_sha
+            """SELECT id,github_full_name,github_last_sync_at,github_sync_state,
+                      github_sync_detail,github_last_remote_sha
                FROM repositories WHERE id=? AND owner_id=?""",
             (repository_id, owner_id),
         ).fetchone()
@@ -160,6 +147,10 @@ def _synchronize_github_push(
     Dirty, detached-unreferenced, ahead, or diverged local work is never reset or
     overwritten. One stale user's GitHub authorization cannot stop another
     mapped workspace from synchronizing.
+) -> list[dict]:
+    """Fast-forward mapped workspaces after a GitHub push.
+
+    Dirty, ahead, or diverged local work is never reset or overwritten.
     """
 
     if not ref.startswith("refs/heads/"):
@@ -177,6 +168,16 @@ def _synchronize_github_push(
             repository_full_name,
             github_repository_id,
         )
+    ensure_sync_columns()
+    with _db() as db:
+        rows = db.execute(
+            "SELECT * FROM repositories WHERE github_full_name=?",
+            (repository_full_name,),
+        ).fetchall()
+
+    results: list[dict] = []
+    for row in rows:
+        repository_id = int(row["id"])
         expected_branch = str(
             row["github_default_branch"] or row["default_branch"] or "main"
         )
@@ -244,6 +245,26 @@ def _synchronize_github_push(
                         remote_ref.hexsha,
                         successful=True,
                     )
+
+                remote = _synchronization_remote(repo)
+                remote_name = remote.name
+                original_url = remote.url
+                try:
+                    remote.set_url(
+                        _authenticated_clone_url(repository_full_name, token)
+                    )
+                    remote.fetch(branch)
+                finally:
+                    remote.set_url(
+                        original_url or _public_remote_url(repository_full_name)
+                    )
+
+                remote_ref = repo.commit(f"{remote_name}/{branch}")
+                if branch not in [head.name for head in repo.heads]:
+                    local_head = repo.create_head(branch, remote_ref)
+                    local_head.checkout()
+                    detail = "Created local branch from GitHub push"
+                    _record(repository_id, "synced", detail, remote_ref.hexsha)
                     results.append(
                         {
                             "repository_id": repository_id,
@@ -263,6 +284,7 @@ def _synchronize_github_push(
                         remote_ref.hexsha,
                         successful=True,
                     )
+                    _record(repository_id, "current", detail, remote_ref.hexsha)
                     results.append(
                         {
                             "repository_id": repository_id,
@@ -296,6 +318,7 @@ def _synchronize_github_push(
                     remote_ref.hexsha,
                     successful=True,
                 )
+                _record(repository_id, "synced", detail, remote_ref.hexsha)
                 results.append(
                     {
                         "repository_id": repository_id,
@@ -309,6 +332,7 @@ def _synchronize_github_push(
                 ValueError,
                 OSError,
             ) as exc:
+            except (GitCommandError, ValueError, OSError) as exc:
                 detail = f"Automatic GitHub pull failed: {type(exc).__name__}"
                 _record(repository_id, "error", detail, remote_sha)
                 results.append(
@@ -336,6 +360,15 @@ def synchronize_github_push(
             remote_sha,
             github_repository_id,
         )
+) -> list[dict]:
+    """Run a webhook synchronization without leaking exceptions to Starlette.
+
+    FastAPI executes this function after the webhook response has been returned.
+    A blank or temporarily unavailable database must not crash the webhook runner.
+    """
+
+    try:
+        return _synchronize_github_push(repository_full_name, ref, remote_sha)
     except Exception as exc:  # pragma: no cover - final background-task boundary
         log.exception(
             "GitHub background synchronization failed for %s (%s)",

@@ -34,6 +34,12 @@ sandbox:
   max_processes: 512
   default_network: none
   allow_internal_mesh_access: false
+    - www.amosclaud.com
+
+sandbox:
+  default_image: mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+  docker_enabled: true
+  privileged_by_default: false
 
 telemetry:
   enabled: true

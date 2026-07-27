@@ -22,9 +22,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from amoscloud_ai import codex_memory, github_issue_commands
 from amoscloud_ai.api.routes.agent import _authenticated_user
-from amoscloud_ai.api.routes.github_repositories import _db as _repository_db
-from amoscloud_ai.cloud_configuration import load_cloud_configuration
-from amoscloud_ai.db_migrations import ensure_github_repository_schema
 from amoscloud_ai.github_repository_sync import synchronize_github_push
 
 router = APIRouter(prefix="/agent/github", tags=["github-app"])
@@ -77,12 +74,10 @@ def _webhook_secret() -> str:
 
 
 def _production() -> bool:
-    environment = (
-        os.getenv("AMOSCLAUD_ENV")
-        or os.getenv("ENVIRONMENT")
-        or "development"
-    )
-    return environment.strip().lower() in {"production", "prod"}
+    return os.getenv("AMOSCLAUD_ENV", "development").lower() in {
+        "production",
+        "prod",
+    }
 
 
 def _verify_signature(payload: bytes, signature_header: str | None) -> None:
@@ -268,8 +263,7 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
     if event == "check_suite":
         suite = payload.get("check_suite") or {}
         title = (
-            f"Check suite "
-            f"{str(suite.get('conclusion') or suite.get('status') or action)}"
+            f"Check suite {str(suite.get('conclusion') or suite.get('status') or action)}"
         )
         return action, title, title
     return (
@@ -280,10 +274,7 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
 
 
 @router.post("/webhook", summary="Receive GitHub App webhook deliveries")
-async def receive_webhook(
-    request: Request,
-    background_tasks: BackgroundTasks,
-) -> dict:
+async def receive_webhook(request: Request, background_tasks: BackgroundTasks) -> dict:
     payload_bytes = await request.body()
     _verify_signature(
         payload_bytes,
@@ -344,19 +335,13 @@ async def receive_webhook(
         "event_id": record["id"],
     }
     if event == "push" and repository:
-        enabled, policy = _github_to_platform_policy()
-        response["sync_policy"] = policy
-        if enabled:
-            background_tasks.add_task(
-                synchronize_github_push,
-                repository,
-                str(payload.get("ref") or ""),
-                str(payload.get("after") or "") or None,
-                repository_id,
-            )
-            response["sync_queued"] = True
-        else:
-            response["sync_queued"] = False
+        background_tasks.add_task(
+            synchronize_github_push,
+            repository,
+            str(payload.get("ref") or ""),
+            str(payload.get("after") or "") or None,
+        )
+        response["sync_queued"] = True
     if event in {"issues", "issue_comment"}:
         command = github_issue_commands.handle_issue_event(
             event=event,
@@ -445,8 +430,8 @@ async def app_status(request: Request) -> dict:
         "last_event_at": row["last_event_at"],
         "handled_events": sorted(HANDLED_EVENTS),
         "push_sync": {
-            "enabled": enabled,
-            "mode": policy,
+            "enabled": True,
+            "mode": "fast-forward-only",
             "conflict_policy": "never overwrite dirty, ahead, or diverged work",
         },
         "issue_commands": {

@@ -129,6 +129,12 @@ def test_repository_name_fallback_is_case_insensitive(tmp_path: Path, monkeypatc
     assert [row["id"] for row in rows] == [1]
 
 
+        "github_sync_state",
+        "github_sync_detail",
+        "github_last_remote_sha",
+    }.issubset(columns)
+
+
 def test_background_sync_contains_unexpected_failures(monkeypatch) -> None:
     def fail(*_args, **_kwargs):
         raise sqlite3.OperationalError("no such table: repositories")
