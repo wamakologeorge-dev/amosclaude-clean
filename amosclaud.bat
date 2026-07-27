@@ -14,7 +14,7 @@ if errorlevel 1 (
 
 if "%~1"=="" goto usage
 
-%AMOSCLAUD_PYTHON% scripts\agent_guard_cli.py %*
+%AMOSCLAUD_PYTHON% -m scripts.agent_guard_cli %*
 exit /b %errorlevel%
 
 :usage
