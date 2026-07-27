@@ -104,6 +104,12 @@ def _safe_mountpoint(value: str) -> Path:
     if not os.path.isabs(cleaned):
         raise HTTPException(status_code=422, detail="mountpoint must be an absolute path")
 
+    parts = [part for part in cleaned.split("/") if part]
+    if any(part == ".." for part in parts):
+        raise HTTPException(status_code=422, detail="mountpoint contains forbidden traversal segments")
+    if any(not re.fullmatch(r"[A-Za-z0-9._-]+", part) for part in parts):
+        raise HTTPException(status_code=422, detail="mountpoint contains invalid path characters")
+
     candidate = Path(cleaned).expanduser().resolve(strict=False)
     for root in _allowed_mount_roots():
         try:
