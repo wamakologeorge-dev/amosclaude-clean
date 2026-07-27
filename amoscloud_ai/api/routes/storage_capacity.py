@@ -11,10 +11,12 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from amoscloud_ai import storage_capacity
+from amoscloud_ai import feature_flags, storage_capacity
 from amoscloud_ai.api.routes import admin
 
 router = APIRouter(prefix="/admin/storage-capacity", tags=["administration", "storage-capacity"])
+
+_HIGH_CAPACITY_THRESHOLD_GIB = 512
 
 
 class ResizeJobCreate(BaseModel):
@@ -81,14 +83,22 @@ def _confirmation(provider: str, resource_name: str, size_gib: int) -> str:
     return f"RESIZE {provider.upper()} {resource_name} TO {size_gib}GiB"
 
 
+def _high_capacity_decision(administrator: sqlite3.Row) -> dict:
+    return feature_flags.evaluate(
+        "storage.high_capacity",
+        user_id=int(administrator["id"]),
+    )
+
+
 @router.get("/controller")
 def storage_controller_status(
     administrator: sqlite3.Row = Depends(admin._admin_user),
 ) -> dict:
-    del administrator
     return {
         **storage_capacity.controller_health(),
         "maximum_size_gib": _max_size_gib(),
+        "high_capacity_threshold_gib": _HIGH_CAPACITY_THRESHOLD_GIB,
+        "high_capacity_feature": _high_capacity_decision(administrator),
         "snapshot_required_for_real_resize": True,
         "filesystem_expansion_location": "privileged storage host, never a developer sandbox",
     }
@@ -106,6 +116,18 @@ def create_resize_job(
             status_code=422,
             detail=f"Requested size exceeds the configured {maximum} GiB limit",
         )
+    if body.target_size_gib > _HIGH_CAPACITY_THRESHOLD_GIB:
+        decision = _high_capacity_decision(administrator)
+        if not decision["enabled"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "high_capacity_storage_not_enabled",
+                    "flag": "storage.high_capacity",
+                    "reason": decision["reason"],
+                    "target_size_gib": body.target_size_gib,
+                },
+            )
     if not body.snapshot_required and not body.dry_run:
         raise HTTPException(
             status_code=422,
