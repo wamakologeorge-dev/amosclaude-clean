@@ -194,6 +194,110 @@
   color: #ff7b72;
 }
 
+.terminal-live-activity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  box-sizing: border-box;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  background: #0b1119;
+  padding: 10px 12px;
+}
+
+.terminal-live-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6e7681;
+  box-shadow: 0 0 0 4px #6e768122;
+}
+
+.terminal-live-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.terminal-live-copy strong {
+  color: #e6edf3;
+  font-size: .82rem;
+}
+
+.terminal-live-copy code {
+  overflow: hidden;
+  color: #8b949e;
+  font-size: .72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-live-time {
+  min-width: 48px;
+  color: #8b949e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .75rem;
+  text-align: right;
+}
+
+.terminal-live-activity button {
+  min-height: 34px;
+  border: 1px solid #f8514966;
+  border-radius: 7px;
+  background: #f8514918;
+  color: #ff7b72;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.terminal-live-activity button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.terminal-live-activity.running,
+.terminal-live-activity.stopping {
+  border-color: #d2992266;
+  background: linear-gradient(90deg, #d2992212, #0b1119 45%);
+}
+
+.terminal-live-activity.running .terminal-live-dot,
+.terminal-live-activity.stopping .terminal-live-dot {
+  background: #e3b341;
+  box-shadow: 0 0 0 4px #d2992233;
+  animation: amosclaud-live-pulse 1.2s ease-in-out infinite;
+}
+
+.terminal-live-activity.success {
+  border-color: #3fb95066;
+}
+
+.terminal-live-activity.success .terminal-live-dot {
+  background: #56d364;
+  box-shadow: 0 0 0 4px #3fb9502b;
+}
+
+.terminal-live-activity.failed,
+.terminal-live-activity.interrupted {
+  border-color: #f8514966;
+}
+
+.terminal-live-activity.failed .terminal-live-dot,
+.terminal-live-activity.interrupted .terminal-live-dot {
+  background: #ff7b72;
+  box-shadow: 0 0 0 4px #f851492b;
+}
+
+@keyframes amosclaud-live-pulse {
+  0%, 100% { transform: scale(.8); opacity: .65; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
 @media (max-width: 900px) {
   .terminal-project-bottom {
     grid-template-columns: minmax(0, 1fr);
@@ -210,5 +314,20 @@
   .terminal-custom-command input,
   .terminal-project-actions input {
     grid-column: 1 / -1;
+  }
+
+  .terminal-live-activity {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .terminal-live-time {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .terminal-live-activity button {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
 }
