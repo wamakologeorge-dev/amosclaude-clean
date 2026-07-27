@@ -108,18 +108,18 @@ def _validate_request(request: dict[str, Any]) -> None:
             "Filesystem labels must contain 1-16 letters, numbers, dots, dashes, or underscores"
         )
     if request.get("confirmation") != expected_confirmation(request):
-        raise VolumeProvisionError("Destructive provisioning confirmation does not match")
+        raise VolumeProvisionError(
+            "Destructive provisioning confirmation does not match"
+        )
     benchmark = int(request.get("benchmark_size_gib") or 0)
     if not 0 <= benchmark <= 100:
         raise VolumeProvisionError("Benchmark size must be between 0 and 100 GiB")
+    mode = str(request.get("directory_mode") or "")
+    if not re.fullmatch(r"[0-7]{3,4}", mode):
+        raise VolumeProvisionError("Directory mode must be an octal permission string")
 
 
 def _provision_gcp(request: dict[str, Any]) -> dict[str, Any]:
-    try:
-        from google.cloud import compute_v1
-    except ImportError as exc:
-        raise VolumeProvisionError("google-cloud-compute is not installed") from exc
-
     resource = dict(request["resource"])
     project = str(resource.get("project_id") or "").strip()
     zone = str(resource.get("zone") or "").strip()
@@ -148,13 +148,24 @@ def _provision_gcp(request: dict[str, Any]) -> dict[str, Any]:
         "stable_device": f"/dev/disk/by-id/google-{device_name}",
     }
     if request.get("dry_run"):
-        return {**planned, "state": "planned", "created": False, "attached": False}
+        return {
+            **planned,
+            "state": "planned",
+            "created": False,
+            "attached": False,
+        }
+
+    try:
+        from google.api_core.exceptions import NotFound
+        from google.cloud import compute_v1
+    except ImportError as exc:
+        raise VolumeProvisionError("google-cloud-compute is not installed") from exc
 
     disks = compute_v1.DisksClient()
     instances = compute_v1.InstancesClient()
     try:
         existing = disks.get(project=project, zone=zone, disk=disk_name)
-    except Exception:
+    except NotFound:
         existing = None
     if existing is not None:
         raise VolumeProvisionError(
@@ -197,12 +208,35 @@ def _provision_gcp(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _provision_aws(request: dict[str, Any]) -> dict[str, Any]:
-    try:
-        import boto3
-    except ImportError as exc:
-        raise VolumeProvisionError("boto3 is not installed") from exc
+def _validate_aws_performance(
+    volume_type: str,
+    iops: int | None,
+    throughput: int | None,
+) -> None:
+    if volume_type == "gp3":
+        if iops is not None and not 3000 <= iops <= 80000:
+            raise VolumeProvisionError("AWS gp3 IOPS must be between 3000 and 80000")
+        if throughput is not None and not 125 <= throughput <= 2000:
+            raise VolumeProvisionError(
+                "AWS gp3 throughput must be between 125 and 2000 MiB/s"
+            )
+    elif volume_type == "io1":
+        if iops is not None and not 100 <= iops <= 64000:
+            raise VolumeProvisionError("AWS io1 IOPS must be between 100 and 64000")
+        if throughput is not None:
+            raise VolumeProvisionError("AWS io1 does not accept gp3 throughput")
+    elif volume_type == "io2":
+        if iops is not None and not 100 <= iops <= 256000:
+            raise VolumeProvisionError("AWS io2 IOPS must be between 100 and 256000")
+        if throughput is not None:
+            raise VolumeProvisionError("AWS io2 does not accept gp3 throughput")
+    elif iops is not None or throughput is not None:
+        raise VolumeProvisionError(
+            f"AWS {volume_type} does not accept provisioned IOPS or throughput"
+        )
 
+
+def _provision_aws(request: dict[str, Any]) -> dict[str, Any]:
     resource = dict(request["resource"])
     region = str(resource.get("region") or "").strip()
     availability_zone = str(resource.get("availability_zone") or "").strip()
@@ -224,7 +258,16 @@ def _provision_aws(request: dict[str, Any]) -> dict[str, Any]:
             f"AWS {volume_type} does not support a {size_gib} GiB volume"
         )
     if not re.fullmatch(r"/dev/sd[f-p]", device_name):
-        raise VolumeProvisionError("AWS attachment device must be between /dev/sdf and /dev/sdp")
+        raise VolumeProvisionError(
+            "AWS attachment device must be between /dev/sdf and /dev/sdp"
+        )
+    iops = int(resource["iops"]) if resource.get("iops") is not None else None
+    throughput = (
+        int(resource["throughput_mibps"])
+        if resource.get("throughput_mibps") is not None
+        else None
+    )
+    _validate_aws_performance(volume_type, iops, throughput)
 
     planned = {
         "provider": "aws",
@@ -235,9 +278,21 @@ def _provision_aws(request: dict[str, Any]) -> dict[str, Any]:
         "volume_type": volume_type,
         "attachment_device": device_name,
         "size_gib": size_gib,
+        "iops": iops,
+        "throughput_mibps": throughput,
     }
     if request.get("dry_run"):
-        return {**planned, "state": "planned", "created": False, "attached": False}
+        return {
+            **planned,
+            "state": "planned",
+            "created": False,
+            "attached": False,
+        }
+
+    try:
+        import boto3
+    except ImportError as exc:
+        raise VolumeProvisionError("boto3 is not installed") from exc
 
     ec2 = boto3.client("ec2", region_name=region)
     create_args: dict[str, Any] = {
@@ -257,15 +312,13 @@ def _provision_aws(request: dict[str, Any]) -> dict[str, Any]:
             }
         ],
     }
-    iops = resource.get("iops")
-    throughput = resource.get("throughput_mibps")
     if volume_type in {"io1", "io2"}:
-        create_args["Iops"] = int(iops or 10000)
+        create_args["Iops"] = iops or 10000
     elif volume_type == "gp3":
         if iops is not None:
-            create_args["Iops"] = int(iops)
+            create_args["Iops"] = iops
         if throughput is not None:
-            create_args["Throughput"] = int(throughput)
+            create_args["Throughput"] = throughput
 
     response = ec2.create_volume(**create_args)
     volume_id = str(response["VolumeId"])
@@ -323,7 +376,7 @@ def _resolve_aws_device(volume_id: str, timeout: int = 300) -> Path:
                 ]
             )
         )
-        matches = []
+        matches: list[Path] = []
         for item in payload.get("blockdevices") or []:
             serial = str(item.get("serial") or "").replace("-", "").lower()
             if serial == expected_serial and item.get("type") == "disk":
@@ -331,9 +384,13 @@ def _resolve_aws_device(volume_id: str, timeout: int = 300) -> Path:
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            raise VolumeProvisionError("Multiple block devices matched the AWS volume ID")
+            raise VolumeProvisionError(
+                "Multiple block devices matched the AWS volume ID"
+            )
         time.sleep(2)
-    raise VolumeProvisionError("Unable to map the attached AWS volume ID to one NVMe device")
+    raise VolumeProvisionError(
+        "Unable to map the attached AWS volume ID to one NVMe device"
+    )
 
 
 def _device_tree(device: Path) -> dict[str, Any]:
@@ -356,21 +413,38 @@ def _device_tree(device: Path) -> dict[str, Any]:
 
 
 def _root_parent_devices() -> set[Path]:
-    source = _run([_which("findmnt"), "--noheadings", "--output", "SOURCE", "/"]).strip()
+    source = _run(
+        [_which("findmnt"), "--noheadings", "--output", "SOURCE", "/"]
+    ).strip()
     if not source.startswith("/dev/"):
         return set()
-    path = Path(source).resolve()
-    protected = {path}
-    try:
-        parent = _run([_which("lsblk"), "--noheadings", "--output", "PKNAME", str(path)]).strip()
-    except VolumeProvisionError:
-        parent = ""
-    if parent:
-        protected.add(Path(f"/dev/{parent}").resolve())
+    protected: set[Path] = set()
+    current = Path(source).resolve()
+    for _ in range(8):
+        protected.add(current)
+        try:
+            parent = _run(
+                [
+                    _which("lsblk"),
+                    "--noheadings",
+                    "--output",
+                    "PKNAME",
+                    str(current),
+                ]
+            ).strip()
+        except VolumeProvisionError:
+            break
+        if not parent:
+            break
+        current = Path(f"/dev/{parent}").resolve()
     return protected
 
 
-def _validate_blank_device(device: Path, *, expected_size_gib: int) -> dict[str, Any]:
+def _validate_blank_device(
+    device: Path,
+    *,
+    expected_size_gib: int,
+) -> dict[str, Any]:
     resolved = device.resolve()
     if not str(resolved).startswith("/dev/"):
         raise VolumeProvisionError("Resolved device is outside /dev")
@@ -378,16 +452,28 @@ def _validate_blank_device(device: Path, *, expected_size_gib: int) -> dict[str,
         raise VolumeProvisionError("Refusing to format the operating-system disk")
     tree = _device_tree(resolved)
     if tree.get("type") != "disk" or int(tree.get("ro") or 0) != 0:
-        raise VolumeProvisionError("Attached resource is not one writable whole-disk block device")
+        raise VolumeProvisionError(
+            "Attached resource is not one writable whole-disk block device"
+        )
     if tree.get("children"):
         raise VolumeProvisionError("New cloud volume unexpectedly contains partitions")
     if any(tree.get("mountpoints") or []):
         raise VolumeProvisionError("New cloud volume is already mounted")
     if tree.get("fstype"):
         raise VolumeProvisionError("New cloud volume already contains a filesystem")
-    signatures = _run([_which("wipefs"), "--noheadings", "--output", "TYPE", str(resolved)]).strip()
+    signatures = _run(
+        [
+            _which("wipefs"),
+            "--noheadings",
+            "--output",
+            "TYPE",
+            str(resolved),
+        ]
+    ).strip()
     if signatures:
-        raise VolumeProvisionError("New cloud volume contains an existing disk signature")
+        raise VolumeProvisionError(
+            "New cloud volume contains an existing disk signature"
+        )
     size_bytes = int(tree.get("size") or 0)
     expected_bytes = int(expected_size_gib) * 1024**3
     tolerance = 1024**3
@@ -413,11 +499,22 @@ def _mount_is_safe(mountpoint: Path) -> None:
     if mountpoint.exists() and mountpoint.is_mount():
         raise VolumeProvisionError("Mountpoint is already mounted")
     if mountpoint.exists() and any(mountpoint.iterdir()):
-        raise VolumeProvisionError("Mountpoint must be empty before a new volume is mounted")
+        raise VolumeProvisionError(
+            "Mountpoint must be empty before a new volume is mounted"
+        )
 
 
 def _filesystem_uuid(partition: Path) -> str:
-    value = _run([_which("blkid"), "--output", "value", "--match-tag", "UUID", str(partition)]).strip()
+    value = _run(
+        [
+            _which("blkid"),
+            "--output",
+            "value",
+            "--match-tag",
+            "UUID",
+            str(partition),
+        ]
+    ).strip()
     if not value or not re.fullmatch(r"[A-Fa-f0-9-]{8,64}", value):
         raise VolumeProvisionError("Unable to read the new filesystem UUID")
     return value
@@ -442,7 +539,10 @@ def _persist_mount(
     marker = f"UUID={uuid_value}"
     if marker in original:
         return marker
-    line = f"{marker} {mountpoint} {filesystem} {mount_options},nofail 0 2\n"
+    line = (
+        f"{marker} {mountpoint} {filesystem} "
+        f"{mount_options},nofail 0 2\n"
+    )
     with tempfile.NamedTemporaryFile(
         mode="w",
         encoding="utf-8",
@@ -516,9 +616,14 @@ def format_mount_and_verify(
     mountpoint: Path,
 ) -> dict[str, Any]:
     if os.geteuid() != 0:
-        raise VolumeProvisionError("Formatting requires the private controller to run as root")
+        raise VolumeProvisionError(
+            "Formatting requires the private controller to run as root"
+        )
     _mount_is_safe(mountpoint)
-    blank = _validate_blank_device(device, expected_size_gib=int(request["size_gib"]))
+    blank = _validate_blank_device(
+        device,
+        expected_size_gib=int(request["size_gib"]),
+    )
     filesystem = str(request["filesystem"]).lower()
     label = str(request["filesystem_label"])
 
@@ -570,9 +675,20 @@ def format_mount_and_verify(
         mount_options = "defaults,noatime,inode64"
 
     mountpoint.mkdir(parents=True, exist_ok=True)
+    _run(
+        [
+            _which("mount"),
+            "--options",
+            mount_options,
+            str(partition),
+            str(mountpoint),
+        ]
+    )
+    # Permissions must be applied after mounting because the filesystem root has
+    # its own ownership and mode, independent of the covered host directory.
     os.chown(mountpoint, int(request["owner_uid"]), int(request["owner_gid"]))
     os.chmod(mountpoint, int(str(request["directory_mode"]), 8))
-    _run([_which("mount"), "--options", mount_options, str(partition), str(mountpoint)])
+
     uuid_value = _filesystem_uuid(partition)
     persisted = None
     if request.get("persist_mount"):
@@ -591,7 +707,9 @@ def format_mount_and_verify(
                 "--output=size",
                 str(mountpoint),
             ]
-        ).splitlines()[-1].strip()
+        )
+        .splitlines()[-1]
+        .strip()
     )
     requested_bytes = int(request["size_gib"]) * 1024**3
     # Filesystem metadata and the 1% ext4 reserve mean df capacity is lower than
@@ -602,7 +720,10 @@ def format_mount_and_verify(
             f"Mounted filesystem exposes {capacity_bytes} bytes; expected at least {minimum_bytes}"
         )
 
-    benchmark = _fio_summary(mountpoint, int(request.get("benchmark_size_gib") or 0))
+    benchmark = _fio_summary(
+        mountpoint,
+        int(request.get("benchmark_size_gib") or 0),
+    )
     _run([_which("sync")])
     return {
         "blank_device_check": blank,
@@ -624,7 +745,11 @@ def format_mount_and_verify(
     }
 
 
-def provision_volume(request: dict[str, Any], *, mountpoint: Path) -> dict[str, Any]:
+def provision_volume(
+    request: dict[str, Any],
+    *,
+    mountpoint: Path,
+) -> dict[str, Any]:
     _validate_request(request)
     cloud = (
         _provision_gcp(request)
@@ -632,13 +757,22 @@ def provision_volume(request: dict[str, Any], *, mountpoint: Path) -> dict[str, 
         else _provision_aws(request)
     )
     if request.get("dry_run"):
-        return {"cloud": cloud, "host": None, "verified": True, "dry_run": True}
+        return {
+            "cloud": cloud,
+            "host": None,
+            "verified": True,
+            "dry_run": True,
+        }
 
     if request["provider"] == "gcp":
         device = _wait_for_path(Path(str(cloud["stable_device"])), timeout=300)
     else:
         device = _resolve_aws_device(str(cloud["volume_id"]), timeout=300)
-    host = format_mount_and_verify(request, device=device, mountpoint=mountpoint)
+    host = format_mount_and_verify(
+        request,
+        device=device,
+        mountpoint=mountpoint,
+    )
     return {
         "cloud": cloud,
         "host": host,
