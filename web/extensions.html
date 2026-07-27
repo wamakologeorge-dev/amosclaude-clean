@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07101d">
+  <title>Extensions · Amosclaud</title>
+  <link rel="stylesheet" href="/static/extensions.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/admin">Amosclaud Admin</a>
+    <nav><a href="/admin">Dashboard</a><a href="/admin/extensions" aria-current="page">Extensions</a><a href="/repositories">Repositories</a><a href="/cloud/agent">Workspace</a></nav>
+  </header>
+
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Modular platform control plane</p>
+      <h1>Plugins, MCP, and feature flags</h1>
+      <p>Load trusted extensions without rewriting the FastAPI core, connect scoped MCP servers, and roll out capabilities safely by user, workspace, tier, or deterministic percentage.</p>
+      <div class="hero-actions"><button id="refresh" type="button">Refresh live state</button><span id="updated">Not checked yet</span></div>
+    </header>
+
+    <p id="notice" class="notice" role="status" aria-live="polite">Loading extension state…</p>
+
+    <section class="metrics" aria-label="Extension metrics">
+      <article><span>Plugins</span><strong id="metric-plugins">—</strong><small>Loaded modules and packages</small></article>
+      <article><span>Feature flags</span><strong id="metric-flags">—</strong><small>Global and targeted controls</small></article>
+      <article><span>MCP servers</span><strong id="metric-mcp">—</strong><small>Scoped protocol endpoints</small></article>
+      <article><span>Health checks</span><strong id="metric-health">—</strong><small>Verified plugin checks</small></article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Registry</p><h2>Installed and drop-in plugins</h2></div><span class="pill">amosclaud.plugins</span></div>
+      <p class="muted">A trusted package can expose the <code>amosclaud.plugins</code> Python entry point. A built-in or self-hosted extension can also be dropped into <code>amoscloud_ai/plugins/</code> with a <code>create_plugin()</code> function.</p>
+      <div id="plugin-list" class="card-grid"><p class="empty">No plugins loaded.</p></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Safe rollout</p><h2>Feature flags</h2></div><span class="pill">Workspace → user → tier → rollout</span></div>
+      <div class="two-column">
+        <form id="flag-form" class="form-card stack">
+          <h3>Create or update a flag</h3>
+          <label>Flag key<input id="flag-key" required pattern="[a-z][a-z0-9_.-]{2,119}" placeholder="workspace.live_collaboration"></label>
+          <label>Name<input id="flag-name" required maxlength="160"></label>
+          <label>Description<textarea id="flag-description" rows="3" maxlength="2000"></textarea></label>
+          <div class="form-grid">
+            <label>Rollout percentage<input id="flag-rollout" type="number" min="0" max="100" value="0"></label>
+            <label>Eligible tiers<input id="flag-tiers" placeholder="full, enterprise"></label>
+          </div>
+          <label class="check"><input id="flag-enabled" type="checkbox"><span>Globally enabled before rollout evaluation</span></label>
+          <button type="submit">Save feature flag</button>
+        </form>
+        <form id="target-form" class="form-card stack">
+          <h3>Add targeted override</h3>
+          <label>Flag<select id="target-flag" required><option value="">Load flags first</option></select></label>
+          <div class="form-grid">
+            <label>Target type<select id="target-type"><option value="user">User ID</option><option value="workspace">Workspace ID</option><option value="tier">Tier</option></select></label>
+            <label>Target value<input id="target-value" required maxlength="300"></label>
+          </div>
+          <label class="check"><input id="target-enabled" type="checkbox" checked><span>Enable this flag for the target</span></label>
+          <button type="submit">Add override</button>
+        </form>
+      </div>
+      <div id="flag-list" class="stack-list"><p class="empty">No flags registered.</p></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">Universal tools</p><h2>MCP server registry</h2></div><span class="pill">Streamable HTTP</span></div>
+      <p class="muted">Credentials are referenced by environment-variable name and are never stored in the database. Public endpoints require HTTPS. Each server can be limited by feature flag, tool allowlist, user, workspace, or tier.</p>
+      <div class="two-column">
+        <form id="mcp-form" class="form-card stack">
+          <h3>Register MCP server</h3>
+          <label>Server ID<input id="mcp-id" required pattern="[a-z][a-z0-9_.-]{2,119}" placeholder="jira-production"></label>
+          <label>Name<input id="mcp-name" required maxlength="160"></label>
+          <label>Description<textarea id="mcp-description" rows="3" maxlength="2000"></textarea></label>
+          <label>Streamable HTTP endpoint<input id="mcp-endpoint" type="url" required placeholder="https://mcp.example.com/mcp"></label>
+          <div class="form-grid">
+            <label>Auth header<input id="mcp-header" maxlength="120" placeholder="Authorization"></label>
+            <label>Secret environment variable<input id="mcp-secret-env" maxlength="120" placeholder="MCP_JIRA_TOKEN"></label>
+          </div>
+          <label>Feature flag<input id="mcp-flag" value="mcp.integrations" required></label>
+          <label>Allowed tools <small>comma or newline separated; empty means all server tools</small><textarea id="mcp-tools" rows="4"></textarea></label>
+          <div class="form-grid"><label>Timeout seconds<input id="mcp-timeout" type="number" min="1" max="300" value="30"></label></div>
+          <label class="check"><input id="mcp-enabled" type="checkbox"><span>Enable server after saving</span></label>
+          <button type="submit">Save MCP server</button>
+        </form>
+        <form id="mcp-scope-form" class="form-card stack">
+          <h3>Assign MCP scope</h3>
+          <label>MCP server<select id="scope-server" required><option value="">Load servers first</option></select></label>
+          <div class="form-grid">
+            <label>Scope type<select id="scope-type"><option value="user">User ID</option><option value="workspace">Workspace ID</option><option value="tier">Tier</option></select></label>
+            <label>Scope value<input id="scope-value" required maxlength="300"></label>
+          </div>
+          <button type="submit">Add MCP scope</button>
+        </form>
+      </div>
+      <div id="mcp-list" class="stack-list"><p class="empty">No MCP servers registered.</p></div>
+    </section>
+  </main>
+
+  <script type="module" src="/static/extensions.js"></script>
+</body>
+</html>
