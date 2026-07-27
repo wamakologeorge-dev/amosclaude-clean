@@ -2,6 +2,15 @@
   const repositoryId = location.pathname.split('/').filter(Boolean).pop();
   const escapeHtml = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  function safeGithubUrl(value) {
+    try {
+      const url = new URL(String(value || ''));
+      return url.protocol === 'https:' && url.hostname === 'github.com' ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
   async function api(path, options = {}) {
     const response = await fetch(path, {
       credentials: 'same-origin',
@@ -20,7 +29,11 @@
     if (raw) {
       try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
     }
-    if (!response.ok) throw new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+    if (!response.ok) {
+      const error = new Error(data?.detail || data?.message || `Request failed (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
     return data;
   }
 
@@ -68,17 +81,50 @@
     await loadIssues();
   }
 
+  async function pullRequestFeed() {
+    try {
+      const result = await api(`/api/v1/github/repositories/${repositoryId}/pull-requests`);
+      return {
+        source: 'github',
+        label: result.github_full_name || 'GitHub',
+        items: Array.isArray(result.pull_requests) ? result.pull_requests : [],
+      };
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      const items = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
+      return { source: 'amosclaud', label: 'Amosclaud', items };
+    }
+  }
+
+  function renderPullRequest(pr, feed) {
+    const source = pr.source || feed.source;
+    const state = pr.draft && pr.state === 'open' ? 'draft' : pr.state;
+    const url = source === 'github' ? safeGithubUrl(pr.html_url) : '';
+    const body = String(pr.body || '').slice(0, 2000);
+    const updated = pr.updated_at ? ` · updated ${escapeHtml(pr.updated_at)}` : '';
+    const actions = [];
+    if (source === 'amosclaud' && pr.state === 'open') {
+      actions.push(`<button type="button" data-merge-pr="${pr.id}">Merge pull request</button>`);
+    }
+    if (url) {
+      actions.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open on GitHub</a>`);
+    }
+    return `<article class="ws-tool-item">
+      <strong>#${pr.number || pr.id} ${escapeHtml(pr.title)}</strong>
+      <span>${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)} · ${escapeHtml(state)} · ${escapeHtml(source)}${updated}</span>
+      ${body ? `<span>${escapeHtml(body)}</span>` : ''}
+      ${actions.length ? `<div class="ws-tool-item-actions">${actions.join('')}</div>` : ''}
+    </article>`;
+  }
+
   async function loadPullRequests() {
     const target = document.getElementById('ws-pull-requests');
-    target.innerHTML = '<div class="ws-empty-row">Loading pull requests…</div>';
+    target.innerHTML = '<div class="ws-empty-row">Refreshing pull requests…</div>';
     try {
-      const prs = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
-      target.innerHTML = prs.map(pr => `<article class="ws-tool-item">
-        <strong>#${pr.id} ${escapeHtml(pr.title)}</strong>
-        <span>${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)} · ${escapeHtml(pr.state)}</span>
-        ${pr.body ? `<span>${escapeHtml(pr.body)}</span>` : ''}
-        ${pr.state === 'open' ? `<div class="ws-tool-item-actions"><button type="button" data-merge-pr="${pr.id}">Merge pull request</button></div>` : ''}
-      </article>`).join('') || '<div class="ws-empty-row">No pull requests yet.</div>';
+      const feed = await pullRequestFeed();
+      const header = `<div class="ws-empty-row">Live source: ${escapeHtml(feed.label)} · open, closed, and merged</div>`;
+      const cards = feed.items.map(pr => renderPullRequest(pr, feed)).join('');
+      target.innerHTML = header + (cards || '<div class="ws-empty-row">No pull requests yet.</div>');
     } catch (error) {
       target.innerHTML = `<div class="ws-empty-row">${escapeHtml(error.message)}</div>`;
     }
@@ -141,4 +187,9 @@
   document.getElementById('ws-agent-test')?.addEventListener('click', () => runAgent('ws-test', 'Test'));
   document.getElementById('ws-agent-review')?.addEventListener('click', () => runAgent('ws-review', 'Review'));
   document.getElementById('ws-agent-deploy')?.addEventListener('click', () => runAgent('ws-deploy', 'Deploy'));
+
+  setInterval(() => {
+    const tab = document.querySelector('.ws-tab[data-tab="pull-requests"]');
+    if (!document.hidden && tab?.classList.contains('active')) loadPullRequests();
+  }, 60000);
 })();
