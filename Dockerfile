@@ -4,14 +4,41 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     AUTH_DB_PATH=/data/auth.db \
-    REPOSITORY_STORAGE_PATH=/data/repositories
+    REPOSITORY_STORAGE_PATH=/data/repositories \
+    AMOSCLAUD_MANAGED_TERMINAL_ENABLED=true
 
 WORKDIR /app
 
+# The public Railway service now includes a non-root managed terminal fallback.
+# These packages provide the same practical run/debug/diagnostic experience when
+# a separate Docker workspace host is not connected.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        build-essential \
+        ca-certificates \
+        curl \
+        fd-find \
+        gdb \
+        git \
+        iproute2 \
+        jq \
+        less \
+        lsof \
+        nano \
+        net-tools \
+        nodejs \
+        npm \
+        procps \
+        ripgrep \
+        strace \
+        tmux \
+        unzip \
+        vim-tiny \
+        zip \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /data/repositories
+    && mkdir -p /data/repositories /tmp/amosclaud-managed-home
 
 # Keep the production image independent from a separately copied requirements
 # file. This prevents Railway build-context mistakes from failing before the
@@ -52,6 +79,8 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "pytest>=8,<10"
 
 COPY . /app
+COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
+RUN chmod 0755 /usr/local/bin/amos
 
 # Fail with an explicit source-context error instead of a misleading missing
 # dependency-file error.
