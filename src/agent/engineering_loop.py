@@ -53,7 +53,7 @@ class LoopOutcome:
 
 
 class AutonomousEngineeringLoop:
-    """Bounded engineering cycle used by the single Amosclaud Autonomous orchestrator."""
+    """Bounded repair cycle used by the single Amosclaud Autonomous orchestrator."""
 
     def __init__(self, *, analyzer, model, files, runtime, max_attempts: int = 2) -> None:
         self.analyzer = analyzer
@@ -75,6 +75,48 @@ class AutonomousEngineeringLoop:
             return self.runtime.verify(changed_files=changed)
         except TypeError:
             return self.runtime.verify()
+
+    def _apply_proposals(
+        self,
+        proposals: list[ChangeProposal],
+        changed: list[str],
+    ) -> list[str]:
+        applied: list[str] = []
+        for proposal in proposals:
+            self.files.write(proposal.path, proposal.content, authorized=True)
+            applied.append(proposal.path)
+            if proposal.path not in changed:
+                changed.append(proposal.path)
+        return applied
+
+    @staticmethod
+    def _retry_evidence(
+        repository_evidence: list[str],
+        failed_checks: list[dict[str, Any]],
+        attempt: int,
+    ) -> list[str]:
+        failure_evidence = [
+            (
+                f"ISOLATED VERIFICATION ATTEMPT {attempt} FAILED. "
+                "The next proposal must correct these exact failures rather than "
+                "repeat the previous patch."
+            )
+        ]
+        for check in failed_checks[:8]:
+            failure_evidence.append(
+                json.dumps(
+                    {
+                        "name": check.get("name"),
+                        "command": check.get("command"),
+                        "exit_code": check.get("exit_code"),
+                        "summary": check.get("summary"),
+                        "output": str(check.get("output") or "")[-12_000:],
+                        "isolated": check.get("isolated"),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        return [*repository_evidence, *failure_evidence]
 
     def run(self, *, objective: str, mode: str, authorized_writes: bool) -> LoopOutcome:
         started = monotonic()
@@ -102,7 +144,7 @@ class AutonomousEngineeringLoop:
         criteria = [
             "Requested outcome is addressed",
             "Changes remain inside the designated workspace",
-            "Verification produces evidence",
+            "Verification runs inside the isolated runner and produces evidence",
             "No success is reported while blocking checks fail",
         ]
         record(
@@ -134,15 +176,15 @@ class AutonomousEngineeringLoop:
 
         if mode == "fix":
             try:
-                proposals = self._proposals(objective, evidence)
-                for proposal in proposals:
-                    self.files.write(proposal.path, proposal.content, authorized=True)
-                    changed.append(proposal.path)
+                applied = self._apply_proposals(
+                    self._proposals(objective, evidence),
+                    changed,
+                )
                 record(
                     LoopPhase.EXECUTE,
                     "passed",
-                    f"Applied {len(changed)} authorized file change(s).",
-                    changed,
+                    f"Applied {len(applied)} authorized file change(s).",
+                    applied,
                 )
             except Exception as exc:
                 blocker = f"Execution stopped safely: {type(exc).__name__}: {exc}"
@@ -171,11 +213,12 @@ class AutonomousEngineeringLoop:
             record(
                 LoopPhase.VERIFY,
                 "failed" if failed else "passed",
-                f"Verification attempt {attempt} completed.",
+                f"Isolated verification attempt {attempt} completed.",
                 [item.get("summary", "") for item in checks],
             )
             if not failed:
                 break
+
             if mode != "fix" or attempt == self.max_attempts:
                 blocker = failed[0].get("summary") or "Verification failed"
                 lessons.append(
@@ -198,10 +241,44 @@ class AutonomousEngineeringLoop:
                     lessons,
                     blocker,
                 )
+
+            retry_objective = (
+                f"{objective}\n\n"
+                "The previous authorized repair failed isolated verification. "
+                "Read the exact compiler, build, and test logs in the evidence, "
+                "diagnose the root cause, and return a corrected complete-file proposal."
+            )
+            retry_evidence = self._retry_evidence(evidence, failed, attempt)
+            try:
+                applied = self._apply_proposals(
+                    self._proposals(retry_objective, retry_evidence),
+                    changed,
+                )
+            except Exception as exc:
+                blocker = f"Corrective repair stopped safely: {type(exc).__name__}: {exc}"
+                lessons.append(
+                    f"Verification logs were available but correction failed: {blocker}"
+                )
+                record(LoopPhase.EXECUTE, "failed", blocker)
+                return self._finish(
+                    started,
+                    objective,
+                    criteria,
+                    plan,
+                    changed,
+                    checks,
+                    events,
+                    lessons,
+                    blocker,
+                )
             record(
                 LoopPhase.EXECUTE,
                 "retry",
-                "Verification failed; another bounded repair attempt is allowed.",
+                (
+                    "Verification failed; read the isolated logs and applied a "
+                    f"corrective repair for attempt {attempt + 1}."
+                ),
+                applied,
             )
 
         lessons.append(
@@ -216,7 +293,7 @@ class AutonomousEngineeringLoop:
         record(
             LoopPhase.REPORT,
             "passed",
-            "Engineering loop completed with verification evidence.",
+            "Engineering loop completed with isolated verification evidence.",
         )
         return LoopOutcome(
             "success",
@@ -236,7 +313,7 @@ class AutonomousEngineeringLoop:
         return [
             "Understand objective",
             "Inspect evidence",
-            "Run deterministic verification",
+            "Run deterministic verification in an isolated container",
             "Report exact results",
         ]
 

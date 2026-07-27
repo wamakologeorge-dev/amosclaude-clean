@@ -1,4 +1,10 @@
-"""Cloud and connected-GitHub execution for Global Task Router jobs."""
+"""Cloud and connected-GitHub execution for Global Task Router jobs.
+
+Every repository-derived compiler, test, typecheck, and build command is routed
+through the locked-down Amosclaud runner container. Production dispatch is
+fail-closed: if the durable worker queue is unavailable, the task remains queued
+for recovery instead of being executed in a process-local daemon thread.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +12,9 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -28,6 +34,12 @@ from amoscloud_ai.api.routes.github_repositories import (
 from amoscloud_ai.api.routes.task_router import _ensure_schema, _event, _json, _now
 from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
 from amosclaud_bot.bot import AmosclaudBot
+from src.services.runtime_exec import RuntimeExecutor
+
+
+def _production() -> bool:
+    value = os.getenv("AMOSCLAUD_ENV") or os.getenv("ENVIRONMENT") or "development"
+    return value.strip().lower() in {"production", "prod"}
 
 
 def _finish(
@@ -42,9 +54,7 @@ def _finish(
 ) -> None:
     if status == "completed" and (not verification_id or not evidence):
         status = "failed"
-        summary = (
-            "Completion blocked: a verification_id and real evidence are required."
-        )
+        summary = "Completion blocked: a verification_id and real evidence are required."
     with _connect() as db:
         _ensure_schema(db)
         task = db.execute(
@@ -134,9 +144,7 @@ def _start(task_id: str) -> dict | None:
 def _repository(task: dict) -> dict:
     repository = (task.get("repository") or "").strip()
     if not repository:
-        raise RuntimeError(
-            "A connected repository is required for this execution target"
-        )
+        raise RuntimeError("A connected repository is required for this execution target")
     with github_db() as db:
         row = db.execute(
             """SELECT * FROM repositories
@@ -145,9 +153,7 @@ def _repository(task: dict) -> dict:
             (task["user_id"], repository, repository),
         ).fetchone()
         if not row or not row["github_full_name"]:
-            raise RuntimeError(
-                "Connect and import this GitHub repository before routing work"
-            )
+            raise RuntimeError("Connect and import this GitHub repository before routing work")
         connection = _connection(db, int(task["user_id"]))
         token = _decrypt_token(connection["access_token_ciphertext"])
     return {**dict(row), "token": token}
@@ -163,21 +169,52 @@ def _ask_only(task: dict) -> tuple[str, list[str]]:
     return result.reply, [f"Provider runtime: {result.runtime}"]
 
 
+def _changed_paths(repo: Repo) -> list[str]:
+    """Return every tracked or untracked path changed from the cloned base."""
+    tracked = [
+        line.strip()
+        for line in repo.git.diff("HEAD", "--name-only").splitlines()
+        if line.strip()
+    ]
+    return list(dict.fromkeys([*tracked, *repo.untracked_files]))
+
+
+def _verification_evidence(checks: list[dict[str, object]]) -> list[str]:
+    evidence: list[str] = []
+    for check in checks:
+        name = str(check.get("name") or "verification")
+        state = "passed" if check.get("passed") else "failed"
+        command = str(check.get("command") or "")
+        summary = str(check.get("summary") or "No output")
+        evidence.append(f"{name}: {state}; command={command}; {summary}"[:2000])
+    return evidence
+
+
+def _run_verification(
+    root: Path,
+    changed_files: list[str] | None = None,
+) -> tuple[list[str], list[dict[str, object]]]:
+    """Run deterministic checks only inside the configured isolated runner."""
+    checks = RuntimeExecutor(root).verify(changed_files=changed_files or [])
+    if not checks:
+        raise RuntimeError(
+            "No deterministic repository verification command could be selected"
+        )
+    evidence = _verification_evidence(checks)
+    failed = [check for check in checks if not check.get("passed")]
+    if failed:
+        details = "\n\n".join(
+            str(check.get("output") or check.get("summary") or "verification failed")
+            for check in failed[:8]
+        )
+        raise RuntimeError("Isolated repository verification failed:\n" + details[-12_000:])
+    return evidence, checks
+
+
 def _run_tests(root: Path) -> list[str]:
-    if not (root / "tests").is_dir():
-        return ["No tests directory was found."]
-    completed = subprocess.run(
-        [os.sys.executable, "-m", "pytest", "-q"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        check=False,
-    )
-    output = (completed.stdout + "\n" + completed.stderr)[-12_000:]
-    if completed.returncode:
-        raise RuntimeError("Repository tests failed:\n" + output)
-    return [output]
+    """Compatibility wrapper retained for callers that request repository tests."""
+    evidence, _checks = _run_verification(root, [])
+    return evidence
 
 
 def _verification_id(task_id: str, commit_sha: str, evidence: list[str]) -> str:
@@ -187,6 +224,29 @@ def _verification_id(task_id: str, commit_sha: str, evidence: list[str]) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return "verify_" + hashlib.sha256(payload).hexdigest()[:32]
+
+
+def _assert_base_unchanged(
+    repo: Repo,
+    *,
+    repository_full_name: str,
+    token: str,
+    base: str,
+    expected_sha: str,
+) -> None:
+    """Refuse publication when the target branch moved during the operation."""
+    remote = repo.remote("origin")
+    remote.set_url(_authenticated_clone_url(repository_full_name, token))
+    try:
+        repo.git.fetch("origin", base, depth=1)
+        current_sha = repo.commit(f"origin/{base}").hexsha
+    finally:
+        remote.set_url(_public_remote_url(repository_full_name))
+    if current_sha != expected_sha:
+        raise RuntimeError(
+            "The target branch moved while Amosclaud was working; the task must be "
+            "replanned against the new revision before publication"
+        )
 
 
 def _github_work(
@@ -212,23 +272,22 @@ def _github_work(
             depth=1,
         )
         repo = Repo(tempdir)
-        repo.remote("origin").set_url(
-            _public_remote_url(repository["github_full_name"])
-        )
+        base_sha = repo.head.commit.hexsha
+        repo.remote("origin").set_url(_public_remote_url(repository["github_full_name"]))
         repo.git.checkout("-b", branch)
 
         if task["mode"] == "test":
-            test_output = _run_tests(tempdir)
-            evidence.extend(test_output)
+            test_evidence, checks = _run_verification(tempdir, [])
+            evidence.extend(test_evidence)
             commit_sha = repo.head.commit.hexsha
             verification_id = _verification_id(task["id"], commit_sha, evidence)
-            return (
-                "Repository tests completed successfully.",
-                [],
-                None,
-                evidence,
-                verification_id,
+            has_tests = any("test" in str(check.get("name") or "").lower() for check in checks)
+            summary = (
+                "Repository tests completed successfully."
+                if has_tests
+                else "Repository verification completed; no automated test suite was detected."
             )
+            return summary, [], None, evidence, verification_id
 
         if task["mode"] in {"fix", "review", "monitor"}:
             command = {
@@ -260,7 +319,7 @@ def _github_work(
             checks = list(result.get("checks") or [])
             evidence.extend(
                 f"{check.get('name', 'check')}: "
-                f"{check.get('status', 'unknown')}"
+                f"{'passed' if check.get('passed') is not False else 'failed'}"
                 for check in checks
             )
             if any(
@@ -269,9 +328,7 @@ def _github_work(
                 or check.get("passed") is False
                 for check in checks
             ):
-                raise RuntimeError(
-                    "Doctor verification failed after the Bot operation"
-                )
+                raise RuntimeError("Doctor verification failed after the Bot operation")
         else:
             run = run_engineering_agent(
                 tempdir,
@@ -281,34 +338,21 @@ def _github_work(
             summary = run.summary
             evidence.extend(run.evidence)
             evidence.extend(
-                f"{check['name']}: "
-                f"{'passed' if check.get('passed') else 'failed'}"
+                f"{check['name']}: {'passed' if check.get('passed') else 'failed'}"
                 for check in run.checks
             )
             if any(not check.get("passed", False) for check in run.checks):
-                raise RuntimeError(
-                    "Verification failed after applying the proposed changes"
-                )
+                raise RuntimeError("Verification failed after applying the proposed changes")
 
-        if task["mode"] in {"build", "deploy", "fix"} and repo.is_dirty(
-            untracked_files=True
-        ):
-            diff_check = subprocess.run(
-                ["git", "diff", "--check"],
-                cwd=tempdir,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
+        changed_files = _changed_paths(repo)
+        if task["mode"] in {"build", "deploy", "fix"} and changed_files:
+            verification_evidence, _checks = _run_verification(
+                tempdir,
+                changed_files,
             )
-            if diff_check.returncode:
-                raise RuntimeError(
-                    "Doctor verification rejected whitespace or conflict markers"
-                )
-            evidence.append("Doctor: git diff --check passed.")
-            evidence.extend(_run_tests(tempdir))
+            evidence.extend(verification_evidence)
 
-        diff = repo.git.diff("--", ".")
+        diff = repo.git.diff("HEAD", "--", ".")
         if diff:
             artifacts.append(
                 {
@@ -318,16 +362,21 @@ def _github_work(
                 }
             )
 
-        if task["delivery"] == "pull_request" and repo.is_dirty(untracked_files=True):
+        if task["delivery"] == "pull_request" and changed_files:
             repo.git.add(A=True)
             with repo.config_writer() as config:
                 config.set_value("user", "name", "Amosclaud Task Router")
                 config.set_value("user", "email", "agent@amosclaud.com")
             repo.index.commit(f"Amosclaud: {task['objective'][:72]}")
-            remote = repo.remote("origin")
-            remote.set_url(
-                _authenticated_clone_url(repository["github_full_name"], token)
+            _assert_base_unchanged(
+                repo,
+                repository_full_name=repository["github_full_name"],
+                token=token,
+                base=base,
+                expected_sha=base_sha,
             )
+            remote = repo.remote("origin")
+            remote.set_url(_authenticated_clone_url(repository["github_full_name"], token))
             try:
                 repo.git.push("--set-upstream", "origin", branch)
             finally:
@@ -343,6 +392,7 @@ def _github_work(
                     "title": f"Amosclaud: {task['objective'][:80]}",
                     "head": branch,
                     "base": base,
+                    "draft": True,
                     "body": (
                         "Requested through the Amosclaud Global Task Router.\n\n"
                         f"Bucket: {task['bucket_id']}\n"
@@ -381,11 +431,7 @@ def execute_cloud_task(task_id: str) -> None:
     try:
         if task["execution_target"] == "cloud" and not task.get("repository"):
             summary, evidence = _ask_only(task)
-            verification_id = _verification_id(
-                task_id,
-                "conversation",
-                evidence,
-            )
+            verification_id = _verification_id(task_id, "conversation", evidence)
             _finish(
                 task_id,
                 "completed",
@@ -419,14 +465,35 @@ def execute_cloud_task(task_id: str) -> None:
         )
 
 
+def _record_dispatch_deferred(task_id: str, exc: Exception) -> None:
+    with _connect() as db:
+        _ensure_schema(db)
+        row = db.execute(
+            "SELECT status FROM global_tasks WHERE id=?", (task_id,)
+        ).fetchone()
+        if not row or row["status"] != "queued":
+            return
+        _event(
+            db,
+            task_id,
+            "task.dispatch_deferred",
+            "Durable worker queue is unavailable; task remains queued for recovery.",
+            {"error": type(exc).__name__},
+        )
+        db.commit()
+
+
 def dispatch_cloud_task(task_id: str) -> None:
-    """Dispatch durably when Celery is reachable, otherwise use a bounded local thread."""
+    """Dispatch to Celery; never downgrade production work to an ephemeral thread."""
     try:
         from amoscloud_ai.task_dispatch import dispatch_task
         from amoscloud_ai.worker import run_global_task
 
         dispatch_task(run_global_task, task_id)
-    except Exception:
+    except Exception as exc:
+        if _production():
+            _record_dispatch_deferred(task_id, exc)
+            return
         thread = threading.Thread(
             target=execute_cloud_task,
             args=(task_id,),
@@ -434,3 +501,64 @@ def dispatch_cloud_task(task_id: str) -> None:
             daemon=True,
         )
         thread.start()
+
+
+def _age_seconds(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        started = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+
+
+def recover_cloud_tasks(
+    *,
+    stale_seconds: int | None = None,
+    limit: int = 100,
+) -> dict[str, int]:
+    """Requeue interrupted cloud/GitHub tasks and redispatch all durable queued work."""
+    threshold = stale_seconds
+    if threshold is None:
+        threshold = int(os.getenv("AMOSCLAUD_OPERATION_STALE_SECONDS", "900"))
+    threshold = max(60, min(int(threshold), 86_400))
+    recovered = 0
+    queued_ids: list[str] = []
+    with _connect() as db:
+        _ensure_schema(db)
+        db.execute("BEGIN IMMEDIATE")
+        rows = db.execute(
+            """SELECT id,status,started_at FROM global_tasks
+               WHERE execution_target IN ('cloud','github')
+                 AND status IN ('queued','running')
+               ORDER BY created_at LIMIT ?""",
+            (max(1, min(limit, 500)),),
+        ).fetchall()
+        for row in rows:
+            task_id = str(row["id"])
+            if row["status"] == "running":
+                age = _age_seconds(row["started_at"])
+                if age is not None and age < threshold:
+                    continue
+                db.execute(
+                    """UPDATE global_tasks
+                       SET status='queued',started_at=NULL
+                       WHERE id=? AND status='running'""",
+                    (task_id,),
+                )
+                _event(
+                    db,
+                    task_id,
+                    "task.recovered",
+                    "Recovered an interrupted operation and returned it to the durable queue.",
+                    {"stale_seconds": age},
+                )
+                recovered += 1
+            queued_ids.append(task_id)
+        db.commit()
+    for task_id in queued_ids:
+        dispatch_cloud_task(task_id)
+    return {"recovered": recovered, "dispatched": len(queued_ids)}

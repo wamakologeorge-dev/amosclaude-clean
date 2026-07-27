@@ -5,37 +5,63 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  pull-requests: write
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   ai-feedback:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
+      - name: Checkout code without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: Install reviewer dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install PyGithub
+          python -m pip install PyGithub pytest
 
-      - name: Get PR Code Diff
+      - name: Require the Amosclaud GitHub credential
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
         run: |
-          git diff "origin/${{ github.base_ref }}...origin/${{ github.head_ref }}" > pr_diff.txt
+          set -euo pipefail
+          test -n "$AMOSCLAUD_GITHUB_TOKEN" || {
+            echo "AMOSCLAUD_GITHUB_TOKEN is required for repository-owned pull requests."
+            exit 1
+          }
+
+      - name: Get pull request code diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff "$BASE_SHA...$HEAD_SHA" > pr_diff.txt
           test -s pr_diff.txt || echo "No textual diff was produced." > pr_diff.txt
 
-      - name: Run Amosclaud Reviewer Engine
+      - name: Verify deterministic reviewer rules
+        run: python -m pytest -q tests/test_ai_reviewer.py
+
+      - name: Run Amosclaud reviewer engine
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GITHUB_FALLBACK_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           DIFF_PATH: pr_diff.txt
-        run: python .github/scripts/ai_reviewer.py
+        run: |
+          set -o pipefail
+          python .github/scripts/ai_reviewer.py | tee /tmp/amosclaud-review.md
+          cat /tmp/amosclaud-review.md >> "$GITHUB_STEP_SUMMARY"
