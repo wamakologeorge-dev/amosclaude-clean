@@ -56,17 +56,28 @@ celery_app.conf.beat_schedule = {
 
 @worker_ready.connect
 def recover_durable_operations(**_kwargs) -> None:
-    """Resume persisted operations and outbound GitHub relays after worker restart."""
+    """Resume persisted operations and outbound relays after worker restart."""
     try:
         from amoscloud_ai.cloud_task_runner import recover_cloud_tasks
         from amoscloud_ai.github_relay_recovery import retry_pending_relays
+        from amoscloud_ai.storage_capacity import recover_jobs as recover_storage_resizes
+        from amoscloud_ai.storage_provisioning import (
+            recover_jobs as recover_storage_provisions,
+        )
 
         tasks = recover_cloud_tasks()
         relays = retry_pending_relays()
+        storage_resizes = recover_storage_resizes()
+        storage_provisions = recover_storage_provisions()
         log.info(
-            "Recovered durable operations: tasks=%s relays=%s",
+            (
+                "Recovered durable operations: tasks=%s relays=%s "
+                "storage_resizes=%s storage_provisions=%s"
+            ),
             tasks,
             relays,
+            storage_resizes,
+            storage_provisions,
         )
     except Exception:
         # Recovery must not prevent the worker from starting. Persisted queued
@@ -93,7 +104,9 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         job.status = PipelineStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
         job.logs.append("Task received by the execution worker.")
-        job.logs.append("Execution started: understand → inspect → plan → act → verify → report.")
+        job.logs.append(
+            "Execution started: understand → inspect → plan → act → verify → report."
+        )
     _save(pipeline, payload)
 
     try:
@@ -120,7 +133,9 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
             successful = asyncio.run(
                 orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
             )
-            pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
+            pipeline.status = (
+                PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
+            )
             pipeline.message = (
                 "Amosclaud Autonomous Agent: pipeline completed with verified evidence."
                 if successful
@@ -140,7 +155,11 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         _save(pipeline, payload)
 
         result_status = pipeline.status.value
-        log.info("[worker] Pipeline %s finished with status: %s", pipeline_id, result_status)
+        log.info(
+            "[worker] Pipeline %s finished with status: %s",
+            pipeline_id,
+            result_status,
+        )
         return {
             "pipeline_id": pipeline_id,
             "status": result_status,
@@ -152,7 +171,9 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         pipeline = _get(pipeline_id) or pipeline
         pipeline.status = PipelineStatus.FAILED
         pipeline.finished_at = datetime.now(timezone.utc)
-        pipeline.message = f"Amosclaud Autonomous Agent: execution failed safely: {type(exc).__name__}."
+        pipeline.message = (
+            f"Amosclaud Autonomous Agent: execution failed safely: {type(exc).__name__}."
+        )
         pipeline.copilot_reply = pipeline.message
         for job in pipeline.jobs:
             if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.CANCELLED):
@@ -164,9 +185,17 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
 
 
 @celery_app.task(name="amoscloud_ai.run_deployment", bind=True, max_retries=3)
-def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+def run_deployment_task(
+    self,
+    deployment_id: str,
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
     """Execute a deployment in the background."""
-    log.info("[worker] Running deployment %s to %s", deployment_id, config.get("environment"))
+    log.info(
+        "[worker] Running deployment %s to %s",
+        deployment_id,
+        config.get("environment"),
+    )
     try:
         from amoscloud_ai.api.routes.deployments import _deployments
         from amoscloud_ai.copilot import deployment_reply
@@ -201,7 +230,9 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
             dep.message = deployment_reply(dep.status)
             dep.copilot_reply = dep.message
 
-        result_status = dep.status.value if dep else ("completed" if success else "failed")
+        result_status = (
+            dep.status.value if dep else ("completed" if success else "failed")
+        )
         return {"deployment_id": deployment_id, "status": result_status}
     except Exception as exc:
         log.exception("[worker] Deployment %s failed", deployment_id)
@@ -256,7 +287,7 @@ def run_global_task(self, task_id: str) -> dict[str, str]:
     max_retries=2,
 )
 def run_autonomous_feature_task(self, task_id: str) -> dict[str, str]:
-    """Execute one Daily Autonomous Builder task through its dedicated policy runner."""
+    """Execute one Daily Autonomous Builder task through its policy runner."""
 
     try:
         from amoscloud_ai.autonomous_task_runner import execute_autonomous_task
@@ -274,7 +305,7 @@ def run_autonomous_feature_task(self, task_id: str) -> dict[str, str]:
     max_retries=2,
 )
 def run_workforce_task(self, task_id: str) -> dict[str, str]:
-    """Execute one delegated engineering work order through the guarded workforce runner."""
+    """Execute one delegated engineering work order through the guarded runner."""
 
     try:
         from amoscloud_ai.workforce_task_runner import execute_workforce_task
@@ -284,6 +315,42 @@ def run_workforce_task(self, task_id: str) -> dict[str, str]:
     except Exception as exc:
         log.exception("Autonomous workforce task %s failed in worker", task_id)
         raise self.retry(exc=exc, countdown=10)
+
+
+@celery_app.task(
+    name="amoscloud_ai.run_storage_resize",
+    bind=True,
+    max_retries=1,
+)
+def run_storage_resize(self, job_id: str) -> dict[str, str]:
+    """Run one durable cloud disk and filesystem resize workflow."""
+
+    try:
+        from amoscloud_ai.storage_capacity import execute_job
+
+        execute_job(job_id)
+        return {"job_id": job_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Storage resize job %s failed in worker", job_id)
+        raise self.retry(exc=exc, countdown=30)
+
+
+@celery_app.task(
+    name="amoscloud_ai.run_storage_provision",
+    bind=True,
+    max_retries=1,
+)
+def run_storage_provision(self, job_id: str) -> dict[str, str]:
+    """Run one new cloud volume, format, mount, and verification workflow."""
+
+    try:
+        from amoscloud_ai.storage_provisioning import execute_job
+
+        execute_job(job_id)
+        return {"job_id": job_id, "dispatched": "true"}
+    except Exception as exc:
+        log.exception("Storage provisioning job %s failed in worker", job_id)
+        raise self.retry(exc=exc, countdown=30)
 
 
 @celery_app.task(
@@ -307,7 +374,9 @@ def run_daily_autonomous_builder_task(self) -> dict[str, Any]:
 
 def main() -> None:
     """Start the Celery worker when invoked as a module."""
-    celery_app.worker_main(argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"])
+    celery_app.worker_main(
+        argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"]
+    )
 
 
 if __name__ == "__main__":
