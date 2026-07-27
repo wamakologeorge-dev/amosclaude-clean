@@ -147,45 +147,36 @@ def _create_github_connections(db: sqlite3.Connection) -> None:
 
 
 def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
-    """Accept both historical ``github_id`` and current ``github_user_id`` rows."""
+    """Accept both historical ``github_id`` and current ``github_user_id`` rows.
+
+    SQLite cannot safely rebuild this table in isolated synchronization databases
+    that intentionally omit the account ``users`` table. Adding compatibility
+    columns in place keeps the helper idempotent without weakening production
+    foreign-key enforcement.
+    """
 
     _create_github_connections(db)
-    info = {
-        row[1]: row
-        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
+    columns = {
+        row[1] for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
     }
-    current_id = info.get("github_user_id")
-    compatible = "github_id" in info and current_id and current_id[3] == 0
-    if compatible:
-        return
+    if "github_user_id" not in columns:
+        db.execute("ALTER TABLE github_connections ADD COLUMN github_user_id INTEGER")
+    if "github_id" not in columns:
+        db.execute("ALTER TABLE github_connections ADD COLUMN github_id TEXT")
 
-    db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
-    _create_github_connections(db)
-    legacy = {
-        row[1]
-        for row in db.execute(
-            "PRAGMA table_info(github_connections_legacy)"
-        ).fetchall()
-    }
-    github_user_expr = (
-        "github_user_id"
-        if "github_user_id" in legacy
-        else "CAST(github_id AS INTEGER)"
-    )
-    github_id_expr = (
-        "github_id"
-        if "github_id" in legacy
-        else "CAST(github_user_id AS TEXT)"
+    db.execute(
+        """UPDATE github_connections
+           SET github_user_id=CAST(github_id AS INTEGER)
+           WHERE github_user_id IS NULL
+             AND github_id IS NOT NULL
+             AND TRIM(github_id) <> ''"""
     )
     db.execute(
-        f"""INSERT INTO github_connections
-            (user_id,github_user_id,github_id,github_login,avatar_url,
-             access_token_ciphertext,scopes,connected_at,updated_at)
-            SELECT user_id,{github_user_expr},{github_id_expr},github_login,avatar_url,
-                   access_token_ciphertext,scopes,connected_at,updated_at
-            FROM github_connections_legacy"""
+        """UPDATE github_connections
+           SET github_id=CAST(github_user_id AS TEXT)
+           WHERE github_id IS NULL
+             AND github_user_id IS NOT NULL"""
     )
-    db.execute("DROP TABLE github_connections_legacy")
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
