@@ -10,9 +10,6 @@
     "www.amosclaud.com"
   ],
   "default_sandbox_image": "amosclaud/workspace-base:latest",
-    "www.amosclaud.com"
-  ],
-  "default_sandbox_image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "repository_sync": {
     "direction": "bidirectional",
     "github_to_platform": "signed-webhook-fast-forward-only",

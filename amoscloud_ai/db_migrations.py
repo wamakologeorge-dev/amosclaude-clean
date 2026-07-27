@@ -129,13 +129,12 @@ def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
 
 
-def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
-    """Idempotently add GitHub account and repository synchronization schema."""
-
+def _create_github_connections(db: sqlite3.Connection) -> None:
     db.execute(
         """CREATE TABLE IF NOT EXISTS github_connections (
             user_id INTEGER PRIMARY KEY,
-            github_user_id INTEGER NOT NULL,
+            github_user_id INTEGER,
+            github_id TEXT,
             github_login TEXT NOT NULL,
             avatar_url TEXT,
             access_token_ciphertext TEXT NOT NULL,
@@ -145,6 +144,54 @@ def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )"""
     )
+
+
+def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
+    """Accept both historical ``github_id`` and current ``github_user_id`` rows."""
+
+    _create_github_connections(db)
+    info = {
+        row[1]: row
+        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
+    }
+    current_id = info.get("github_user_id")
+    compatible = "github_id" in info and current_id and current_id[3] == 0
+    if compatible:
+        return
+
+    db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
+    _create_github_connections(db)
+    legacy = {
+        row[1]
+        for row in db.execute(
+            "PRAGMA table_info(github_connections_legacy)"
+        ).fetchall()
+    }
+    github_user_expr = (
+        "github_user_id"
+        if "github_user_id" in legacy
+        else "CAST(github_id AS INTEGER)"
+    )
+    github_id_expr = (
+        "github_id"
+        if "github_id" in legacy
+        else "CAST(github_user_id AS TEXT)"
+    )
+    db.execute(
+        f"""INSERT INTO github_connections
+            (user_id,github_user_id,github_id,github_login,avatar_url,
+             access_token_ciphertext,scopes,connected_at,updated_at)
+            SELECT user_id,{github_user_expr},{github_id_expr},github_login,avatar_url,
+                   access_token_ciphertext,scopes,connected_at,updated_at
+            FROM github_connections_legacy"""
+    )
+    db.execute("DROP TABLE github_connections_legacy")
+
+
+def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
+    """Idempotently add GitHub account and repository synchronization schema."""
+
+    _ensure_github_connections_schema(db)
     columns = {
         row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
     }

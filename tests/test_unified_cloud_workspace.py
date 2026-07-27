@@ -81,7 +81,8 @@ def test_terminal_ticket_is_short_lived_signed_and_nonce_bound(monkeypatch) -> N
 def test_runtime_source_enforces_container_isolation() -> None:
     source = _source("services/workspace_runtime/app.py")
 
-    assert 'user="developer"' in source
+    assert 'WORKSPACE_USER = "developer"' in source
+    assert "user=WORKSPACE_USER" in source
     assert 'working_dir="/workspace"' in source
     assert "nano_cpus=int(CPU_LIMIT * 1_000_000_000)" in source
     assert 'mem_limit=f"{MEMORY_LIMIT}m"' in source
@@ -100,7 +101,8 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert "Terminal ticket was already used" in source
     assert "_prepare_repository_storage(storage)" in source
     assert 'default_acl = f"d:u:{WORKSPACE_UID}:rwx"' in source
-    assert 'f"{_workspace_id(workspace_id)}.activity"' in source
+    assert 'digest = hashlib.sha256(workspace.encode("utf-8")).hexdigest()' in source
+    assert 'return f"{digest}.activity"' in source
     assert ".amosclaud-runtime-activity" not in source
 
 
