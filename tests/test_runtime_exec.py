@@ -1,12 +1,34 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from amoscloud_ai.isolated_runner import (
     IsolatedRunResult,
     RunnerConfigurationError,
     parse_allowed_command,
 )
 from src.services.runtime_exec import RuntimeExecutor
+
+
+def test_runtime_accepts_caller_workspace_when_global_root_is_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("AMOSCLAUD_WORKSPACE_ROOT", raising=False)
+    assert RuntimeExecutor(tmp_path).workspace == tmp_path.resolve()
+
+
+def test_runtime_rejects_workspace_outside_configured_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_ROOT", str(allowed))
+
+    with pytest.raises(ValueError, match="Workspace escapes allowed root"):
+        RuntimeExecutor(outside)
 
 
 def test_runtime_selects_changed_file_compilation_and_focused_test(tmp_path: Path) -> None:
