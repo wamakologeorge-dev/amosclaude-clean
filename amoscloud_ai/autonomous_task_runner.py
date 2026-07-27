@@ -54,6 +54,19 @@ def _pull_request_body(task: dict, policy: dict, evidence: list[str]) -> str:
     )
 
 
+def _github_json_object(response: httpx.Response) -> dict:
+    content_type = response.headers.get("content-type", "").lower()
+    if "json" not in content_type:
+        raise RuntimeError("GitHub returned a non-JSON pull-request response")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise RuntimeError("GitHub returned invalid pull-request JSON") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError("GitHub returned an invalid pull-request payload")
+    return payload
+
+
 def _bounded_engineering_loop(
     repo: Repo,
     root: Path,
@@ -212,7 +225,10 @@ def execute_autonomous_task(task_id: str) -> None:
             timeout=30,
         )
         response.raise_for_status()
-        pull_request_url = str(response.json()["html_url"])
+        pull_request = _github_json_object(response)
+        pull_request_url = str(pull_request.get("html_url") or "")
+        if not pull_request_url.startswith("https://github.com/"):
+            raise RuntimeError("GitHub pull-request response did not include a safe URL")
         artifacts.append({"type": "pull_request", "url": pull_request_url})
 
         commit_sha = repo.head.commit.hexsha
