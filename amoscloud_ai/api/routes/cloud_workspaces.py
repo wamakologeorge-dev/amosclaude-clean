@@ -1,16 +1,17 @@
-"""Authenticated control-plane routes for isolated Amosclaud workspaces."""
+"""Authenticated control-plane routes for Amosclaud developer workspaces."""
 
 from __future__ import annotations
 
 import re
+import secrets
 import sqlite3
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, WebSocket
 from pydantic import BaseModel, Field
 
-from amoscloud_ai import workspace_runtime, workspace_terminal
+from amoscloud_ai import managed_terminal, workspace_runtime, workspace_terminal
 from amoscloud_ai.api.routes.repositories import (
     _access,
     _current_user,
@@ -105,6 +106,10 @@ _SECRET_VALUE = re.compile(
     r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,})|"
     r"\b(?:sk-[A-Za-z0-9_-]{20,})"
 )
+_HELP_REQUEST = re.compile(
+    r"^\s*@?amosclaud(?:\s+(?:please\s+)?)?(?:help|commands?|what can you do)\??\s*$",
+    re.IGNORECASE,
+)
 
 
 def _repository(repository_id: int, user_id: int) -> sqlite3.Row:
@@ -112,35 +117,77 @@ def _repository(repository_id: int, user_id: int) -> sqlite3.Row:
         return _access(db, repository_id, user_id)
 
 
-def _workspace(repository_id: int, user: sqlite3.Row) -> dict:
+def _workspace(repository_id: int, user: sqlite3.Row) -> dict[str, Any]:
     repository = _repository(repository_id, int(user["id"]))
     _require_write(repository)
     return workspace_runtime.workspace_for_repository(
-        int(repository["id"]), int(repository["owner_id"])
+        int(repository["id"]),
+        int(repository["owner_id"]),
     )
 
 
-def _running_workspace(repository_id: int, user: sqlite3.Row) -> dict:
+def _external_health() -> dict[str, Any]:
+    return workspace_runtime.runtime_health()
+
+
+def _effective_health() -> dict[str, Any]:
+    external = _external_health()
+    if external.get("ok"):
+        return {
+            **external,
+            "configured": True,
+            "ok": True,
+            "provider": "external",
+            "managed_fallback": False,
+            "external_runtime": external,
+        }
+    managed = managed_terminal.health(external=external)
+    return {**managed, "external_runtime": external}
+
+
+def _workspace_provider(workspace: dict[str, Any]) -> str:
+    detail = str(workspace.get("runtime_detail") or "")
+    if "provider=managed" in detail:
+        return "managed"
+    if "provider=external" in detail:
+        return "external"
+    return "external" if workspace_runtime.configured() else "managed"
+
+
+def _running_workspace(
+    repository_id: int,
+    user: sqlite3.Row,
+) -> tuple[dict[str, Any], str]:
     workspace = _workspace(repository_id, user)
-    if not workspace_runtime.configured():
-        raise HTTPException(status_code=503, detail="Workspace runtime is not configured")
-    try:
-        container = workspace_runtime.remote_status(workspace)
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Workspace runtime is currently unavailable.",
-        ) from exc
-    if not container.get("running"):
-        raise HTTPException(status_code=409, detail="Start the workspace first")
-    return workspace
+    provider = _workspace_provider(workspace)
+    if provider == "external":
+        external = _external_health()
+        if external.get("ok"):
+            try:
+                container = workspace_runtime.remote_status(workspace)
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail="The isolated workspace runtime is temporarily unreachable.",
+                ) from exc
+            if container.get("running"):
+                return workspace, "external"
+    managed = managed_terminal.status(workspace)
+    if managed.get("running"):
+        repository = _repository(repository_id, int(user["id"]))
+        _require_owner(repository)
+        return workspace, "managed"
+    raise HTTPException(status_code=409, detail="Start the workspace first")
 
 
 def _safe_terminal_output(value: str) -> str:
     """Clip and redact likely credentials before terminal output reaches an agent."""
 
     cleaned = _ANSI_ESCAPE.sub("", str(value or "")).replace("\x00", "")
-    cleaned = _SECRET_ASSIGNMENT.sub(lambda match: f"{match.group(1)}=[redacted]", cleaned)
+    cleaned = _SECRET_ASSIGNMENT.sub(
+        lambda match: f"{match.group(1)}=[redacted]",
+        cleaned,
+    )
     cleaned = _SECRET_VALUE.sub("[redacted]", cleaned)
     return cleaned[-6000:]
 
@@ -162,9 +209,11 @@ def _agent_objective(
         ),
     ]
     if body.agent == "doctor":
-        lines.append("Diagnosis only: do not modify repository files.")
+        # Avoid command phrases such as "do not modify" here. The native executor
+        # correctly treats those words as an explicit cancellation instruction.
+        lines.append("Read-only diagnosis: repository write authority is not granted.")
     elif not body.allow_changes:
-        lines.append("Planning mode: changes are not authorized for this message.")
+        lines.append("Planning mode: repository write authority is not granted.")
     elif body.agent == "underground":
         lines.append(
             "Escalation mode is bounded: no force push, no protected-branch write, "
@@ -186,28 +235,62 @@ def _agent_objective(
     return "\n".join(lines)
 
 
+def _agent_help_response(repository_id: int, agent: str) -> dict[str, Any]:
+    spec = _TERMINAL_AGENTS[agent]
+    return {
+        "message_id": str(uuid.uuid4()),
+        "agent": agent,
+        "agent_name": spec["name"],
+        "status": "completed",
+        "reply": (
+            "Amosclaud is ready. Start the workspace, then use Run app, Debug, "
+            "Ports, Problems, Connectors, Network, Commit, Pull, Push, or Sync & Push. "
+            "Doctor diagnoses output; Fixer repairs a verified problem; Autonomous "
+            "completes an engineering task; Underground is the bounded escalation path."
+        ),
+        "operation": "terminal-help",
+        "changes_authorized": False,
+        "terminal_context_used": False,
+        "evidence": [
+            f"Repository ID: {repository_id}",
+            "The managed runtime keeps the terminal available when the isolated runtime is offline.",
+            "Debugger command output streams into the active terminal in real time.",
+        ],
+        "logs": ["Help completed without repository mutation."],
+        "resource": None,
+    }
+
+
 @router.get("/runtime")
-def runtime_status(user: sqlite3.Row = Depends(_current_user)) -> dict:
+def runtime_status(user: sqlite3.Row = Depends(_current_user)) -> dict[str, Any]:
     del user
-    return workspace_runtime.runtime_health()
+    return _effective_health()
 
 
 @router.get("/repositories/{repository_id}")
 def repository_workspace_status(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
+) -> dict[str, Any]:
     workspace = _workspace(repository_id, user)
-    payload = {
+    health = _effective_health()
+    provider = _workspace_provider(workspace)
+    payload: dict[str, Any] = {
         "workspace": workspace,
-        "runtime": workspace_runtime.runtime_health(),
+        "runtime": health,
         "persistent_repository": True,
+        "provider": provider,
     }
-    if workspace_runtime.configured() and workspace["runtime_status"] != "not_started":
-        try:
-            payload["container"] = workspace_runtime.remote_status(workspace)
-        except RuntimeError:
-            payload["container_error"] = "Unable to retrieve container status."
+    if provider == "external" and health.get("external_runtime", {}).get("ok"):
+        if workspace["runtime_status"] != "not_started":
+            try:
+                payload["container"] = workspace_runtime.remote_status(workspace)
+            except RuntimeError:
+                payload["container_error"] = (
+                    "The isolated runtime did not answer; the managed runtime is available."
+                )
+    else:
+        payload["container"] = managed_terminal.status(workspace)
     return payload
 
 
@@ -215,60 +298,90 @@ def repository_workspace_status(
 def start_repository_workspace(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
+) -> dict[str, Any]:
     workspace = _workspace(repository_id, user)
-    if not workspace_runtime.configured():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "The isolated workspace runtime is not configured. Set "
-                "AMOSCLAUD_WORKSPACE_RUNTIME_URL and AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN."
-            ),
-        )
+    external = _external_health()
+    if external.get("ok"):
+        try:
+            container = workspace_runtime.start_workspace(
+                workspace,
+                environment={
+                    "AMOSCLAUD_PROJECT_REPOSITORY_ID": str(repository_id),
+                    "AMOSCLAUD_PROJECT_OWNER_ID": str(workspace["owner_id"]),
+                },
+            )
+            return {
+                "workspace": workspace,
+                "container": container,
+                "provider": "external",
+            }
+        except RuntimeError:
+            # Fall through to the same-service runtime rather than presenting the
+            # user with another dead end.
+            pass
+
+    repository = _repository(repository_id, int(user["id"]))
+    _require_owner(repository)
     try:
-        container = workspace_runtime.start_workspace(
-            workspace,
-            environment={
-                "AMOSCLAUD_PROJECT_REPOSITORY_ID": str(repository_id),
-                "AMOSCLAUD_PROJECT_OWNER_ID": str(workspace["owner_id"]),
-            },
-        )
+        container = managed_terminal.start(workspace)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Workspace runtime is currently unavailable.",
+            detail=str(exc),
         ) from exc
-    return {"workspace": workspace, "container": container}
+    return {
+        "workspace": workspace,
+        "container": container,
+        "provider": "managed",
+        "fallback_reason": external.get("detail"),
+    }
 
 
 @router.post("/repositories/{repository_id}/stop")
 def stop_repository_workspace(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
+) -> dict[str, Any]:
     workspace = _workspace(repository_id, user)
+    provider = _workspace_provider(workspace)
+    if provider == "managed":
+        repository = _repository(repository_id, int(user["id"]))
+        _require_owner(repository)
+        container = managed_terminal.stop(workspace)
+        return {"workspace": workspace, "container": container, "provider": "managed"}
     try:
         container = workspace_runtime.stop_workspace(workspace)
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Workspace runtime is currently unavailable.",
+            detail=(
+                "The isolated runtime could not be stopped. Its connection is unavailable."
+            ),
         ) from exc
-    return {"workspace": workspace, "container": container}
+    return {"workspace": workspace, "container": container, "provider": "external"}
 
 
 @router.post("/repositories/{repository_id}/terminal-ticket")
 def create_terminal_ticket(
     repository_id: int,
+    request: Request,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
-    workspace = _running_workspace(repository_id, user)
+) -> dict[str, Any]:
+    workspace, provider = _running_workspace(repository_id, user)
+    if provider == "managed":
+        return managed_terminal.create_ticket(
+            request,
+            workspace,
+            int(user["id"]),
+            terminal_id=f"term_{secrets.token_hex(8)}",
+            profile="bash",
+        )
     try:
         return workspace_runtime.terminal_ticket(workspace, int(user["id"]))
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Workspace runtime is currently unavailable.",
+            detail="Workspace terminal is currently unavailable.",
         ) from exc
 
 
@@ -276,11 +389,20 @@ def create_terminal_ticket(
 def create_terminal_ticket_v2(
     repository_id: int,
     body: TerminalTicketV2Request,
+    request: Request,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
-    """Create a session-bound ticket for the complete browser terminal."""
+) -> dict[str, Any]:
+    """Create a session-bound ticket for external or managed terminal transport."""
 
-    workspace = _running_workspace(repository_id, user)
+    workspace, provider = _running_workspace(repository_id, user)
+    if provider == "managed":
+        return managed_terminal.create_ticket(
+            request,
+            workspace,
+            int(user["id"]),
+            terminal_id=body.terminal_id,
+            profile=body.profile,
+        )
     try:
         return workspace_terminal.terminal_ticket(
             workspace,
@@ -295,11 +417,27 @@ def create_terminal_ticket_v2(
         ) from exc
 
 
+@router.websocket(
+    "/repositories/{repository_id}/managed-terminal/{terminal_id}",
+    name="managed_terminal_websocket",
+)
+async def managed_terminal_websocket(
+    websocket: WebSocket,
+    repository_id: int,
+    terminal_id: str,
+) -> None:
+    await managed_terminal.websocket_session(
+        websocket,
+        repository_id=repository_id,
+        terminal_id=terminal_id,
+    )
+
+
 @router.get("/repositories/{repository_id}/agent-hub")
 def terminal_agent_hub(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Describe the terminal-side engineering agents and their safety contract."""
 
     repository = _repository(repository_id, int(user["id"]))
@@ -317,6 +455,7 @@ def terminal_agent_hub(
             "force_push_allowed": False,
             "protected_branch_bypass_allowed": False,
             "success_requires_runtime_evidence": True,
+            "managed_runtime_available": managed_terminal.enabled(),
         },
     }
 
@@ -326,12 +465,15 @@ def terminal_agent_message(
     repository_id: int,
     body: TerminalAgentMessage,
     user: sqlite3.Row = Depends(_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Run one truthful agent-hub turn against the selected native repository."""
 
     repository = _repository(repository_id, int(user["id"]))
     _require_write(repository)
     spec = _TERMINAL_AGENTS[body.agent]
+    if _HELP_REQUEST.fullmatch(body.message.strip()):
+        return _agent_help_response(repository_id, body.agent)
+
     changes_authorized = bool(body.allow_changes and spec["write_capable"])
     terminal_output = _safe_terminal_output(body.terminal_output)
 
@@ -408,16 +550,19 @@ def delete_repository_workspace(
     repository = _repository(repository_id, int(user["id"]))
     _require_owner(repository)
     workspace = workspace_runtime.workspace_for_repository(
-        int(repository["id"]), int(repository["owner_id"])
+        int(repository["id"]),
+        int(repository["owner_id"]),
     )
-    if workspace_runtime.configured():
+    provider = _workspace_provider(workspace)
+    if provider == "managed":
+        managed_terminal.delete(workspace)
+    elif workspace_runtime.configured():
         try:
             workspace_runtime.delete_workspace(workspace)
-        except RuntimeError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail="Workspace runtime is currently unavailable.",
-            ) from exc
+        except RuntimeError:
+            # The record must still be removable when an old external runtime has
+            # disappeared. Any orphaned container is outside this control plane.
+            pass
     with _db() as db:
         db.execute("DELETE FROM cloud_workspaces WHERE id=?", (workspace["id"],))
         db.commit()
