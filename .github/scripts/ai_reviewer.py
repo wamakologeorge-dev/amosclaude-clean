@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from github import Github
 
@@ -214,13 +214,39 @@ def publish_comment(pull: Any, comment: str) -> None:
             print(f"Could not remove duplicate review comment: {type(exc).__name__}")
 
 
+def publish_with_tokens(
+    repo_name: str,
+    pr_number: int,
+    comment: str,
+    tokens: list[str],
+    *,
+    github_factory: Callable[[str], Any] = Github,
+) -> bool:
+    """Publish with the broad Amosclaud token, then the scoped Actions token.
+
+    Review analysis remains authoritative even when GitHub comment delivery is
+    temporarily unavailable. Tokens are never printed and duplicate values are
+    attempted only once.
+    """
+
+    attempted: set[str] = set()
+    for token in tokens:
+        candidate = str(token or "").strip()
+        if not candidate or candidate in attempted:
+            continue
+        attempted.add(candidate)
+        try:
+            pull = github_factory(candidate).get_repo(repo_name).get_pull(pr_number)
+            publish_comment(pull, comment)
+            return True
+        except Exception as exc:
+            print(f"Review delivery attempt failed: {type(exc).__name__}")
+    return False
+
+
 def main() -> None:
     repo_name = os.environ["REPO_NAME"]
     pr_number = int(os.environ["PR_NUMBER"])
-    token = (
-        os.getenv("AMOSCLAUD_GITHUB_TOKEN", "").strip()
-        or os.environ["GITHUB_TOKEN"]
-    )
 
     if not DIFF_PATH.exists():
         raise SystemExit(f"Diff file not found: {DIFF_PATH}")
@@ -230,8 +256,18 @@ def main() -> None:
         diff = DIFF_PATH.read_text(encoding="utf-8", errors="replace")
 
     comment = build_comment(review_diff(diff))
-    pull = Github(token).get_repo(repo_name).get_pull(pr_number)
-    publish_comment(pull, comment)
+    delivered = publish_with_tokens(
+        repo_name,
+        pr_number,
+        comment,
+        [
+            os.getenv("AMOSCLAUD_GITHUB_TOKEN", ""),
+            os.getenv("GITHUB_FALLBACK_TOKEN", ""),
+            os.getenv("GITHUB_TOKEN", ""),
+        ],
+    )
+    if not delivered:
+        print("Review comment delivery was unavailable; review evidence follows.")
     print(comment)
 
 
