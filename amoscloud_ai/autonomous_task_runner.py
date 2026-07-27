@@ -10,7 +10,6 @@ from pathlib import Path
 
 import httpx
 from git import Repo
-from git.exc import GitCommandError
 
 from amoscloud_ai.api.routes.github_repositories import (
     _authenticated_clone_url,
@@ -65,6 +64,15 @@ def _github_json_object(response: httpx.Response) -> dict:
     if not isinstance(payload, dict):
         raise RuntimeError("GitHub returned an invalid pull-request payload")
     return payload
+
+
+def _feature_title(objective: str) -> str:
+    for line in objective.splitlines():
+        if line.startswith("Feature: "):
+            value = line.removeprefix("Feature: ").strip()
+            if value:
+                return value
+    return "Autonomous feature"
 
 
 def _bounded_engineering_loop(
@@ -137,12 +145,9 @@ def execute_autonomous_task(task_id: str) -> None:
         return
     policy = task_policy(task)
     if not policy:
-        _finish(
-            task_id,
-            "failed",
-            "Autonomous policy blocked publication: task metadata is missing.",
-            evidence=["No autonomous policy metadata was available."],
-        )
+        summary = "Autonomous policy blocked publication: task metadata is missing."
+        _finish(task_id, "failed", summary, evidence=[summary])
+        record_task_completion(task_id, "failed", summary)
         return
     if policy.get("auto_merge") is not False:
         summary = "Autonomous policy blocked publication: auto_merge must be false."
@@ -207,7 +212,6 @@ def execute_autonomous_task(task_id: str) -> None:
         finally:
             remote.set_url(_public_remote_url(repository["github_full_name"]))
 
-        feature_title = task["objective"].splitlines()[2]
         response = httpx.post(
             f"https://api.github.com/repos/{repository['github_full_name']}/pulls",
             headers={
@@ -216,7 +220,7 @@ def execute_autonomous_task(task_id: str) -> None:
                 "X-GitHub-Api-Version": "2022-11-28",
             },
             json={
-                "title": f"Amosclaud daily: {feature_title[:72]}",
+                "title": f"Amosclaud daily: {_feature_title(str(task['objective']))[:72]}",
                 "head": branch,
                 "base": base,
                 "draft": True,
@@ -261,7 +265,7 @@ def execute_autonomous_task(task_id: str) -> None:
         summary = str(exc)[:20_000]
         _finish(task_id, "failed", summary, evidence=[summary])
         record_task_completion(task_id, "failed", summary)
-    except (GitCommandError, httpx.HTTPError, EngineeringAgentError, RuntimeError) as exc:
+    except Exception as exc:
         summary = f"Autonomous execution stopped safely: {type(exc).__name__}"
         _finish(task_id, "failed", summary, evidence=["Reserved credits were refunded."])
         record_task_completion(task_id, "failed", summary)
