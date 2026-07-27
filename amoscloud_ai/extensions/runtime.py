@@ -25,14 +25,30 @@ REGISTRY: PluginRegistry | None = None
 def _drop_in_candidates() -> list[tuple[Any, str]]:
     package = importlib.import_module("amoscloud_ai.plugins")
     candidates: list[tuple[Any, str]] = []
-    for module_info in sorted(pkgutil.iter_modules(package.__path__), key=lambda item: item.name):
+    for module_info in sorted(
+        pkgutil.iter_modules(package.__path__),
+        key=lambda item: item.name,
+    ):
         if module_info.name.startswith("_"):
             continue
         module_name = f"amoscloud_ai.plugins.{module_info.name}"
-        module = importlib.import_module(module_name)
-        candidate = getattr(module, "create_plugin", None) or getattr(module, "plugin", None)
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            # A broken optional extension must not prevent Amosclaud from starting
+            # or hide every other healthy plugin.
+            log.exception("Drop-in plugin module import failed: %s", module_name)
+            continue
+        candidate = getattr(module, "create_plugin", None) or getattr(
+            module,
+            "plugin",
+            None,
+        )
         if candidate is None:
-            log.info("Skipping plugin module without create_plugin/plugin: %s", module_name)
+            log.info(
+                "Skipping plugin module without create_plugin/plugin: %s",
+                module_name,
+            )
             continue
         candidates.append((candidate, f"drop-in:{module_name}"))
     return candidates
@@ -100,21 +116,24 @@ def bootstrap_registry(host_router: APIRouter) -> PluginRegistry:
         feature_flags.register_definitions(flag_definitions)
 
     # Synchronous startup hooks can initialize schemas immediately. Async hooks
-    # remain registered for a future native FastAPI lifespan bridge rather than
-    # being executed incorrectly during module import.
+    # remain mounted and are clearly deferred instead of making the whole plugin
+    # appear broken during module import.
     for record in registry.records.values():
         if record.status != "mounted":
             continue
+        deferred_async = False
         try:
             for hook in record.contribution.startup_hooks:
                 result = hook(None)
                 if inspect.isawaitable(result):
+                    deferred_async = True
                     if inspect.iscoroutine(result):
                         result.close()
-                    raise RuntimeError(
-                        "Async startup hooks require the native plugin lifespan bridge"
+                    log.warning(
+                        "Deferred async startup hook for plugin %s until the native lifespan bridge is enabled",
+                        record.manifest.plugin_id,
                     )
-            record.status = "started"
+            record.status = "mounted" if deferred_async else "started"
         except Exception as exc:
             record.status = "failed"
             record.error = f"{type(exc).__name__}: {exc}"[:2_000]
