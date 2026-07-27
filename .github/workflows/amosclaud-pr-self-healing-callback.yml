@@ -1,0 +1,73 @@
+name: Amosclaud PR Self-Healing Callback
+
+on:
+  issues:
+    types: [edited, reopened]
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  issues: write
+  pull-requests: write
+  statuses: read
+
+concurrency:
+  group: >-
+    amosclaud-pr-self-heal-${{
+      github.event.issue.number || github.run_id
+    }}
+  cancel-in-progress: false
+
+jobs:
+  callback:
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' &&
+       startsWith(github.event.issue.title, '[Amosclaud Repair Incident ') &&
+       contains(github.event.issue.body, 'amosclaud-repair-state:blocked') &&
+       contains(github.event.issue.body, '- Route: `pull_request`'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out trusted callback controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Require the authorized Amosclaud GitHub token
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$AMOSCLAUD_GITHUB_TOKEN" ]; then
+            echo "AMOSCLAUD_GITHUB_TOKEN is required for owner-authorized callback commands."
+            exit 1
+          fi
+
+      - name: Re-enter blocked pull-request repairs
+        env:
+          AMOSCLAUD_GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/amosclaud_repair_callback.py \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --repository "$GITHUB_REPOSITORY" \
+            --token "$AMOSCLAUD_GITHUB_TOKEN" \
+            --max-attempts 4 \
+            --cooldown-seconds 1200
