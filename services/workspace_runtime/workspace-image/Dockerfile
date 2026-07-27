@@ -19,8 +19,24 @@ RUN apt-get update \
        python3 \
        python3-pip \
        python3-venv \
-    && groupadd --gid 1000 developer \
-    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash developer \
+    && if getent passwd 1000 >/dev/null; then \
+         existing_user="$(getent passwd 1000 | cut -d: -f1)"; \
+         existing_group="$(getent group 1000 | cut -d: -f1)"; \
+         if [ "$existing_group" != "developer" ]; then \
+           groupmod --new-name developer "$existing_group"; \
+         fi; \
+         if [ "$existing_user" != "developer" ]; then \
+           usermod --login developer \
+             --home /home/developer \
+             --move-home \
+             --shell /bin/bash \
+             "$existing_user"; \
+         fi; \
+       else \
+         groupadd --gid 1000 developer; \
+         useradd --uid 1000 --gid 1000 \
+           --create-home --shell /bin/bash developer; \
+       fi \
     && mkdir -p /workspace /home/developer/.cache \
     && chown -R developer:developer /workspace /home/developer \
     && rm -rf /var/lib/apt/lists/*
