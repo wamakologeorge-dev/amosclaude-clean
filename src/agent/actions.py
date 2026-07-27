@@ -248,13 +248,15 @@ def _resolve_workspace(workspace: str) -> Path:
     ).expanduser().resolve()
     allowed_roots = tuple(dict.fromkeys((base, repository_root)))
 
-    workspace_path = Path(raw_workspace).expanduser()
-    candidate = (
-        workspace_path.resolve()
-        if workspace_path.is_absolute()
-        else (base / workspace_path).resolve()
-    )
+    workspace_path = Path(raw_workspace)
+    if workspace_path.is_absolute():
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace must be a relative path inside allowed roots",
+        )
+
     for root in allowed_roots:
+        candidate = (root / workspace_path).resolve()
         try:
             candidate.relative_to(root)
             return candidate
