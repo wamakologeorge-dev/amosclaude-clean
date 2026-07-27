@@ -59,11 +59,13 @@ def _user_id(session: str | None, authorization: str | None) -> int:
     return task_router._actor(session, authorization)
 
 
-def _registry(request: Request):
-    registry = getattr(request.app.state, "plugin_registry", None)
-    if registry is None:
-        raise HTTPException(status_code=503, detail="Plugin registry is not initialized")
-    return registry
+def _registry(_request: Request):
+    from amoscloud_ai.extensions.runtime import get_registry
+
+    try:
+        return get_registry()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/registry")
@@ -75,6 +77,7 @@ def plugins(
     registry = _registry(request)
     return {
         "entry_point_group": "amosclaud.plugins",
+        "drop_in_package": "amoscloud_ai.plugins",
         "plugins": registry.list_plugins(),
         "agent_tools": sorted(registry.agent_tools),
         "terminal_commands": sorted(registry.terminal_commands),
