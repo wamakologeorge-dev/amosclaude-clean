@@ -22,6 +22,10 @@ def test_live_dashboard_renders_real_test_cards_and_progress() -> None:
 
     assert DASHBOARD_MARKER in body
     assert "👁️ Amosclaud Live Execution" in body
+    assert "3D Result Card" in body
+    assert '<table role="presentation">' in body
+    assert "<kbd>🟨 RUNNING</kbd>" in body
+    assert "Execution rail" in body
     assert "Test cards" in body
     assert "Python compilation" in body
     assert "42 passed" in body
@@ -37,6 +41,7 @@ def test_failed_stage_is_never_presented_as_passed() -> None:
         tests=[TestCard("Targeted pytest", "failed", "1 failed")],
     )
 
+    assert "<kbd>🟥 FAILED</kbd>" in body
     assert "**Test suite** — FAILED" in body
     assert "`FAILED`" in body
     assert "1 failed" in body
@@ -54,10 +59,39 @@ def test_completed_dashboard_shows_delivery_evidence() -> None:
         branch="feature/live-execution-dashboard",
     )
 
+    assert "<kbd>🟩 VERIFIED</kbd>" in body
     assert "`100%`" in body
     assert "`abc1234`" in body
     assert "#491" in body
+    assert "PUBLISHED" in body
     assert "Commit & pull request** — PASSED" in body
+
+
+def test_card_escapes_user_controlled_html() -> None:
+    body = render_dashboard(
+        objective='<script>alert("owned")</script>',
+        current_stage="analyze",
+        branch='<img src=x onerror="alert(1)">',
+        tests=[TestCard("<b>unsafe</b>", "running", "<script>bad()</script>")],
+    )
+
+    assert "<script>" not in body
+    assert "<img src=x" not in body
+    assert "&lt;script&gt;" in body
+    assert "&lt;b&gt;unsafe&lt;/b&gt;" in body
+
+
+def test_unknown_outcome_is_rejected() -> None:
+    try:
+        render_dashboard(
+            objective="test",
+            current_stage="analyze",
+            outcome="unknown",
+        )
+    except ValueError as exc:
+        assert "unknown dashboard outcome" in str(exc)
+    else:
+        raise AssertionError("unknown outcomes must fail closed")
 
 
 def test_latest_dashboard_comment_is_reused() -> None:
