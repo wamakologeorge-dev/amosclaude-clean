@@ -53,11 +53,16 @@ class SandboxPolicy:
         image: str,
         action: str,
     ) -> list[str]:
-        root = Path(workspace).expanduser().resolve(strict=True)
+        raw = Path(workspace).expanduser()
+        absolute = Path(os.path.abspath(raw))
+        for component in (absolute, *absolute.parents):
+            if component.exists() and component.is_symlink():
+                raise SandboxError(
+                    "Sandbox workspace path cannot contain symlinks"
+                )
+        root = absolute.resolve(strict=True)
         if not root.is_dir():
             raise SandboxError("Sandbox workspace must be a directory")
-        if root.is_symlink():
-            raise SandboxError("Sandbox workspace cannot be a symlink")
         if not _IMAGE.fullmatch(str(image or "")):
             raise SandboxError("Sandbox image reference is invalid")
         try:
