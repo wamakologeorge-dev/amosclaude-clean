@@ -249,7 +249,7 @@ def _resolve_workspace(workspace: str) -> Path:
     ).expanduser().resolve()
     allowed_roots = tuple(dict.fromkeys((base, repository_root)))
 
-    # Validate user-provided workspace text before constructing a Path object.
+    # Validate user-provided workspace text before constructing a filesystem path.
     if raw_workspace.startswith("~"):
         raise HTTPException(status_code=400, detail="Invalid workspace path")
 
@@ -257,11 +257,9 @@ def _resolve_workspace(workspace: str) -> Path:
     if not workspace_path.is_absolute() and ".." in workspace_path.parts:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
 
-    candidate = (
-        workspace_path.resolve()
-        if workspace_path.is_absolute()
-        else (base / workspace_path).resolve()
-    )
+    anchored = workspace_path if workspace_path.is_absolute() else (base / workspace_path)
+    candidate = anchored.resolve()
+
     for root in allowed_roots:
         try:
             candidate.relative_to(root)
