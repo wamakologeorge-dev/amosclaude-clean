@@ -223,19 +223,27 @@ def run_deployment_task(self, deployment_id: str, config: Dict[str, Any]) -> Dic
 
 @celery_app.task(name="amoscloud_ai.run_global_task", bind=True, max_retries=2)
 def run_global_task(self, task_id: str) -> dict[str, str]:
-    """Execute one approved Global Task Router job."""
+    """Execute one approved Global Task Router job through its policy adapter."""
     try:
-        from amoscloud_ai.autonomous_task_runner import (
-            _is_autonomous_task,
-            execute_autonomous_task,
+        from amoscloud_ai.workforce_task_runner import (
+            _is_workforce_task,
+            execute_workforce_task,
         )
 
-        if _is_autonomous_task(task_id):
-            execute_autonomous_task(task_id)
+        if _is_workforce_task(task_id):
+            execute_workforce_task(task_id)
         else:
-            from amoscloud_ai.cloud_task_runner import execute_cloud_task
+            from amoscloud_ai.autonomous_task_runner import (
+                _is_autonomous_task,
+                execute_autonomous_task,
+            )
 
-            execute_cloud_task(task_id)
+            if _is_autonomous_task(task_id):
+                execute_autonomous_task(task_id)
+            else:
+                from amoscloud_ai.cloud_task_runner import execute_cloud_task
+
+                execute_cloud_task(task_id)
         return {"task_id": task_id, "dispatched": "true"}
     except Exception as exc:
         log.exception("Global task %s failed in worker", task_id)
