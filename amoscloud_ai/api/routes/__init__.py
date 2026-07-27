@@ -169,6 +169,21 @@ def _route_keys(route):
     return {(path, method) for method in methods}
 
 
+# Privileged storage-capacity operations are administrator-only and are mounted
+# through the canonical administration router so main.py includes them once.
+from amoscloud_ai.api.routes import storage_capacity as storage_capacity_routes
+
+_admin_keys = set()
+for _route in admin.router.routes:
+    _admin_keys |= _route_keys(_route)
+for _route in storage_capacity_routes.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _admin_keys:
+        continue
+    admin.router.routes.append(_route)
+    _admin_keys |= _keys
+
+
 _native_keys = set()
 for _route in repositories.router.routes:
     _native_keys |= _route_keys(_route)
