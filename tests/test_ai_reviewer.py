@@ -110,3 +110,36 @@ def test_publish_review_recreates_comment_owned_by_another_identity():
 
     assert pull.created == [body]
     assert old.deleted is True
+
+
+def test_publish_with_tokens_uses_scoped_fallback():
+    calls = []
+    pull = FakePull([])
+
+    class FakeRepo:
+        def get_pull(self, number):
+            assert number == 737
+            return pull
+
+    class FakeGithub:
+        def __init__(self, token):
+            self.token = token
+            calls.append(token)
+
+        def get_repo(self, name):
+            assert name == "owner/repository"
+            if self.token == "primary":
+                raise PermissionError("primary token cannot write this comment")
+            return FakeRepo()
+
+    delivered = reviewer.publish_with_tokens(
+        "owner/repository",
+        737,
+        "review body",
+        ["primary", "fallback", "fallback"],
+        github_factory=FakeGithub,
+    )
+
+    assert delivered is True
+    assert calls == ["primary", "fallback"]
+    assert pull.created == ["review body"]
