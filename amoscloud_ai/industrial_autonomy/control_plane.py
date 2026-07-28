@@ -160,9 +160,7 @@ class SentinelGridControlPlane:
 
     @staticmethod
     def _default_connection() -> sqlite3.Connection:
-        configured = os.getenv("SENTINELGRID_DB_PATH") or os.getenv(
-            "AUTH_DB_PATH", "data/auth.db"
-        )
+        configured = os.getenv("SENTINELGRID_DB_PATH") or os.getenv("AUTH_DB_PATH", "data/auth.db")
         path = Path(configured)
         path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(path)
@@ -187,8 +185,7 @@ class SentinelGridControlPlane:
         """Create all durable tables and indexes idempotently."""
 
         with self._lock, self._database() as db:
-            db.executescript(
-                """
+            db.executescript("""
                 CREATE TABLE IF NOT EXISTS sentinelgrid_assets (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -247,8 +244,7 @@ class SentinelGridControlPlane:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sentinelgrid_actions_created
                     ON sentinelgrid_actions(created_at DESC);
-                """
-            )
+                """)
 
     def reset(self) -> None:
         """Delete SentinelGrid data. Intended for isolated tests only."""
@@ -268,9 +264,7 @@ class SentinelGridControlPlane:
             counts = {
                 "assets": self._count(db, "sentinelgrid_assets"),
                 "telemetry_records": self._count(db, "sentinelgrid_telemetry"),
-                "open_incidents": self._count(
-                    db, "sentinelgrid_incidents", "status='open'"
-                ),
+                "open_incidents": self._count(db, "sentinelgrid_incidents", "status='open'"),
                 "action_proposals": self._count(db, "sentinelgrid_actions"),
             }
         return {
@@ -346,8 +340,7 @@ class SentinelGridControlPlane:
         with self._lock, self._database() as db:
             self._require_asset(db, asset_id)
             incidents = [
-                self._upsert_incident(db, asset_id, finding, received_at)
-                for finding in findings
+                self._upsert_incident(db, asset_id, finding, received_at) for finding in findings
             ]
             active_codes = {item.code for item in incidents}
             resolved_codes = evaluated_codes - active_codes
@@ -416,9 +409,7 @@ class SentinelGridControlPlane:
     ) -> ActionProposal:
         action_type = action_type.strip().lower()
         if action_type not in self.ALLOWED_ACTIONS:
-            raise StateConflictError(
-                f"Unsupported SentinelGrid action: {action_type or '<blank>'}"
-            )
+            raise StateConflictError(f"Unsupported SentinelGrid action: {action_type or '<blank>'}")
         with self._lock, self._database() as db:
             asset = self._require_asset(db, asset_id)
             self._validate_action(asset, action_type)
@@ -428,21 +419,17 @@ class SentinelGridControlPlane:
                 asset_id=asset_id,
                 action_type=action_type,
                 reason=self._required_text(reason, "Action reason", 3),
-                requested_by=self._required_text(
-                    requested_by, "Action requester", 2
-                ),
+                requested_by=self._required_text(requested_by, "Action requester", 2),
                 risk=(
                     RiskLevel.LOW
                     if software_only
-                    else RiskLevel.CRITICAL
-                    if action_type == "emergency_shutdown"
-                    else RiskLevel.ELEVATED
+                    else (
+                        RiskLevel.CRITICAL
+                        if action_type == "emergency_shutdown"
+                        else RiskLevel.ELEVATED
+                    )
                 ),
-                status=(
-                    ActionStatus.APPROVED
-                    if software_only
-                    else ActionStatus.PENDING_APPROVAL
-                ),
+                status=(ActionStatus.APPROVED if software_only else ActionStatus.PENDING_APPROVAL),
                 software_only=software_only,
                 execution_allowed=False,
                 created_at=self._now(),
@@ -471,16 +458,12 @@ class SentinelGridControlPlane:
     def approve_action(
         self, action_id: str, *, decided_by: str, decision_note: str = ""
     ) -> ActionProposal:
-        return self._decide(
-            action_id, ActionStatus.APPROVED, decided_by, decision_note
-        )
+        return self._decide(action_id, ActionStatus.APPROVED, decided_by, decision_note)
 
     def reject_action(
         self, action_id: str, *, decided_by: str, decision_note: str = ""
     ) -> ActionProposal:
-        return self._decide(
-            action_id, ActionStatus.REJECTED, decided_by, decision_note
-        )
+        return self._decide(action_id, ActionStatus.REJECTED, decided_by, decision_note)
 
     def list_actions(self, *, limit: int = 100) -> list[ActionProposal]:
         with self._lock, self._database() as db:
@@ -573,9 +556,7 @@ class SentinelGridControlPlane:
         ).fetchone()
         return self._incident(row)
 
-    def _diagnose(
-        self, metrics: dict[str, MetricValue]
-    ) -> tuple[list[_Finding], set[str]]:
+    def _diagnose(self, metrics: dict[str, MetricValue]) -> tuple[list[_Finding], set[str]]:
         findings: list[_Finding] = []
         evaluated: set[str] = set()
         numeric_checks = (
@@ -613,9 +594,7 @@ class SentinelGridControlPlane:
             evaluated.add(code)
             value = self._number(metrics[metric], metric)
             if unsafe(value, threshold):
-                findings.append(
-                    _Finding(code, risk, message.format(value=value), recommendation)
-                )
+                findings.append(_Finding(code, risk, message.format(value=value), recommendation))
         boolean_checks = (
             (
                 "link_online",
@@ -656,17 +635,13 @@ class SentinelGridControlPlane:
         )
 
     def _require_asset(self, db: sqlite3.Connection, asset_id: str) -> AssetRecord:
-        row = db.execute(
-            "SELECT * FROM sentinelgrid_assets WHERE id=?", (asset_id,)
-        ).fetchone()
+        row = db.execute("SELECT * FROM sentinelgrid_assets WHERE id=?", (asset_id,)).fetchone()
         if row is None:
             raise AssetNotFoundError(f"Unknown SentinelGrid asset: {asset_id}")
         return self._asset(row)
 
     def _require_action(self, db: sqlite3.Connection, action_id: str) -> ActionProposal:
-        row = db.execute(
-            "SELECT * FROM sentinelgrid_actions WHERE id=?", (action_id,)
-        ).fetchone()
+        row = db.execute("SELECT * FROM sentinelgrid_actions WHERE id=?", (action_id,)).fetchone()
         if row is None:
             raise ActionNotFoundError(f"Unknown SentinelGrid action: {action_id}")
         return self._action(row)
