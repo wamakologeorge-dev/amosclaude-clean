@@ -14,15 +14,26 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 _DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
 
 
 def normalize_url(value: str | None) -> str:
-    """Upgrade only the public Amosclaud host; preserve local HTTP development."""
+    """Canonicalize the public host while preserving local HTTP development."""
     raw = (value or _DEFAULT_PUBLIC_URL).strip().rstrip("/")
-    parts = urlsplit(raw)
-    if parts.hostname in {"amosclaud.com", "www.amosclaud.com"} and parts.scheme == "http":
-        raw = urlunsplit(parts._replace(scheme="https"))
-    return raw
+    candidate = raw if "://" in raw else f"https://{raw}"
+    parts = urlsplit(candidate)
+    if (parts.hostname or "").lower() not in _PUBLIC_HOSTS:
+        return raw
+
+    try:
+        port = parts.port
+    except ValueError:
+        return raw
+    netloc = _CANONICAL_PUBLIC_HOST
+    if port not in {None, 80, 443}:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit(parts._replace(scheme="https", netloc=netloc)).rstrip("/")
 
 
 DEFAULT_URL = normalize_url(os.getenv("AMOSCLAUD_URL"))
