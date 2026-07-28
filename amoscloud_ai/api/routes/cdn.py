@@ -60,9 +60,7 @@ def get_cdn_service() -> CDNService:
     origin = HTTPOriginFetcher(
         origin_url,
         timeout_seconds=_environment_float("AMOSCLAUD_CDN_ORIGIN_TIMEOUT_SECONDS", 10.0),
-        maximum_asset_bytes=_environment_integer(
-            "AMOSCLAUD_CDN_MAX_ASSET_BYTES", 25 * 1024 * 1024
-        ),
+        maximum_asset_bytes=_environment_integer("AMOSCLAUD_CDN_MAX_ASSET_BYTES", 25 * 1024 * 1024),
     )
     return CDNService(
         build_cache_backend(),
