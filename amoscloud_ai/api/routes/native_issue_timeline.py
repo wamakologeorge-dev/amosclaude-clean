@@ -18,7 +18,9 @@ router = APIRouter(prefix="/repositories", tags=["native-issue-timeline"])
 class IssueActionRequest(BaseModel):
     """Start one governed Amosclaud Action from a native repository issue."""
 
-    mode: Literal["autonomous-check", "build", "fix", "deploy", "monitor"] = "fix"
+    mode: Literal[
+        "autonomous-check", "build", "fix", "deploy", "monitor"
+    ] = "fix"
     branch: str = Field(default="main", min_length=1, max_length=200)
     instructions: str = Field(default="", max_length=20_000)
 
@@ -86,7 +88,9 @@ def _pipeline_snapshot(pipeline_id: str | None) -> dict[str, object] | None:
         "status": pipeline.status.value,
         "reply": pipeline.copilot_reply or pipeline.message,
         "started_at": pipeline.started_at.isoformat(),
-        "finished_at": pipeline.finished_at.isoformat() if pipeline.finished_at else None,
+        "finished_at": (
+            pipeline.finished_at.isoformat() if pipeline.finished_at else None
+        ),
     }
 
 
@@ -174,7 +178,7 @@ async def run_issue_action(
 
     with repositories._db() as db:
         _ensure_activity_table(db)
-        row = _issue_row(db, repository_id, issue_id)
+        _issue_row(db, repository_id, issue_id)
         db.execute(
             """INSERT INTO native_issue_activity(
                    repository_id,issue_id,actor_id,actor_kind,event_kind,
@@ -194,4 +198,5 @@ async def run_issue_action(
             (_now(), repository_id, issue_id),
         )
         db.commit()
-        return _issue_detail(db, row)
+        refreshed = _issue_row(db, repository_id, issue_id)
+        return _issue_detail(db, refreshed)
