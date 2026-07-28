@@ -29,9 +29,12 @@ _ROUTE_DECORATOR = re.compile(
     r"(?:get|post|put|patch|delete|options|head)\s*\("
 )
 _ACCOUNT_DELETION = re.compile(
-    r"(?is)(?:\b(?:delete|deletion|remove|destroy)\w*\b.{0,180}"
-    r"\b(?:account|user)\b|\b(?:account|user)\b.{0,180}"
-    r"\b(?:delete|deletion|remove|destroy)\w*\b)"
+    r"(?i)(?:"
+    r"\b(?:delete|deletion|remove|destroy)(?:[_-](?:user|account)[a-z0-9_]*)+"
+    r"|\b(?:user|account)(?:[_-](?:delete|deletion|remove|destroy)[a-z0-9_]*)+"
+    r"|\b(?:delete|deletion|remove|destroy)\w*\s+(?:the\s+)?(?:user|account)\b"
+    r"|\b(?:user|account)\s+(?:is\s+)?(?:deleted|removed|destroyed|deletion)\b"
+    r")"
 )
 _PLACEHOLDER_MARKERS = (
     "example",
