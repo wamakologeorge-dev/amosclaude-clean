@@ -140,9 +140,7 @@ def test_telemetry_numeric_strings_create_critical_incident(
         "battery_charge_low",
         "methane_threshold_exceeded",
     }
-    critical = next(
-        item for item in incidents if item["code"] == "methane_threshold_exceeded"
-    )
+    critical = next(item for item in incidents if item["code"] == "methane_threshold_exceeded")
     assert critical["risk"] == "critical"
     assert critical["recommended_action"] == "request_maintenance"
 
@@ -303,9 +301,7 @@ def test_physical_action_uses_authenticated_approver_and_never_auto_executes(
 
 
 def test_action_list_returns_stable_snapshots(tmp_path: Path) -> None:
-    control_plane = SentinelGridControlPlane(
-        _sqlite_factory(tmp_path / "sentinelgrid.db")
-    )
+    control_plane = SentinelGridControlPlane(_sqlite_factory(tmp_path / "sentinelgrid.db"))
     asset = control_plane.register_asset(
         name="Snapshot Robot",
         asset_type=AssetType.ROBOT,
