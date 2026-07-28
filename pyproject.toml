@@ -50,6 +50,9 @@ amosclaud-mcp = "amosclaud_mcp.server:main"
 amcl = "amosclaud_language.cli:main"
 amosclaud-tamper-server = "Amosclaud.api.path.byte.server.router.folder.cb.chapter.core.system.py:main"
 
+[tool.setuptools]
+py-modules = ["sitecustomize"]
+
 [tool.setuptools.packages.find]
 include = [
   "Amosclaud*",
