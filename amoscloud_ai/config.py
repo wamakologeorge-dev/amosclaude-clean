@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     allowed_hosts: List[str] = [
         "http://localhost",
         "http://localhost:8000",
-        "http://www.amosclaud.com/",
+        "https://www.amosclaud.com",
     ]
 
     # Security
@@ -75,10 +75,10 @@ class Settings(BaseSettings):
     celery_result_backend: str = ""
 
     # Amosclaud public/customer API
-    amosclaud_api_url: str = "http://www.amosclaud.com/"
+    amosclaud_api_url: str = "https://www.amosclaud.com"
     amosclaud_api_key: str = ""
     amosclaud_api_model: str = "amosclaud-agent"
-    amosclaud_public_url: str = "http://www.amosclaud.com/"
+    amosclaud_public_url: str = "https://www.amosclaud.com"
 
     # Folder-owned model runtime
     amosclaud_model_home: str = "data/amosclaud-model"
@@ -163,7 +163,7 @@ class Settings(BaseSettings):
             return [
                 "http://localhost",
                 "http://localhost:8000",
-                "http://www.amosclaud.com/",
+                "https://www.amosclaud.com",
             ]
         try:
             parsed = json.loads(raw)
