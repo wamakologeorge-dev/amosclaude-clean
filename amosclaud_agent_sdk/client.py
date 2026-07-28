@@ -1,6 +1,7 @@
 """Dependency-free client for Amosclaud Autonomous on www.amosclaud.com."""
 
 from __future__ import annotations
+
 import json
 import os
 import time
@@ -9,6 +10,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
+
 from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResponseError
 
 _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
