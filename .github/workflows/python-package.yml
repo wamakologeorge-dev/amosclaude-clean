@@ -4,9 +4,9 @@ name: Python package
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -16,36 +16,48 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+
 jobs:
   agent-status:
-    runs-on: ubuntu-latest
-    name: 🐦 Amosclaud-ai Status
+    runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
+    name: Amosclaud-ai Status
+    timeout-minutes: 2
     steps:
       - name: Report Agent Activity
         run: |
           echo "=================================================="
-          echo "🐦 Amosclaud-ai is currently analyzing and working!"
+          echo "Amosclaud-ai is currently analyzing and working."
           echo "=================================================="
-          echo "🟢 Live & Active"
+          echo "Live and active"
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8 pytest pytest-cov
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        run: python -m pip install --prefer-binary -r requirements.txt
+
       - name: Lint with flake8
         id: flake8
         shell: bash
@@ -59,15 +71,17 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics >"$report_log" 2>&1
           cat "$report_log"
           exit "$status"
+
       - name: Test with pytest
         id: pytest
         shell: bash
         run: |
           set +e
-          pytest tests/ -v > pytest-${{ matrix.python-version }}.log 2>&1
+          pytest tests/ -q > pytest-${{ matrix.python-version }}.log 2>&1
           status=$?
           cat pytest-${{ matrix.python-version }}.log
           exit "$status"
+
       - name: Upload Python diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -78,6 +92,7 @@ jobs:
             flake8-report-${{ matrix.python-version }}.log
             pytest-${{ matrix.python-version }}.log
           if-no-files-found: warn
+
       - name: Report Python failure
         if: failure() && github.event_name == 'pull_request' && matrix.python-version == '3.12'
         env:
