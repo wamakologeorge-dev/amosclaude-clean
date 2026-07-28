@@ -124,9 +124,7 @@ def repository_instructions() -> str:
     """Load the immutable operating rules that every generated repair must follow."""
 
     agents = _read_instruction(ROOT / "AGENTS.md")
-    engineering_book = _read_instruction(
-        ROOT / "docs" / "PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md"
-    )
+    engineering_book = _read_instruction(ROOT / "docs" / "PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md")
     return (
         "=== AGENTS.md ===\n"
         + agents
@@ -312,7 +310,9 @@ def amosclaud_chat(instructions: str, prompt: str) -> str:
             result = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Amosclaud gateway returned HTTP {error.code}: {redact(detail)}") from error
+        raise RuntimeError(
+            f"Amosclaud gateway returned HTTP {error.code}: {redact(detail)}"
+        ) from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"Amosclaud gateway is unreachable: {error.reason}") from error
 
@@ -359,9 +359,7 @@ def main() -> int:
     if not AMOSCLAUD_API_KEY:
         raise SystemExit("AMOSCLAUD_API_KEY is required for Amosclaud AI Fixer")
     failure_log = redact(
-        LOG_PATH.read_text(encoding="utf-8", errors="replace")
-        if LOG_PATH.exists()
-        else ""
+        LOG_PATH.read_text(encoding="utf-8", errors="replace") if LOG_PATH.exists() else ""
     )
     if not failure_log.strip():
         failure_log = (
@@ -418,9 +416,7 @@ def main() -> int:
             feedback = verification
         except Exception as error:
             feedback = redact(f"{type(error).__name__}: {error}")
-            attempts.append(
-                {"attempt": attempt, "verified": False, "error": feedback}
-            )
+            attempts.append({"attempt": attempt, "verified": False, "error": feedback})
 
     restore()
     REPORT_PATH.write_text(
