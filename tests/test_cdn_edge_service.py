@@ -131,9 +131,7 @@ def test_origin_redirects_compression_and_credential_origins_are_rejected() -> N
     fetcher = HTTPOriginFetcher(
         "https://origin.example",
         transport=httpx.MockTransport(
-            lambda request: httpx.Response(
-                302, headers={"Location": "http://127.0.0.1"}
-            )
+            lambda request: httpx.Response(302, headers={"Location": "http://127.0.0.1"})
         ),
     )
     with pytest.raises(OriginFetchError):
