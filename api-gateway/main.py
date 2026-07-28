@@ -53,7 +53,7 @@ allowed_origins = [
     item.strip()
     for item in os.getenv(
         "AMOSCLAUD_ALLOWED_ORIGINS",
-        "http://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000",
+        "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000",
     ).split(",")
     if item.strip()
 ]
