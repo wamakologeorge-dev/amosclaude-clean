@@ -49,7 +49,7 @@ commands:
               exit 0
             fi
 
-            BASE_URL="${AMOSCLAUD_API_URL:-http://www.amosclaud.com}"
+            BASE_URL="${AMOSCLAUD_API_URL:-https://www.amosclaud.com}"
             TASK_ID="circleci-${CIRCLE_WORKFLOW_ID}-${CIRCLE_BUILD_NUM}"
             ERROR_CONTEXT="CircleCI verification failed for ${CIRCLE_PROJECT_REPONAME} at commit ${CIRCLE_SHA1}. Workflow: ${CIRCLE_BUILD_URL}"
             export TASK_ID ERROR_CONTEXT
