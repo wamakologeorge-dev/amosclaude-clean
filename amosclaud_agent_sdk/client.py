@@ -6,11 +6,22 @@ import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResponseError
 
 _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
+_DEFAULT_BASE_URL = "https://www.amosclaud.com"
+
+
+def _normalize_base_url(value: str | None) -> str:
+    """Keep local HTTP endpoints, but never redirect public Amosclaud POSTs."""
+    raw = (value or _DEFAULT_BASE_URL).strip().rstrip("/")
+    parts = urlsplit(raw)
+    if parts.hostname in {"amosclaud.com", "www.amosclaud.com"} and parts.scheme == "http":
+        parts = parts._replace(scheme="https")
+        raw = urlunsplit(parts)
+    return raw
 
 
 @dataclass(slots=True)
@@ -28,13 +39,13 @@ class AmosclaudAgentClient:
         session_cookie: Value of the ``amos_session`` cookie for web-session auth.
         timeout: Per-request socket timeout in seconds.
     """
-    base_url: str = "http://www.amosclaud.com/"
+    base_url: str = _DEFAULT_BASE_URL
     api_key: str | None = None
     session_cookie: str | None = None
     timeout: float = 30.0
 
     def __post_init__(self) -> None:
-        self.base_url = (self.base_url or "http://www.amosclaud.com/").rstrip("/")
+        self.base_url = _normalize_base_url(self.base_url)
         self.api_key = self.api_key or os.getenv("AMOSCLAUD_API_KEY")
         self.session_cookie = self.session_cookie or os.getenv("AMOSCLAUD_SESSION")
 
