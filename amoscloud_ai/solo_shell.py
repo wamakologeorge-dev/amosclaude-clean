@@ -10,8 +10,21 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
-DEFAULT_URL = os.getenv("AMOSCLAUD_URL", "http://www.amosclaud.com/").rstrip("/")
+_DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
+
+
+def normalize_url(value: str | None) -> str:
+    """Upgrade only the public Amosclaud host; preserve local HTTP development."""
+    raw = (value or _DEFAULT_PUBLIC_URL).strip().rstrip("/")
+    parts = urlsplit(raw)
+    if parts.hostname in {"amosclaud.com", "www.amosclaud.com"} and parts.scheme == "http":
+        raw = urlunsplit(parts._replace(scheme="https"))
+    return raw
+
+
+DEFAULT_URL = normalize_url(os.getenv("AMOSCLAUD_URL"))
 
 
 def request(method: str, path: str, payload: dict[str, Any] | None, args: argparse.Namespace) -> Any:
@@ -24,7 +37,7 @@ def request(method: str, path: str, payload: dict[str, Any] | None, args: argpar
     if args.key:
         headers["Authorization"] = f"Bearer {args.key}"
     req = urllib.request.Request(
-        f"{args.url.rstrip('/')}{path}", data=data, headers=headers, method=method
+        f"{normalize_url(args.url)}{path}", data=data, headers=headers, method=method
     )
     try:
         with urllib.request.urlopen(req, timeout=args.timeout) as response:
