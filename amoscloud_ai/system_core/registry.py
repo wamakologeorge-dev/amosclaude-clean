@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Iterable, Iterator, Mapping
 
-
 DOCTOR_COUNTS: dict[str, int] = {
     "amosclaud-clean": 1,
     "amosclaud-fixer": 2,
@@ -138,11 +137,7 @@ class InventoryManifest:
 
     @property
     def coverage_percent(self) -> int:
-        expected = (
-            len(self.required_requirements)
-            + len(self.required_files)
-            + len(self.required_tools)
-        )
+        expected = len(self.required_requirements) + len(self.required_files) + len(self.required_tools)
         if expected == 0:
             return 100
         missing = sum(len(values) for values in self.missing().values())
@@ -185,16 +180,10 @@ class AmosclaudSystemCore:
 
         self.doctors = self._materialize_doctors()
         self.policies = self._materialize_policies()
-        self._component_names = tuple(
-            sorted(set(self.doctor_counts) | set(self.policy_counts))
-        )
-        self._system_policy_inheritance = {
-            component: True for component in self._component_names
-        }
+        self._component_names = tuple(sorted(set(self.doctor_counts) | set(self.policy_counts)))
+        self._system_policy_inheritance = {component: True for component in self._component_names}
         self._execution_lock = Lock()
-        self._round_robin: dict[str, int] = {
-            component: 0 for component in self.doctor_counts
-        }
+        self._round_robin: dict[str, int] = {component: 0 for component in self.doctor_counts}
 
     def _validate_exact_manifest(self) -> None:
         if self.doctor_counts != DOCTOR_COUNTS:
@@ -243,16 +232,8 @@ class AmosclaudSystemCore:
 
     def validate(self) -> CoverageReport:
         self._validate_exact_manifest()
-        doctor_ids = [
-            doctor.doctor_id
-            for lanes in self.doctors.values()
-            for doctor in lanes
-        ]
-        policy_ids = [
-            policy.policy_id
-            for slots in self.policies.values()
-            for policy in slots
-        ]
+        doctor_ids = [doctor.doctor_id for lanes in self.doctors.values() for doctor in lanes]
+        policy_ids = [policy.policy_id for slots in self.policies.values() for policy in slots]
         if len(doctor_ids) != len(set(doctor_ids)):
             raise ManifestError("Doctor IDs must be unique")
         if len(policy_ids) != len(set(policy_ids)):
@@ -302,9 +283,7 @@ class AmosclaudSystemCore:
     def _next_healthy_doctor(self, component: str) -> DoctorLane:
         lanes = self.doctors.get(component)
         if not lanes:
-            raise DoctorUnavailableError(
-                f"No doctors are registered for component: {component}"
-            )
+            raise DoctorUnavailableError(f"No doctors are registered for component: {component}")
         start = self._round_robin[component] % len(lanes)
         for offset in range(len(lanes)):
             index = (start + offset) % len(lanes)
@@ -312,9 +291,7 @@ class AmosclaudSystemCore:
             if doctor.healthy:
                 self._round_robin[component] = index + 1
                 return doctor
-        raise DoctorUnavailableError(
-            f"All doctors are unavailable for component: {component}"
-        )
+        raise DoctorUnavailableError(f"All doctors are unavailable for component: {component}")
 
     @contextmanager
     def acquire_doctor(
