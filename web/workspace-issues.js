@@ -264,12 +264,18 @@
     if (!trigger) return;
     const name = trigger.dataset.tab || trigger.dataset.openTab || trigger.dataset.openWorkspaceTab;
     if (!name) return;
-    queueMicrotask(() => activateTab(name));
     if (trigger.hasAttribute('data-open-tab')) {
       document.getElementById('account-drawer')?.setAttribute('hidden', '');
       document.getElementById('account-drawer-backdrop')?.setAttribute('hidden', '');
     }
-  });
+    if (name === 'issues') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      activateTab(name);
+      return;
+    }
+    queueMicrotask(() => activateTab(name));
+  }, true);
 
   const requestedTab = location.hash.replace(/^#/, '');
   if (requestedTab === 'issues') queueMicrotask(() => activateTab('issues'));
