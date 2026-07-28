@@ -51,9 +51,11 @@ def normalize_public_environment() -> None:
     origins = os.environ.get("AMOSCLAUD_ALLOWED_ORIGINS", "")
     if origins:
         os.environ["AMOSCLAUD_ALLOWED_ORIGINS"] = ",".join(
-            normalize_public_amosclaud_url(item)
-            if (urlsplit(item.strip()).hostname or "").lower() in _PUBLIC_HOSTS
-            else item.strip().rstrip("/")
+            (
+                normalize_public_amosclaud_url(item)
+                if (urlsplit(item.strip()).hostname or "").lower() in _PUBLIC_HOSTS
+                else item.strip().rstrip("/")
+            )
             for item in origins.split(",")
             if item.strip()
         )
