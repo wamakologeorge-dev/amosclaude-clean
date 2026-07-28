@@ -28,6 +28,17 @@ from .domain import (
 _CACHE_CONTROL_MAX_AGE = re.compile(r"(?:^|,)\s*(?:s-maxage|max-age)=(\d+)\s*(?:,|$)")
 
 
+def _environment_integer(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise CDNConfigurationError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise CDNConfigurationError(f"{name} must be greater than zero")
+    return value
+
+
 class MemoryEdgeCache:
     name = "memory"
 
@@ -189,6 +200,9 @@ class HTTPOriginFetcher:
                     raise OriginFetchError("origin asset exceeds the configured size limit")
                 chunks.append(chunk)
 
+            content_encoding = response.headers.get("content-encoding", "identity").lower()
+            if content_encoding not in {"", "identity"}:
+                raise OriginFetchError("compressed origin responses are not accepted")
             content_type = response.headers.get("content-type", "application/octet-stream")
             if content_type.lower().startswith("text/html"):
                 raise OriginFetchError("dynamic HTML responses are not accepted as CDN assets")
@@ -290,6 +304,8 @@ def build_cache_backend():
             raise CDNConfigurationError("REDIS_URL is required for the Redis CDN cache")
         return RedisEdgeCache(redis_url)
     return MemoryEdgeCache(
-        maximum_entries=int(os.getenv("AMOSCLAUD_CDN_MEMORY_MAX_ENTRIES", "2000")),
-        maximum_bytes=int(os.getenv("AMOSCLAUD_CDN_MEMORY_MAX_BYTES", str(128 * 1024 * 1024))),
+        maximum_entries=_environment_integer("AMOSCLAUD_CDN_MEMORY_MAX_ENTRIES", 2_000),
+        maximum_bytes=_environment_integer(
+            "AMOSCLAUD_CDN_MEMORY_MAX_BYTES", 128 * 1024 * 1024
+        ),
     )
