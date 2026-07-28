@@ -14,14 +14,19 @@ from sitecustomize import normalize_public_amosclaud_url, normalize_public_envir
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_public_amosclaud_http_is_upgraded_to_https() -> None:
+def test_public_amosclaud_http_is_upgraded_to_canonical_https() -> None:
     assert (
         normalize_public_amosclaud_url("http://www.amosclaud.com/") == "https://www.amosclaud.com"
     )
     assert (
         normalize_public_amosclaud_url("http://amosclaud.com/api/v1/provider")
-        == "https://amosclaud.com/api/v1/provider"
+        == "https://www.amosclaud.com/api/v1/provider"
     )
+    assert (
+        normalize_public_amosclaud_url("http://www.amosclaud.com:80/v1/chat/completions")
+        == "https://www.amosclaud.com/v1/chat/completions"
+    )
+    assert normalize_url("http://amosclaud.com:80") == "https://www.amosclaud.com"
 
 
 def test_private_and_local_http_endpoints_are_preserved() -> None:
@@ -34,16 +39,16 @@ def test_private_and_local_http_endpoints_are_preserved() -> None:
 
 def test_environment_guard_upgrades_public_urls(monkeypatch) -> None:
     monkeypatch.setenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/")
-    monkeypatch.setenv("AMOSCLAUD_PROVIDER_API_URL", "http://amosclaud.com")
+    monkeypatch.setenv("AMOSCLAUD_PROVIDER_API_URL", "http://amosclaud.com:80")
     monkeypatch.setenv(
         "AMOSCLAUD_ALLOWED_ORIGINS",
-        "http://www.amosclaud.com,http://localhost:8000",
+        "http://www.amosclaud.com:80,http://localhost:8000",
     )
 
     normalize_public_environment()
 
     assert os.environ["AMOSCLAUD_API_URL"] == "https://www.amosclaud.com"
-    assert os.environ["AMOSCLAUD_PROVIDER_API_URL"] == "https://amosclaud.com"
+    assert os.environ["AMOSCLAUD_PROVIDER_API_URL"] == "https://www.amosclaud.com"
     assert os.environ["AMOSCLAUD_ALLOWED_ORIGINS"] == (
         "https://www.amosclaud.com,http://localhost:8000"
     )
@@ -100,7 +105,7 @@ def test_api_gateway_guard_sets_https_cors_default() -> None:
 
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
-    client = AmosclaudAgentClient(base_url="http://www.amosclaud.com/")
+    client = AmosclaudAgentClient(base_url="http://amosclaud.com:80/")
     assert client.base_url == "https://www.amosclaud.com"
 
     request = Request(
