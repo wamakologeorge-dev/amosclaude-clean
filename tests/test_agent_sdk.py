@@ -36,7 +36,7 @@ def test_sdk_connects_to_hosted_agent_with_bearer_key(monkeypatch):
         "Inspect repository", mode="build"
     )
     assert result["pipeline_id"] == "pipeline-1"
-    assert captured["url"] == "http://www.amosclaud.com/api/v1/agent/run"
+    assert captured["url"] == "https://www.amosclaud.com/api/v1/agent/run"
     assert captured["authorization"] == "Bearer amos_aut_test"
     assert captured["payload"]["mode"] == "build"
 
