@@ -3,7 +3,6 @@ from pathlib import Path
 import sys
 import types
 
-
 if "github" not in sys.modules:
     github_stub = types.ModuleType("github")
     github_stub.Github = object
@@ -136,8 +135,7 @@ class FakePull:
 def test_publish_review_updates_one_comment_and_removes_duplicates():
     old = FakeComment("### Amosclaud automated review\n\nOld")
     latest = FakeComment(
-        "<!-- amosclaud-automated-review -->\n"
-        "### Amosclaud automated review\n\nLatest"
+        "<!-- amosclaud-automated-review -->\n" "### Amosclaud automated review\n\nLatest"
     )
     pull = FakePull([old, latest])
     body = reviewer.build_comment([])
