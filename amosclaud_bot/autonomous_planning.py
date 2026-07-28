@@ -115,10 +115,7 @@ def latest_plan(comments: list[dict[str, Any]]) -> dict[str, str] | None:
 
 
 def _brain_summary(context: dict[str, Any]) -> str:
-    roles = (
-        ", ".join(item["role"] for item in context.get("agent_roles", []))
-        or "default roles"
-    )
+    roles = ", ".join(item["role"] for item in context.get("agent_roles", [])) or "default roles"
     proven = context.get("proven_memories", [])
     failures = context.get("failed_attempts_to_avoid", [])
     lessons = context.get("approved_lessons", [])
@@ -135,18 +132,15 @@ def _brain_summary(context: dict[str, Any]) -> str:
     ]
     if proven:
         lines.append(
-            "- **Strongest proven guidance:** "
-            + str(proven[0].get("title") or "verified memory")
+            "- **Strongest proven guidance:** " + str(proven[0].get("title") or "verified memory")
         )
     if failures:
         lines.append(
-            "- **Primary warning:** "
-            + str(failures[0].get("title") or "previous failed attempt")
+            "- **Primary warning:** " + str(failures[0].get("title") or "previous failed attempt")
         )
     if lessons:
         lines.append(
-            "- **Most relevant lesson:** "
-            + str(lessons[0].get("title") or "approved lesson")
+            "- **Most relevant lesson:** " + str(lessons[0].get("title") or "approved lesson")
         )
     lines.append(
         "- **Truth rule:** Prior knowledge guides the task but never replaces "
@@ -189,13 +183,10 @@ def format_plan(
     codex_context: dict[str, Any] | None = None,
 ) -> str:
     heading = (
-        "### Amosclaud — Autonomous Plan Resumed"
-        if resumed
-        else "### Amosclaud — Autonomous Plan"
+        "### Amosclaud — Autonomous Plan Resumed" if resumed else "### Amosclaud — Autonomous Plan"
     )
     rendered = [
-        f"{'🟩' if index < 2 else '⬜'} {step}"
-        for index, step in enumerate(plan_steps(command))
+        f"{'🟩' if index < 2 else '⬜'} {step}" for index, step in enumerate(plan_steps(command))
     ]
     brain = f"\n\n{_brain_summary(brain_context)}" if brain_context else ""
     codex = f"\n\n{_codex_summary(codex_context)}" if codex_context else ""
@@ -217,9 +208,7 @@ def resolve_continuation(bot: AmosclaudBot, payload: dict[str, Any]) -> bool:
         return False
     issue = payload.get("issue") or {}
     number = int(issue.get("number"))
-    comments = bot._request(
-        "GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100"
-    )
+    comments = bot._request("GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100")
     plan = latest_plan(comments if isinstance(comments, list) else [])
     if not plan:
         bot.post_comment(
