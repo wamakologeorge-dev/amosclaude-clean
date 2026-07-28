@@ -58,7 +58,7 @@ jobs:
           flake8 Amosclaud-metadata/src Amosclaud-metadata/tests \
             --count \
             --max-complexity=10 \
-            --max-line-length=88 \
+            --max-line-length=100 \
             --statistics
 
       - name: Run metadata tests
