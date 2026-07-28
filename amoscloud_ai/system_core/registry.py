@@ -137,7 +137,9 @@ class InventoryManifest:
 
     @property
     def coverage_percent(self) -> int:
-        expected = len(self.required_requirements) + len(self.required_files) + len(self.required_tools)
+        expected = (
+            len(self.required_requirements) + len(self.required_files) + len(self.required_tools)
+        )
         if expected == 0:
             return 100
         missing = sum(len(values) for values in self.missing().values())
