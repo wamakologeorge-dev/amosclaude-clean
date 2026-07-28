@@ -159,10 +159,7 @@ def list_incidents(
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
 ) -> list[dict[str, object]]:
     _authorise(request, x_amosclaud_owner_key)
-    return [
-        asdict(item)
-        for item in control_plane.list_incidents(limit=limit, status=status)
-    ]
+    return [asdict(item) for item in control_plane.list_incidents(limit=limit, status=status)]
 
 
 @router.post("/actions", status_code=202)
