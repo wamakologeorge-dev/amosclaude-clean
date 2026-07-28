@@ -15,9 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_public_amosclaud_http_is_upgraded_to_https() -> None:
-    assert (
-        normalize_public_amosclaud_url("http://www.amosclaud.com/")
-        == "https://www.amosclaud.com"
+    assert normalize_public_amosclaud_url("http://www.amosclaud.com/") == (
+        "https://www.amosclaud.com"
     )
     assert (
         normalize_public_amosclaud_url("http://amosclaud.com/api/v1/provider")
@@ -27,7 +26,9 @@ def test_public_amosclaud_http_is_upgraded_to_https() -> None:
 
 def test_private_and_local_http_endpoints_are_preserved() -> None:
     assert normalize_public_amosclaud_url("http://127.0.0.1:8091") == "http://127.0.0.1:8091"
-    assert normalize_public_amosclaud_url("http://model-station:8000") == "http://model-station:8000"
+    assert (
+        normalize_public_amosclaud_url("http://model-station:8000") == "http://model-station:8000"
+    )
     assert normalize_url("http://localhost:8000") == "http://localhost:8000"
 
 
@@ -74,10 +75,13 @@ def test_sitecustomize_runs_before_entrypoint_imports() -> None:
 
 
 def test_repair_script_sitecustomize_loads_repository_guard() -> None:
-    assert _run_environment_probe(
-        cwd=ROOT.parent,
-        pythonpath=str(ROOT / ".github" / "scripts"),
-    ) == "https://www.amosclaud.com"
+    assert (
+        _run_environment_probe(
+            cwd=ROOT.parent,
+            pythonpath=str(ROOT / ".github" / "scripts"),
+        )
+        == "https://www.amosclaud.com"
+    )
 
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
