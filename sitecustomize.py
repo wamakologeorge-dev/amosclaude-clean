@@ -25,9 +25,7 @@ _PUBLIC_URL_ENV_NAMES = (
     "AMOSCLAUD_URL",
 )
 _DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
-_DEFAULT_ALLOWED_ORIGINS = (
-    "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
-)
+_DEFAULT_ALLOWED_ORIGINS = "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
 
 
 def normalize_public_amosclaud_url(value: str | None) -> str:
