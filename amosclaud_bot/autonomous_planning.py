@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from .autonomous_brain import GitHubAutonomousBrain
-from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 from .codex_capabilities import prepare_codex_capabilities
 
 PLAN_MARKER = "amosclaud-autonomous-plan"
