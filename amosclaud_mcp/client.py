@@ -38,9 +38,7 @@ class AmosclaudClientConfig:
         return cls(
             base_url=normalize_public_amosclaud_url(raw_url),
             autonomous_key=(
-                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY")
-                or os.getenv("AMOSCLAUD_MCP_API_KEY")
-                or None
+                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY") or os.getenv("AMOSCLAUD_MCP_API_KEY") or None
             ),
             timeout_seconds=timeout,
         )
@@ -152,9 +150,7 @@ class AmosclaudClient:
         normalized_mode = mode.strip().lower()
         allowed_modes = {"autonomous-check", "build", "fix", "deploy", "monitor"}
         if normalized_mode not in allowed_modes:
-            raise AmosclaudMCPError(
-                f"mode must be one of: {', '.join(sorted(allowed_modes))}"
-            )
+            raise AmosclaudMCPError(f"mode must be one of: {', '.join(sorted(allowed_modes))}")
         metadata: dict[str, Any] = {
             "source": "amosclaud-mcp",
             "mcp_client": True,
