@@ -1,13 +1,13 @@
-"""Normalize Amosclaud public endpoint variables before application imports.
+"""Normalize configured Amosclaud public endpoints before application imports.
 
 Python imports ``sitecustomize`` automatically during interpreter startup when
-this repository is on ``sys.path``.  Several independent Amosclaud entry points
-historically defaulted to ``http://www.amosclaud.com``.  An HTTP-to-HTTPS redirect
-can rewrite a POST into GET, which produces FastAPI's ``405 Method Not Allowed``.
+this repository is on ``sys.path``. Several independent Amosclaud entry points
+historically accepted ``http://www.amosclaud.com``. An HTTP-to-HTTPS redirect can
+rewrite a POST into GET, which produces FastAPI's ``405 Method Not Allowed``.
 
-Only the public Amosclaud domains are upgraded. Localhost, loopback, Docker,
-Railway private-network, and explicitly configured non-Amosclaud endpoints keep
-their original scheme.
+Only explicitly configured public Amosclaud domains are upgraded. Unset values,
+localhost, loopback, Docker, Railway private-network, and other endpoints remain
+untouched so this guard cannot silently configure a model provider.
 """
 
 from __future__ import annotations
@@ -42,10 +42,10 @@ def normalize_public_amosclaud_url(value: str | None) -> str:
 
 
 def normalize_public_environment() -> None:
-    """Upgrade public Amosclaud environment values without touching private URLs."""
+    """Upgrade configured public URLs without inventing missing configuration."""
     for name in _PUBLIC_URL_ENV_NAMES:
         value = os.environ.get(name)
-        if value or name == "AMOSCLAUD_API_URL":
+        if value:
             os.environ[name] = normalize_public_amosclaud_url(value)
 
     origins = os.environ.get("AMOSCLAUD_ALLOWED_ORIGINS", "")
@@ -56,10 +56,6 @@ def normalize_public_environment() -> None:
             else item.strip().rstrip("/")
             for item in origins.split(",")
             if item.strip()
-        )
-    else:
-        os.environ["AMOSCLAUD_ALLOWED_ORIGINS"] = (
-            "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
         )
 
 
