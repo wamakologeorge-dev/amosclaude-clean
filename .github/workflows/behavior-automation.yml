@@ -1,0 +1,318 @@
+name: Repository Behavior Automation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  issues:
+    types: [opened, edited, reopened]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: "17 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Repository behavior operation
+        required: true
+        default: verify
+        type: choice
+        options:
+          - verify
+          - maintenance
+          - format-branch
+      confirm_write:
+        description: Confirm that format-branch may commit to the selected non-default branch
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-behavior-${{ github.event.pull_request.number || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  behavior-quality-gate:
+    name: behavior-quality-gate
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && inputs.operation == 'verify')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install repository formatting tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "black>=24.4,<27" "isort>=8.0.1,<9"
+
+      - name: Select changed Python files
+        id: changed
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git fetch --no-tags origin "$BASE_REF"
+            base="$(git merge-base HEAD "origin/$BASE_REF")"
+            git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.py' > /tmp/python-files.txt
+          elif [[ "$EVENT_NAME" == "push" && -n "${BEFORE_SHA:-}" && \
+                  "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --name-only --diff-filter=ACMR "$BEFORE_SHA" HEAD -- '*.py' > /tmp/python-files.txt
+          elif [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]]; then
+            git fetch --no-tags origin "$DEFAULT_BRANCH"
+            base="$(git merge-base HEAD "origin/$DEFAULT_BRANCH")"
+            git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.py' > /tmp/python-files.txt
+          else
+            git ls-files '*.py' > /tmp/python-files.txt
+          fi
+
+          sed -i '/^[[:space:]]*$/d' /tmp/python-files.txt
+          cat /tmp/python-files.txt
+          if [[ -s /tmp/python-files.txt ]]; then
+            echo "has_python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_python=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Capture Black formatting differences
+        id: black
+        if: steps.changed.outputs.has_python == 'true'
+        shell: bash
+        run: |
+          set +e
+          xargs -d '\n' black --check --diff -- < /tmp/python-files.txt > black-format.diff
+          status=$?
+          cat black-format.diff
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload Black formatting differences
+        if: steps.black.outputs.status != '0'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: behavior-black-format-diff
+          path: black-format.diff
+          if-no-files-found: error
+
+      - name: Enforce Black formatting
+        if: steps.black.outputs.status != '0'
+        run: |
+          echo "Changed Python files do not match Black formatting."
+          exit 1
+
+      - name: Enforce import ordering
+        if: steps.changed.outputs.has_python == 'true'
+        run: xargs -d '\n' isort --check-only -- < /tmp/python-files.txt
+
+      - name: Reject whitespace errors
+        run: git diff --check
+
+      - name: Verify behavior automation unit tests
+        run: python -m unittest discover -s tests -p 'test_repository_behavior_automation.py' -v
+
+  label-pull-request:
+    name: label-pull-request
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Check out trusted base branch only
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Apply bounded pull-request labels
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python .github/scripts/repository_behavior.py label-pr --number "$PR_NUMBER"
+
+  label-issue:
+    name: label-issue
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Check out repository automation
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Apply bounded issue labels
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: python .github/scripts/repository_behavior.py label-issue --number "$ISSUE_NUMBER"
+
+  refresh-active-item:
+    name: refresh-active-item
+    if: github.event_name == 'issue_comment'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository automation
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Remove stale label after new activity
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ITEM_NUMBER: ${{ github.event.issue.number }}
+        run: python .github/scripts/repository_behavior.py refresh --number "$ITEM_NUMBER"
+
+  scheduled-maintenance:
+    name: scheduled-maintenance
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.operation == 'maintenance')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository automation
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Label inactive work without closing it
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/repository_behavior.py maintenance --stale-days 30
+
+  format-branch:
+    name: format-branch
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'format-branch'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+
+    steps:
+      - name: Enforce owner-only non-default branch write
+        shell: bash
+        env:
+          CONFIRM_WRITE: ${{ inputs.confirm_write }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_ACTOR" == "$GITHUB_REPOSITORY_OWNER" ]] || {
+            echo "Only the repository owner may run the write operation."
+            exit 1
+          }
+          [[ "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" ]] || {
+            echo "Formatting never writes directly to the default branch."
+            exit 1
+          }
+          [[ "$CONFIRM_WRITE" == "true" ]] || {
+            echo "Re-run with confirm_write enabled."
+            exit 1
+          }
+
+      - name: Check out selected branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install repository formatting tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "black>=24.4,<27" "isort>=8.0.1,<9"
+
+      - name: Format Python files changed from main
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$DEFAULT_BRANCH"
+          base="$(git merge-base HEAD "origin/$DEFAULT_BRANCH")"
+          git diff --name-only --diff-filter=ACMR "$base"...HEAD -- '*.py' > /tmp/python-files.txt
+          sed -i '/^[[:space:]]*$/d' /tmp/python-files.txt
+
+          if [[ ! -s /tmp/python-files.txt ]]; then
+            echo "No changed Python files need formatting."
+            exit 0
+          fi
+
+          xargs -d '\n' black -- < /tmp/python-files.txt
+          xargs -d '\n' isort -- < /tmp/python-files.txt
+          git diff --check
+
+      - name: Commit verified formatting changes
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "amosclaud-behavior-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -- '*.py'
+          git commit -m "style: apply repository formatting"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch verification for the new commit
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run behavior-automation.yml \
+            --ref "$GITHUB_REF_NAME" \
+            -f operation=verify \
+            -f confirm_write=false
