@@ -46,8 +46,7 @@ def _changed_file_summary(files: list[dict[str, Any]]) -> dict[str, Any]:
     source_changes = [
         name
         for name in names
-        if name.endswith((".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java"))
-        and name not in tests
+        if name.endswith((".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java")) and name not in tests
     ]
 
     return {
@@ -84,27 +83,39 @@ def _professional_review(
             + ", ".join(f"`{name}`" for name in summary["security_related"][:8])
         )
     if summary["source_changes"] and not summary["tests"]:
-        medium.append("Source code changed, but no changed test file was detected in this pull request.")
+        medium.append(
+            "Source code changed, but no changed test file was detected in this pull request."
+        )
     if summary["changed_lines"] > 800:
         medium.append(
             f"Large change set detected ({summary['changed_lines']} changed lines); split or perform focused human review."
         )
     if not high and not medium:
-        low.append("No high-risk path or missing-test signal was detected by the deterministic baseline review.")
+        low.append(
+            "No high-risk path or missing-test signal was detected by the deterministic baseline review."
+        )
 
     autonomous_status = str(autonomous_result.get("status") or "unknown").upper()
     evidence = [str(item) for item in (autonomous_result.get("evidence") or [])][:5]
     if autonomous_status not in {"SUCCESS", "COMPLETED", "READY"}:
-        medium.append(f"Autonomous review runtime returned `{autonomous_status}`; human verification is required.")
+        medium.append(
+            f"Autonomous review runtime returned `{autonomous_status}`; human verification is required."
+        )
 
-    recommendation = "CHANGES REQUESTED" if high else ("NEEDS HUMAN REVIEW" if medium else "APPROVE")
+    recommendation = (
+        "CHANGES REQUESTED" if high else ("NEEDS HUMAN REVIEW" if medium else "APPROVE")
+    )
     risk = "HIGH" if high else ("MEDIUM" if medium else "LOW")
     title = str(pr.get("title") or "Untitled pull request")
     base = str((pr.get("base") or {}).get("ref") or "unknown")
     head = str((pr.get("head") or {}).get("ref") or "unknown")
 
     def section(items: list[str]) -> str:
-        return "\n".join(f"- {item}" for item in items) if items else "- None detected by this baseline review."
+        return (
+            "\n".join(f"- {item}" for item in items)
+            if items
+            else "- None detected by this baseline review."
+        )
 
     tests_text = (
         f"Changed test files detected: {len(summary['tests'])}."
@@ -162,7 +173,9 @@ def _handle_professional_review(payload: dict[str, Any]) -> int | None:
     repository = os.getenv("GITHUB_REPOSITORY", "")
     token = os.getenv("GITHUB_TOKEN", "")
     if not repository or not token:
-        raise RuntimeError("GITHUB_REPOSITORY and GITHUB_TOKEN are required for professional PR review")
+        raise RuntimeError(
+            "GITHUB_REPOSITORY and GITHUB_TOKEN are required for professional PR review"
+        )
 
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
     pr = bot._request("GET", f"/repos/{repository}/pulls/{number}")
@@ -170,7 +183,10 @@ def _handle_professional_review(payload: dict[str, Any]) -> int | None:
     if not isinstance(files, list):
         files = []
 
-    review_objective = objective or f"Review pull request #{number} for correctness, tests, security, and merge risk"
+    review_objective = (
+        objective
+        or f"Review pull request #{number} for correctness, tests, security, and merge risk"
+    )
     autonomous_result = bot._run_local("review", review_objective, allow_writes=False)
     body = _professional_review(pr=pr, files=files, autonomous_result=autonomous_result)
     bot.post_comment(number, body)
@@ -206,7 +222,9 @@ def _prepare_new_files_for_diff(workspace: Path) -> list[str]:
     )
     if result.returncode != 0:
         return []
-    candidates = [item.decode("utf-8", errors="replace") for item in result.stdout.split(b"\0") if item]
+    candidates = [
+        item.decode("utf-8", errors="replace") for item in result.stdout.split(b"\0") if item
+    ]
     safe = [
         path
         for path in candidates
