@@ -7,9 +7,9 @@ import pytest
 
 from amoscloud_ai.cdn import (
     AssetRequest,
+    CacheDisposition,
     CDNConfigurationError,
     CDNService,
-    CacheDisposition,
     HTTPOriginFetcher,
     MemoryEdgeCache,
     OriginAsset,
