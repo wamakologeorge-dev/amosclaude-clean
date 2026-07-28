@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
-API_URL = os.getenv("AMOSCLAUD_API_URL", "http://www.amosclaud.com/").rstrip("/")
+API_URL = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/")
 API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
 MODEL = os.getenv("AMOSCLAUD_CRON_MODEL", "amosclaud-agent").strip()
 GITHUB_REPOSITORY = os.getenv(
@@ -461,7 +461,6 @@ def run_daily_cycle() -> int:
                 "ERROR",
             )
         return 1
-
     log(f"Published verified pull request: {pull_request_url}")
     return 0
 
