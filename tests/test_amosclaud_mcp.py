@@ -13,7 +13,7 @@ from amosclaud_mcp.client import (
 
 
 def test_config_reads_first_party_environment(monkeypatch):
-    monkeypatch.setenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com/")
+    monkeypatch.setenv("AMOSCLAUD_API_URL", "http://amosclaud.com:80/")
     monkeypatch.setenv("AMOSCLAUD_AUTONOMOUS_KEY", "secret-key")
     monkeypatch.setenv("AMOSCLAUD_MCP_TIMEOUT", "30")
 
