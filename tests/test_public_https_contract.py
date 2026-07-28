@@ -89,11 +89,14 @@ def test_repair_script_sitecustomize_loads_repository_guard() -> None:
 
 
 def test_api_gateway_sitecustomize_sets_https_cors_default() -> None:
-    assert _run_environment_probe(
-        cwd=ROOT.parent,
-        pythonpath=str(ROOT / "api-gateway"),
-        variable="AMOSCLAUD_ALLOWED_ORIGINS",
-    ) == "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
+    assert (
+        _run_environment_probe(
+            cwd=ROOT.parent,
+            pythonpath=str(ROOT / "api-gateway"),
+            variable="AMOSCLAUD_ALLOWED_ORIGINS",
+        )
+        == "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
+    )
 
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
