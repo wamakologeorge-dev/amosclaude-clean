@@ -11,6 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "amosclaud_cron_agent.py"
+GATEWAY = ROOT / "amosclaud_cron_gateway.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "daily-build.yml"
 
 
@@ -34,6 +35,16 @@ def test_cron_agent_is_valid_python_and_uses_amosclaud_gateway() -> None:
     assert "AMOSCLAUD_API_KEY" in source
     assert "https://anthropic.com" not in source
     assert "ANTHROPIC_API_KEY" not in source
+
+
+def test_cron_gateway_prefers_canonical_provider_route_and_handles_legacy_route() -> None:
+    source = GATEWAY.read_text(encoding="utf-8")
+
+    ast.parse(source)
+    assert "/api/v1/provider/chat/completions" in source
+    assert "/v1/chat/completions" in source
+    assert "error.code in {404, 405}" in source
+    assert "non-JSON response" in source
 
 
 def test_cron_agent_never_force_pushes_or_writes_default_branch() -> None:
@@ -120,4 +131,5 @@ def test_daily_workflow_has_narrow_write_permissions_and_pinned_actions() -> Non
     assert "issues: write" in workflow
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in workflow
     assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in workflow
-    assert "python amosclaud_cron_agent.py" in workflow
+    assert "AMOSCLAUD_API_COMPLETIONS_PATH" in workflow
+    assert "python amosclaud_cron_gateway.py" in workflow
