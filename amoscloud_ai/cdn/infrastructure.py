@@ -305,7 +305,5 @@ def build_cache_backend():
         return RedisEdgeCache(redis_url)
     return MemoryEdgeCache(
         maximum_entries=_environment_integer("AMOSCLAUD_CDN_MEMORY_MAX_ENTRIES", 2_000),
-        maximum_bytes=_environment_integer(
-            "AMOSCLAUD_CDN_MEMORY_MAX_BYTES", 128 * 1024 * 1024
-        ),
+        maximum_bytes=_environment_integer("AMOSCLAUD_CDN_MEMORY_MAX_BYTES", 128 * 1024 * 1024),
     )
