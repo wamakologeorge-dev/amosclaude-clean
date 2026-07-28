@@ -17,6 +17,7 @@ from amoscloud_ai.api.routes import (
     cdn,
     codex_system_bundle,
     control_bus_dashboard,
+    github_repository_management,
     industrial_autonomy,
     metadata_dashboard,
     monitoring,
@@ -47,6 +48,7 @@ router.include_router(byte_metadata_router, prefix="/api/v1")
 router.include_router(codex_system_bundle.router, prefix="/api/v1")
 router.include_router(autonomous_codex.router, prefix="/api/v1")
 router.include_router(industrial_autonomy.router, prefix="/api/v1")
+router.include_router(github_repository_management.router, prefix="/api/v1")
 router.include_router(amomodel_router, prefix="/api/v1")
 router.include_router(monitoring.router, prefix="/api/v1")
 router.include_router(cdn.router, prefix="/api/v1")
