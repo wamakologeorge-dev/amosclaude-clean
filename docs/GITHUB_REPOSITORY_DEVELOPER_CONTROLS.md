@@ -36,6 +36,10 @@ Open **Repositories**, choose an imported GitHub repository, and select **Develo
 /static/repository-developer-settings.html?repository_id=<id>
 ```
 
+## Deployment configuration
+
+The existing GitHub OAuth callback handles both normal connections and the elevated repository-management reconnect. `GITHUB_REPOSITORY_CALLBACK_URL` can override the generated callback URL when a deployment uses a fixed public callback address.
+
 ## Operational notes
 
 - Repository transfers are asynchronous on GitHub. Amosclaud updates the imported repository metadata and local `origin` URL from the transfer response when GitHub returns the new full name.
