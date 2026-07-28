@@ -38,7 +38,8 @@
       <button type="button" data-open-tab="chat"><strong>Chat with Amosclaud</strong><span>Discuss this repository and selected branch in a normal conversation.</span></button>
       <button type="button" data-open-tab="autonomous"><strong>Autonomous execution</strong><span>Run build, test, review, or deployment operations.</span></button>
       <button type="button" data-open-tab="commits"><strong>Branches and commits</strong><span>Open real branch controls and commit history.</span></button>
-      <button type="button" data-open-tab="pull-requests"><strong>Pull requests and issues</strong><span>Create, review, and merge native Amosclaud work items.</span></button>
+      <button type="button" data-open-tab="issues"><strong>Issues</strong><span>Read the complete issue instructions and view Amosclaud Action reports.</span></button>
+      <button type="button" data-open-tab="pull-requests"><strong>Pull requests</strong><span>Create, review, and merge changes between repository branches.</span></button>
     </section>
     <button data-account-logout class="ws-drawer-signout" type="button">Sign out</button>
   </aside>
@@ -88,7 +89,7 @@
 
     <section class="ws-panel" data-panel="autonomous"><div class="ws-section-head"><div><h2>Autonomous agent</h2><p>Run real build, test, review, and deployment operations for the selected branch.</p></div></div><div class="ws-agent-grid"><button id="ws-agent-build" type="button">Build</button><button id="ws-agent-test" type="button">Test</button><button id="ws-agent-review" type="button">Review</button><button id="ws-agent-deploy" type="button">Deploy</button></div><pre id="ws-agent-output" class="ws-agent-output">Choose an operation.</pre></section>
     <section class="ws-panel" data-panel="commits"><div class="ws-section-head"><div><h2>Commit history</h2><p>Real commits recorded on the selected branch.</p></div></div><div id="ws-commits" class="ws-commit-list">Loading…</div></section>
-    <section class="ws-panel" data-panel="issues"><div class="ws-section-head"><div><h2>Issues</h2><p>Native Amosclaud repository issues.</p></div><div class="ws-tool-form"><button id="ws-new-issue" type="button">New issue</button><button id="ws-refresh-issues" type="button">Refresh</button></div></div><div id="ws-issues" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load issues.</div></div></section>
+    <section class="ws-panel" data-panel="issues"><div class="ws-section-head"><div><h2>Issues</h2><p>Open an issue to read every instruction and its persistent Amosclaud Action timeline.</p></div><div class="ws-tool-form"><button id="ws-new-issue" type="button">New issue</button><button id="ws-refresh-issues" type="button">Refresh</button></div></div><div id="ws-issues" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load issues.</div></div></section>
     <section class="ws-panel" data-panel="pull-requests"><div class="ws-section-head"><div><h2>Pull requests</h2><p>Create and merge changes between repository branches.</p></div><div class="ws-tool-form"><button id="ws-new-pr" type="button">New pull request</button><button id="ws-refresh-prs" type="button">Refresh</button></div></div><div id="ws-pull-requests" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load pull requests.</div></div></section>
   </main>
 
@@ -124,6 +125,6 @@
       document.getElementById('ws-mode-edit')?.addEventListener('click', openFullEditor, true);
     })();
   </script>
-  <script src="/static/highlight.js"></script><script src="/static/workspace.js"></script><script src="/static/markdown-service.js"></script><script src="/static/workspace-chat.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
+  <script src="/static/highlight.js"></script><script src="/static/workspace.js"></script><script src="/static/workspace-issues.js"></script><script src="/static/markdown-service.js"></script><script src="/static/workspace-chat.js"></script><script src="/static/account.js"></script><script src="/static/app-install.js"></script>
 </body>
 </html>
