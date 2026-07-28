@@ -5,10 +5,22 @@ from typing import Any, Mapping
 
 from . import bot as bot_module
 from .autonomous_brain import GitHubAutonomousBrain
-from .bot import AmosclaudBot, BotResponse, parse_command
+from .bot import AmosclaudBot, BotResponse
+from .continuation_state import is_continue_request, read_continuation_state
 
+_ORIGINAL_PARSE_COMMAND = bot_module.parse_command
 _ORIGINAL_RUN_LOCAL = AmosclaudBot._run_local
 _ORIGINAL_HANDLE_COMMENT = AmosclaudBot.handle_comment
+
+
+def _continuation_aware_parse_command(text: str) -> tuple[str | None, str]:
+    """Reuse the preflight-resolved command during later workflow steps."""
+    if not is_continue_request(text):
+        return _ORIGINAL_PARSE_COMMAND(text)
+    state = read_continuation_state()
+    if not state or state.get("found") is not True:
+        return None, ""
+    return str(state["command"]), str(state["objective"])
 
 
 def _legacy_kernel_call(
@@ -117,6 +129,8 @@ def _status_aware_handle_comment(
     return response
 
 
+parse_command = _continuation_aware_parse_command
+bot_module.parse_command = parse_command
 AmosclaudBot._run_local = _brain_aware_run_local
 AmosclaudBot.handle_comment = _status_aware_handle_comment
 
