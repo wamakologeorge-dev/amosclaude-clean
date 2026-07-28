@@ -4,7 +4,6 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 MODULE_PATH = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "repository_behavior.py"
 SPEC = importlib.util.spec_from_file_location("repository_behavior", MODULE_PATH)
 assert SPEC and SPEC.loader
