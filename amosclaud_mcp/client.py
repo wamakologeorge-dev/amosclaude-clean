@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from sitecustomize import normalize_public_amosclaud_url
 
 TERMINAL_PIPELINE_STATES = {"success", "failed", "cancelled"}
 
@@ -35,7 +36,7 @@ class AmosclaudClientConfig:
         except ValueError as exc:
             raise AmosclaudMCPError("AMOSCLAUD_MCP_TIMEOUT must be a number") from exc
         return cls(
-            base_url=raw_url.rstrip("/"),
+            base_url=normalize_public_amosclaud_url(raw_url),
             autonomous_key=(
                 os.getenv("AMOSCLAUD_AUTONOMOUS_KEY")
                 or os.getenv("AMOSCLAUD_MCP_API_KEY")
