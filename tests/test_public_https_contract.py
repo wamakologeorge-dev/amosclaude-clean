@@ -49,16 +49,20 @@ def test_environment_guard_upgrades_public_urls(monkeypatch) -> None:
     )
 
 
-def _run_environment_probe(*, cwd: Path, pythonpath: str | None = None) -> str:
+def _run_environment_probe(
+    *, cwd: Path, pythonpath: str | None = None, variable: str = "AMOSCLAUD_API_URL"
+) -> str:
     env = dict(os.environ)
     env["AMOSCLAUD_API_URL"] = "http://www.amosclaud.com/"
+    if variable == "AMOSCLAUD_ALLOWED_ORIGINS":
+        env.pop(variable, None)
     if pythonpath is not None:
         env["PYTHONPATH"] = pythonpath
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "import os; print(os.environ['AMOSCLAUD_API_URL'])",
+            f"import os; print(os.environ['{variable}'])",
         ],
         cwd=cwd,
         env=env,
@@ -82,6 +86,14 @@ def test_repair_script_sitecustomize_loads_repository_guard() -> None:
         )
         == "https://www.amosclaud.com"
     )
+
+
+def test_api_gateway_sitecustomize_sets_https_cors_default() -> None:
+    assert _run_environment_probe(
+        cwd=ROOT.parent,
+        pythonpath=str(ROOT / "api-gateway"),
+        variable="AMOSCLAUD_ALLOWED_ORIGINS",
+    ) == "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
 
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
