@@ -51,6 +51,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "flask-cors>=4.0,<7" \
         "python-multipart>=0.0.9" \
         "python-jose[cryptography]>=3.3,<4" \
+        "PyNaCl>=1.5,<2" \
         "passlib>=1.7,<2" \
         "bcrypt>=4.1,<5" \
         "jinja2>=3.1.3" \
