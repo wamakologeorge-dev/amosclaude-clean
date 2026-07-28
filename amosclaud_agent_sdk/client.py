@@ -15,16 +15,26 @@ from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResp
 
 _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
 _DEFAULT_BASE_URL = "https://www.amosclaud.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
 
 
 def _normalize_base_url(value: str | None) -> str:
-    """Keep local HTTP endpoints, but never redirect public Amosclaud POSTs."""
+    """Canonicalize the public host while preserving local/private endpoints."""
     raw = (value or _DEFAULT_BASE_URL).strip().rstrip("/")
-    parts = urlsplit(raw)
-    if parts.hostname in {"amosclaud.com", "www.amosclaud.com"} and parts.scheme == "http":
-        parts = parts._replace(scheme="https")
-        raw = urlunsplit(parts)
-    return raw
+    candidate = raw if "://" in raw else f"https://{raw}"
+    parts = urlsplit(candidate)
+    if (parts.hostname or "").lower() not in _PUBLIC_HOSTS:
+        return raw
+
+    try:
+        port = parts.port
+    except ValueError:
+        return raw
+    netloc = _CANONICAL_PUBLIC_HOST
+    if port not in {None, 80, 443}:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit(parts._replace(scheme="https", netloc=netloc)).rstrip("/")
 
 
 @dataclass(slots=True)
