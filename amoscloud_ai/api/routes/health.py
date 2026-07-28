@@ -15,6 +15,7 @@ from amoscloud_ai.api.routes import (
     autonomous_codex,
     bundle_pages,
     bundles,
+    cdn,
     codex_system_bundle,
     control_bus_dashboard,
     metadata_dashboard,
@@ -45,6 +46,7 @@ router.include_router(codex_system_bundle.router, prefix="/api/v1")
 router.include_router(autonomous_codex.router, prefix="/api/v1")
 router.include_router(amomodel_router, prefix="/api/v1")
 router.include_router(monitoring.router, prefix="/api/v1")
+router.include_router(cdn.router, prefix="/api/v1")
 
 
 @router.get("/autonomous-codex-configuration", include_in_schema=False)
