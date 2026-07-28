@@ -17,14 +17,16 @@ import urllib.request
 from typing import Any
 
 import amosclaud_cron_agent as agent
+from sitecustomize import normalize_public_amosclaud_url
 
 
 def _base_url() -> str:
-    return (
+    configured = (
         os.getenv("AMOSCLAUD_PROVIDER_API_URL", "").strip()
         or os.getenv("AMOSCLAUD_API_URL", "").strip()
         or "https://www.amosclaud.com"
-    ).rstrip("/")
+    )
+    return normalize_public_amosclaud_url(configured)
 
 
 def _completion_paths() -> list[str]:
