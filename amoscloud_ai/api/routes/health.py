@@ -9,12 +9,12 @@ from fastapi.responses import FileResponse, RedirectResponse
 from amomodel.api import router as amomodel_router
 from amomodel.api import status as amomodel_status
 from amoscloud_ai import provider
-from amoscloud_ai.railway_health import status as railway_health_status
 from amoscloud_ai.agent.preflight import run_preflight
 from amoscloud_ai.api.routes import (
     autonomous_codex,
     bundle_pages,
     bundles,
+    cdn,
     codex_system_bundle,
     control_bus_dashboard,
     metadata_dashboard,
@@ -28,6 +28,7 @@ from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
 )
 from amoscloud_ai.config import settings
 from amoscloud_ai.models import HealthResponse
+from amoscloud_ai.railway_health import status as railway_health_status
 from amoscloud_ai.server.cb.Amosclaud import server_identity
 
 router = APIRouter(tags=["health"])
@@ -45,6 +46,7 @@ router.include_router(codex_system_bundle.router, prefix="/api/v1")
 router.include_router(autonomous_codex.router, prefix="/api/v1")
 router.include_router(amomodel_router, prefix="/api/v1")
 router.include_router(monitoring.router, prefix="/api/v1")
+router.include_router(cdn.router, prefix="/api/v1")
 
 
 @router.get("/autonomous-codex-configuration", include_in_schema=False)
