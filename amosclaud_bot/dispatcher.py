@@ -10,7 +10,7 @@ from .approval_gate import (
     handle_approval_event,
 )
 from .autonomous_planning import announce_plan, resolve_continuation
-from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 from .comment_style import compact_public_comment
 from .intelligence_router import handle_intelligence_request
 from .privacy_gate import requires_private_work, route_private_work
