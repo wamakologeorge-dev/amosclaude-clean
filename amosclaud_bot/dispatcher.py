@@ -42,7 +42,11 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
         return None
 
     command, objective = parse_command(raw)
-    if not command or not objective or not requires_private_work(objective):
+    if (
+        not command
+        or not objective
+        or not requires_private_work(objective, command=command)
+    ):
         return None
 
     issue = payload.get("issue") or {}
@@ -132,6 +136,11 @@ def run_dispatcher_from_environment() -> int:
 
     if event_name == "issue_comment":
         if resolve_continuation(bot, payload):
+            return 0
+        # The workflow intentionally runs a privacy-only preflight before the
+        # execution pass. Respect its marker so the same event is not routed or
+        # commented twice during the second dispatcher invocation.
+        if PRIVATE_ROUTE_MARKER.exists():
             return 0
         privacy_result = _handle_private_issue_comment(bot, payload)
         if privacy_result is not None:
