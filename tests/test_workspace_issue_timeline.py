@@ -4,7 +4,6 @@ from pathlib import Path
 
 from amoscloud_ai.main import create_app
 
-
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 
@@ -21,9 +20,7 @@ def test_native_issue_detail_and_action_routes_are_registered() -> None:
 
 
 def test_issue_timeline_persists_pipeline_evidence() -> None:
-    source = (ROOT / "amoscloud_ai/api/routes/native_issue_timeline.py").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "amoscloud_ai/api/routes/native_issue_timeline.py").read_text(encoding="utf-8")
 
     assert "native_issue_activity" in source
     assert "pipeline_id" in source
@@ -48,7 +45,7 @@ def test_workspace_has_separate_issue_and_pull_request_navigation() -> None:
 
     assert 'data-open-tab="issues"' in html
     assert 'data-open-tab="pull-requests"' in html
-    assert '/static/workspace-issues.js' in html
+    assert "/static/workspace-issues.js" in html
     assert "read every instruction" in html
 
 
