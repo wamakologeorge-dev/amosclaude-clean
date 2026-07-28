@@ -24,9 +24,7 @@ ROOT = Path(__file__).resolve().parent
 API_URL = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/")
 API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
 MODEL = os.getenv("AMOSCLAUD_CRON_MODEL", "amosclaud-agent").strip()
-GITHUB_REPOSITORY = os.getenv(
-    "GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean"
-).strip()
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean").strip()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
 DEFAULT_BRANCH = os.getenv("AMOSCLAUD_DEFAULT_BRANCH", "main").strip()
 MAX_PATCH_BYTES = 250_000
@@ -76,9 +74,7 @@ def log(message: str, level: str = "INFO") -> None:
     print(f"[{timestamp}] [{level}] {message}", flush=True)
 
 
-def run(
-    command: list[str], *, check: bool = False
-) -> subprocess.CompletedProcess[str]:
+def run(command: list[str], *, check: bool = False) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         command,
         cwd=ROOT,
@@ -132,16 +128,10 @@ def repository_context() -> str:
         path
         for path in tracked
         if path.startswith(ALLOWED_PREFIXES)
-        and path.endswith(
-            (".py", ".js", ".ts", ".html", ".css", ".json", ".md")
-        )
+        and path.endswith((".py", ".js", ".ts", ".html", ".css", ".json", ".md"))
     ][:600]
-    recent = run(
-        ["git", "log", "-8", "--pretty=format:%h %s"], check=True
-    ).stdout
-    return "Tracked change targets:\n" + "\n".join(relevant) + (
-        "\n\nRecent commits:\n" + recent
-    )
+    recent = run(["git", "log", "-8", "--pretty=format:%h %s"], check=True).stdout
+    return "Tracked change targets:\n" + "\n".join(relevant) + ("\n\nRecent commits:\n" + recent)
 
 
 def request_json(url: str, payload: dict[str, Any], token: str) -> dict[str, Any]:
@@ -153,21 +143,15 @@ def request_json(url: str, payload: dict[str, Any], token: str) -> dict[str, Any
         "User-Agent": "Amosclaud-Cron-Agent/1.0",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    request = urllib.request.Request(
-        url, data=data, headers=headers, method="POST"
-    )
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
-        raise CronAgentError(
-            f"GitHub API returned HTTP {error.code}: {redact(detail)}"
-        ) from error
+        raise CronAgentError(f"GitHub API returned HTTP {error.code}: {redact(detail)}") from error
     except urllib.error.URLError as error:
-        raise CronAgentError(
-            f"GitHub API is unreachable: {error.reason}"
-        ) from error
+        raise CronAgentError(f"GitHub API is unreachable: {error.reason}") from error
 
 
 def call_amosclaud(prompt: str) -> str:
@@ -211,31 +195,23 @@ def call_amosclaud(prompt: str) -> str:
             f"Amosclaud gateway returned HTTP {error.code}: {redact(detail)}"
         ) from error
     except urllib.error.URLError as error:
-        raise CronAgentError(
-            f"Amosclaud gateway is unreachable: {error.reason}"
-        ) from error
+        raise CronAgentError(f"Amosclaud gateway is unreachable: {error.reason}") from error
 
     try:
         content = result["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as error:
-        raise CronAgentError(
-            "Amosclaud gateway returned an invalid completion payload"
-        ) from error
+        raise CronAgentError("Amosclaud gateway returned an invalid completion payload") from error
     if not isinstance(content, str) or not content.strip():
         raise CronAgentError("Amosclaud gateway returned no proposal")
     return content
 
 
 def extract_diff(response_text: str) -> str:
-    fenced = re.search(
-        r"```(?:diff|patch)?\s*(.*?)```", response_text, re.DOTALL
-    )
+    fenced = re.search(r"```(?:diff|patch)?\s*(.*?)```", response_text, re.DOTALL)
     candidate = fenced.group(1) if fenced else response_text
     start = candidate.find("diff --git ")
     if start < 0:
-        raise CronAgentError(
-            "Amosclaud response did not contain a unified git diff"
-        )
+        raise CronAgentError("Amosclaud response did not contain a unified git diff")
     return candidate[start:].strip() + "\n"
 
 
@@ -280,9 +256,7 @@ def validate_patch(patch: str) -> list[str]:
         raise CronAgentError("Generated patch exceeds the size limit")
     for marker in FORBIDDEN_PATCH_MARKERS:
         if marker in patch:
-            raise CronAgentError(
-                f"Generated patch contains forbidden structure: {marker}"
-            )
+            raise CronAgentError(f"Generated patch contains forbidden structure: {marker}")
 
     paths = patch_paths(patch)
     if not paths:
@@ -300,19 +274,13 @@ def validate_patch(patch: str) -> list[str]:
         ):
             raise CronAgentError(f"Generated patch has unsafe path: {path}")
         if is_protected(normalized):
-            raise CronAgentError(
-                f"Generated patch targets protected path: {normalized}"
-            )
+            raise CronAgentError(f"Generated patch targets protected path: {normalized}")
         if not normalized.startswith(ALLOWED_PREFIXES):
-            raise CronAgentError(
-                f"Generated patch targets an unsupported path: {normalized}"
-            )
+            raise CronAgentError(f"Generated patch targets an unsupported path: {normalized}")
 
     normalized_paths = [normalize_path(p) for p in paths]
     if not any(p.startswith(RUNTIME_PREFIXES) for p in normalized_paths):
-        raise CronAgentError(
-            "Generated patch does not modify an existing runtime component"
-        )
+        raise CronAgentError("Generated patch does not modify an existing runtime component")
     if not any(p.startswith("tests/") for p in normalized_paths):
         raise CronAgentError("Generated patch must include test coverage")
     return normalized_paths
@@ -362,9 +330,7 @@ def apply_and_verify(patch: str) -> list[str]:
         if result.stdout:
             print(redact(result.stdout), flush=True)
         if result.returncode != 0:
-            raise CronAgentError(
-                f"Verification failed: {' '.join(command)}"
-            )
+            raise CronAgentError(f"Verification failed: {' '.join(command)}")
     return paths
 
 
@@ -456,8 +422,7 @@ def run_daily_cycle() -> int:
             )
         except Exception as report_error:
             log(
-                f"Failure report could not be created: "
-                f"{redact(str(report_error))}",
+                f"Failure report could not be created: {redact(str(report_error))}",
                 "ERROR",
             )
         return 1
