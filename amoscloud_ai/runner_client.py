@@ -81,10 +81,9 @@ def _heartbeat(client: httpx.Client, api_url: str, runner_id: str, token: str) -
 
 def _model_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
-    token = (
-        os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
-        or os.getenv("AMOSCLAUD_API_KEY", "").strip()
-    )
+    token = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip() or os.getenv(
+        "AMOSCLAUD_API_KEY", ""
+    ).strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
