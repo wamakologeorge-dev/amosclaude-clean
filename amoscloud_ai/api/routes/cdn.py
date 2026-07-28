@@ -30,6 +30,28 @@ class PurgeRequest(BaseModel):
     paths: list[str] = Field(min_length=1, max_length=100)
 
 
+def _environment_integer(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise CDNConfigurationError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise CDNConfigurationError(f"{name} must be greater than zero")
+    return value
+
+
+def _environment_float(name: str, default: float) -> float:
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise CDNConfigurationError(f"{name} must be a number") from exc
+    if value <= 0:
+        raise CDNConfigurationError(f"{name} must be greater than zero")
+    return value
+
+
 @lru_cache(maxsize=1)
 def get_cdn_service() -> CDNService:
     origin_url = os.getenv("AMOSCLAUD_CDN_ORIGIN_URL", "").strip()
@@ -37,17 +59,17 @@ def get_cdn_service() -> CDNService:
         raise CDNConfigurationError("AMOSCLAUD_CDN_ORIGIN_URL is not configured")
     origin = HTTPOriginFetcher(
         origin_url,
-        timeout_seconds=float(os.getenv("AMOSCLAUD_CDN_ORIGIN_TIMEOUT_SECONDS", "10")),
-        maximum_asset_bytes=int(
-            os.getenv("AMOSCLAUD_CDN_MAX_ASSET_BYTES", str(25 * 1024 * 1024))
+        timeout_seconds=_environment_float("AMOSCLAUD_CDN_ORIGIN_TIMEOUT_SECONDS", 10.0),
+        maximum_asset_bytes=_environment_integer(
+            "AMOSCLAUD_CDN_MAX_ASSET_BYTES", 25 * 1024 * 1024
         ),
     )
     return CDNService(
         build_cache_backend(),
         origin,
         PrometheusEdgeTelemetry(),
-        default_ttl_seconds=int(os.getenv("AMOSCLAUD_CDN_DEFAULT_TTL_SECONDS", "300")),
-        maximum_ttl_seconds=int(os.getenv("AMOSCLAUD_CDN_MAX_TTL_SECONDS", "86400")),
+        default_ttl_seconds=_environment_integer("AMOSCLAUD_CDN_DEFAULT_TTL_SECONDS", 300),
+        maximum_ttl_seconds=_environment_integer("AMOSCLAUD_CDN_MAX_TTL_SECONDS", 86_400),
     )
 
 
