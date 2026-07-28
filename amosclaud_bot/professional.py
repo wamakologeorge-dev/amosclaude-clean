@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from .bot import AmosclaudBot, parse_command, run_from_environment
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command, run_from_environment
+from .execution_dashboard import TestCard, publish_dashboard, render_dashboard
 
 HIGH_RISK_PREFIXES = (
     ".github/workflows/",
@@ -44,8 +46,7 @@ def _changed_file_summary(files: list[dict[str, Any]]) -> dict[str, Any]:
     source_changes = [
         name
         for name in names
-        if name.endswith((".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java"))
-        and name not in tests
+        if name.endswith((".py", ".js", ".ts", ".tsx", ".go", ".rs", ".java")) and name not in tests
     ]
 
     return {
@@ -82,27 +83,39 @@ def _professional_review(
             + ", ".join(f"`{name}`" for name in summary["security_related"][:8])
         )
     if summary["source_changes"] and not summary["tests"]:
-        medium.append("Source code changed, but no changed test file was detected in this pull request.")
+        medium.append(
+            "Source code changed, but no changed test file was detected in this pull request."
+        )
     if summary["changed_lines"] > 800:
         medium.append(
             f"Large change set detected ({summary['changed_lines']} changed lines); split or perform focused human review."
         )
     if not high and not medium:
-        low.append("No high-risk path or missing-test signal was detected by the deterministic baseline review.")
+        low.append(
+            "No high-risk path or missing-test signal was detected by the deterministic baseline review."
+        )
 
     autonomous_status = str(autonomous_result.get("status") or "unknown").upper()
     evidence = [str(item) for item in (autonomous_result.get("evidence") or [])][:5]
     if autonomous_status not in {"SUCCESS", "COMPLETED", "READY"}:
-        medium.append(f"Autonomous review runtime returned `{autonomous_status}`; human verification is required.")
+        medium.append(
+            f"Autonomous review runtime returned `{autonomous_status}`; human verification is required."
+        )
 
-    recommendation = "CHANGES REQUESTED" if high else ("NEEDS HUMAN REVIEW" if medium else "APPROVE")
+    recommendation = (
+        "CHANGES REQUESTED" if high else ("NEEDS HUMAN REVIEW" if medium else "APPROVE")
+    )
     risk = "HIGH" if high else ("MEDIUM" if medium else "LOW")
     title = str(pr.get("title") or "Untitled pull request")
     base = str((pr.get("base") or {}).get("ref") or "unknown")
     head = str((pr.get("head") or {}).get("ref") or "unknown")
 
     def section(items: list[str]) -> str:
-        return "\n".join(f"- {item}" for item in items) if items else "- None detected by this baseline review."
+        return (
+            "\n".join(f"- {item}" for item in items)
+            if items
+            else "- None detected by this baseline review."
+        )
 
     tests_text = (
         f"Changed test files detected: {len(summary['tests'])}."
@@ -160,7 +173,9 @@ def _handle_professional_review(payload: dict[str, Any]) -> int | None:
     repository = os.getenv("GITHUB_REPOSITORY", "")
     token = os.getenv("GITHUB_TOKEN", "")
     if not repository or not token:
-        raise RuntimeError("GITHUB_REPOSITORY and GITHUB_TOKEN are required for professional PR review")
+        raise RuntimeError(
+            "GITHUB_REPOSITORY and GITHUB_TOKEN are required for professional PR review"
+        )
 
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
     pr = bot._request("GET", f"/repos/{repository}/pulls/{number}")
@@ -168,22 +183,126 @@ def _handle_professional_review(payload: dict[str, Any]) -> int | None:
     if not isinstance(files, list):
         files = []
 
-    review_objective = objective or f"Review pull request #{number} for correctness, tests, security, and merge risk"
+    review_objective = (
+        objective
+        or f"Review pull request #{number} for correctness, tests, security, and merge risk"
+    )
     autonomous_result = bot._run_local("review", review_objective, allow_writes=False)
     body = _professional_review(pr=pr, files=files, autonomous_result=autonomous_result)
     bot.post_comment(number, body)
     return 0
 
 
+def _trusted_fix(payload: dict[str, Any]) -> tuple[bool, str, int]:
+    comment = payload.get("comment") or {}
+    command, objective = parse_command(str(comment.get("body") or ""))
+    association = str(comment.get("author_association") or "NONE").upper()
+    number = (payload.get("issue") or {}).get("number")
+    return (
+        command == "fix" and association in WRITE_ASSOCIATIONS and isinstance(number, int),
+        objective,
+        int(number) if isinstance(number, int) else 0,
+    )
+
+
+def _prepare_new_files_for_diff(workspace: Path) -> list[str]:
+    """Make safe untracked files visible to ``git diff`` using intent-to-add.
+
+    The publication workflow historically checked only ``git diff``. New files
+    created by Autonomous are untracked, so they were incorrectly reported as
+    "NO CHANGES". Intent-to-add preserves the review boundary without staging
+    content or committing anything.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        cwd=workspace,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return []
+    candidates = [
+        item.decode("utf-8", errors="replace") for item in result.stdout.split(b"\0") if item
+    ]
+    safe = [
+        path
+        for path in candidates
+        if path not in HIGH_RISK_FILES
+        and not path.startswith((".git/", ".amosclaud/", *HIGH_RISK_PREFIXES))
+    ]
+    if safe:
+        subprocess.run(
+            ["git", "add", "--intent-to-add", "--", *safe],
+            cwd=workspace,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    return safe
+
+
+def _has_diff(workspace: Path) -> bool:
+    unstaged = subprocess.run(["git", "diff", "--quiet"], cwd=workspace, check=False)
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=workspace, check=False)
+    return unstaged.returncode != 0 or staged.returncode != 0
+
+
+def _publish_no_change_dashboard(payload: dict[str, Any], objective: str, number: int) -> None:
+    repository = os.getenv("GITHUB_REPOSITORY", "")
+    token = os.getenv("GITHUB_TOKEN", "")
+    if not repository or not token or not number:
+        return
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=Path.cwd(),
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    ).stdout.strip()
+    body = render_dashboard(
+        objective=objective or "Repository engineering task",
+        current_stage="edit",
+        outcome="failed",
+        tests=[
+            TestCard(
+                "Repository change production",
+                "failed",
+                "The execution runtime returned without a safe file proposal. Review the preceding Amosclaud result for the exact blocker.",
+            ),
+            TestCard(
+                "Truth gate",
+                "passed",
+                "No commit or pull request was claimed without a real changed file.",
+            ),
+        ],
+        branch=branch,
+    )
+    publish_dashboard(AmosclaudBot(repository, token=token), number, body)
+
+
 def run_professional_from_environment() -> int:
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
     event_path = os.getenv("GITHUB_EVENT_PATH", "")
+    payload: dict[str, Any] | None = None
     if event_name == "issue_comment" and event_path:
         payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
         handled = _handle_professional_review(payload)
         if handled is not None:
             return handled
-    return run_from_environment()
+
+    result = run_from_environment()
+
+    if payload is not None:
+        trusted, objective, number = _trusted_fix(payload)
+        if trusted:
+            workspace = Path.cwd()
+            _prepare_new_files_for_diff(workspace)
+            if not _has_diff(workspace):
+                _publish_no_change_dashboard(payload, objective, number)
+    return result
 
 
 if __name__ == "__main__":

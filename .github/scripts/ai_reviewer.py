@@ -23,8 +23,18 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(?:api[_-]?key|client[_-]?secret|secret|password|token)[a-z0-9_-]*"
     r"\s*=\s*(['\"])([^'\"]+)\1"
 )
-_BEARER_LITERAL = re.compile(
-    r"(?i)\bauthorization\s*[:=]\s*(['\"])bearer\s+([^'\"]+)\1"
+_BEARER_LITERAL = re.compile(r"(?i)\bauthorization\s*[:=]\s*(['\"])bearer\s+([^'\"]+)\1")
+_ROUTE_DECORATOR = re.compile(
+    r"(?m)^\s*@(?:[A-Za-z_][A-Za-z0-9_]*\.)?router\."
+    r"(?:get|post|put|patch|delete|options|head)\s*\("
+)
+_ACCOUNT_DELETION = re.compile(
+    r"(?i)(?:"
+    r"\b(?:delete|deletion|remove|destroy)(?:[_-](?:user|account)[a-z0-9_]*)+"
+    r"|\b(?:user|account)(?:[_-](?:delete|deletion|remove|destroy)[a-z0-9_]*)+"
+    r"|\b(?:delete|deletion|remove|destroy)\w*\s+(?:the\s+)?(?:user|account)\b"
+    r"|\b(?:user|account)\s+(?:is\s+)?(?:deleted|removed|destroyed|deletion)\b"
+    r")"
 )
 _PLACEHOLDER_MARKERS = (
     "example",
@@ -47,6 +57,17 @@ _KNOWN_SECRET_PREFIXES = (
     "sk-",
     "xoxb-",
     "xoxp-",
+)
+_AUTH_SIGNALS = (
+    "depends(",
+    "security(",
+    "cookie(",
+    "authorization",
+    "x-api-key",
+    "current_user",
+    "require_user",
+    "require_admin",
+    "authenticated",
 )
 
 
@@ -99,10 +120,30 @@ def _contains_shell_execution(added: str) -> bool:
         r"\bsubprocess\.(?:run|popen|call|check_call|check_output)\s*\("
         r".{0,400}?\[\s*['\"](?:ba|z|da|a)?sh['\"]\s*,\s*['\"]-c['\"]",
     )
-    return any(
-        re.search(pattern, added, re.IGNORECASE | re.DOTALL)
-        for pattern in patterns
-    )
+    return any(re.search(pattern, added, re.IGNORECASE | re.DOTALL) for pattern in patterns)
+
+
+def _contains_unguarded_json_parse(added: str) -> bool:
+    lowered = added.lower()
+    marker = "response.json()"
+    start = 0
+    while True:
+        index = lowered.find(marker, start)
+        if index < 0:
+            return False
+        window = lowered[max(0, index - 600) : index + 600]
+        if "content-type" not in window and "headers.get(" not in window:
+            return True
+        start = index + len(marker)
+
+
+def _new_route_lacks_auth(added: str) -> bool:
+    lowered = added.lower()
+    for match in _ROUTE_DECORATOR.finditer(added):
+        window = lowered[match.start() : match.start() + 1600]
+        if not any(signal in window for signal in _AUTH_SIGNALS):
+            return True
+    return False
 
 
 def review_diff(diff: str) -> list[str]:
@@ -116,7 +157,7 @@ def review_diff(diff: str) -> list[str]:
             "move it to environment-managed secrets."
         )
 
-    if "response.json()" in added and "content-type" not in lowered:
+    if _contains_unguarded_json_parse(added):
         findings.append(
             "A response is parsed as JSON without checking its content type; "
             "plain-text server errors could crash the client."
@@ -128,34 +169,24 @@ def review_diff(diff: str) -> list[str]:
             "user-controlled input cannot reach the shell."
         )
 
-    if (
-        "../" in added
-        or "path(" in lowered
-        or "write_bytes" in lowered
-        or "write_text" in lowered
-    ):
+    if "../" in added or "path(" in lowered or "write_bytes" in lowered or "write_text" in lowered:
         if "resolve()" not in added and "safe" not in lowered:
             findings.append(
                 "Filesystem handling changed; verify path traversal protection "
                 "and ownership checks."
             )
 
-    if "delete" in lowered and ("account" in lowered or "user" in lowered):
+    if _ACCOUNT_DELETION.search(added):
         findings.append(
             "Account/user deletion changed; verify confirmation, session "
             "invalidation, foreign-key cleanup, and irreversible-data messaging."
         )
 
-    if "@router" in added or "app.include_router" in added:
-        if (
-            "depends(" not in lowered
-            and "cookie(" not in lowered
-            and "x-api-key" not in lowered
-        ):
-            findings.append(
-                "A new API route may lack explicit authentication or authorization; "
-                "confirm access control is intentional."
-            )
+    if _new_route_lacks_auth(added):
+        findings.append(
+            "A new API route may lack explicit authentication or authorization; "
+            "confirm access control is intentional."
+        )
 
     if "android" in diff.lower() and "test" not in diff.lower():
         findings.append(
@@ -170,8 +201,7 @@ def build_comment(findings: list[str]) -> str:
     prefix = f"{COMMENT_MARKER}\n{COMMENT_HEADING}\n\n"
     if not findings:
         return (
-            prefix
-            + "No high-signal security, reliability, or test risks were detected "
+            prefix + "No high-signal security, reliability, or test risks were detected "
             "in this diff. This is a lightweight automated check and does not "
             "replace human review."
         )
@@ -228,7 +258,6 @@ def publish_with_tokens(
     temporarily unavailable. Tokens are never printed and duplicate values are
     attempted only once.
     """
-
     attempted: set[str] = set()
     for token in tokens:
         candidate = str(token or "").strip()

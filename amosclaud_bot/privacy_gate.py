@@ -1,28 +1,38 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 from .bot import AmosclaudBot
 
-PRIVATE_HINTS = (
-    "production",
-    "deploy",
-    "deployment",
-    "security",
+READ_ONLY_COMMANDS = frozenset({"help", "inspect", "review", "status", "verify"})
+
+# These phrases indicate a disclosure risk even when the requested operation is
+# read-only. They deliberately exclude broad engineering words such as
+# "deployment" and "authentication", which are safe to inspect publicly.
+EXPLICIT_PRIVATE_HINTS = (
     "vulnerability",
     "secret",
     "credential",
     "token",
     "password",
-    "authentication",
-    "authorization",
-    "infrastructure",
     "incident",
     "private",
     "confidential",
     "customer data",
     "personal data",
+)
+
+# Write requests involving these areas require the protected owner-only route.
+WRITE_SENSITIVE_HINTS = (
+    "production",
+    "deploy",
+    "deployment",
+    "security",
+    "authentication",
+    "authorization",
+    "infrastructure",
 )
 
 
@@ -34,10 +44,28 @@ class PrivacyRoute:
     configured: bool = False
 
 
-def requires_private_work(text: str) -> bool:
-    """Return True when a task should not create detailed public process issues."""
+def _contains_hint(text: str, hint: str) -> bool:
+    """Match whole words/phrases so terms such as ``tokenizer`` stay public."""
+    if " " in hint:
+        return hint in text
+    return re.search(rf"(?<![a-z0-9_]){re.escape(hint)}(?![a-z0-9_])", text) is not None
+
+
+def requires_private_work(text: str, command: str | None = None) -> bool:
+    """Return whether a task must leave the public issue-processing path.
+
+    Read-only inspection, review, and verification may discuss ordinary
+    deployment or authentication code publicly. Explicit disclosure risks still
+    fail closed. Write requests retain the stricter sensitive-operation policy.
+    """
     lowered = " ".join((text or "").strip().lower().split())
-    return any(hint in lowered for hint in PRIVATE_HINTS)
+    normalized_command = (command or "").strip().lower()
+
+    if any(_contains_hint(lowered, hint) for hint in EXPLICIT_PRIVATE_HINTS):
+        return True
+    if normalized_command in READ_ONLY_COMMANDS:
+        return False
+    return any(_contains_hint(lowered, hint) for hint in WRITE_SENSITIVE_HINTS)
 
 
 def route_private_work(*, source_bot: AmosclaudBot, title: str, body: str) -> PrivacyRoute:

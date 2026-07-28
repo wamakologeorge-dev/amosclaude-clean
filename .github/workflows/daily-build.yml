@@ -45,10 +45,12 @@ jobs:
       - name: Generate and verify one reviewable proposal
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
+          AMOSCLAUD_PROVIDER_API_URL: ${{ secrets.AMOSCLAUD_PROVIDER_API_URL || vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_COMPLETIONS_PATH: ${{ vars.AMOSCLAUD_API_COMPLETIONS_PATH || '/api/v1/provider/chat/completions' }}
           AMOSCLAUD_CRON_MODEL: ${{ vars.AMOSCLAUD_CRON_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python amosclaud_cron_agent.py
+          python amosclaud_cron_gateway.py
