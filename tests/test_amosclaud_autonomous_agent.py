@@ -106,7 +106,7 @@ def test_non_engineering_guidance_does_not_require_build_evidence() -> None:
 
 
 def test_autonomous_uses_only_the_canonical_public_domain() -> None:
-    canonical_url = "http://www.amosclaud.com/"
+    canonical_url = "https://www.amosclaud.com/"
     canonical_host = "www.amosclaud.com"
 
     assert canonical_url in Path("docs/DOMAIN_OWNERSHIP.md").read_text(encoding="utf-8")
