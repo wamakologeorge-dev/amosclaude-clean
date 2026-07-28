@@ -234,7 +234,7 @@ jobs:
         id: candidate
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
           AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
           FAILURE_LOG: ${{ runner.temp }}/amosclaud-repair-failure.log
           PATCH_PATH: ${{ runner.temp }}/amosclaud-repair.patch
@@ -391,7 +391,7 @@ jobs:
             --incident-number "$INCIDENT_NUMBER" \
             --state published \
             --repair-sha "${{ steps.publish.outputs.repair_sha }}" \
-            --message "Verified repair published to ${{ steps.publish.outputs.publication }}. New checks are running for commit `${{ steps.publish.outputs.repair_sha }}`." \
+            --message "Verified repair published to ${{ steps.publish.outputs.publication }}. New checks are running for commit \`${{ steps.publish.outputs.repair_sha }}\`." \
             --token "$GITHUB_TOKEN"
 
       - name: Report blocked or discarded repair
