@@ -48,23 +48,36 @@ def test_environment_guard_upgrades_public_urls(monkeypatch) -> None:
     )
 
 
-def test_sitecustomize_runs_before_entrypoint_imports() -> None:
+def _run_environment_probe(*, cwd: Path, pythonpath: str | None = None) -> str:
     env = dict(os.environ)
     env["AMOSCLAUD_API_URL"] = "http://www.amosclaud.com/"
+    if pythonpath is not None:
+        env["PYTHONPATH"] = pythonpath
     result = subprocess.run(
         [
             sys.executable,
             "-c",
             "import os; print(os.environ['AMOSCLAUD_API_URL'])",
         ],
-        cwd=ROOT,
+        cwd=cwd,
         env=env,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=True,
     )
-    assert result.stdout.strip() == "https://www.amosclaud.com"
+    return result.stdout.strip()
+
+
+def test_sitecustomize_runs_before_entrypoint_imports() -> None:
+    assert _run_environment_probe(cwd=ROOT) == "https://www.amosclaud.com"
+
+
+def test_repair_script_sitecustomize_loads_repository_guard() -> None:
+    assert _run_environment_probe(
+        cwd=ROOT.parent,
+        pythonpath=str(ROOT / ".github" / "scripts"),
+    ) == "https://www.amosclaud.com"
 
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
