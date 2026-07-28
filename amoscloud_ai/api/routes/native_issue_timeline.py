@@ -18,9 +18,7 @@ router = APIRouter(prefix="/repositories", tags=["native-issue-timeline"])
 class IssueActionRequest(BaseModel):
     """Start one governed Amosclaud Action from a native repository issue."""
 
-    mode: Literal[
-        "autonomous-check", "build", "fix", "deploy", "monitor"
-    ] = "fix"
+    mode: Literal["autonomous-check", "build", "fix", "deploy", "monitor"] = "fix"
     branch: str = Field(default="main", min_length=1, max_length=200)
     instructions: str = Field(default="", max_length=20_000)
 
@@ -31,8 +29,7 @@ def _now() -> str:
 
 def _ensure_activity_table(db: sqlite3.Connection) -> None:
     solo_development._ensure_tables(db)
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS native_issue_activity (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             repository_id INTEGER NOT NULL,
@@ -49,8 +46,7 @@ def _ensure_activity_table(db: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_native_issue_activity_issue
             ON native_issue_activity(repository_id, issue_id, id ASC);
-        """
-    )
+        """)
     db.commit()
 
 
@@ -88,9 +84,7 @@ def _pipeline_snapshot(pipeline_id: str | None) -> dict[str, object] | None:
         "status": pipeline.status.value,
         "reply": pipeline.copilot_reply or pipeline.message,
         "started_at": pipeline.started_at.isoformat(),
-        "finished_at": (
-            pipeline.finished_at.isoformat() if pipeline.finished_at else None
-        ),
+        "finished_at": (pipeline.finished_at.isoformat() if pipeline.finished_at else None),
     }
 
 
