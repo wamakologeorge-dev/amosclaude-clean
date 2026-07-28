@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: amosclaud-bot-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   pre-ci-guardian:

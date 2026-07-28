@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import yaml
 
 from amoscloud_ai import workspace_runtime
@@ -123,7 +124,9 @@ def test_runtime_stack_is_separate_and_owns_the_only_docker_socket_mount() -> No
     assert "/var/run/docker.sock:/var/run/docker.sock" in mounts
     assert any("/var/lib/amosclaud/repositories" in item for item in mounts)
     assert "workspace-runtime-state:/var/lib/amosclaud/runtime-state" in mounts
-    assert runtime["ports"][0].startswith("127.0.0.1:")
+    assert runtime["ports"][0].startswith(
+        "${AMOSCLAUD_WORKSPACE_RUNTIME_BIND:-127.0.0.1}:"
+    )
     assert "/live" in " ".join(runtime["healthcheck"]["test"])
     assert compose["networks"]["workspace-control"]["internal"] is True
 
@@ -179,3 +182,30 @@ def test_unconfigured_runtime_is_reported_truthfully(monkeypatch) -> None:
     monkeypatch.delenv("AMOSCLAUD_WORKSPACE_RUNTIME_TOKEN", raising=False)
     result = check_workspace_runtime()
     assert result["state"] == "not_configured"
+
+
+def test_connect_error_is_reported_without_crashing_service_board(monkeypatch) -> None:
+    request = httpx.Request("GET", "https://runtime.example.test/health")
+
+    def refused() -> dict:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    monkeypatch.setattr(workspace_runtime, "runtime_health", refused)
+    result = check_workspace_runtime()
+
+    assert result["state"] == "unreachable"
+    assert "network connection" in result["explanation"]
+    assert "AMOSCLAUD_WORKSPACE_RUNTIME_BIND" in result["remediation"]
+
+
+def test_timeout_is_reported_without_crashing_service_board(monkeypatch) -> None:
+    request = httpx.Request("GET", "https://runtime.example.test/health")
+
+    def timed_out() -> dict:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    monkeypatch.setattr(workspace_runtime, "runtime_health", timed_out)
+    result = check_workspace_runtime()
+
+    assert result["state"] == "unreachable"
+    assert "timed out" in result["remediation"]

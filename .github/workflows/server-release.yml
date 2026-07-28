@@ -16,12 +16,16 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -109,21 +113,21 @@ jobs:
 
           root = Path("dist/Amosclaud")
           manifest = {
-              "name": "Amosclaud Server Workspace",
-              "version": "1.0.1",
-              "entrypoints": {
-                  "windows": "install-amosclaud.ps1",
-                  "unix": "install-amosclaud.sh",
-                  "workspace_windows": "amosclaud-workspace.ps1",
-                  "workspace_unix": "amosclaud-workspace.sh",
-              },
-              "directories": {
-                  "application": "app",
-                  "configuration": "config",
-                  "persistent_data": "data",
-                  "logs": "logs",
-                  "projects": "workspace/projects",
-              },
+            "name": "Amosclaud Server Workspace",
+            "version": "1.0.1",
+            "entrypoints": {
+                "windows": "install-amosclaud.ps1",
+                "unix": "install-amosclaud.sh",
+                "workspace_windows": "amosclaud-workspace.ps1",
+                "workspace_unix": "amosclaud-workspace.sh",
+            },
+            "directories": {
+                "application": "app",
+                "configuration": "config",
+                "persistent_data": "data",
+                "logs": "logs",
+                "projects": "workspace/projects",
+            },
           }
           (root / "PACKAGE_MANIFEST.json").write_text(json.dumps(manifest, indent=2) + "\n")
           PY
