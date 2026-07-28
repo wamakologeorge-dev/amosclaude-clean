@@ -50,6 +50,57 @@ def test_shell_execution_is_reported():
     assert any("shell-based command execution" in item.lower() for item in findings)
 
 
+def test_unrelated_delete_and_user_words_do_not_trigger_account_deletion():
+    diff = """
++def delete_cache_entry(key):
++    cache.pop(key, None)
++
++def render_user_preferences(profile):
++    return profile.preferences
+"""
+    findings = reviewer.review_diff(diff)
+    assert not any("Account/user deletion" in item for item in findings)
+
+
+def test_actual_user_deletion_is_reported():
+    diff = """
++def delete_user_account(user_id):
++    database.remove_user(user_id)
+"""
+    findings = reviewer.review_diff(diff)
+    assert any("Account/user deletion" in item for item in findings)
+
+
+def test_authenticated_route_is_not_reported_as_missing_access_control():
+    diff = """
++@router.post("/jobs")
++def create_job(current_user = Depends(require_user)):
++    return {"owner": current_user.id}
+"""
+    findings = reviewer.review_diff(diff)
+    assert not any("may lack explicit authentication" in item for item in findings)
+
+
+def test_unguarded_route_is_reported():
+    diff = """
++@router.post("/jobs")
++def create_job():
++    return {"created": True}
+"""
+    findings = reviewer.review_diff(diff)
+    assert any("may lack explicit authentication" in item for item in findings)
+
+
+def test_json_parse_with_nearby_content_type_guard_is_not_reported():
+    diff = """
++content_type = response.headers.get("content-type", "")
++if "application/json" in content_type:
++    payload = response.json()
+"""
+    findings = reviewer.review_diff(diff)
+    assert not any("parsed as JSON" in item for item in findings)
+
+
 class FakeComment:
     def __init__(self, body, *, fail_edit=False):
         self.body = body
