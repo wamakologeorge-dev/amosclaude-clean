@@ -42,3 +42,50 @@ body{margin:0;background:#0d1117;color:#e6edf3;font-family:Inter,system-ui,sans-
 .ws-powered-by a{color:#c9d1d9;text-decoration:none;font-weight:800}
 .ws-powered-by a:hover{color:#58a6ff}
 @media(max-width:700px){.ws-blame-row{grid-template-columns:minmax(90px,120px) 40px minmax(0,1fr)}}
+
+/* Native issue detail and persistent Amosclaud Action timeline. */
+.ws-issue-card{cursor:pointer;outline:none;background:#0b1119}
+.ws-issue-card:hover,.ws-issue-card:focus-visible{background:#161b22;box-shadow:inset 3px 0 #58a6ff}
+.ws-issue-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.ws-issue-card-head strong{color:#f0f6fc}
+.ws-issue-card-body{margin-top:14px;padding:14px;border:1px solid #21262d;border-radius:9px;background:#050a10}
+.ws-issue-copy{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.65;max-height:none!important;overflow:visible!important}
+.ws-issue-empty-copy{margin:0;color:#8b949e;font-style:italic}
+.ws-issue-open-hint{margin-top:12px!important;color:#79c0ff!important;font-weight:750}
+.ws-issue-detail{padding:18px;background:#0b1119}
+.ws-issue-detail-toolbar,.ws-issue-action-bar,.ws-issue-activity-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ws-issue-detail-toolbar button,.ws-issue-action-bar button{border:1px solid #30363d;border-radius:8px;background:#21262d;color:#e6edf3;padding:10px 14px;font-weight:800;cursor:pointer}
+.ws-issue-detail-toolbar button:hover,.ws-issue-action-bar button:hover:not(:disabled){border-color:#58a6ff}
+.ws-issue-action-bar button{background:#1f6feb;color:#fff}
+.ws-issue-action-bar button:disabled{opacity:.6;cursor:progress}
+.ws-issue-detail-head{padding:18px 0;border-bottom:1px solid #30363d}
+.ws-issue-detail-head span,.ws-issue-detail-head p{color:#8b949e}
+.ws-issue-detail-head h3{margin:6px 0;font-size:1.45rem;overflow-wrap:anywhere}
+.ws-issue-detail-head p{margin:0}
+.ws-issue-instructions{margin:18px 0;padding:18px;border:1px solid #30363d;border-radius:10px;background:#050a10;max-height:none!important;overflow:visible!important}
+.ws-issue-instructions h4,.ws-issue-timeline h4{margin:0 0 12px;color:#f0f6fc}
+.ws-issue-action-bar{margin:18px 0;padding:14px;border:1px solid #1f6feb66;border-radius:10px;background:#1f6feb18}
+.ws-issue-action-bar span{color:#a5d6ff;line-height:1.5}
+.ws-issue-timeline{margin-top:20px}
+.ws-issue-activity{margin:12px 0;padding:16px;border:1px solid #30363d;border-radius:10px;background:#050a10;max-height:none!important;overflow:visible!important}
+.ws-issue-activity time{display:block;margin:5px 0 12px;color:#8b949e;font-size:.78rem}
+.ws-issue-activity-body,.ws-issue-result{max-height:none!important;overflow:visible!important}
+.ws-issue-result{margin-top:14px;padding-top:14px;border-top:1px solid #21262d}
+.ws-issue-result>strong{display:block;margin-bottom:8px;color:#7ee787}
+.ws-issue-pipeline{margin-top:12px;color:#8b949e;font-size:.8rem;overflow-wrap:anywhere}
+.ws-issue-pipeline code{color:#79c0ff}
+.ws-issue-status{margin:0!important;padding:4px 9px;border:1px solid #30363d;border-radius:999px;text-transform:uppercase;font-size:.7rem!important;font-weight:850}
+.ws-issue-status-success{color:#7ee787;border-color:#238636}.ws-issue-status-failed{color:#ff7b72;border-color:#da3633}.ws-issue-status-pending,.ws-issue-status-running{color:#e3b341;border-color:#9e6a03}
+
+/* Keep every repository destination visible and tappable on mobile. */
+@media(max-width:820px){
+  body{padding-bottom:calc(122px + env(safe-area-inset-bottom))}
+  .ws-tabs{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;right:0;bottom:0;left:0;overflow:visible!important;padding:0 4px env(safe-area-inset-bottom)!important}
+  .ws-tab{min-width:0!important;min-height:54px!important;padding:8px 5px!important;font-size:.78rem!important;white-space:normal!important;line-height:1.2}
+  .ws-issue-card-head{display:block}
+  .ws-issue-card-head span{margin-top:7px}
+  .ws-issue-detail{padding:14px}
+  .ws-issue-detail-toolbar button,.ws-issue-action-bar button{min-height:48px}
+  .ws-issue-action-bar{align-items:stretch;flex-direction:column}
+  .ws-issue-action-bar button{width:100%;min-height:54px}
+}
