@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import gzip
+
 import httpx
 import pytest
 
@@ -122,7 +124,7 @@ def test_origin_fetcher_uses_fixed_origin_without_forwarding_credentials() -> No
     assert asset.ttl_seconds == 120
 
 
-def test_origin_redirects_and_credential_bearing_origins_are_rejected() -> None:
+def test_origin_redirects_compression_and_credential_origins_are_rejected() -> None:
     with pytest.raises(CDNConfigurationError):
         HTTPOriginFetcher("https://user:password@origin.example")
 
@@ -136,6 +138,22 @@ def test_origin_redirects_and_credential_bearing_origins_are_rejected() -> None:
     )
     with pytest.raises(OriginFetchError):
         fetcher.fetch(AssetRequest.create("assets/app.js"))
+
+    compressed = HTTPOriginFetcher(
+        "https://origin.example",
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                headers={
+                    "Content-Type": "application/javascript",
+                    "Content-Encoding": "gzip",
+                },
+                content=gzip.compress(b"compressed"),
+            )
+        ),
+    )
+    with pytest.raises(OriginFetchError):
+        compressed.fetch(AssetRequest.create("assets/app.js"))
 
 
 def test_memory_cache_is_bounded_by_entry_count() -> None:
