@@ -1,7 +1,7 @@
-from importlib.util import module_from_spec, spec_from_file_location
-from pathlib import Path
 import sys
 import types
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 
 if "github" not in sys.modules:
     github_stub = types.ModuleType("github")
