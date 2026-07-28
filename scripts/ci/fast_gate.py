@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +24,7 @@ REPOSITORY_BEHAVIOR_PATHS = {
 }
 FAST_TESTS = ("tests/test_fast_pr_gate.py",)
 REPOSITORY_BEHAVIOR_TEST = "tests/test_repository_behavior_automation.py"
-MERGE_MARKERS = ("<<<<<<< ", "=======", ">>>>>>> ")
+MERGE_MARKER = re.compile(r"^(<<<<<<< |=======|>>>>>>> )", re.MULTILINE)
 
 
 class FastGateError(RuntimeError):
@@ -53,9 +54,13 @@ def _read_text(path: Path) -> str:
         raise FastGateError(f"{path} is not valid UTF-8") from exc
 
 
+def _has_merge_marker(source: str) -> bool:
+    return MERGE_MARKER.search(source) is not None
+
+
 def validate_python(path: Path) -> None:
     source = _read_text(path)
-    if any(marker in source for marker in MERGE_MARKERS):
+    if _has_merge_marker(source):
         raise FastGateError(f"{path} contains an unresolved merge marker")
     try:
         ast.parse(source, filename=str(path))
@@ -65,7 +70,7 @@ def validate_python(path: Path) -> None:
 
 def validate_yaml(path: Path) -> None:
     source = _read_text(path)
-    if any(marker in source for marker in MERGE_MARKERS):
+    if _has_merge_marker(source):
         raise FastGateError(f"{path} contains an unresolved merge marker")
     try:
         yaml.safe_load(source)
