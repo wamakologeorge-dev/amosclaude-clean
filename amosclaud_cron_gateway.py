@@ -114,9 +114,7 @@ def call_amosclaud(prompt: str) -> str:
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             if error.code in {404, 405}:
-                route_errors.append(
-                    f"{path} -> HTTP {error.code}: {agent.redact(detail[:300])}"
-                )
+                route_errors.append(f"{path} -> HTTP {error.code}: {agent.redact(detail[:300])}")
                 continue
             raise agent.CronAgentError(
                 f"Amosclaud gateway returned HTTP {error.code} at {path}: "
