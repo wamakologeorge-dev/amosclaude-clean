@@ -36,17 +36,15 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
     raw = str(comment.get("body") or "")
     normalized = " ".join(raw.strip().split()).lower()
 
-    if normalized.startswith("@amosclaud approve") or normalized.startswith("@amosclaud-bot approve"):
+    if normalized.startswith("@amosclaud approve") or normalized.startswith(
+        "@amosclaud-bot approve"
+    ):
         return None
     if normalized.startswith("@amosclaud deny") or normalized.startswith("@amosclaud-bot deny"):
         return None
 
     command, objective = parse_command(raw)
-    if (
-        not command
-        or not objective
-        or not requires_private_work(objective, command=command)
-    ):
+    if not command or not objective or not requires_private_work(objective, command=command):
         return None
 
     issue = payload.get("issue") or {}
@@ -96,7 +94,9 @@ def _handle_private_issue_comment(bot: AmosclaudBot, payload: dict) -> int | Non
     return 0
 
 
-def _pending_sensitive_approval(bot: AmosclaudBot, payload: dict, event_name: str) -> tuple[int, str, int, str] | None:
+def _pending_sensitive_approval(
+    bot: AmosclaudBot, payload: dict, event_name: str
+) -> tuple[int, str, int, str] | None:
     if event_name != "issue_comment":
         return None
     comment = payload.get("comment") or {}
