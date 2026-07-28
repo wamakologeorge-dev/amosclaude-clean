@@ -2,8 +2,8 @@
 
 Python imports ``sitecustomize`` automatically during interpreter startup when
 this repository is on ``sys.path``. Several independent Amosclaud entry points
-historically accepted ``http://www.amosclaud.com``. An HTTP-to-HTTPS redirect can
-rewrite a POST into GET, which produces FastAPI's ``405 Method Not Allowed``.
+historically accepted the public site over plain HTTP. An HTTP-to-HTTPS redirect
+can rewrite a POST into GET, which produces FastAPI's ``405 Method Not Allowed``.
 
 Only explicitly configured public Amosclaud domains are upgraded. Unset model
 and API endpoints, localhost, Docker, Railway private-network, and other hosts
@@ -18,6 +18,7 @@ import os
 from urllib.parse import urlsplit, urlunsplit
 
 _PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
 _PUBLIC_URL_ENV_NAMES = (
     "AMOSCLAUD_API_URL",
     "AMOSCLAUD_PROVIDER_API_URL",
@@ -29,7 +30,7 @@ _DEFAULT_ALLOWED_ORIGINS = "https://www.amosclaud.com,http://localhost:8000,http
 
 
 def normalize_public_amosclaud_url(value: str | None) -> str:
-    """Return a canonical HTTPS URL for Amosclaud's public domains only."""
+    """Return the canonical HTTPS URL for Amosclaud's public domains only."""
     raw = str(value or "").strip()
     if not raw:
         return _DEFAULT_PUBLIC_URL
@@ -39,9 +40,14 @@ def normalize_public_amosclaud_url(value: str | None) -> str:
     if (parts.hostname or "").lower() not in _PUBLIC_HOSTS:
         return raw.rstrip("/")
 
-    scheme = "https" if parts.scheme.lower() in {"", "http", "https"} else parts.scheme
-    normalized = parts._replace(scheme=scheme, netloc=parts.netloc.lower())
-    return urlunsplit(normalized).rstrip("/")
+    try:
+        port = parts.port
+    except ValueError:
+        return raw.rstrip("/")
+    netloc = _CANONICAL_PUBLIC_HOST
+    if port not in {None, 80, 443}:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit(parts._replace(scheme="https", netloc=netloc)).rstrip("/")
 
 
 def normalize_public_environment() -> None:
