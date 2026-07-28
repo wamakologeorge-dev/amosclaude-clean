@@ -7,35 +7,13 @@ from typing import Any
 from .autonomous_brain import GitHubAutonomousBrain
 from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 from .codex_capabilities import prepare_codex_capabilities
+from .continuation_state import (
+    is_continue_request,
+    read_continuation_state,
+    write_continuation_state,
+)
 
 PLAN_MARKER = "amosclaud-autonomous-plan"
-CONTINUE_PHRASES = {
-    "continue",
-    "resume",
-    "proceed",
-    "go ahead",
-    "continue the task",
-    "resume the task",
-    "proceed with the task",
-    "proceed with the repair",
-    "proceed with the fix",
-    "go ahead with the task",
-    "finish the remaining work",
-    "finish remaining work",
-    "complete the remaining work",
-}
-
-
-def _normalized_request(text: str) -> str:
-    normalized = " ".join((text or "").strip().split()).lower()
-    for name in ("@amosclaud-bot", "@amosclaud"):
-        if normalized.startswith(name):
-            return normalized[len(name) :].strip().rstrip(".")
-    return normalized.rstrip(".")
-
-
-def is_continue_request(text: str) -> bool:
-    return _normalized_request(text) in CONTINUE_PHRASES
 
 
 def plan_steps(command: str) -> tuple[str, ...]:
@@ -206,18 +184,33 @@ def resolve_continuation(bot: AmosclaudBot, payload: dict[str, Any]) -> bool:
     comment = payload.get("comment") or {}
     if not is_continue_request(str(comment.get("body") or "")):
         return False
-    issue = payload.get("issue") or {}
-    number = int(issue.get("number"))
-    comments = bot._request("GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100")
-    plan = latest_plan(comments if isinstance(comments, list) else [])
-    if not plan:
-        bot.post_comment(
-            number,
-            "### Amosclaud — Nothing to resume\n"
-            "No earlier autonomous plan was found in this issue. Start a task "
-            "with `@amosclaud <objective>`.",
+
+    state = read_continuation_state()
+    if state is not None:
+        if state.get("found") is not True:
+            return True
+        plan = {
+            "command": str(state["command"]),
+            "objective": str(state["objective"]),
+        }
+    else:
+        issue = payload.get("issue") or {}
+        number = int(issue.get("number"))
+        comments = bot._request(
+            "GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100"
         )
-        return True
+        plan = latest_plan(comments if isinstance(comments, list) else [])
+        if not plan:
+            write_continuation_state(None)
+            bot.post_comment(
+                number,
+                "### Amosclaud — Nothing to resume\n"
+                "No earlier autonomous plan was found in this issue. Start a task "
+                "with `@amosclaud <objective>`.",
+            )
+            return True
+        write_continuation_state(plan)
+
     comment["body"] = f"@amosclaud {plan['command']} {plan['objective']}"
     payload["comment"] = comment
     payload["_amosclaud_resumed_plan"] = plan
