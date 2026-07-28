@@ -16,10 +16,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PIP_NO_INPUT: "1"
-
 jobs:
   agent-status:
     runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
@@ -52,11 +48,14 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: requirements.txt
 
-      - name: Install dependencies
-        run: python -m pip install --prefer-binary -r requirements.txt
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+          cache-suffix: py-${{ matrix.python-version }}
 
       - name: Lint with flake8
         id: flake8
@@ -65,10 +64,14 @@ jobs:
           set +e
           strict_log="flake8-strict-${{ matrix.python-version }}.log"
           report_log="flake8-report-${{ matrix.python-version }}.log"
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics >"$strict_log" 2>&1
+          uv run --no-project --with-requirements requirements.txt \
+            flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics \
+            >"$strict_log" 2>&1
           status=$?
           cat "$strict_log"
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics >"$report_log" 2>&1
+          uv run --no-project --with-requirements requirements.txt \
+            flake8 . --count --exit-zero --max-complexity=10 \
+            --max-line-length=127 --statistics >"$report_log" 2>&1
           cat "$report_log"
           exit "$status"
 
@@ -77,7 +80,8 @@ jobs:
         shell: bash
         run: |
           set +e
-          pytest tests/ -q > pytest-${{ matrix.python-version }}.log 2>&1
+          uv run --no-project --with-requirements requirements.txt \
+            pytest tests/ -q > pytest-${{ matrix.python-version }}.log 2>&1
           status=$?
           cat pytest-${{ matrix.python-version }}.log
           exit "$status"
