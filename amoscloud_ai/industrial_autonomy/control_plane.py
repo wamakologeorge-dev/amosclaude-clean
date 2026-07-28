@@ -125,22 +125,11 @@ class _Finding:
 
 
 class SentinelGridControlPlane:
-    """Persist and supervise industrial assets without commanding physical hardware."""
+    """Persist and supervise assets without directly commanding hardware."""
 
-    SOFTWARE_ONLY_ACTIONS = frozenset(
-        {
-            "analyze_telemetry",
-            "inspect",
-            "simulate",
-        }
-    )
+    SOFTWARE_ONLY_ACTIONS = frozenset({"analyze_telemetry", "inspect", "simulate"})
     CONTROLLED_ACTIONS = frozenset(
-        {
-            "emergency_shutdown",
-            "move",
-            "request_maintenance",
-            "schedule_charge",
-        }
+        {"emergency_shutdown", "move", "request_maintenance", "schedule_charge"}
     )
     ALLOWED_ACTIONS = SOFTWARE_ONLY_ACTIONS | CONTROLLED_ACTIONS
     ACTION_ASSET_TYPES = {
@@ -162,17 +151,12 @@ class SentinelGridControlPlane:
             }
         ),
     }
-    INCIDENT_LIMIT = 500
     TELEMETRY_LIMIT = 5000
 
     def __init__(self, connection_factory: ConnectionFactory | None = None) -> None:
         self._lock = RLock()
         self._connection_factory = connection_factory or self._default_connection
         self.ensure_schema()
-
-    @staticmethod
-    def _now() -> datetime:
-        return datetime.now(timezone.utc)
 
     @staticmethod
     def _default_connection() -> sqlite3.Connection:
@@ -183,7 +167,6 @@ class SentinelGridControlPlane:
         path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(path)
         db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys = ON")
         return db
 
     @contextmanager
@@ -201,7 +184,7 @@ class SentinelGridControlPlane:
             db.close()
 
     def ensure_schema(self) -> None:
-        """Create the durable SentinelGrid schema without replacing existing data."""
+        """Create all durable tables and indexes idempotently."""
 
         with self._lock, self._database() as db:
             db.executescript(
@@ -214,7 +197,6 @@ class SentinelGridControlPlane:
                     capabilities_json TEXT NOT NULL DEFAULT '[]',
                     registered_at TEXT NOT NULL
                 );
-
                 CREATE TABLE IF NOT EXISTS sentinelgrid_incidents (
                     id TEXT PRIMARY KEY,
                     asset_id TEXT NOT NULL,
@@ -231,11 +213,9 @@ class SentinelGridControlPlane:
                         ON DELETE CASCADE
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_sentinelgrid_incident_open
-                    ON sentinelgrid_incidents(asset_id, code)
-                    WHERE status='open';
+                    ON sentinelgrid_incidents(asset_id, code) WHERE status='open';
                 CREATE INDEX IF NOT EXISTS idx_sentinelgrid_incident_status_seen
                     ON sentinelgrid_incidents(status, last_seen_at DESC);
-
                 CREATE TABLE IF NOT EXISTS sentinelgrid_telemetry (
                     id TEXT PRIMARY KEY,
                     asset_id TEXT NOT NULL,
@@ -248,7 +228,6 @@ class SentinelGridControlPlane:
                 );
                 CREATE INDEX IF NOT EXISTS idx_sentinelgrid_telemetry_asset_received
                     ON sentinelgrid_telemetry(asset_id, received_at DESC);
-
                 CREATE TABLE IF NOT EXISTS sentinelgrid_actions (
                     id TEXT PRIMARY KEY,
                     asset_id TEXT NOT NULL,
@@ -272,14 +251,17 @@ class SentinelGridControlPlane:
             )
 
     def reset(self) -> None:
-        """Delete SentinelGrid records. Intended for isolated tests only."""
+        """Delete SentinelGrid data. Intended for isolated tests only."""
 
         self.ensure_schema()
         with self._lock, self._database() as db:
-            db.execute("DELETE FROM sentinelgrid_actions")
-            db.execute("DELETE FROM sentinelgrid_telemetry")
-            db.execute("DELETE FROM sentinelgrid_incidents")
-            db.execute("DELETE FROM sentinelgrid_assets")
+            for table in (
+                "sentinelgrid_actions",
+                "sentinelgrid_telemetry",
+                "sentinelgrid_incidents",
+                "sentinelgrid_assets",
+            ):
+                db.execute(f"DELETE FROM {table}")
 
     def status(self) -> dict[str, Any]:
         with self._lock, self._database() as db:
@@ -316,27 +298,21 @@ class SentinelGridControlPlane:
         site: str,
         capabilities: tuple[str, ...],
     ) -> AssetRecord:
-        normalized_name = self._required_text(name, "Asset name", minimum=2)
-        normalized_site = self._required_text(site, "Asset site", minimum=2)
-        normalized_type = AssetType(asset_type)
-        normalized_capabilities = tuple(
-            sorted({item.strip().lower() for item in capabilities if item.strip()})
-        )
         asset = AssetRecord(
             asset_id=f"asset-{uuid4().hex[:16]}",
-            name=normalized_name,
-            asset_type=normalized_type,
-            site=normalized_site,
-            capabilities=normalized_capabilities,
+            name=self._required_text(name, "Asset name", 2),
+            asset_type=AssetType(asset_type),
+            site=self._required_text(site, "Asset site", 2),
+            capabilities=tuple(
+                sorted({item.strip().lower() for item in capabilities if item.strip()})
+            ),
             registered_at=self._now(),
         )
         with self._lock, self._database() as db:
             db.execute(
-                """
-                INSERT INTO sentinelgrid_assets(
-                    id,name,asset_type,site,capabilities_json,registered_at
-                ) VALUES (?,?,?,?,?,?)
-                """,
+                """INSERT INTO sentinelgrid_assets
+                   (id,name,asset_type,site,capabilities_json,registered_at)
+                   VALUES (?,?,?,?,?,?)""",
                 (
                     asset.asset_id,
                     asset.name,
@@ -349,16 +325,12 @@ class SentinelGridControlPlane:
         return asset
 
     def list_assets(self, *, limit: int = 500) -> list[AssetRecord]:
-        normalized_limit = self._bounded_limit(limit, maximum=500)
         with self._lock, self._database() as db:
             rows = db.execute(
-                """
-                SELECT * FROM sentinelgrid_assets
-                ORDER BY registered_at ASC LIMIT ?
-                """,
-                (normalized_limit,),
+                "SELECT * FROM sentinelgrid_assets ORDER BY registered_at LIMIT ?",
+                (self._limit(limit, 500),),
             ).fetchall()
-        return [self._asset_from_row(row) for row in rows]
+        return [self._asset(row) for row in rows]
 
     def record_telemetry(
         self,
@@ -369,49 +341,36 @@ class SentinelGridControlPlane:
     ) -> tuple[TelemetryRecord, list[IncidentRecord]]:
         if not metrics:
             raise InvalidInputError("Telemetry metrics cannot be empty")
-        normalized_metrics = dict(metrics)
-        findings, evaluated_codes = self._diagnose(normalized_metrics)
+        findings, evaluated_codes = self._diagnose(dict(metrics))
         received_at = self._now()
-        normalized_observed_at = self._aware_datetime(observed_at or received_at)
-
         with self._lock, self._database() as db:
             self._require_asset(db, asset_id)
-            active_incidents = [
+            incidents = [
                 self._upsert_incident(db, asset_id, finding, received_at)
                 for finding in findings
             ]
-            active_codes = {item.code for item in active_incidents}
+            active_codes = {item.code for item in incidents}
             resolved_codes = evaluated_codes - active_codes
             if resolved_codes:
-                placeholders = ",".join("?" for _ in resolved_codes)
+                marks = ",".join("?" for _ in resolved_codes)
                 db.execute(
-                    f"""
-                    UPDATE sentinelgrid_incidents
-                    SET status='resolved', resolved_at=?
-                    WHERE asset_id=? AND status='open'
-                      AND code IN ({placeholders})
-                    """,
-                    (
-                        self._iso(received_at),
-                        asset_id,
-                        *sorted(resolved_codes),
-                    ),
+                    f"""UPDATE sentinelgrid_incidents
+                        SET status='resolved', resolved_at=?
+                        WHERE asset_id=? AND status='open' AND code IN ({marks})""",
+                    (self._iso(received_at), asset_id, *sorted(resolved_codes)),
                 )
-
             telemetry = TelemetryRecord(
                 telemetry_id=f"telemetry-{uuid4().hex[:16]}",
                 asset_id=asset_id,
-                metrics=normalized_metrics,
-                observed_at=normalized_observed_at,
+                metrics=dict(metrics),
+                observed_at=self._aware(observed_at or received_at),
                 received_at=received_at,
-                incident_ids=tuple(item.incident_id for item in active_incidents),
+                incident_ids=tuple(item.incident_id for item in incidents),
             )
             db.execute(
-                """
-                INSERT INTO sentinelgrid_telemetry(
-                    id,asset_id,metrics_json,observed_at,received_at,incident_ids_json
-                ) VALUES (?,?,?,?,?,?)
-                """,
+                """INSERT INTO sentinelgrid_telemetry
+                   (id,asset_id,metrics_json,observed_at,received_at,incident_ids_json)
+                   VALUES (?,?,?,?,?,?)""",
                 (
                     telemetry.telemetry_id,
                     telemetry.asset_id,
@@ -421,8 +380,14 @@ class SentinelGridControlPlane:
                     json.dumps(telemetry.incident_ids),
                 ),
             )
-            self._trim_telemetry(db)
-        return telemetry, active_incidents
+            db.execute(
+                """DELETE FROM sentinelgrid_telemetry WHERE id IN (
+                       SELECT id FROM sentinelgrid_telemetry
+                       ORDER BY received_at DESC LIMIT -1 OFFSET ?
+                   )""",
+                (self.TELEMETRY_LIMIT,),
+            )
+        return telemetry, incidents
 
     def list_incidents(
         self,
@@ -430,17 +395,16 @@ class SentinelGridControlPlane:
         limit: int = 100,
         status: IncidentStatus | None = None,
     ) -> list[IncidentRecord]:
-        normalized_limit = self._bounded_limit(limit, maximum=self.INCIDENT_LIMIT)
         query = "SELECT * FROM sentinelgrid_incidents"
         parameters: list[Any] = []
         if status is not None:
             query += " WHERE status=?"
             parameters.append(IncidentStatus(status).value)
         query += " ORDER BY last_seen_at DESC LIMIT ?"
-        parameters.append(normalized_limit)
+        parameters.append(self._limit(limit, 500))
         with self._lock, self._database() as db:
             rows = db.execute(query, parameters).fetchall()
-        return [self._incident_from_row(row) for row in rows]
+        return [self._incident(row) for row in rows]
 
     def propose_action(
         self,
@@ -450,31 +414,28 @@ class SentinelGridControlPlane:
         reason: str,
         requested_by: str,
     ) -> ActionProposal:
-        normalized_action = action_type.strip().lower()
-        if normalized_action not in self.ALLOWED_ACTIONS:
+        action_type = action_type.strip().lower()
+        if action_type not in self.ALLOWED_ACTIONS:
             raise StateConflictError(
-                f"Unsupported SentinelGrid action: {normalized_action or '<blank>'}"
+                f"Unsupported SentinelGrid action: {action_type or '<blank>'}"
             )
-        normalized_reason = self._required_text(reason, "Action reason", minimum=3)
-        normalized_requester = self._required_text(
-            requested_by, "Action requester", minimum=2
-        )
-
         with self._lock, self._database() as db:
             asset = self._require_asset(db, asset_id)
-            self._validate_action_for_asset(asset, normalized_action)
-            software_only = normalized_action in self.SOFTWARE_ONLY_ACTIONS
-            proposal = ActionProposal(
+            self._validate_action(asset, action_type)
+            software_only = action_type in self.SOFTWARE_ONLY_ACTIONS
+            action = ActionProposal(
                 action_id=f"action-{uuid4().hex[:16]}",
                 asset_id=asset_id,
-                action_type=normalized_action,
-                reason=normalized_reason,
-                requested_by=normalized_requester,
+                action_type=action_type,
+                reason=self._required_text(reason, "Action reason", 3),
+                requested_by=self._required_text(
+                    requested_by, "Action requester", 2
+                ),
                 risk=(
                     RiskLevel.LOW
                     if software_only
                     else RiskLevel.CRITICAL
-                    if normalized_action == "emergency_shutdown"
+                    if action_type == "emergency_shutdown"
                     else RiskLevel.ELEVATED
                 ),
                 status=(
@@ -486,83 +447,79 @@ class SentinelGridControlPlane:
                 execution_allowed=False,
                 created_at=self._now(),
             )
-            self._insert_action(db, proposal)
-        return proposal
+            db.execute(
+                """INSERT INTO sentinelgrid_actions
+                   (id,asset_id,action_type,reason,requested_by,risk,status,
+                    software_only,execution_allowed,created_at,decision_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    action.action_id,
+                    action.asset_id,
+                    action.action_type,
+                    action.reason,
+                    action.requested_by,
+                    action.risk.value,
+                    action.status.value,
+                    int(action.software_only),
+                    0,
+                    self._iso(action.created_at),
+                    "",
+                ),
+            )
+        return action
 
     def approve_action(
-        self,
-        action_id: str,
-        *,
-        decided_by: str,
-        decision_note: str = "",
+        self, action_id: str, *, decided_by: str, decision_note: str = ""
     ) -> ActionProposal:
-        return self._decide_action(
-            action_id,
-            status=ActionStatus.APPROVED,
-            decided_by=decided_by,
-            decision_note=decision_note,
+        return self._decide(
+            action_id, ActionStatus.APPROVED, decided_by, decision_note
         )
 
     def reject_action(
-        self,
-        action_id: str,
-        *,
-        decided_by: str,
-        decision_note: str = "",
+        self, action_id: str, *, decided_by: str, decision_note: str = ""
     ) -> ActionProposal:
-        return self._decide_action(
-            action_id,
-            status=ActionStatus.REJECTED,
-            decided_by=decided_by,
-            decision_note=decision_note,
+        return self._decide(
+            action_id, ActionStatus.REJECTED, decided_by, decision_note
         )
 
     def list_actions(self, *, limit: int = 100) -> list[ActionProposal]:
-        normalized_limit = self._bounded_limit(limit, maximum=500)
         with self._lock, self._database() as db:
             rows = db.execute(
-                """
-                SELECT * FROM sentinelgrid_actions
-                ORDER BY created_at DESC LIMIT ?
-                """,
-                (normalized_limit,),
+                "SELECT * FROM sentinelgrid_actions ORDER BY created_at DESC LIMIT ?",
+                (self._limit(limit, 500),),
             ).fetchall()
-        return [self._action_from_row(row) for row in rows]
+        return [self._action(row) for row in rows]
 
-    def _decide_action(
+    def _decide(
         self,
         action_id: str,
-        *,
         status: ActionStatus,
         decided_by: str,
         decision_note: str,
     ) -> ActionProposal:
-        normalized_actor = self._required_text(decided_by, "Decision actor", minimum=2)
-        normalized_note = decision_note.strip()
-        decided_at = self._now()
+        actor = self._required_text(decided_by, "Decision actor", 2)
         with self._lock, self._database() as db:
             current = self._require_action(db, action_id)
             if current.status != ActionStatus.PENDING_APPROVAL:
                 raise StateConflictError(
                     f"Action {action_id} cannot be decided from {current.status.value}"
                 )
-            db.execute(
-                """
-                UPDATE sentinelgrid_actions
-                SET status=?, decided_at=?, decided_by=?, decision_note=?,
-                    execution_allowed=0
-                WHERE id=? AND status='pending_approval'
-                """,
+            cursor = db.execute(
+                """UPDATE sentinelgrid_actions
+                   SET status=?,decided_at=?,decided_by=?,decision_note=?,
+                       execution_allowed=0
+                   WHERE id=? AND status='pending_approval'""",
                 (
                     status.value,
-                    self._iso(decided_at),
-                    normalized_actor,
-                    normalized_note,
+                    self._iso(self._now()),
+                    actor,
+                    decision_note.strip(),
                     action_id,
                 ),
             )
-            updated = self._require_action(db, action_id)
-        return updated
+            if cursor.rowcount != 1:
+                raise StateConflictError(f"Action {action_id} was already decided")
+            return self._require_action(db, action_id)
 
     def _upsert_incident(
         self,
@@ -571,43 +528,35 @@ class SentinelGridControlPlane:
         finding: _Finding,
         seen_at: datetime,
     ) -> IncidentRecord:
-        existing = db.execute(
-            """
-            SELECT * FROM sentinelgrid_incidents
-            WHERE asset_id=? AND code=? AND status='open'
-            """,
+        row = db.execute(
+            """SELECT * FROM sentinelgrid_incidents
+               WHERE asset_id=? AND code=? AND status='open'""",
             (asset_id, finding.code),
         ).fetchone()
-        if existing:
+        if row:
             db.execute(
-                """
-                UPDATE sentinelgrid_incidents
-                SET risk=?, message=?, recommended_action=?,
-                    occurrence_count=occurrence_count+1, last_seen_at=?
-                WHERE id=?
-                """,
+                """UPDATE sentinelgrid_incidents
+                   SET risk=?,message=?,recommended_action=?,
+                       occurrence_count=occurrence_count+1,last_seen_at=?
+                   WHERE id=?""",
                 (
                     finding.risk.value,
                     finding.message,
                     finding.recommended_action,
                     self._iso(seen_at),
-                    existing["id"],
+                    row["id"],
                 ),
             )
             row = db.execute(
-                "SELECT * FROM sentinelgrid_incidents WHERE id=?",
-                (existing["id"],),
+                "SELECT * FROM sentinelgrid_incidents WHERE id=?", (row["id"],)
             ).fetchone()
-            return self._incident_from_row(row)
-
+            return self._incident(row)
         incident_id = f"incident-{uuid4().hex[:16]}"
         db.execute(
-            """
-            INSERT INTO sentinelgrid_incidents(
-                id,asset_id,code,risk,status,message,recommended_action,
-                occurrence_count,created_at,last_seen_at,resolved_at
-            ) VALUES (?,?,?,?,'open',?,?,1,?,?,NULL)
-            """,
+            """INSERT INTO sentinelgrid_incidents
+               (id,asset_id,code,risk,status,message,recommended_action,
+                occurrence_count,created_at,last_seen_at)
+               VALUES (?,?,?,?,'open',?,?,1,?,?)""",
             (
                 incident_id,
                 asset_id,
@@ -622,92 +571,82 @@ class SentinelGridControlPlane:
         row = db.execute(
             "SELECT * FROM sentinelgrid_incidents WHERE id=?", (incident_id,)
         ).fetchone()
-        return self._incident_from_row(row)
+        return self._incident(row)
 
     def _diagnose(
-        self,
-        metrics: dict[str, MetricValue],
+        self, metrics: dict[str, MetricValue]
     ) -> tuple[list[_Finding], set[str]]:
         findings: list[_Finding] = []
-        evaluated_codes: set[str] = set()
-
-        if "methane_ppm" in metrics:
-            evaluated_codes.add("methane_threshold_exceeded")
-            methane_ppm = self._number(metrics["methane_ppm"], "methane_ppm")
-            if methane_ppm >= 1000:
+        evaluated: set[str] = set()
+        numeric_checks = (
+            (
+                "methane_ppm",
+                "methane_threshold_exceeded",
+                RiskLevel.CRITICAL,
+                1000,
+                lambda value, threshold: value >= threshold,
+                "Methane reading reached {value:g} ppm.",
+                "request_maintenance",
+            ),
+            (
+                "battery_temperature_c",
+                "battery_temperature_high",
+                RiskLevel.CRITICAL,
+                60,
+                lambda value, threshold: value >= threshold,
+                "Battery temperature reached {value:g} C.",
+                "emergency_shutdown",
+            ),
+            (
+                "battery_percent",
+                "battery_charge_low",
+                RiskLevel.ELEVATED,
+                10,
+                lambda value, threshold: value <= threshold,
+                "Battery charge fell to {value:g} percent.",
+                "schedule_charge",
+            ),
+        )
+        for metric, code, risk, threshold, unsafe, message, recommendation in numeric_checks:
+            if metric not in metrics:
+                continue
+            evaluated.add(code)
+            value = self._number(metrics[metric], metric)
+            if unsafe(value, threshold):
                 findings.append(
-                    _Finding(
-                        "methane_threshold_exceeded",
-                        RiskLevel.CRITICAL,
-                        f"Methane reading reached {methane_ppm:g} ppm.",
-                        "request_maintenance",
-                    )
+                    _Finding(code, risk, message.format(value=value), recommendation)
                 )
+        boolean_checks = (
+            (
+                "link_online",
+                False,
+                "control_link_offline",
+                RiskLevel.ELEVATED,
+                "The asset stopped reporting an online control link.",
+                "inspect",
+            ),
+            (
+                "charger_fault",
+                True,
+                "charging_station_fault",
+                RiskLevel.CRITICAL,
+                "A charging-system fault was reported.",
+                "request_maintenance",
+            ),
+        )
+        for metric, unsafe_value, code, risk, message, recommendation in boolean_checks:
+            if metric not in metrics:
+                continue
+            evaluated.add(code)
+            if self._boolean(metrics[metric], metric) is unsafe_value:
+                findings.append(_Finding(code, risk, message, recommendation))
+        return findings, evaluated
 
-        if "battery_temperature_c" in metrics:
-            evaluated_codes.add("battery_temperature_high")
-            battery_temperature = self._number(
-                metrics["battery_temperature_c"], "battery_temperature_c"
-            )
-            if battery_temperature >= 60:
-                findings.append(
-                    _Finding(
-                        "battery_temperature_high",
-                        RiskLevel.CRITICAL,
-                        f"Battery temperature reached {battery_temperature:g} C.",
-                        "emergency_shutdown",
-                    )
-                )
-
-        if "battery_percent" in metrics:
-            evaluated_codes.add("battery_charge_low")
-            battery_percent = self._number(metrics["battery_percent"], "battery_percent")
-            if battery_percent <= 10:
-                findings.append(
-                    _Finding(
-                        "battery_charge_low",
-                        RiskLevel.ELEVATED,
-                        f"Battery charge fell to {battery_percent:g} percent.",
-                        "schedule_charge",
-                    )
-                )
-
-        if "link_online" in metrics:
-            evaluated_codes.add("control_link_offline")
-            if self._boolean(metrics["link_online"], "link_online") is False:
-                findings.append(
-                    _Finding(
-                        "control_link_offline",
-                        RiskLevel.ELEVATED,
-                        "The asset stopped reporting an online control link.",
-                        "inspect",
-                    )
-                )
-
-        if "charger_fault" in metrics:
-            evaluated_codes.add("charging_station_fault")
-            if self._boolean(metrics["charger_fault"], "charger_fault") is True:
-                findings.append(
-                    _Finding(
-                        "charging_station_fault",
-                        RiskLevel.CRITICAL,
-                        "A charging-system fault was reported.",
-                        "request_maintenance",
-                    )
-                )
-
-        return findings, evaluated_codes
-
-    def _validate_action_for_asset(self, asset: AssetRecord, action_type: str) -> None:
+    def _validate_action(self, asset: AssetRecord, action_type: str) -> None:
         if action_type in self.SOFTWARE_ONLY_ACTIONS:
             return
-        allowed_types = self.ACTION_ASSET_TYPES[action_type]
-        capability_aliases = {
-            action_type,
-            f"action:{action_type}",
-            f"supports:{action_type}",
-        }
-        if asset.asset_type in allowed_types or capability_aliases.intersection(
+        aliases = {action_type, f"action:{action_type}", f"supports:{action_type}"}
+        if asset.asset_type in self.ACTION_ASSET_TYPES[action_type] or aliases.intersection(
             asset.capabilities
         ):
             return
@@ -716,20 +655,36 @@ class SentinelGridControlPlane:
             f"asset {asset.asset_id}"
         )
 
+    def _require_asset(self, db: sqlite3.Connection, asset_id: str) -> AssetRecord:
+        row = db.execute(
+            "SELECT * FROM sentinelgrid_assets WHERE id=?", (asset_id,)
+        ).fetchone()
+        if row is None:
+            raise AssetNotFoundError(f"Unknown SentinelGrid asset: {asset_id}")
+        return self._asset(row)
+
+    def _require_action(self, db: sqlite3.Connection, action_id: str) -> ActionProposal:
+        row = db.execute(
+            "SELECT * FROM sentinelgrid_actions WHERE id=?", (action_id,)
+        ).fetchone()
+        if row is None:
+            raise ActionNotFoundError(f"Unknown SentinelGrid action: {action_id}")
+        return self._action(row)
+
     @staticmethod
-    def _number(value: object, metric_name: str) -> float:
+    def _number(value: object, metric: str) -> float:
         if isinstance(value, bool):
-            raise InvalidInputError(f"Metric {metric_name} must be numeric")
+            raise InvalidInputError(f"Metric {metric} must be numeric")
         try:
             number = float(value)
         except (TypeError, ValueError, OverflowError) as exc:
-            raise InvalidInputError(f"Metric {metric_name} must be numeric") from exc
+            raise InvalidInputError(f"Metric {metric} must be numeric") from exc
         if not math.isfinite(number):
-            raise InvalidInputError(f"Metric {metric_name} must be finite")
+            raise InvalidInputError(f"Metric {metric} must be finite")
         return number
 
     @staticmethod
-    def _boolean(value: object, metric_name: str) -> bool:
+    def _boolean(value: object, metric: str) -> bool:
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
@@ -738,10 +693,10 @@ class SentinelGridControlPlane:
                 return True
             if normalized in {"false", "0", "no"}:
                 return False
-        raise InvalidInputError(f"Metric {metric_name} must be boolean")
+        raise InvalidInputError(f"Metric {metric} must be boolean")
 
     @staticmethod
-    def _required_text(value: str, label: str, *, minimum: int) -> str:
+    def _required_text(value: str, label: str, minimum: int) -> str:
         normalized = value.strip()
         if len(normalized) < minimum:
             raise InvalidInputError(
@@ -750,23 +705,27 @@ class SentinelGridControlPlane:
         return normalized
 
     @staticmethod
-    def _bounded_limit(value: int, *, maximum: int) -> int:
+    def _limit(value: int, maximum: int) -> int:
         if value < 1 or value > maximum:
             raise InvalidInputError(f"Limit must be between 1 and {maximum}")
         return value
 
     @staticmethod
-    def _aware_datetime(value: datetime) -> datetime:
+    def _now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _aware(value: datetime) -> datetime:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
 
     @classmethod
     def _iso(cls, value: datetime) -> str:
-        return cls._aware_datetime(value).isoformat()
+        return cls._aware(value).isoformat()
 
     @staticmethod
-    def _datetime(value: str | None) -> datetime | None:
+    def _date(value: str | None) -> datetime | None:
         if value is None:
             return None
         parsed = datetime.fromisoformat(value)
@@ -781,100 +740,44 @@ class SentinelGridControlPlane:
             query += f" WHERE {where}"
         return int(db.execute(query).fetchone()[0])
 
-    def _require_asset(self, db: sqlite3.Connection, asset_id: str) -> AssetRecord:
-        row = db.execute(
-            "SELECT * FROM sentinelgrid_assets WHERE id=?", (asset_id,)
-        ).fetchone()
-        if row is None:
-            raise AssetNotFoundError(f"Unknown SentinelGrid asset: {asset_id}")
-        return self._asset_from_row(row)
-
-    def _require_action(self, db: sqlite3.Connection, action_id: str) -> ActionProposal:
-        row = db.execute(
-            "SELECT * FROM sentinelgrid_actions WHERE id=?", (action_id,)
-        ).fetchone()
-        if row is None:
-            raise ActionNotFoundError(f"Unknown SentinelGrid action: {action_id}")
-        return self._action_from_row(row)
-
-    @staticmethod
-    def _insert_action(db: sqlite3.Connection, action: ActionProposal) -> None:
-        db.execute(
-            """
-            INSERT INTO sentinelgrid_actions(
-                id,asset_id,action_type,reason,requested_by,risk,status,
-                software_only,execution_allowed,created_at,decided_at,
-                decided_by,decision_note
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                action.action_id,
-                action.asset_id,
-                action.action_type,
-                action.reason,
-                action.requested_by,
-                action.risk.value,
-                action.status.value,
-                int(action.software_only),
-                int(action.execution_allowed),
-                SentinelGridControlPlane._iso(action.created_at),
-                None,
-                None,
-                action.decision_note,
-            ),
-        )
-
-    def _trim_telemetry(self, db: sqlite3.Connection) -> None:
-        db.execute(
-            """
-            DELETE FROM sentinelgrid_telemetry
-            WHERE id IN (
-                SELECT id FROM sentinelgrid_telemetry
-                ORDER BY received_at DESC
-                LIMIT -1 OFFSET ?
-            )
-            """,
-            (self.TELEMETRY_LIMIT,),
-        )
-
-    def _asset_from_row(self, row: sqlite3.Row) -> AssetRecord:
+    def _asset(self, row: sqlite3.Row) -> AssetRecord:
         return AssetRecord(
-            asset_id=row["id"],
-            name=row["name"],
-            asset_type=AssetType(row["asset_type"]),
-            site=row["site"],
-            capabilities=tuple(json.loads(row["capabilities_json"] or "[]")),
-            registered_at=self._datetime(row["registered_at"]),
+            row["id"],
+            row["name"],
+            AssetType(row["asset_type"]),
+            row["site"],
+            tuple(json.loads(row["capabilities_json"] or "[]")),
+            self._date(row["registered_at"]),
         )
 
-    def _incident_from_row(self, row: sqlite3.Row) -> IncidentRecord:
+    def _incident(self, row: sqlite3.Row) -> IncidentRecord:
         return IncidentRecord(
-            incident_id=row["id"],
-            asset_id=row["asset_id"],
-            code=row["code"],
-            risk=RiskLevel(row["risk"]),
-            status=IncidentStatus(row["status"]),
-            message=row["message"],
-            recommended_action=row["recommended_action"],
-            occurrence_count=int(row["occurrence_count"]),
-            created_at=self._datetime(row["created_at"]),
-            last_seen_at=self._datetime(row["last_seen_at"]),
-            resolved_at=self._datetime(row["resolved_at"]),
+            row["id"],
+            row["asset_id"],
+            row["code"],
+            RiskLevel(row["risk"]),
+            IncidentStatus(row["status"]),
+            row["message"],
+            row["recommended_action"],
+            int(row["occurrence_count"]),
+            self._date(row["created_at"]),
+            self._date(row["last_seen_at"]),
+            self._date(row["resolved_at"]),
         )
 
-    def _action_from_row(self, row: sqlite3.Row) -> ActionProposal:
+    def _action(self, row: sqlite3.Row) -> ActionProposal:
         return ActionProposal(
-            action_id=row["id"],
-            asset_id=row["asset_id"],
-            action_type=row["action_type"],
-            reason=row["reason"],
-            requested_by=row["requested_by"],
-            risk=RiskLevel(row["risk"]),
-            status=ActionStatus(row["status"]),
-            software_only=bool(row["software_only"]),
-            execution_allowed=bool(row["execution_allowed"]),
-            created_at=self._datetime(row["created_at"]),
-            decided_at=self._datetime(row["decided_at"]),
-            decided_by=row["decided_by"],
-            decision_note=row["decision_note"] or "",
+            row["id"],
+            row["asset_id"],
+            row["action_type"],
+            row["reason"],
+            row["requested_by"],
+            RiskLevel(row["risk"]),
+            ActionStatus(row["status"]),
+            bool(row["software_only"]),
+            bool(row["execution_allowed"]),
+            self._date(row["created_at"]),
+            self._date(row["decided_at"]),
+            row["decided_by"],
+            row["decision_note"] or "",
         )
