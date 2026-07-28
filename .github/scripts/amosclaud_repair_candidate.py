@@ -213,7 +213,9 @@ def validate_patch(patch: str, policy: dict[str, Any], mode: str) -> list[str]:
             if not _maintenance_allowed(path, settings["allowed_prefixes"]):
                 raise ValueError(f"maintenance patch targets a non-repair-engine path: {path}")
         else:
-            if path in settings["protected_paths"] or any(path.startswith(prefix) for prefix in settings["protected_prefixes"]):
+            if path in settings["protected_paths"] or any(
+                path.startswith(prefix) for prefix in settings["protected_prefixes"]
+            ):
                 raise ValueError(f"regular patch targets protected path: {path}")
 
     if mode == "maintenance" and settings.get("requires_test_change"):
@@ -254,7 +256,9 @@ def main() -> int:
     parser.add_argument("--source", default="")
     parser.add_argument("--patch-output", required=True)
     parser.add_argument("--report", required=True)
-    parser.add_argument("--api-url", default=os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com"))
+    parser.add_argument(
+        "--api-url", default=os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com")
+    )
     parser.add_argument("--api-key", default=os.getenv("AMOSCLAUD_API_KEY", ""))
     parser.add_argument("--model", default=os.getenv("AMOSCLAUD_FIXER_MODEL", "amosclaud-agent"))
     args = parser.parse_args()
@@ -276,7 +280,9 @@ def main() -> int:
                 f"Repository context:\n{context}\n\n"
                 f"Previous candidate feedback:\n{feedback or 'none'}"
             )
-            patch = extract_diff(call_model(args.api_url, args.api_key, args.model, system_prompt(args.mode), prompt))
+            patch = extract_diff(
+                call_model(args.api_url, args.api_key, args.model, system_prompt(args.mode), prompt)
+            )
             paths = validate_patch(patch, policy, args.mode)
             patch_path = Path(args.patch_output)
             patch_path.write_text(patch, encoding="utf-8")
