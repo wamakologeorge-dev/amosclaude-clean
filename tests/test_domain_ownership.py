@@ -13,6 +13,12 @@ FORBIDDEN_URLS = (
 AUTHORITATIVE_FILES = (
     ROOT / ".env.example",
     ROOT / ".circleci" / "config.yml",
+    ROOT / ".github" / "scripts" / "amosclaud_fixer.py",
+    ROOT / ".github" / "scripts" / "amosclaud_repair_candidate.py",
+    ROOT / ".github" / "workflows" / "amosclaud-autonomous-background-engineer.yml",
+    ROOT / ".github" / "workflows" / "amosclaud-repair-control-plane.yml",
+    ROOT / "amosclaud_cron_agent.py",
+    ROOT / "api-gateway" / "main.py",
     ROOT / "docker-compose.prod.yml",
     ROOT / "pyproject.toml",
     ROOT / "amoscloud_ai" / "config.py",
