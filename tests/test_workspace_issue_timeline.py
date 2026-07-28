@@ -40,6 +40,14 @@ def test_workspace_renders_complete_issue_body_and_clickable_detail() -> None:
     assert "/actions" in source
 
 
+def test_workspace_issue_navigation_cannot_be_overwritten_by_legacy_loader() -> None:
+    source = (WEB / "workspace-issues.js").read_text(encoding="utf-8")
+
+    assert "name === 'issues'" in source
+    assert "event.stopImmediatePropagation()" in source
+    assert "}, true);" in source
+
+
 def test_workspace_has_separate_issue_and_pull_request_navigation() -> None:
     html = (WEB / "workspace.html").read_text(encoding="utf-8")
 
