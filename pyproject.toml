@@ -29,9 +29,9 @@ dynamic = ["dependencies"]
 mcp = ["mcp>=1.27,<2"]
 
 [project.urls]
-Homepage = "http://www.amosclaud.com/"
-Repository = "http://www.amosclaud.com/repositories"
-Documentation = "http://www.amosclaud.com/docs"
+Homepage = "https://www.amosclaud.com"
+Repository = "https://www.amosclaud.com/repositories"
+Documentation = "https://www.amosclaud.com/docs"
 
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"
