@@ -15,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_public_amosclaud_http_is_upgraded_to_https() -> None:
-    assert normalize_public_amosclaud_url("http://www.amosclaud.com/") == (
-        "https://www.amosclaud.com"
+    assert (
+        normalize_public_amosclaud_url("http://www.amosclaud.com/") == "https://www.amosclaud.com"
     )
     assert (
         normalize_public_amosclaud_url("http://amosclaud.com/api/v1/provider")
