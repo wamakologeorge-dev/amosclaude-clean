@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command, run_from_environment
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command, run_from_environment
 from .execution_dashboard import TestCard, publish_dashboard, render_dashboard
 
 HIGH_RISK_PREFIXES = (
