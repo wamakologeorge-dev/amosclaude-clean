@@ -6,21 +6,24 @@ from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from amoscloud_ai.api.routes.auth import get_user_from_session
+from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
 from amoscloud_ai.api.routes.pr_tasks import _require_owner_key
 from amoscloud_ai.industrial_autonomy import (
     ActionNotFoundError,
     AssetNotFoundError,
     AssetType,
+    IncidentStatus,
+    InvalidInputError,
     SentinelGridControlPlane,
+    SentinelGridError,
     StateConflictError,
 )
 
 router = APIRouter(prefix="/sentinel-grid", tags=["sentinel-grid"])
-control_plane = SentinelGridControlPlane()
+control_plane = SentinelGridControlPlane(connection_factory=_connect)
 
 
 class AssetRegistration(BaseModel):
@@ -52,14 +55,20 @@ class ActionProposalRequest(BaseModel):
 
 
 class ActionDecisionRequest(BaseModel):
-    decided_by: str = Field(..., min_length=2, max_length=160)
     note: str = Field(default="", max_length=2000)
+    decided_by: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Deprecated and ignored; the authenticated principal is recorded.",
+    )
 
 
-def _authorise(request: Request, owner_key: Optional[str]) -> None:
+def _authorise(request: Request, owner_key: Optional[str]) -> str:
+    """Authorize an administrator and return an auditable principal identifier."""
+
     if owner_key:
         _require_owner_key(owner_key)
-        return
+        return "amosclaud-owner-key"
 
     user = get_user_from_session(request.cookies.get("amos_session"))
     if not user:
@@ -72,21 +81,21 @@ def _authorise(request: Request, owner_key: Optional[str]) -> None:
             status_code=403,
             detail="Administrator approval is required for SentinelGrid operations.",
         )
+    return f"amosclaud-user:{user['id']}"
 
 
-def _translate_error(exc: Exception) -> HTTPException:
+def _translate_error(exc: SentinelGridError) -> HTTPException:
+    if isinstance(exc, InvalidInputError):
+        return HTTPException(status_code=422, detail=str(exc))
     if isinstance(exc, (AssetNotFoundError, ActionNotFoundError)):
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, StateConflictError):
         return HTTPException(status_code=409, detail=str(exc))
-    return HTTPException(
-        status_code=500,
-        detail="SentinelGrid could not complete the request",
-    )
+    return HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("")
-def sentinel_grid_status() -> dict:
+def sentinel_grid_status() -> dict[str, object]:
     """Return the public, secret-free SentinelGrid capability summary."""
 
     return control_plane.status()
@@ -95,10 +104,11 @@ def sentinel_grid_status() -> dict:
 @router.get("/assets")
 def list_assets(
     request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> list[dict]:
+) -> list[dict[str, object]]:
     _authorise(request, x_amosclaud_owner_key)
-    return [asdict(item) for item in control_plane.list_assets()]
+    return [asdict(item) for item in control_plane.list_assets(limit=limit)]
 
 
 @router.post("/assets", status_code=201)
@@ -106,14 +116,17 @@ def register_asset(
     body: AssetRegistration,
     request: Request,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> dict:
+) -> dict[str, object]:
     _authorise(request, x_amosclaud_owner_key)
-    asset = control_plane.register_asset(
-        name=body.name,
-        asset_type=body.asset_type,
-        site=body.site,
-        capabilities=tuple(body.capabilities),
-    )
+    try:
+        asset = control_plane.register_asset(
+            name=body.name,
+            asset_type=body.asset_type,
+            site=body.site,
+            capabilities=tuple(body.capabilities),
+        )
+    except SentinelGridError as exc:
+        raise _translate_error(exc) from exc
     return asdict(asset)
 
 
@@ -122,7 +135,7 @@ def ingest_telemetry(
     body: TelemetrySubmission,
     request: Request,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> dict:
+) -> dict[str, object]:
     _authorise(request, x_amosclaud_owner_key)
     try:
         telemetry, incidents = control_plane.record_telemetry(
@@ -130,7 +143,7 @@ def ingest_telemetry(
             metrics=body.metrics,
             observed_at=body.observed_at,
         )
-    except Exception as exc:
+    except SentinelGridError as exc:
         raise _translate_error(exc) from exc
     return {
         "telemetry": asdict(telemetry),
@@ -141,10 +154,15 @@ def ingest_telemetry(
 @router.get("/incidents")
 def list_incidents(
     request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    status: IncidentStatus | None = Query(default=None),
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> list[dict]:
+) -> list[dict[str, object]]:
     _authorise(request, x_amosclaud_owner_key)
-    return [asdict(item) for item in control_plane.list_incidents()]
+    return [
+        asdict(item)
+        for item in control_plane.list_incidents(limit=limit, status=status)
+    ]
 
 
 @router.post("/actions", status_code=202)
@@ -152,7 +170,7 @@ def propose_action(
     body: ActionProposalRequest,
     request: Request,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> dict:
+) -> dict[str, object]:
     _authorise(request, x_amosclaud_owner_key)
     try:
         action = control_plane.propose_action(
@@ -161,7 +179,7 @@ def propose_action(
             reason=body.reason,
             requested_by=body.requested_by,
         )
-    except Exception as exc:
+    except SentinelGridError as exc:
         raise _translate_error(exc) from exc
     return asdict(action)
 
@@ -169,10 +187,11 @@ def propose_action(
 @router.get("/actions")
 def list_actions(
     request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> list[dict]:
+) -> list[dict[str, object]]:
     _authorise(request, x_amosclaud_owner_key)
-    return [asdict(item) for item in control_plane.list_actions()]
+    return [asdict(item) for item in control_plane.list_actions(limit=limit)]
 
 
 @router.post("/actions/{action_id}/approve")
@@ -181,15 +200,15 @@ def approve_action(
     body: ActionDecisionRequest,
     request: Request,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> dict:
-    _authorise(request, x_amosclaud_owner_key)
+) -> dict[str, object]:
+    principal = _authorise(request, x_amosclaud_owner_key)
     try:
         action = control_plane.approve_action(
             action_id,
-            decided_by=body.decided_by,
+            decided_by=principal,
             decision_note=body.note,
         )
-    except Exception as exc:
+    except SentinelGridError as exc:
         raise _translate_error(exc) from exc
     return asdict(action)
 
@@ -200,14 +219,14 @@ def reject_action(
     body: ActionDecisionRequest,
     request: Request,
     x_amosclaud_owner_key: Optional[str] = Header(default=None),
-) -> dict:
-    _authorise(request, x_amosclaud_owner_key)
+) -> dict[str, object]:
+    principal = _authorise(request, x_amosclaud_owner_key)
     try:
         action = control_plane.reject_action(
             action_id,
-            decided_by=body.decided_by,
+            decided_by=principal,
             decision_note=body.note,
         )
-    except Exception as exc:
+    except SentinelGridError as exc:
         raise _translate_error(exc) from exc
     return asdict(action)
