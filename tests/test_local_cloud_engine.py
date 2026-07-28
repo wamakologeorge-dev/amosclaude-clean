@@ -22,7 +22,10 @@ def test_authority_initializes_verifies_and_rotates(tmp_path: Path) -> None:
     assert authority.verify(replacement)
 
 
-def test_workspace_registry_uses_existing_local_folder(tmp_path: Path) -> None:
+def test_workspace_registry_uses_existing_local_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AMOSCLAUD_LOCAL_ALLOWED_ROOTS", str(tmp_path))
     workspace_dir = tmp_path / "project"
     workspace_dir.mkdir()
     registry = WorkspaceRegistry(tmp_path / "state")
@@ -32,7 +35,10 @@ def test_workspace_registry_uses_existing_local_folder(tmp_path: Path) -> None:
     assert registry.register(name="Project", path=str(workspace_dir)) == workspace
 
 
-def test_job_requires_exact_confirmation(tmp_path: Path) -> None:
+def test_job_requires_exact_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AMOSCLAUD_LOCAL_ALLOWED_ROOTS", str(tmp_path))
     workspace_dir = tmp_path / "project"
     workspace_dir.mkdir()
     registry = WorkspaceRegistry(tmp_path / "state")
