@@ -18,6 +18,13 @@ The workflow follows the Black and isort settings already defined in
 jobs; labeling and maintenance use the Python standard library and the
 repository-scoped `GITHUB_TOKEN`.
 
+## Label ownership
+
+The automation replaces only labels it owns: `area:*`, `type:*`, `size:*`, and
+`status:needs-triage`. Existing project, roadmap, priority, release, and
+maintainer-created labels remain untouched. The stale label is removed whenever
+new discussion activity is recorded.
+
 ## Permissions
 
 The workflow starts with `contents: read`. Each job receives only the permissions
