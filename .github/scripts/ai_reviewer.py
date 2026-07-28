@@ -23,9 +23,7 @@ _SECRET_ASSIGNMENT = re.compile(
     r"(?i)\b(?:api[_-]?key|client[_-]?secret|secret|password|token)[a-z0-9_-]*"
     r"\s*=\s*(['\"])([^'\"]+)\1"
 )
-_BEARER_LITERAL = re.compile(
-    r"(?i)\bauthorization\s*[:=]\s*(['\"])bearer\s+([^'\"]+)\1"
-)
+_BEARER_LITERAL = re.compile(r"(?i)\bauthorization\s*[:=]\s*(['\"])bearer\s+([^'\"]+)\1")
 _ROUTE_DECORATOR = re.compile(
     r"(?m)^\s*@(?:[A-Za-z_][A-Za-z0-9_]*\.)?router\."
     r"(?:get|post|put|patch|delete|options|head)\s*\("
@@ -119,10 +117,7 @@ def _contains_shell_execution(added: str) -> bool:
         r"\bsubprocess\.(?:run|popen|call|check_call|check_output)\s*\("
         r".{0,400}?\[\s*['\"](?:ba|z|da|a)?sh['\"]\s*,\s*['\"]-c['\"]",
     )
-    return any(
-        re.search(pattern, added, re.IGNORECASE | re.DOTALL)
-        for pattern in patterns
-    )
+    return any(re.search(pattern, added, re.IGNORECASE | re.DOTALL) for pattern in patterns)
 
 
 def _contains_unguarded_json_parse(added: str) -> bool:
@@ -171,12 +166,7 @@ def review_diff(diff: str) -> list[str]:
             "user-controlled input cannot reach the shell."
         )
 
-    if (
-        "../" in added
-        or "path(" in lowered
-        or "write_bytes" in lowered
-        or "write_text" in lowered
-    ):
+    if "../" in added or "path(" in lowered or "write_bytes" in lowered or "write_text" in lowered:
         if "resolve()" not in added and "safe" not in lowered:
             findings.append(
                 "Filesystem handling changed; verify path traversal protection "
@@ -208,8 +198,7 @@ def build_comment(findings: list[str]) -> str:
     prefix = f"{COMMENT_MARKER}\n{COMMENT_HEADING}\n\n"
     if not findings:
         return (
-            prefix
-            + "No high-signal security, reliability, or test risks were detected "
+            prefix + "No high-signal security, reliability, or test risks were detected "
             "in this diff. This is a lightweight automated check and does not "
             "replace human review."
         )
