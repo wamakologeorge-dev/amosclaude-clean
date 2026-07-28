@@ -5,9 +5,11 @@ this repository is on ``sys.path``. Several independent Amosclaud entry points
 historically accepted ``http://www.amosclaud.com``. An HTTP-to-HTTPS redirect can
 rewrite a POST into GET, which produces FastAPI's ``405 Method Not Allowed``.
 
-Only explicitly configured public Amosclaud domains are upgraded. Unset values,
-localhost, loopback, Docker, Railway private-network, and other endpoints remain
-untouched so this guard cannot silently configure a model provider.
+Only explicitly configured public Amosclaud domains are upgraded. Unset model
+and API endpoints, localhost, Docker, Railway private-network, and other hosts
+remain untouched. A safe HTTPS CORS default is supplied because it is not a
+provider connection and prevents browsers from being rejected by legacy HTTP
+origin defaults.
 """
 
 from __future__ import annotations
@@ -23,6 +25,9 @@ _PUBLIC_URL_ENV_NAMES = (
     "AMOSCLAUD_URL",
 )
 _DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
+_DEFAULT_ALLOWED_ORIGINS = (
+    "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000"
+)
 
 
 def normalize_public_amosclaud_url(value: str | None) -> str:
@@ -42,7 +47,7 @@ def normalize_public_amosclaud_url(value: str | None) -> str:
 
 
 def normalize_public_environment() -> None:
-    """Upgrade configured public URLs without inventing missing configuration."""
+    """Upgrade configured public URLs without inventing provider configuration."""
     for name in _PUBLIC_URL_ENV_NAMES:
         value = os.environ.get(name)
         if value:
@@ -59,6 +64,8 @@ def normalize_public_environment() -> None:
             for item in origins.split(",")
             if item.strip()
         )
+    else:
+        os.environ["AMOSCLAUD_ALLOWED_ORIGINS"] = _DEFAULT_ALLOWED_ORIGINS
 
 
 normalize_public_environment()
