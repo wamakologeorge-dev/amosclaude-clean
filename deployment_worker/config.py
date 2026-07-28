@@ -15,4 +15,6 @@ class WorkerConfig:
     @classmethod
     def validate(cls) -> None:
         if not cls.API_KEY:
-            raise RuntimeError("Set AMOSCLAUD_DEPLOYMENT_WORKER_KEY before starting the deployment worker")
+            raise RuntimeError(
+                "Set AMOSCLAUD_DEPLOYMENT_WORKER_KEY before starting the deployment worker"
+            )
