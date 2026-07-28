@@ -88,7 +88,11 @@ def encode_plan_marker(command: str, objective: str) -> str:
 
 
 def decode_plan_marker(body: str) -> dict[str, str] | None:
-    match = re.search(rf"<!--\s*{re.escape(PLAN_MARKER)}:(\{{.*?\}})\s*-->", body or "", re.DOTALL)
+    match = re.search(
+        rf"<!--\s*{re.escape(PLAN_MARKER)}:(\{{.*?\}})\s*-->",
+        body or "",
+        re.DOTALL,
+    )
     if not match:
         return None
     try:
@@ -111,7 +115,10 @@ def latest_plan(comments: list[dict[str, Any]]) -> dict[str, str] | None:
 
 
 def _brain_summary(context: dict[str, Any]) -> str:
-    roles = ", ".join(item["role"] for item in context.get("agent_roles", [])) or "default roles"
+    roles = (
+        ", ".join(item["role"] for item in context.get("agent_roles", []))
+        or "default roles"
+    )
     proven = context.get("proven_memories", [])
     failures = context.get("failed_attempts_to_avoid", [])
     lessons = context.get("approved_lessons", [])
@@ -120,18 +127,31 @@ def _brain_summary(context: dict[str, Any]) -> str:
         "## Autonomous brain context",
         "- **Runtime:** GitHub Actions repository-local brain",
         f"- **Agent roles:** {roles}",
-        f"- **Curriculum:** Level {context.get('current_level', 1)} — {curriculum.get('track', 'ai-assistant')}",
+        f"- **Curriculum:** Level {context.get('current_level', 1)} — "
+        f"{curriculum.get('track', 'ai-assistant')}",
         f"- **Relevant proven memories:** {len(proven)}",
         f"- **Known failed attempts to avoid:** {len(failures)}",
         f"- **Approved Academy lessons:** {len(lessons)}",
     ]
     if proven:
-        lines.append("- **Strongest proven guidance:** " + str(proven[0].get("title") or "verified memory"))
+        lines.append(
+            "- **Strongest proven guidance:** "
+            + str(proven[0].get("title") or "verified memory")
+        )
     if failures:
-        lines.append("- **Primary warning:** " + str(failures[0].get("title") or "previous failed attempt"))
+        lines.append(
+            "- **Primary warning:** "
+            + str(failures[0].get("title") or "previous failed attempt")
+        )
     if lessons:
-        lines.append("- **Most relevant lesson:** " + str(lessons[0].get("title") or "approved lesson"))
-    lines.append("- **Truth rule:** Prior knowledge guides the task but never replaces current verification or grants write authority.")
+        lines.append(
+            "- **Most relevant lesson:** "
+            + str(lessons[0].get("title") or "approved lesson")
+        )
+    lines.append(
+        "- **Truth rule:** Prior knowledge guides the task but never replaces "
+        "current verification or grants write authority."
+    )
     return "\n".join(lines)
 
 
@@ -148,10 +168,13 @@ def _codex_summary(context: dict[str, Any]) -> str:
             f"- **Skill phases:** {' → '.join(skill['phases'])}",
             f"- **Permitted tools for this plan:** {tool_names}",
             f"- **Tools still requiring approval:** {approval_tools}",
-            f"- **Execution limits:** {limits['max_iterations']} iterations, {limits['max_tool_calls']} tool calls, {limits['max_changed_files']} changed files",
+            f"- **Execution limits:** {limits['max_iterations']} iterations, "
+            f"{limits['max_tool_calls']} tool calls, "
+            f"{limits['max_changed_files']} changed files",
             f"- **Required checks:** {', '.join(verification['required_checks'])}",
             "- **Workspace:** confined; parent traversal and secret files are forbidden",
-            "- **External model execution:** disabled in Bot planning unless a separately configured runtime is explicitly invoked",
+            "- **External model execution:** disabled in Bot planning unless a "
+            "separately configured runtime is explicitly invoked",
             f"- **Authority rule:** {context['authority_note']}",
         ]
     )
@@ -165,18 +188,25 @@ def format_plan(
     brain_context: dict[str, Any] | None = None,
     codex_context: dict[str, Any] | None = None,
 ) -> str:
-    heading = "### Amosclaud — Autonomous Plan Resumed" if resumed else "### Amosclaud — Autonomous Plan"
-    rendered = [f"{'🟩' if index < 2 else '⬜'} {step}" for index, step in enumerate(plan_steps(command))]
+    heading = (
+        "### Amosclaud — Autonomous Plan Resumed"
+        if resumed
+        else "### Amosclaud — Autonomous Plan"
+    )
+    rendered = [
+        f"{'🟩' if index < 2 else '⬜'} {step}"
+        for index, step in enumerate(plan_steps(command))
+    ]
     brain = f"\n\n{_brain_summary(brain_context)}" if brain_context else ""
     codex = f"\n\n{_codex_summary(codex_context)}" if codex_context else ""
+    opening = f"{heading}\n\n**Objective:** {objective}\n\n" + "\n".join(rendered)
     return (
-        f"{heading}\n\n"
-        f"**Objective:** {objective}\n\n"
-        + "\n".join(rendered)
+        opening
         + brain
         + codex
         + "\n\nProceeding through the existing approval and publication gates. "
-        + "The enforced order remains privacy, approval, verification, rollback, commit, and pull-request.\n"
+        + "The enforced order remains privacy, approval, verification, rollback, "
+        + "commit, and pull-request.\n"
         + encode_plan_marker(command, objective)
     )
 
@@ -187,10 +217,17 @@ def resolve_continuation(bot: AmosclaudBot, payload: dict[str, Any]) -> bool:
         return False
     issue = payload.get("issue") or {}
     number = int(issue.get("number"))
-    comments = bot._request("GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100")
+    comments = bot._request(
+        "GET", f"/repos/{bot.repository}/issues/{number}/comments?per_page=100"
+    )
     plan = latest_plan(comments if isinstance(comments, list) else [])
     if not plan:
-        bot.post_comment(number, "### Amosclaud — Nothing to resume\nNo earlier autonomous plan was found in this issue. Start a task with `@amosclaud <objective>`.")
+        bot.post_comment(
+            number,
+            "### Amosclaud — Nothing to resume\n"
+            "No earlier autonomous plan was found in this issue. Start a task "
+            "with `@amosclaud <objective>`.",
+        )
         return True
     comment["body"] = f"@amosclaud {plan['command']} {plan['objective']}"
     payload["comment"] = comment
