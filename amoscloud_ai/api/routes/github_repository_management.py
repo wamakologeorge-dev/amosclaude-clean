@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -14,7 +15,6 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode
 
-import base64
 import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -262,8 +262,7 @@ def _repository_context(
 
 
 def _ensure_audit_schema(db: sqlite3.Connection) -> None:
-    db.execute(
-        """CREATE TABLE IF NOT EXISTS github_repository_audit_log (
+    db.execute("""CREATE TABLE IF NOT EXISTS github_repository_audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             repository_id INTEGER,
@@ -271,8 +270,7 @@ def _ensure_audit_schema(db: sqlite3.Connection) -> None:
             operation TEXT NOT NULL,
             details_json TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL
-        )"""
-    )
+        )""")
 
 
 def _audit(context: RepositoryContext, operation: str, details: dict[str, object]) -> None:
@@ -763,12 +761,16 @@ def list_repository_webhooks(
                 "name": item.get("name"),
                 "active": bool(item.get("active")),
                 "events": item.get("events") or [],
-                "url": (item.get("config") or {}).get("url")
-                if isinstance(item.get("config"), dict)
-                else None,
-                "content_type": (item.get("config") or {}).get("content_type")
-                if isinstance(item.get("config"), dict)
-                else None,
+                "url": (
+                    (item.get("config") or {}).get("url")
+                    if isinstance(item.get("config"), dict)
+                    else None
+                ),
+                "content_type": (
+                    (item.get("config") or {}).get("content_type")
+                    if isinstance(item.get("config"), dict)
+                    else None
+                ),
                 "created_at": item.get("created_at"),
                 "updated_at": item.get("updated_at"),
                 "last_response": item.get("last_response") or {},
@@ -818,9 +820,11 @@ def create_repository_webhook(
         "id": hook.get("id"),
         "active": bool(hook.get("active")),
         "events": hook.get("events") or [],
-        "url": (hook.get("config") or {}).get("url")
-        if isinstance(hook.get("config"), dict)
-        else config["url"],
+        "url": (
+            (hook.get("config") or {}).get("url")
+            if isinstance(hook.get("config"), dict)
+            else config["url"]
+        ),
         "secret_returned": False,
     }
 
@@ -867,9 +871,9 @@ def update_repository_webhook(
         "id": hook.get("id") or hook_id,
         "active": bool(hook.get("active")),
         "events": hook.get("events") or [],
-        "url": (hook.get("config") or {}).get("url")
-        if isinstance(hook.get("config"), dict)
-        else None,
+        "url": (
+            (hook.get("config") or {}).get("url") if isinstance(hook.get("config"), dict) else None
+        ),
         "secret_returned": False,
     }
 

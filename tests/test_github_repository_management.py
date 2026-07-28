@@ -172,9 +172,7 @@ def test_secret_response_never_returns_plaintext(monkeypatch: pytest.MonkeyPatch
                 },
             )
         body = _kwargs["json_body"]
-        decrypted = SealedBox(private_key).decrypt(
-            base64.b64decode(str(body["encrypted_value"]))
-        )
+        decrypted = SealedBox(private_key).decrypt(base64.b64decode(str(body["encrypted_value"])))
         assert decrypted == b"secret-value"
         return _json_response(201)
 
