@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 AGENT = ROOT / "amosclaud_cron_agent.py"
 GATEWAY = ROOT / "amosclaud_cron_gateway.py"
