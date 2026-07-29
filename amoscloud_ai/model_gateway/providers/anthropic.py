@@ -112,11 +112,7 @@ class AnthropicProvider(ModelProvider):
             model=str(data.get("model") or self.model),
             finish_reason=data.get("stop_reason"),
             tool_calls=tuple(tool_calls),
-            usage={
-                str(key): int(value)
-                for key, value in usage.items()
-                if isinstance(value, int)
-            },
+            usage={str(key): int(value) for key, value in usage.items() if isinstance(value, int)},
             latency_ms=latency_ms,
             request_id=data.get("id"),
         )
