@@ -54,4 +54,7 @@ def test_model_agent_uses_same_selected_ollama_model_for_preflight_and_inference
 
     assert workflow.count("vars.AMOSCLAUD_MODEL || vars.OLLAMA_MODEL") == 2
     assert "OLLAMA_REQUIRE_MODEL: 'true'" in workflow
-    assert "AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY" in workflow
+    assert (
+        "AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY"
+        in workflow
+    )
