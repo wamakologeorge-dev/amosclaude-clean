@@ -56,6 +56,64 @@ def test_connection_sends_bearer_key_without_printing_it(monkeypatch, tmp_path, 
     assert secret not in summary.read_text(encoding="utf-8")
 
 
+def test_connection_requires_selected_model_when_requested(monkeypatch, capsys):
+    monkeypatch.setenv("OLLAMA_API_KEY", "present")
+    monkeypatch.setenv("AMOSCLAUD_MODEL", "wamakologeorge/amosclaud-clean:latest")
+    monkeypatch.setenv("OLLAMA_REQUIRE_MODEL", "true")
+    monkeypatch.setattr(
+        ollama_connection,
+        "urlopen",
+        lambda _request, timeout: _Response({"models": [{"name": "gpt-oss:120b"}]}),
+    )
+
+    assert ollama_connection.verify_connection() == 1
+    assert "not visible" in capsys.readouterr().err
+
+
+def test_connection_probes_openai_compatible_completion(monkeypatch, capsys):
+    secret = "ollama-secret-value"
+    model = "wamakologeorge/amosclaud-clean:latest"
+    requests: list[tuple[str, str | None, dict | None]] = []
+
+    monkeypatch.setenv("OLLAMA_API_KEY", secret)
+    monkeypatch.setenv("AMOSCLAUD_MODEL", model)
+    monkeypatch.setenv("OLLAMA_REQUIRE_MODEL", "true")
+    monkeypatch.setenv("OLLAMA_PROBE_COMPLETION", "true")
+
+    def fake_urlopen(request, timeout):
+        body = json.loads(request.data.decode("utf-8")) if request.data else None
+        requests.append((request.full_url, request.headers.get("Authorization"), body))
+        if request.full_url.endswith("/api/tags"):
+            return _Response({"models": [{"name": model}]})
+        assert timeout == 60
+        return _Response(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "AMOSCLAUD_OLLAMA_READY",
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr(ollama_connection, "urlopen", fake_urlopen)
+
+    assert ollama_connection.verify_connection() == 0
+    assert requests[0][:2] == (
+        "https://ollama.com/api/tags",
+        f"Bearer {secret}",
+    )
+    assert requests[1][0] == "https://ollama.com/v1/chat/completions"
+    assert requests[1][1] == f"Bearer {secret}"
+    assert requests[1][2]["model"] == model
+    output = capsys.readouterr().out
+    assert "Completion probe passed" in output
+    assert secret not in output
+
+
 def test_connection_rejects_invalid_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("OLLAMA_API_KEY", "present")
     monkeypatch.setenv("OLLAMA_URL", "not-a-url")
