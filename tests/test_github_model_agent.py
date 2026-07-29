@@ -105,7 +105,7 @@ def test_workflow_wires_first_party_ollama_and_fallback_secret_names():
         "secrets.AMOSCLAUD_MODEL_URL",
         "secrets.OLLAMA_URL",
         "secrets.AMOSCLAUD_MODEL_TOKEN",
-        "secrets.OLLAMA_API_KEY",
+        "OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}",
         "secrets.OLLAMA_CLOUD_API_KEY",
         "secrets.OLLAMA_KEY",
         "secrets.OLLAMA_TOKEN",
@@ -116,6 +116,7 @@ def test_workflow_wires_first_party_ollama_and_fallback_secret_names():
         "secrets.ANTHROPIC_API_KEY",
         "secrets.OPENAI_API_KEY",
         "AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: 'true'",
+        "python -m amosclaud_bot.ollama_connection",
         "python -m amosclaud_bot.model_agent",
     ):
         assert required in workflow
