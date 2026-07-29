@@ -70,9 +70,7 @@ class GeminiProvider(ModelProvider):
             declarations = []
             for tool in request.tools:
                 function = tool.get("function")
-                declarations.append(
-                    dict(function) if isinstance(function, dict) else dict(tool)
-                )
+                declarations.append(dict(function) if isinstance(function, dict) else dict(tool))
             payload["tools"] = [{"functionDeclarations": declarations}]
 
         endpoint = (
@@ -99,7 +97,7 @@ class GeminiProvider(ModelProvider):
         if not candidates:
             raise RuntimeError("Gemini returned no candidates")
         candidate = candidates[0] or {}
-        parts = ((candidate.get("content") or {}).get("parts") or [])
+        parts = (candidate.get("content") or {}).get("parts") or []
         text_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
         for part in parts:
