@@ -15,11 +15,14 @@ from amoscloud_ai.ide_client import (
 )
 
 
-def test_normalize_base_url_requires_https_except_loopback():
+def test_normalize_base_url_requires_https_except_exact_loopback():
     assert normalize_base_url("https://www.amosclaud.com/") == "https://www.amosclaud.com"
     assert normalize_base_url("http://localhost:8000/") == "http://localhost:8000"
+    assert normalize_base_url("http://127.0.0.1:8000/") == "http://127.0.0.1:8000"
     with pytest.raises(IDEClientError):
         normalize_base_url("http://example.com")
+    with pytest.raises(IDEClientError):
+        normalize_base_url("http://localhost.example.com")
 
 
 def test_relative_editor_paths_reject_escape_and_absolute_paths():
@@ -50,6 +53,15 @@ def test_selection_file_reads_only_the_bounded_context(tmp_path: Path):
     selection = tmp_path / "selection.txt"
     selection.write_text("y" * (MAX_SELECTION_CHARS + 200), encoding="utf-8")
     assert len(read_selection_file(str(selection))) == MAX_SELECTION_CHARS
+
+
+def test_selection_file_rejects_a_sensitive_parent_directory(tmp_path: Path):
+    secret_directory = tmp_path / "secrets"
+    secret_directory.mkdir()
+    selection = secret_directory / "selection.txt"
+    selection.write_text("provider-token", encoding="utf-8")
+    with pytest.raises(IDEClientError):
+        read_selection_file(str(selection))
 
 
 def test_payload_preserves_one_autonomous_request_and_optional_capability():
