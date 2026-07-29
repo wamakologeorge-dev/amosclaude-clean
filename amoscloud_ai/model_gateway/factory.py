@@ -72,9 +72,7 @@ def build_default_gateway() -> UniversalModelGateway:
             )
         )
 
-    gemini_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv(
-        "GOOGLE_API_KEY", ""
-    ).strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
     if gemini_key:
         registry.register(
             GeminiProvider(
