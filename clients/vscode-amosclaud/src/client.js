@@ -15,12 +15,18 @@ const SENSITIVE_SUFFIXES = new Set(['.key', '.pem', '.p12', '.pfx']);
 
 function normalizeBaseUrl(value) {
   const candidate = String(value || 'https://www.amosclaud.com').trim().replace(/\/+$/, '');
-  if (
-    !candidate.startsWith('https://') &&
-    !candidate.startsWith('http://localhost') &&
-    !candidate.startsWith('http://127.0.0.1')
-  ) {
-    throw new Error('Amosclaud URL must use HTTPS, except for localhost development');
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error('Amosclaud URL is invalid');
+  }
+  const secureRemote = parsed.protocol === 'https:' && Boolean(parsed.hostname);
+  const localDevelopment =
+    parsed.protocol === 'http:' &&
+    ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+  if (!secureRemote && !localDevelopment) {
+    throw new Error('Amosclaud URL must use HTTPS, except for exact localhost development hosts');
   }
   return candidate;
 }
