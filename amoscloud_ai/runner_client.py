@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 
 from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
+from sitecustomize import normalize_public_amosclaud_url
 
 
 class RunnerConfigurationError(RuntimeError):
@@ -21,7 +22,9 @@ class RunnerConfigurationError(RuntimeError):
 
 
 def _configuration() -> tuple[str, str, str, Path, float]:
-    api_url = os.getenv("AMOSCLAUD_API_URL", "https://amosclaud.com").strip().rstrip("/")
+    api_url = normalize_public_amosclaud_url(
+        os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com")
+    )
     runner_id = os.getenv("AMOSCLAUD_RUNNER_ID", "").strip()
     runner_token = os.getenv("AMOSCLAUD_RUNNER_TOKEN", "").strip()
     workspace_raw = os.getenv("AMOSCLAUD_RUNNER_WORKSPACE", "").strip()
@@ -167,7 +170,6 @@ def _execute(task: dict, workspace: Path) -> dict:
                 *[f"{check['name']}: failed" for check in failed],
             ],
         }
-
     evidence = [
         *run.evidence,
         *[
@@ -256,9 +258,7 @@ def run_once(
         evidence = [str(item) for item in result.get("evidence") or [] if str(item)]
         if evidence:
             result["evidence"] = evidence
-            result["verification_id"] = _verification_id(
-                task["id"], workspace, evidence
-            )
+            result["verification_id"] = _verification_id(task["id"], workspace, evidence)
         else:
             result = {
                 "status": "failed",

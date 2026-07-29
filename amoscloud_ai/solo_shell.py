@@ -1,4 +1,5 @@
 """Command-line shell for Amosclaud-native repository operations."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,11 +11,37 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
-DEFAULT_URL = os.getenv("AMOSCLAUD_URL", "http://www.amosclaud.com/").rstrip("/")
+_DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
 
 
-def request(method: str, path: str, payload: dict[str, Any] | None, args: argparse.Namespace) -> Any:
+def normalize_url(value: str | None) -> str:
+    """Canonicalize the public host while preserving local HTTP development."""
+    raw = (value or _DEFAULT_PUBLIC_URL).strip().rstrip("/")
+    candidate = raw if "://" in raw else f"https://{raw}"
+    parts = urlsplit(candidate)
+    if (parts.hostname or "").lower() not in _PUBLIC_HOSTS:
+        return raw
+
+    try:
+        port = parts.port
+    except ValueError:
+        return raw
+    netloc = _CANONICAL_PUBLIC_HOST
+    if port not in {None, 80, 443}:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit(parts._replace(scheme="https", netloc=netloc)).rstrip("/")
+
+
+DEFAULT_URL = normalize_url(os.getenv("AMOSCLAUD_URL"))
+
+
+def request(
+    method: str, path: str, payload: dict[str, Any] | None, args: argparse.Namespace
+) -> Any:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     headers = {"Accept": "application/json"}
     if data is not None:
@@ -24,7 +51,7 @@ def request(method: str, path: str, payload: dict[str, Any] | None, args: argpar
     if args.key:
         headers["Authorization"] = f"Bearer {args.key}"
     req = urllib.request.Request(
-        f"{args.url.rstrip('/')}{path}", data=data, headers=headers, method=method
+        f"{normalize_url(args.url)}{path}", data=data, headers=headers, method=method
     )
     try:
         with urllib.request.urlopen(req, timeout=args.timeout) as response:
@@ -104,37 +131,81 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "repo-list":
         emit(request("GET", "/api/v1/repositories", None, args))
     elif command == "repo-create":
-        emit(request("POST", "/api/v1/repositories", {
-            "name": args.name,
-            "description": args.description,
-            "visibility": "public" if args.public else "private",
-            "initialize_readme": True,
-        }, args))
+        emit(
+            request(
+                "POST",
+                "/api/v1/repositories",
+                {
+                    "name": args.name,
+                    "description": args.description,
+                    "visibility": "public" if args.public else "private",
+                    "initialize_readme": True,
+                },
+                args,
+            )
+        )
     elif command == "tree":
-        emit(request("GET", f"/api/v1/repositories/{args.repository_id}/tree?branch={args.branch}", None, args))
+        emit(
+            request(
+                "GET",
+                f"/api/v1/repositories/{args.repository_id}/tree?branch={args.branch}",
+                None,
+                args,
+            )
+        )
     elif command == "file-put":
         content = Path(args.source).read_text(encoding="utf-8")
-        emit(request("PUT", f"/api/v1/repositories/{args.repository_id}/files", {
-            "path": args.path,
-            "content": content,
-            "branch": args.branch,
-            "commit_message": args.message,
-        }, args))
+        emit(
+            request(
+                "PUT",
+                f"/api/v1/repositories/{args.repository_id}/files",
+                {
+                    "path": args.path,
+                    "content": content,
+                    "branch": args.branch,
+                    "commit_message": args.message,
+                },
+                args,
+            )
+        )
     elif command == "issue-create":
-        emit(request("POST", f"/api/v1/repositories/{args.repository_id}/issues", {
-            "title": args.title, "body": args.body
-        }, args))
+        emit(
+            request(
+                "POST",
+                f"/api/v1/repositories/{args.repository_id}/issues",
+                {"title": args.title, "body": args.body},
+                args,
+            )
+        )
     elif command == "pr-create":
-        emit(request("POST", f"/api/v1/repositories/{args.repository_id}/pull-requests", {
-            "title": args.title,
-            "body": args.body,
-            "head_branch": args.head_branch,
-            "base_branch": args.base,
-        }, args))
+        emit(
+            request(
+                "POST",
+                f"/api/v1/repositories/{args.repository_id}/pull-requests",
+                {
+                    "title": args.title,
+                    "body": args.body,
+                    "head_branch": args.head_branch,
+                    "base_branch": args.base,
+                },
+                args,
+            )
+        )
     elif command == "pr-merge":
-        emit(request("POST", f"/api/v1/repositories/{args.repository_id}/pull-requests/{args.pull_request_id}/merge", {}, args))
+        emit(
+            request(
+                "POST",
+                f"/api/v1/repositories/{args.repository_id}/pull-requests/{args.pull_request_id}/merge",
+                {},
+                args,
+            )
+        )
     elif command == "deployment":
-        emit(request("GET", f"/api/v1/repositories/{args.repository_id}/deployment-settings", None, args))
+        emit(
+            request(
+                "GET", f"/api/v1/repositories/{args.repository_id}/deployment-settings", None, args
+            )
+        )
     elif command == "verify":
         root = Path(args.root).resolve()
         commands = [

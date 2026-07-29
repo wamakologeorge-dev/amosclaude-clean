@@ -1,16 +1,40 @@
 """Dependency-free client for Amosclaud Autonomous on www.amosclaud.com."""
+
 from __future__ import annotations
+
 import json
 import os
 import time
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
+
 from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResponseError
 
 _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
+_DEFAULT_BASE_URL = "https://www.amosclaud.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
+
+
+def _normalize_base_url(value: str | None) -> str:
+    """Canonicalize the public host while preserving local/private endpoints."""
+    raw = (value or _DEFAULT_BASE_URL).strip().rstrip("/")
+    candidate = raw if "://" in raw else f"https://{raw}"
+    parts = urlsplit(candidate)
+    if (parts.hostname or "").lower() not in _PUBLIC_HOSTS:
+        return raw
+
+    try:
+        port = parts.port
+    except ValueError:
+        return raw
+    netloc = _CANONICAL_PUBLIC_HOST
+    if port not in {None, 80, 443}:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit(parts._replace(scheme="https", netloc=netloc)).rstrip("/")
 
 
 @dataclass(slots=True)
@@ -28,13 +52,14 @@ class AmosclaudAgentClient:
         session_cookie: Value of the ``amos_session`` cookie for web-session auth.
         timeout: Per-request socket timeout in seconds.
     """
-    base_url: str = "http://www.amosclaud.com/"
+
+    base_url: str = _DEFAULT_BASE_URL
     api_key: str | None = None
     session_cookie: str | None = None
     timeout: float = 30.0
 
     def __post_init__(self) -> None:
-        self.base_url = (self.base_url or "http://www.amosclaud.com/").rstrip("/")
+        self.base_url = _normalize_base_url(self.base_url)
         self.api_key = self.api_key or os.getenv("AMOSCLAUD_API_KEY")
         self.session_cookie = self.session_cookie or os.getenv("AMOSCLAUD_SESSION")
 
@@ -62,7 +87,12 @@ class AmosclaudAgentClient:
         return self._request(
             "POST",
             "/api/v1/agent/run",
-            {"objective": objective, "mode": mode, "branch": branch, "metadata": dict(metadata or {})},
+            {
+                "objective": objective,
+                "mode": mode,
+                "branch": branch,
+                "metadata": dict(metadata or {}),
+            },
         )
 
     def pipeline(self, pipeline_id: str) -> dict[str, Any]:
@@ -99,10 +129,15 @@ class AmosclaudAgentClient:
             if result.get("status") in _TERMINAL_STATUSES:
                 return result
             time.sleep(max(0.1, poll_seconds))
-        raise AmosclaudAgentError(f"Pipeline {pipeline_id} did not finish within {max_wait_seconds:g} seconds")
+        raise AmosclaudAgentError(
+            f"Pipeline {pipeline_id} did not finish within {max_wait_seconds:g} seconds"
+        )
 
     def _build_headers(self, *, has_payload: bool) -> dict[str, str]:
-        headers: dict[str, str] = {"Accept": "application/json", "User-Agent": "amosclaud-agent-sdk"}
+        headers: dict[str, str] = {
+            "Accept": "application/json",
+            "User-Agent": "amosclaud-agent-sdk",
+        }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if self.session_cookie:
@@ -111,7 +146,9 @@ class AmosclaudAgentClient:
             headers["Content-Type"] = "application/json"
         return headers
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self, method: str, path: str, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         data = json.dumps(payload).encode() if payload is not None else None
         headers = self._build_headers(has_payload=data is not None)
         request = Request(self.base_url + path, data=data, headers=headers, method=method)
@@ -124,7 +161,9 @@ class AmosclaudAgentClient:
                 detail = json.loads(raw).get("detail", raw)
             except json.JSONDecodeError:
                 detail = raw
-            raise AmosclaudAgentError(f"Amosclaud request failed ({error.code}): {detail}") from error
+            raise AmosclaudAgentError(
+                f"Amosclaud request failed ({error.code}): {detail}"
+            ) from error
         except (URLError, TimeoutError) as error:
             raise AmosclaudConnectionError(f"Cannot reach {self.base_url}: {error}") from error
         try:

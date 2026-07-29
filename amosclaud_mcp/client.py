@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from sitecustomize import normalize_public_amosclaud_url
 
 TERMINAL_PIPELINE_STATES = {"success", "failed", "cancelled"}
 
@@ -35,11 +36,9 @@ class AmosclaudClientConfig:
         except ValueError as exc:
             raise AmosclaudMCPError("AMOSCLAUD_MCP_TIMEOUT must be a number") from exc
         return cls(
-            base_url=raw_url.rstrip("/"),
+            base_url=normalize_public_amosclaud_url(raw_url),
             autonomous_key=(
-                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY")
-                or os.getenv("AMOSCLAUD_MCP_API_KEY")
-                or None
+                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY") or os.getenv("AMOSCLAUD_MCP_API_KEY") or None
             ),
             timeout_seconds=timeout,
         )
@@ -151,9 +150,7 @@ class AmosclaudClient:
         normalized_mode = mode.strip().lower()
         allowed_modes = {"autonomous-check", "build", "fix", "deploy", "monitor"}
         if normalized_mode not in allowed_modes:
-            raise AmosclaudMCPError(
-                f"mode must be one of: {', '.join(sorted(allowed_modes))}"
-            )
+            raise AmosclaudMCPError(f"mode must be one of: {', '.join(sorted(allowed_modes))}")
         metadata: dict[str, Any] = {
             "source": "amosclaud-mcp",
             "mcp_client": True,

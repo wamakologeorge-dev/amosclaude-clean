@@ -72,14 +72,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.event.repository.default_branch }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.11'
           cache: pip
@@ -240,7 +240,7 @@ jobs:
         id: engineer
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'http://www.amosclaud.com/' }}
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
           AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_FIXER_ATTEMPTS: '3'
         run: |
@@ -275,7 +275,7 @@ jobs:
 
       - name: Upload engineering evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: amosclaud-background-engineer-${{ github.run_id }}
           path: |

@@ -53,7 +53,7 @@ allowed_origins = [
     item.strip()
     for item in os.getenv(
         "AMOSCLAUD_ALLOWED_ORIGINS",
-        "http://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000",
+        "https://www.amosclaud.com,http://localhost:8000,http://127.0.0.1:8000",
     ).split(",")
     if item.strip()
 ]
@@ -80,9 +80,7 @@ async def initialize_platform_services() -> None:
     create_database()
     platform_bus = platform_bus_from_environment()
     if platform_bus is None:
-        logger.warning(
-            "Internal byte bus is disabled; configure AMOSCLAUD_BYTE_BUS_SECRET"
-        )
+        logger.warning("Internal byte bus is disabled; configure AMOSCLAUD_BYTE_BUS_SECRET")
     else:
         health = platform_bus.execute(platform_bus.frame("platform.health", {})).json()
         logger.info("Internal byte bus ready: %s", health["status"])
@@ -142,8 +140,7 @@ async def forward_network_packet(
         safe_headers = {
             key: value
             for key, value in downstream.headers.items()
-            if key.lower()
-            not in {"content-length", "transfer-encoding", "connection"}
+            if key.lower() not in {"content-length", "transfer-encoding", "connection"}
         }
         return Response(
             content=downstream.content,
@@ -238,9 +235,7 @@ async def read_agent_job(
 ):
     async with async_session_scope() as session:
         job = (
-            await session.execute(
-                select(AutonomousJob).where(AutonomousJob.task_id == task_id)
-            )
+            await session.execute(select(AutonomousJob).where(AutonomousJob.task_id == task_id))
         ).scalar_one_or_none()
         if job is None:
             raise HTTPException(status_code=404, detail="Autonomous job not found")
@@ -298,9 +293,7 @@ async def route_ci_service(
 async def health_check():
     bus_status: dict[str, Any] = {"enabled": platform_bus is not None}
     if platform_bus is not None:
-        bus_status.update(
-            platform_bus.execute(platform_bus.frame("platform.health", {})).json()
-        )
+        bus_status.update(platform_bus.execute(platform_bus.frame("platform.health", {})).json())
     return {
         "status": "ok",
         "agent": "Amosclaud Autonomous",

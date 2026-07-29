@@ -17,6 +17,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from sitecustomize import normalize_public_environment
+
 from .repository_control import initialize_repository_control
 
 PRODUCT_NAME = "Amosclaud"
@@ -60,6 +62,7 @@ def _configure_persistent_auth_storage() -> None:
 
 
 _configure_persistent_auth_storage()
+normalize_public_environment()
 
 __version__ = "1.0.1"
 __author__ = "Amosclaud Team"

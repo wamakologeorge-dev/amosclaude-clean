@@ -1,9 +1,13 @@
 import os
 
+from sitecustomize import normalize_public_amosclaud_url
+
 
 class WorkerConfig:
     WORKER_ID = os.getenv("DEPLOYMENT_WORKER_ID", "worker-01")
-    CENTRAL_API_URL = os.getenv("AMOSCLAUD_API_URL", "http://localhost:8000")
+    CENTRAL_API_URL = normalize_public_amosclaud_url(
+        os.getenv("AMOSCLAUD_API_URL", "http://localhost:8000")
+    )
     WORKSPACE_DIR = os.getenv("WORKER_WORKSPACE_DIR", "./workspace")
     POLL_INTERVAL = int(os.getenv("WORKER_POLL_INTERVAL", "5"))
     API_KEY = os.getenv("AMOSCLAUD_DEPLOYMENT_WORKER_KEY", "").strip()
@@ -11,4 +15,6 @@ class WorkerConfig:
     @classmethod
     def validate(cls) -> None:
         if not cls.API_KEY:
-            raise RuntimeError("Set AMOSCLAUD_DEPLOYMENT_WORKER_KEY before starting the deployment worker")
+            raise RuntimeError(
+                "Set AMOSCLAUD_DEPLOYMENT_WORKER_KEY before starting the deployment worker"
+            )

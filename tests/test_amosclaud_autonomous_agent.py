@@ -14,7 +14,6 @@ import pytest
 from amoscloud_ai.main import create_app
 from amoscloud_ai.verification import verification_contract
 
-
 REQUIRED_ROUTE_PATHS = {
     "/api/v1/agent",
     "/api/v1/agent/readiness",
@@ -60,12 +59,10 @@ def test_all_required_autonomous_routes_are_registered() -> None:
 
 @pytest.mark.parametrize("path", sorted(REQUIRED_ROUTE_PATHS))
 def test_each_required_route_is_unique(path: str) -> None:
-    matches = [
-        route
-        for route in create_app().routes
-        if str(getattr(route, "path", "")) == path
-    ]
-    assert len(matches) == 1, f"Expected exactly one registered route for {path}, found {len(matches)}"
+    matches = [route for route in create_app().routes if str(getattr(route, "path", "")) == path]
+    assert (
+        len(matches) == 1
+    ), f"Expected exactly one registered route for {path}, found {len(matches)}"
 
 
 def test_autonomous_dashboard_contains_required_controls() -> None:
@@ -106,7 +103,7 @@ def test_non_engineering_guidance_does_not_require_build_evidence() -> None:
 
 
 def test_autonomous_uses_only_the_canonical_public_domain() -> None:
-    canonical_url = "http://www.amosclaud.com/"
+    canonical_url = "https://www.amosclaud.com/"
     canonical_host = "www.amosclaud.com"
 
     assert canonical_url in Path("docs/DOMAIN_OWNERSHIP.md").read_text(encoding="utf-8")
