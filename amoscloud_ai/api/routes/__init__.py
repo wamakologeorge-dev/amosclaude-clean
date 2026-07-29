@@ -118,8 +118,7 @@ def _flat_include_router(
         if isinstance(route, APIWebSocketRoute):
             path = _join_prefix(prefix, route.path)
             if any(
-                isinstance(existing, APIWebSocketRoute)
-                and getattr(existing, "path", None) == path
+                isinstance(existing, APIWebSocketRoute) and getattr(existing, "path", None) == path
                 for existing in target.routes
             ):
                 continue
