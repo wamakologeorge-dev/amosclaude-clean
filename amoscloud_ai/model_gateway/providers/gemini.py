@@ -69,8 +69,10 @@ class GeminiProvider(ModelProvider):
         if request.tools:
             declarations = []
             for tool in request.tools:
-                function = tool.get("function") if isinstance(tool, dict) else None
-                declarations.append(dict(function or tool))
+                function = tool.get("function")
+                declarations.append(
+                    dict(function) if isinstance(function, dict) else dict(tool)
+                )
             payload["tools"] = [{"functionDeclarations": declarations}]
 
         endpoint = (
