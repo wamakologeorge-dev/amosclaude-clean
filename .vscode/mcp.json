@@ -10,7 +10,7 @@
   "servers": {
     "amosclaud": {
       "type": "http",
-      "url": "https://www.amosclaud.com/mcp",
+      "url": "https://www.amosclaud.com/mcp/",
       "headers": {
         "Authorization": "Bearer ${input:amosclaud-mcp-access-key}"
       }
