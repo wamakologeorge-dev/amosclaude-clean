@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from amoscloud_ai.ide_client import (
-    IDEClientError,
     MAX_SELECTION_CHARS,
+    IDEClientError,
     bounded_selection,
     build_context,
     build_payload,
