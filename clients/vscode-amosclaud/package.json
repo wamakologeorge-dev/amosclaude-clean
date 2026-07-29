@@ -1,0 +1,81 @@
+{
+  "name": "amosclaud-autonomous",
+  "displayName": "Amosclaud Autonomous",
+  "description": "Repository-aware Amosclaud chat, planning, and governed execution inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "amosclaud",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:amosclaud.chatView",
+    "onCommand:amosclaud.configureToken",
+    "onCommand:amosclaud.planTask",
+    "onCommand:amosclaud.runTask"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "amosclaud.configureToken",
+        "title": "Amosclaud: Configure Autonomous Token"
+      },
+      {
+        "command": "amosclaud.planTask",
+        "title": "Amosclaud: Plan Current Task"
+      },
+      {
+        "command": "amosclaud.runTask",
+        "title": "Amosclaud: Run Current Task"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "amosclaud",
+          "title": "Amosclaud",
+          "icon": "media/amosclaud.svg"
+        }
+      ]
+    },
+    "views": {
+      "amosclaud": [
+        {
+          "type": "webview",
+          "id": "amosclaud.chatView",
+          "name": "Autonomous Chat"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Amosclaud",
+      "properties": {
+        "amosclaud.baseUrl": {
+          "type": "string",
+          "default": "https://www.amosclaud.com",
+          "description": "HTTPS Amosclaud platform URL. Localhost HTTP is allowed for development."
+        },
+        "amosclaud.repository": {
+          "type": "string",
+          "default": "",
+          "description": "Optional owner/repository name included in bounded editor context."
+        },
+        "amosclaud.branch": {
+          "type": "string",
+          "default": "main",
+          "description": "Current repository branch when Git metadata is unavailable."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "node --check extension.js && node --check src/client.js",
+    "test": "node --test"
+  },
+  "devDependencies": {}
+}

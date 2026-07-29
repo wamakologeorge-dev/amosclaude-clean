@@ -158,3 +158,14 @@ Amosclaud Copilot is the repository-aware coding assistant and multi-agent coord
 - It exposes profile, agent registry, plan, and run APIs under `/api/v1/copilot`.
 
 See `docs/AMOSCLAUD_COPILOT.md` for the routing model, API contract, editor integration flow, and safety boundaries.
+
+## VS Code, Xcode, and portable IDE access
+
+Amosclaud Autonomous can now follow a developer into local editors without creating another autonomous runtime.
+
+- `amosclaud-ide` is a dependency-free Python CLI for terminals and editor tasks.
+- `clients/vscode-amosclaud` provides a VS Code chat panel, safe planning, and explicit governed execution.
+- `clients/xcode-amosclaud` provides a native Swift package, macOS Keychain token lookup, interactive chat, and an Xcode behavior launcher.
+- Every client sends only bounded, explicitly selected editor context and delegates to `/api/v1/copilot`.
+
+See `docs/AMOSCLAUD_IDE_COMPANION.md` for setup, authentication, safety boundaries, commands, and known limitations.
