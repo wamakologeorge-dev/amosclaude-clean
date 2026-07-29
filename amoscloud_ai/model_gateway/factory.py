@@ -42,9 +42,7 @@ def build_default_gateway() -> UniversalModelGateway:
                 model=compatible_model,
                 api_key=os.getenv("AMOSCLAUD_OPENAI_COMPAT_TOKEN", ""),
                 priority=80,
-                privacy=_privacy(
-                    "AMOSCLAUD_OPENAI_COMPAT_PRIVACY", "first_party"
-                ),
+                privacy=_privacy("AMOSCLAUD_OPENAI_COMPAT_PRIVACY", "first_party"),
             )
         )
 
@@ -74,10 +72,9 @@ def build_default_gateway() -> UniversalModelGateway:
             )
         )
 
-    gemini_key = (
-        os.getenv("GEMINI_API_KEY", "").strip()
-        or os.getenv("GOOGLE_API_KEY", "").strip()
-    )
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv(
+        "GOOGLE_API_KEY", ""
+    ).strip()
     if gemini_key:
         registry.register(
             GeminiProvider(
