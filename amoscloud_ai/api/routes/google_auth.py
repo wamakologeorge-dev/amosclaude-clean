@@ -115,6 +115,13 @@ def _provision_google_user(
             """,
             (email, now, subject),
         )
+        db.execute(
+            "UPDATE users SET provider=? WHERE id=?",
+            (
+                _merge_provider(existing_identity["provider"], "google"),
+                existing_identity["id"],
+            ),
+        )
         db.commit()
         return db.execute(
             "SELECT * FROM users WHERE id=?", (existing_identity["id"],)
@@ -141,8 +148,8 @@ def _provision_google_user(
         cursor = db.execute(
             """
             INSERT INTO users(name,email,password_hash,provider,is_admin,created_at)
-            VALUES (?,?,NULL,'google',?,?,?)
-            """.replace(",?,?,?)", ",?,?)"),
+            VALUES (?,?,NULL,'google',?,?)
+            """,
             (name, email, int(is_admin), now),
         )
         user_id = int(cursor.lastrowid)
