@@ -169,3 +169,15 @@ Amosclaud Autonomous can now follow a developer into local editors without creat
 - Every client sends only bounded, explicitly selected editor context and delegates to `/api/v1/copilot`.
 
 See `docs/AMOSCLAUD_IDE_COMPANION.md` for setup, authentication, safety boundaries, commands, and known limitations.
+
+## Amosclaud Registry
+
+The Amosclaud Registry is a durable, metadata-only catalog for trusted capabilities, editor clients, services, skills, and adapters.
+
+- It exposes public discovery, filtering, capability-provider, and first-party manifest endpoints under `/api/v1/registry`.
+- Built-in Amosclaud entries are immutable and restored from the canonical repository definition.
+- Administrators can register, update, audit, and softly disable approved or community metadata.
+- Registry records never install dependencies, import code, execute commands, or create a competing agent identity.
+- Amosclaud Autonomous remains the single public identity; Codex, Fixer, Action, Security, Clean, Autonomous, and AI are internal capability roles.
+
+See `docs/AMOSCLAUD_REGISTRY.md` for the data model, trust levels, validation rules, API contract, administrator workflow, and security limitations.
