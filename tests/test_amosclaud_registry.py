@@ -118,7 +118,11 @@ def test_manifest_digest_is_deterministic_and_metadata_scoped():
         "metadata": entry["metadata"],
         "platforms": entry["platforms"],
         "capabilities": entry["capabilities"],
-        **{key: value for key, value in entry.items() if key not in {"metadata", "platforms", "capabilities"}},
+        **{
+            key: value
+            for key, value in entry.items()
+            if key not in {"metadata", "platforms", "capabilities"}
+        },
         "immutable": False,
     }
     assert registry.manifest_digest(reordered) == digest
