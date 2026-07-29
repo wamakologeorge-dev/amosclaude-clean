@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from amoscloud_ai import registry as registry_core
@@ -182,7 +183,9 @@ def list_registry_entries(
 
 
 @router.get("/entries/{entry_id}", summary="Get one Amosclaud Registry entry")
-def get_registry_entry(entry_id: str = Field(..., pattern=ENTRY_ID_PATTERN)) -> dict[str, Any]:
+def get_registry_entry(
+    entry_id: str = Path(..., pattern=ENTRY_ID_PATTERN),
+) -> dict[str, Any]:
     with _db() as db:
         entry = registry_core.get_entry(db, entry_id)
     if not entry or entry["status"] == "disabled":
@@ -212,7 +215,7 @@ def registry_manifest() -> dict[str, Any]:
     with _db() as db:
         entries = [entry for entry in registry_core.list_entries(db) if entry["immutable"]]
     digest_source = "\n".join(sorted(entry["manifest_digest"] for entry in entries))
-    manifest_digest = registry_core.hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
+    manifest_digest = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
     return {
         "schema_version": registry_core.REGISTRY_SCHEMA_VERSION,
         "identity": {"name": "Amosclaud Autonomous", "type": "one-agent"},
@@ -252,7 +255,7 @@ def create_registry_entry(
 @router.patch("/entries/{entry_id}", summary="Update a mutable Amosclaud Registry entry")
 def update_registry_entry(
     body: RegistryEntryUpdate,
-    entry_id: str = Field(..., pattern=ENTRY_ID_PATTERN),
+    entry_id: str = Path(..., pattern=ENTRY_ID_PATTERN),
     admin: sqlite3.Row = Depends(admin_routes._admin_user),
 ) -> dict[str, Any]:
     with _db() as db:
@@ -276,7 +279,7 @@ def update_registry_entry(
 
 @router.delete("/entries/{entry_id}", summary="Disable a mutable Amosclaud Registry entry")
 def disable_registry_entry(
-    entry_id: str = Field(..., pattern=ENTRY_ID_PATTERN),
+    entry_id: str = Path(..., pattern=ENTRY_ID_PATTERN),
     admin: sqlite3.Row = Depends(admin_routes._admin_user),
 ) -> dict[str, Any]:
     with _db() as db:
