@@ -39,6 +39,10 @@ docker compose -f docker-compose.control-plane.yml up --build
 
 The API binds to `127.0.0.1:8300` by default in the Compose file.
 
+### Chromebook and ChromeOS
+
+For a native ChromeOS Linux setup that does not require Docker, follow [Run Amosclaud locally on a Chromebook](../../docs/CHROMEOS_LOCAL_DEVELOPMENT.md). The guide installs Node.js 22 with `nvm`, runs Redis inside the Debian environment, starts the API and worker separately, and opens the local health endpoint through Chrome.
+
 ## API
 
 Create a command task:
