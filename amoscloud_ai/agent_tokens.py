@@ -17,8 +17,7 @@ def key_hash(value: str) -> str:
 
 
 def ensure_agent_schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS agent_api_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -52,8 +51,7 @@ def ensure_agent_schema(db: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     db.commit()
 
 
