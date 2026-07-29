@@ -51,8 +51,7 @@ def _callback_url(request: Request) -> str:
 
 
 def _ensure_identity_table(db: sqlite3.Connection) -> None:
-    db.execute(
-        """
+    db.execute("""
         CREATE TABLE IF NOT EXISTS oauth_identities (
             provider TEXT NOT NULL,
             subject TEXT NOT NULL,
@@ -64,8 +63,7 @@ def _ensure_identity_table(db: sqlite3.Connection) -> None:
             UNIQUE(provider, email),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
-        """
-    )
+        """)
     db.commit()
 
 
@@ -123,9 +121,7 @@ def _provision_google_user(
             ),
         )
         db.commit()
-        return db.execute(
-            "SELECT * FROM users WHERE id=?", (existing_identity["id"],)
-        ).fetchone()
+        return db.execute("SELECT * FROM users WHERE id=?", (existing_identity["id"],)).fetchone()
 
     email_identity = db.execute(
         """
@@ -195,16 +191,20 @@ def google_login(request: Request) -> RedirectResponse:
         raise HTTPException(status_code=503, detail="Google sign-in is not configured")
 
     state = secrets.token_urlsafe(32)
-    authorization_url = GOOGLE_AUTHORIZE_URL + "?" + urlencode(
-        {
-            "client_id": _google_client_id(),
-            "redirect_uri": _callback_url(request),
-            "response_type": "code",
-            "scope": GOOGLE_SCOPES,
-            "state": state,
-            "prompt": "select_account",
-            "include_granted_scopes": "true",
-        }
+    authorization_url = (
+        GOOGLE_AUTHORIZE_URL
+        + "?"
+        + urlencode(
+            {
+                "client_id": _google_client_id(),
+                "redirect_uri": _callback_url(request),
+                "response_type": "code",
+                "scope": GOOGLE_SCOPES,
+                "state": state,
+                "prompt": "select_account",
+                "include_granted_scopes": "true",
+            }
+        )
     )
     response = RedirectResponse(authorization_url, status_code=302)
     response.set_cookie(
@@ -233,9 +233,7 @@ async def google_oauth_callback(
         return _login_error("access_denied")
     if not code or not state:
         return _login_error("missing_response")
-    if not amos_google_oauth_state or not hmac.compare_digest(
-        state, amos_google_oauth_state
-    ):
+    if not amos_google_oauth_state or not hmac.compare_digest(state, amos_google_oauth_state):
         raise HTTPException(status_code=400, detail="Invalid Google OAuth state")
     if not _configured():
         return _login_error("not_configured")
@@ -272,9 +270,10 @@ async def google_oauth_callback(
 
     subject = str(profile.get("sub") or "").strip()
     raw_email = str(profile.get("email") or "").strip()
-    verified = profile.get("email_verified") is True or str(
-        profile.get("email_verified")
-    ).lower() == "true"
+    verified = (
+        profile.get("email_verified") is True
+        or str(profile.get("email_verified")).lower() == "true"
+    )
     if not subject or not raw_email or not verified:
         return _login_error("unverified_email")
 
