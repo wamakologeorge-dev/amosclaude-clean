@@ -66,8 +66,7 @@ def _require_user(token: str | None) -> sqlite3.Row:
 
 
 def _ensure_schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS billing_subscriptions (
             user_id INTEGER PRIMARY KEY,
             plan TEXT NOT NULL DEFAULT 'community',
@@ -98,8 +97,7 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
             event_type TEXT NOT NULL,
             processed_at TEXT NOT NULL
         );
-        """
-    )
+        """)
     db.commit()
 
 
@@ -113,7 +111,9 @@ def _stripe_ready() -> bool:
 
 
 def _price_id(interval: str) -> str:
-    name = "STRIPE_FULL_MONTHLY_PRICE_ID" if interval == "monthly" else "STRIPE_FULL_ANNUAL_PRICE_ID"
+    name = (
+        "STRIPE_FULL_MONTHLY_PRICE_ID" if interval == "monthly" else "STRIPE_FULL_ANNUAL_PRICE_ID"
+    )
     value = os.getenv(name, "").strip()
     if not value:
         raise HTTPException(status_code=503, detail=f"{name} is not configured")
@@ -129,7 +129,11 @@ def _entitlement(db: sqlite3.Connection, user_id: int) -> dict[str, object]:
     subscription = db.execute(
         "SELECT * FROM billing_subscriptions WHERE user_id=?", (user_id,)
     ).fetchone()
-    if subscription and subscription["plan"] == "full" and subscription["status"] in ACTIVE_STATUSES:
+    if (
+        subscription
+        and subscription["plan"] == "full"
+        and subscription["status"] in ACTIVE_STATUSES
+    ):
         return {
             "plan": "full",
             "active": True,
@@ -327,7 +331,7 @@ def issue_license(
         cursor = db.execute(
             """INSERT INTO billing_license_keys
                (key_hash,label,plan,issued_by_user_id,issued_at,expires_at)
-               VALUES (?,'full',?,?,?,?)""".replace("(?,'full'", "(?,?,'full'"),
+               VALUES (?,?,'full',?,?,?)""",
             (
                 _license_hash(raw_key),
                 body.label.strip(),
@@ -412,14 +416,15 @@ async def stripe_webhook(
 
         metadata = obj.get("metadata") or {}
         if (
-            event_type
-            in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
+            event_type in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
             and metadata.get("kind") == "agent_tokens"
         ):
             try:
                 settle_paid_checkout(db, obj)
             except ValueError as exc:
-                raise HTTPException(status_code=400, detail="Invalid agent-credit checkout") from exc
+                raise HTTPException(
+                    status_code=400, detail="Invalid agent-credit checkout"
+                ) from exc
         elif event_type == "checkout.session.completed" and obj.get("subscription"):
             stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
             subscription = stripe.Subscription.retrieve(obj["subscription"])
