@@ -390,9 +390,7 @@ def create_entry(
     db: sqlite3.Connection, entry: Mapping[str, Any], *, created_by: int
 ) -> dict[str, Any]:
     seed_builtin_entries(db)
-    if db.execute(
-        "SELECT 1 FROM amosclaud_registry_entries WHERE id=?", (entry["id"],)
-    ).fetchone():
+    if db.execute("SELECT 1 FROM amosclaud_registry_entries WHERE id=?", (entry["id"],)).fetchone():
         raise ValueError("Registry entry already exists")
     complete = dict(entry)
     complete["immutable"] = False
