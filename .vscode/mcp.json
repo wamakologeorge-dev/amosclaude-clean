@@ -1,0 +1,19 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "amosclaud-mcp-access-key",
+      "description": "Amosclaud MCP or Autonomous access key",
+      "password": true
+    }
+  ],
+  "servers": {
+    "amosclaud": {
+      "type": "http",
+      "url": "https://www.amosclaud.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${input:amosclaud-mcp-access-key}"
+      }
+    }
+  }
+}
