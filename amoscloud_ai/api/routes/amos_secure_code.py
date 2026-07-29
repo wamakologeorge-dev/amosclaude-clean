@@ -83,13 +83,9 @@ def _decode_secret(secret: str) -> bytes:
 
 
 def _totp(secret: str, counter: int) -> str:
-    digest = hmac.new(
-        _decode_secret(secret), struct.pack(">Q", counter), hashlib.sha1
-    ).digest()
+    digest = hmac.new(_decode_secret(secret), struct.pack(">Q", counter), hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
-    number = (
-        struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
-    ) % 1_000_000
+    number = (struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF) % 1_000_000
     return f"{number:06d}"
 
 
@@ -98,10 +94,7 @@ def _valid_totp(secret: str, code: str) -> bool:
     if len(value) != 6:
         return False
     counter = int(time.time()) // 30
-    return any(
-        hmac.compare_digest(_totp(secret, counter + drift), value)
-        for drift in (-1, 0, 1)
-    )
+    return any(hmac.compare_digest(_totp(secret, counter + drift), value) for drift in (-1, 0, 1))
 
 
 def _new_recovery_codes() -> list[str]:
@@ -112,19 +105,14 @@ def _hash_recovery(code: str) -> str:
     return hashlib.sha256(code.strip().upper().encode()).hexdigest()
 
 
-def _consume_recovery(
-    db: sqlite3.Connection, user_id: int, code: str, hashes_csv: str
-) -> bool:
+def _consume_recovery(db: sqlite3.Connection, user_id: int, code: str, hashes_csv: str) -> bool:
     wanted = _hash_recovery(code)
     hashes = [item for item in hashes_csv.split(",") if item]
     match = next((item for item in hashes if hmac.compare_digest(item, wanted)), None)
     if not match:
         return False
     hashes.remove(match)
-    db.execute(
-        "UPDATE user_authenticators SET recovery_hashes=? WHERE user_id=?",
-        (",".join(hashes), user_id),
-    )
+    db.execute("UPDATE user_authenticators SET recovery_hashes=? WHERE user_id=?", (",".join(hashes), user_id))
     return True
 
 
@@ -136,9 +124,7 @@ def start_secure_code(body: SecureCodeStartRequest) -> dict:
     with _connect() as db:
         _prepare_tables(db)
         if db.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
-            raise HTTPException(
-                status_code=409, detail="An account with this email already exists"
-            )
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
         db.execute(
             """INSERT INTO secure_code_setups(email,name,password_hash,secret,expires_at,created_at)
                VALUES (?,?,?,?,?,?)
@@ -172,63 +158,31 @@ def verify_secure_code(body: SecureCodeVerifyRequest, response: Response) -> dic
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as db:
         _prepare_tables(db)
-        pending = db.execute(
-            "SELECT * FROM secure_code_setups WHERE email=?", (email,)
-        ).fetchone()
+        pending = db.execute("SELECT * FROM secure_code_setups WHERE email=?", (email,)).fetchone()
         if not pending or pending["expires_at"] <= now:
-            raise HTTPException(
-                status_code=400,
-                detail="Setup expired. Start account creation again.",
-            )
+            raise HTTPException(status_code=400, detail="Setup expired. Start account creation again.")
         if not _valid_totp(pending["secret"], body.code):
             raise HTTPException(status_code=400, detail="Invalid Amos Secure Code")
-        if not hmac.compare_digest(
-            _hash_password(
-                body.password,
-                bytes.fromhex(pending["password_hash"].split("$")[2]),
-            ),
-            pending["password_hash"],
-        ):
-            raise HTTPException(
-                status_code=400, detail="Password does not match the signup request"
-            )
+        if not hmac.compare_digest(_hash_password(body.password, bytes.fromhex(pending["password_hash"].split("$")[2])), pending["password_hash"]):
+            raise HTTPException(status_code=400, detail="Password does not match the signup request")
         if db.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
-            raise HTTPException(
-                status_code=409, detail="An account with this email already exists"
-            )
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
         first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         cursor = db.execute(
             "INSERT INTO users(name,email,password_hash,provider,is_admin,created_at) VALUES (?,?,?,'secure-code',?,?)",
-            (
-                pending["name"],
-                email,
-                pending["password_hash"],
-                int(first_user),
-                datetime.now(timezone.utc).isoformat(),
-            ),
+            (pending["name"], email, pending["password_hash"], int(first_user), datetime.now(timezone.utc).isoformat()),
         )
         recovery_codes = _new_recovery_codes()
         db.execute(
             "INSERT INTO user_authenticators(user_id,secret,recovery_hashes,created_at) VALUES (?,?,?,?)",
-            (
-                cursor.lastrowid,
-                pending["secret"],
-                ",".join(_hash_recovery(code) for code in recovery_codes),
-                datetime.now(timezone.utc).isoformat(),
-            ),
+            (cursor.lastrowid, pending["secret"], ",".join(_hash_recovery(code) for code in recovery_codes), datetime.now(timezone.utc).isoformat()),
         )
         db.execute("DELETE FROM secure_code_setups WHERE email=?", (email,))
         token = _create_session(db, cursor.lastrowid)
-        user = db.execute(
-            "SELECT id,name,email,is_admin,provider FROM users WHERE id=?",
-            (cursor.lastrowid,),
-        ).fetchone()
+        user = db.execute("SELECT id,name,email,is_admin,provider FROM users WHERE id=?", (cursor.lastrowid,)).fetchone()
         db.commit()
     _set_session_cookie(response, token)
-    return {
-        "user": _user_response(user).model_dump(),
-        "recovery_codes": recovery_codes,
-    }
+    return {"user": _user_response(user).model_dump(), "recovery_codes": recovery_codes}
 
 
 @router.post("/password/secure-reset", status_code=204)
@@ -238,28 +192,14 @@ def secure_reset(body: SecureResetRequest) -> None:
         _prepare_tables(db)
         user = db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
         if not user:
-            raise HTTPException(
-                status_code=400, detail="Invalid recovery information"
-            )
-        auth = db.execute(
-            "SELECT secret,recovery_hashes FROM user_authenticators WHERE user_id=?",
-            (user["id"],),
-        ).fetchone()
+            raise HTTPException(status_code=400, detail="Invalid recovery information")
+        auth = db.execute("SELECT secret,recovery_hashes FROM user_authenticators WHERE user_id=?", (user["id"],)).fetchone()
         if not auth:
-            raise HTTPException(
-                status_code=400, detail="This account does not use Amos Secure Code"
-            )
-        valid = _valid_totp(auth["secret"], body.code) or _consume_recovery(
-            db, user["id"], body.code, auth["recovery_hashes"]
-        )
+            raise HTTPException(status_code=400, detail="This account does not use Amos Secure Code")
+        valid = _valid_totp(auth["secret"], body.code) or _consume_recovery(db, user["id"], body.code, auth["recovery_hashes"])
         if not valid:
-            raise HTTPException(
-                status_code=400, detail="Invalid authenticator or recovery code"
-            )
-        db.execute(
-            "UPDATE users SET password_hash=?,provider='secure-code' WHERE id=?",
-            (_hash_password(body.password), user["id"]),
-        )
+            raise HTTPException(status_code=400, detail="Invalid authenticator or recovery code")
+        db.execute("UPDATE users SET password_hash=?,provider='secure-code' WHERE id=?", (_hash_password(body.password), user["id"]))
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         db.commit()
 
