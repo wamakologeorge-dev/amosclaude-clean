@@ -16,16 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def _database() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
-    db.execute(
-        """CREATE TABLE users (
+    db.execute("""CREATE TABLE users (
             id INTEGER PRIMARY KEY,
             email TEXT NOT NULL,
             name TEXT
-        )"""
-    )
-    db.execute(
-        "INSERT INTO users(id,email,name) VALUES (1,'owner@example.com','Owner')"
-    )
+        )""")
+    db.execute("INSERT INTO users(id,email,name) VALUES (1,'owner@example.com','Owner')")
     db.commit()
     return db
 
@@ -48,9 +44,7 @@ def _clear_stripe_environment(monkeypatch) -> None:
 def test_pack_reports_every_missing_checkout_requirement(monkeypatch):
     _clear_stripe_environment(monkeypatch)
 
-    pack = agent_credit_billing.public_pack(
-        agent_credit_billing.get_pack("starter")
-    )
+    pack = agent_credit_billing.public_pack(agent_credit_billing.get_pack("starter"))
 
     assert pack["available"] is False
     assert "STRIPE_SECRET_KEY" in pack["configuration_message"]
@@ -63,9 +57,7 @@ def test_inline_amount_creates_a_stripe_checkout_line_item(monkeypatch):
     monkeypatch.setenv("STRIPE_AGENT_CURRENCY", "usd")
     monkeypatch.setenv("STRIPE_AGENT_STARTER_AMOUNT_CENTS", "1250")
 
-    item = agent_credit_billing.checkout_line_item(
-        agent_credit_billing.get_pack("starter")
-    )
+    item = agent_credit_billing.checkout_line_item(agent_credit_billing.get_pack("starter"))
 
     assert item == {
         "price_data": {
@@ -113,12 +105,8 @@ def test_paid_checkout_credits_fixed_pack_once(monkeypatch):
 
     assert first == (True, 1000)
     assert second == (False, 1000)
-    ledger = db.execute(
-        "SELECT delta,reference FROM agent_token_ledger"
-    ).fetchall()
-    assert [tuple(row) for row in ledger] == [
-        (1000, "stripe_checkout:cs_test_paid_once")
-    ]
+    ledger = db.execute("SELECT delta,reference FROM agent_token_ledger").fetchall()
+    assert [tuple(row) for row in ledger] == [(1000, "stripe_checkout:cs_test_paid_once")]
 
 
 def test_checkout_rejects_an_amount_that_does_not_match_pack(monkeypatch):
@@ -203,16 +191,11 @@ def test_checkout_redirects_to_hosted_stripe_and_returns_to_api_access(monkeypat
 
     assert result["url"].startswith("https://checkout.stripe.com/")
     assert captured["customer"] == "cus_amosclaud"
-    assert captured["line_items"] == [
-        {"price": "price_starter", "quantity": 1}
-    ]
+    assert captured["line_items"] == [{"price": "price_starter", "quantity": 1}]
     assert captured["success_url"] == (
-        "https://www.amosclaud.com/api-access?checkout=success"
-        "&session_id={CHECKOUT_SESSION_ID}"
+        "https://www.amosclaud.com/api-access?checkout=success" "&session_id={CHECKOUT_SESSION_ID}"
     )
-    assert captured["cancel_url"] == (
-        "https://www.amosclaud.com/api-access?checkout=cancelled"
-    )
+    assert captured["cancel_url"] == ("https://www.amosclaud.com/api-access?checkout=cancelled")
     assert "payment_method_types" not in captured
 
 
@@ -228,9 +211,7 @@ def test_mobile_page_explains_disabled_checkout_and_redirects_to_stripe():
 
 
 def test_billing_webhook_handles_delayed_bank_payment_success():
-    billing = (
-        ROOT / "amoscloud_ai" / "api" / "routes" / "billing.py"
-    ).read_text(encoding="utf-8")
+    billing = (ROOT / "amoscloud_ai" / "api" / "routes" / "billing.py").read_text(encoding="utf-8")
 
     assert "checkout.session.async_payment_succeeded" in billing
     assert "settle_paid_checkout(db, obj)" in billing
