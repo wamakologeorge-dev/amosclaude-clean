@@ -29,8 +29,7 @@ def _methods(value: Any) -> frozenset[str]:
 
 def _already_registered(target: APIRouter, path: str, methods: frozenset[str]) -> bool:
     return any(
-        getattr(existing, "path", None) == path
-        and _methods(existing) == methods
+        getattr(existing, "path", None) == path and _methods(existing) == methods
         for existing in target.routes
         if isinstance(existing, APIRoute)
     )
@@ -111,8 +110,7 @@ def _flat_include_router(
                 callbacks=[*inherited_callbacks, *(route.callbacks or [])],
                 openapi_extra=route.openapi_extra,
                 generate_unique_id_function=(
-                    generate_unique_id_function
-                    or route.generate_unique_id_function
+                    generate_unique_id_function or route.generate_unique_id_function
                 ),
             )
             continue
@@ -149,9 +147,7 @@ from amoscloud_ai.api.routes import doctor_travel as doctor_travel
 from amoscloud_ai.api.routes import repository_templates as repository_templates
 from amoscloud_ai.api.routes import real_repositories as real_repositories
 
-_existing_paths = {
-    getattr(route, "path", None) for route in repository_templates.router.routes
-}
+_existing_paths = {getattr(route, "path", None) for route in repository_templates.router.routes}
 for _route in real_repositories.router.routes:
     if getattr(_route, "path", None) not in _existing_paths:
         repository_templates.router.routes.append(_route)
