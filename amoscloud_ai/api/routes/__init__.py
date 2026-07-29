@@ -29,8 +29,7 @@ def _methods(value: Any) -> frozenset[str]:
 
 def _already_registered(target: APIRouter, path: str, methods: frozenset[str]) -> bool:
     return any(
-        getattr(existing, "path", None) == path
-        and _methods(existing) == methods
+        getattr(existing, "path", None) == path and _methods(existing) == methods
         for existing in target.routes
         if isinstance(existing, APIRoute)
     )
@@ -111,8 +110,7 @@ def _flat_include_router(
                 callbacks=[*inherited_callbacks, *(route.callbacks or [])],
                 openapi_extra=route.openapi_extra,
                 generate_unique_id_function=(
-                    generate_unique_id_function
-                    or route.generate_unique_id_function
+                    generate_unique_id_function or route.generate_unique_id_function
                 ),
             )
             continue
@@ -120,8 +118,7 @@ def _flat_include_router(
         if isinstance(route, APIWebSocketRoute):
             path = _join_prefix(prefix, route.path)
             if any(
-                isinstance(existing, APIWebSocketRoute)
-                and getattr(existing, "path", None) == path
+                isinstance(existing, APIWebSocketRoute) and getattr(existing, "path", None) == path
                 for existing in target.routes
             ):
                 continue
@@ -146,12 +143,10 @@ if not getattr(APIRouter.include_router, "_amosclaud_flattened", False):
 from amoscloud_ai.api.routes import admin as admin
 from amoscloud_ai.api.routes import doctor_medical as doctor_medical
 from amoscloud_ai.api.routes import doctor_travel as doctor_travel
-from amoscloud_ai.api.routes import repository_templates as repository_templates
 from amoscloud_ai.api.routes import real_repositories as real_repositories
+from amoscloud_ai.api.routes import repository_templates as repository_templates
 
-_existing_paths = {
-    getattr(route, "path", None) for route in repository_templates.router.routes
-}
+_existing_paths = {getattr(route, "path", None) for route in repository_templates.router.routes}
 for _route in real_repositories.router.routes:
     if getattr(_route, "path", None) not in _existing_paths:
         repository_templates.router.routes.append(_route)
@@ -208,18 +203,20 @@ for _module in (cloud_workspaces, terminal_tools):
         repositories.router.routes.append(_route)
         _native_keys |= _keys
 
-from amoscloud_ai.api.routes import auth as auth
 from amoscloud_ai.api.routes import account_recovery as account_recovery
+from amoscloud_ai.api.routes import auth as auth
+from amoscloud_ai.api.routes import google_auth as google_auth
 
 _auth_paths = {getattr(route, "path", None) for route in auth.router.routes}
-for _route in account_recovery.router.routes:
-    if getattr(_route, "path", None) not in _auth_paths:
-        auth.router.routes.append(_route)
-        _auth_paths.add(getattr(_route, "path", None))
+for _module in (account_recovery, google_auth):
+    for _route in _module.router.routes:
+        if getattr(_route, "path", None) not in _auth_paths:
+            auth.router.routes.append(_route)
+            _auth_paths.add(getattr(_route, "path", None))
 
-from amoscloud_ai.api.routes import github_repositories as github_repositories
 from amoscloud_ai.api.routes import github_organization_publish as github_organization_publish
 from amoscloud_ai.api.routes import github_pull_requests as github_pull_requests
+from amoscloud_ai.api.routes import github_repositories as github_repositories
 
 _github_keys = set()
 for _route in github_repositories.router.routes:
@@ -232,9 +229,9 @@ for _module in (github_organization_publish, github_pull_requests):
         github_repositories.router.routes.append(_route)
         _github_keys |= _keys
 
-from amoscloud_ai.api.routes import platform_services as platform_services
-from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
 from amoscloud_ai import workspace_runtime_service
+from amoscloud_ai.api.routes import cloud_configuration as cloud_configuration
+from amoscloud_ai.api.routes import platform_services as platform_services
 
 _platform_keys = set()
 for _route in platform_services.router.routes:

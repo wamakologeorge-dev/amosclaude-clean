@@ -25,6 +25,7 @@
   const submit = byId('submit-button');
   const emailCode = byId('email-code-button');
   const passkeyButton = byId('passkey-login-button');
+  const googleButton = byId('google-login-button');
   const title = byId('auth-title');
   const subtitle = byId('auth-subtitle');
   const message = byId('message');
@@ -132,7 +133,7 @@
 
     if (next === 'login') {
       title.textContent = 'Welcome back';
-      subtitle.textContent = 'Use your email address and password.';
+      subtitle.textContent = 'Use Google, your email address, or your password.';
       hidden(fields.identifier, false);
       hidden(fields.password, false);
       required(inputs.identifier, true);
@@ -143,7 +144,7 @@
       hidden(emailCode, false);
     } else if (next === 'register') {
       title.textContent = 'Create your account';
-      subtitle.textContent = 'Start with your name, email, and password. Fingerprint is optional.';
+      subtitle.textContent = 'Continue with Google or start with your name, email, and password.';
       hidden(fields.name, false);
       hidden(fields.recovery, false);
       hidden(fields.nextPassword, false);
@@ -179,6 +180,14 @@
   registerTab.addEventListener('click', () => setMode('register'));
   forgotPassword.addEventListener('click', () => setMode('forgot-password'));
   forgotUsername.addEventListener('click', () => setMode('forgot-username'));
+
+  if (googleButton) {
+    googleButton.addEventListener('click', () => {
+      googleButton.disabled = true;
+      show('Opening Google sign-in…', true);
+      window.location.assign('/api/v1/auth/google');
+    });
+  }
 
   emailCode.addEventListener('click', async () => {
     const address = email(inputs.identifier.value);
@@ -334,7 +343,6 @@
     }
   });
 
-
   // Account settings can use these helpers to add a verified, separate recovery
   // address without duplicating authentication transport or error handling.
   window.AmosclaudAccountAccess = Object.freeze({
@@ -348,5 +356,35 @@
     }),
   });
 
+  function showGoogleReturnError() {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('google_error');
+    if (!code) return;
+    const messages = {
+      access_denied: 'Google sign-in was cancelled.',
+      missing_response: 'Google did not return a complete sign-in response. Try again.',
+      not_configured: 'Google sign-in is not configured on this deployment.',
+      token_exchange_failed: 'Google could not complete sign-in. Try again.',
+      provider_unavailable: 'Google sign-in is temporarily unavailable. Try again shortly.',
+      unverified_email: 'Google did not provide a verified email address for this account.',
+      account_conflict: 'That Google account is already connected to another Amosclaud account.',
+    };
+    show(messages[code] || 'Google sign-in could not be completed.');
+    url.searchParams.delete('google_error');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  async function configureGoogleButton() {
+    if (!googleButton) return;
+    try {
+      const status = await request('/api/v1/auth/google/status');
+      googleButton.hidden = !status.enabled;
+    } catch (_) {
+      googleButton.hidden = true;
+    }
+  }
+
   setMode('login');
+  showGoogleReturnError();
+  configureGoogleButton();
 })();
