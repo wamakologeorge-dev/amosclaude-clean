@@ -59,7 +59,7 @@ bounded editor context and explicitly selected text. Repository writes,
 protected branches, merges, deployments, and secret operations remain subject
 to Amosclaud authorization and verification.
 
-## Configuration
+## Installation and configuration
 
 The default platform URL is `https://www.amosclaud.com`. Configure a different
 HTTPS installation with the `amosclaud.baseUrl` setting. Exact localhost HTTP
@@ -68,6 +68,20 @@ URLs are accepted for development.
 Every user must create and store their own Amosclaud Autonomous key. Do not share
 one user's key between accounts, workspaces, screenshots, issues, or repository
 files.
+
+For a test installation:
+
+1. Download the `amosclaud-autonomous-vsix` artifact from the successful
+   **Amosclaud VS Code Extension** workflow.
+2. In desktop VS Code or a compatible remote environment, run **Extensions:
+   Install from VSIX**.
+3. Run **Amosclaud: Configure Autonomous Token** and store that user's personal
+   key.
+4. Run **Amosclaud: Open Self Terminal**.
+5. Select a repository owned by that Amosclaud account.
+
+Browser-only VS Code should use the published Marketplace version when the
+`amosclaud` publisher release is available.
 
 ## Local development
 
