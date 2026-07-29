@@ -135,3 +135,14 @@ It provides:
 - versioned `SKILL.md` distribution through installed npm packages.
 
 See `docs/NODE_NPM_CONTROL_PLANE.md` for architecture and `services/control_plane/README.md` for deployment and API examples.
+
+## Local-first collaboration
+
+Amosclaud supports independent local installations today and a path toward coordinated multi-user cloud services.
+
+- Each installation keeps its own repositories, databases, queues, credentials, models, and execution policies.
+- Collaborators can clone the same GitHub repository, work through separate Amosclaud nodes, and exchange changes through branches and pull requests.
+- Authenticated organization records, membership roles, and organization repository ownership already provide a multi-user authorization foundation.
+- Teams, invitations, shared execution pools, centralized billing, and portal-coordinated deployments remain planned maturity stages.
+
+See `docs/LOCAL_FIRST_MULTI_USER_COLLABORATION.md` for the current trust model, organization roadmap, GitHub collaboration workflow, and future amosclaud.com node-coordination design.
