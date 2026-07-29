@@ -107,11 +107,7 @@ class OpenAICompatibleProvider(ModelProvider):
             model=str(data.get("model") or self.model),
             finish_reason=choice.get("finish_reason"),
             tool_calls=tool_calls,
-            usage={
-                str(key): int(value)
-                for key, value in usage.items()
-                if isinstance(value, int)
-            },
+            usage={str(key): int(value) for key, value in usage.items() if isinstance(value, int)},
             latency_ms=latency_ms,
             request_id=data.get("id"),
             raw={"object": data.get("object")},
