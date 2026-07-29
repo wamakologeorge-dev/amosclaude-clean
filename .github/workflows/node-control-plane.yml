@@ -1,0 +1,36 @@
+name: Node control plane
+
+on:
+  pull_request:
+    paths:
+      - "services/control_plane/**"
+      - ".github/workflows/node-control-plane.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/control_plane/**"
+      - ".github/workflows/node-control-plane.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/control_plane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Check npm supply-chain policy
+        run: node scripts/supply-chain-check.mjs
+      - name: Install exact dependencies without lifecycle scripts
+        run: npm install --ignore-scripts --no-fund
+      - name: Run tests and syntax checks
+        run: npm run check
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
