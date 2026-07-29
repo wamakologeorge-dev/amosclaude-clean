@@ -56,9 +56,7 @@ class UniversalModelGateway:
                     status="unavailable",
                     detail=f"health check failed: {type(exc).__name__}",
                 )
-            evaluated.append(
-                (provider, self.policy.evaluate(provider, request, health))
-            )
+            evaluated.append((provider, self.policy.evaluate(provider, request, health)))
         return tuple(
             sorted(
                 evaluated,
@@ -71,9 +69,7 @@ class UniversalModelGateway:
         decisions = tuple(decision for _, decision in routed)
         eligible = [(provider, decision) for provider, decision in routed if decision.eligible]
         if not eligible:
-            reasons = "; ".join(
-                f"{decision.provider}: {decision.reason}" for decision in decisions
-            )
+            reasons = "; ".join(f"{decision.provider}: {decision.reason}" for decision in decisions)
             raise GatewayUnavailableError(
                 f"no eligible model provider is available ({reasons})",
                 decisions=decisions,
@@ -106,9 +102,7 @@ class UniversalModelGateway:
                 )
             return response
 
-        summary = "; ".join(
-            f"{attempt.provider}: {attempt.error_type}" for attempt in attempts
-        )
+        summary = "; ".join(f"{attempt.provider}: {attempt.error_type}" for attempt in attempts)
         raise GatewayUnavailableError(
             f"all eligible model providers failed ({summary})",
             decisions=decisions,
