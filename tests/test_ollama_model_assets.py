@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_NAME = "wamakologeorge/amosclaud-clean:latest"
 
 
 def test_modelfile_builds_amosclaud_from_llama32():
-    modelfile = (ROOT / "models" / "ollama" / "Modelfile").read_text(
-        encoding="utf-8"
-    )
+    modelfile = (ROOT / "models" / "ollama" / "Modelfile").read_text(encoding="utf-8")
 
     assert "FROM llama3.2" in modelfile
     assert "SYSTEM" in modelfile
@@ -19,9 +16,7 @@ def test_modelfile_builds_amosclaud_from_llama32():
 
 
 def test_publish_script_creates_tests_and_pushes_namespaced_model():
-    script = (ROOT / "scripts" / "publish_ollama_model.sh").read_text(
-        encoding="utf-8"
-    )
+    script = (ROOT / "scripts" / "publish_ollama_model.sh").read_text(encoding="utf-8")
 
     assert MODEL_NAME in script
     assert 'ollama pull "$BASE_MODEL"' in script
