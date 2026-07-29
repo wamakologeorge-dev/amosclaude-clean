@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_BASE_URL = "https://www.amosclaud.com"
@@ -38,9 +38,16 @@ class IDEClientError(RuntimeError):
 
 def normalize_base_url(value: str | None) -> str:
     candidate = (value or DEFAULT_BASE_URL).strip().rstrip("/")
-    if not candidate.startswith(("https://", "http://localhost", "http://127.0.0.1")):
+    parsed = urlparse(candidate)
+    secure_remote = parsed.scheme == "https" and bool(parsed.hostname)
+    local_development = parsed.scheme == "http" and parsed.hostname in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }
+    if not (secure_remote or local_development):
         raise IDEClientError(
-            "AMOSCLAUD_URL must use HTTPS, except for localhost development endpoints"
+            "AMOSCLAUD_URL must use HTTPS, except for exact localhost development hosts"
         )
     return candidate
 
@@ -123,7 +130,7 @@ def read_selection_file(path: str | None) -> str | None:
     candidate = Path(path).expanduser()
     if not candidate.is_file():
         raise IDEClientError(f"Selection file does not exist: {candidate}")
-    if is_sensitive_path(candidate.name):
+    if is_sensitive_path(candidate.as_posix()):
         raise IDEClientError("Sensitive files cannot be read as editor selections")
     with candidate.open("r", encoding="utf-8", errors="replace") as stream:
         return stream.read(MAX_SELECTION_CHARS)
