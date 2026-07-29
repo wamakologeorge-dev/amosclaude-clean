@@ -32,9 +32,9 @@ def test_publish_script_creates_tests_and_pushes_namespaced_model():
 
 
 def test_manual_workflow_verifies_published_model_with_repository_secret():
-    workflow = (
-        ROOT / ".github" / "workflows" / "ollama-model-verify.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ollama-model-verify.yml").read_text(
+        encoding="utf-8"
+    )
 
     for required in (
         MODEL_NAME,
@@ -48,9 +48,9 @@ def test_manual_workflow_verifies_published_model_with_repository_secret():
 
 
 def test_model_agent_uses_same_selected_ollama_model_for_preflight_and_inference():
-    workflow = (
-        ROOT / ".github" / "workflows" / "amosclaud-model-agent.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "amosclaud-model-agent.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert workflow.count("vars.AMOSCLAUD_MODEL || vars.OLLAMA_MODEL") == 2
     assert "OLLAMA_REQUIRE_MODEL: 'true'" in workflow
