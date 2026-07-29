@@ -146,3 +146,15 @@ Amosclaud supports independent local installations today and a path toward coord
 - Teams, invitations, shared execution pools, centralized billing, and portal-coordinated deployments remain planned maturity stages.
 
 See `docs/LOCAL_FIRST_MULTI_USER_COLLABORATION.md` for the current trust model, organization roadmap, GitHub collaboration workflow, and future amosclaud.com node-coordination design.
+
+## Amosclaud Copilot
+
+Amosclaud Copilot is the repository-aware coding assistant and multi-agent coordinator for the Amosclaud agent system.
+
+- It understands code and developer instructions with bounded repository context.
+- It selects a primary agent and only the supporting agents needed for the task.
+- It coordinates Codex, Fixer, Action, Security, Clean, Autonomous, and AI agents.
+- It sends authorized execution through the existing governed Autonomous pipeline.
+- It exposes profile, agent registry, plan, and run APIs under `/api/v1/copilot`.
+
+See `docs/AMOSCLAUD_COPILOT.md` for the routing model, API contract, editor integration flow, and safety boundaries.
