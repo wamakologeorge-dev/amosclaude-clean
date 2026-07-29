@@ -219,8 +219,7 @@ def manifest_digest(entry: Mapping[str, Any]) -> str:
 
 def ensure_registry_schema(db: sqlite3.Connection) -> None:
     db.row_factory = sqlite3.Row
-    db.execute(
-        """
+    db.execute("""
         CREATE TABLE IF NOT EXISTS amosclaud_registry_entries (
             id TEXT PRIMARY KEY,
             kind TEXT NOT NULL,
@@ -240,8 +239,7 @@ def ensure_registry_schema(db: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             created_by INTEGER
         )
-        """
-    )
+        """)
     db.execute(
         "CREATE INDEX IF NOT EXISTS idx_registry_kind_status "
         "ON amosclaud_registry_entries(kind,status)"
@@ -249,7 +247,9 @@ def ensure_registry_schema(db: sqlite3.Connection) -> None:
     db.commit()
 
 
-def _database_values(entry: Mapping[str, Any], *, created_at: str, updated_at: str) -> tuple[Any, ...]:
+def _database_values(
+    entry: Mapping[str, Any], *, created_at: str, updated_at: str
+) -> tuple[Any, ...]:
     complete = dict(entry)
     complete.setdefault("source_url", None)
     complete.setdefault("capabilities", [])
@@ -281,10 +281,18 @@ def seed_builtin_entries(db: sqlite3.Connection) -> None:
     ensure_registry_schema(db)
     now = _now()
     for entry in BUILTIN_ENTRIES:
+        expected_digest = manifest_digest(entry)
         existing = db.execute(
-            "SELECT created_at FROM amosclaud_registry_entries WHERE id=?",
+            "SELECT created_at,manifest_digest,immutable "
+            "FROM amosclaud_registry_entries WHERE id=?",
             (entry["id"],),
         ).fetchone()
+        if (
+            existing
+            and bool(existing["immutable"])
+            and existing["manifest_digest"] == expected_digest
+        ):
+            continue
         created_at = str(existing["created_at"]) if existing else now
         db.execute(
             """
@@ -378,9 +386,13 @@ def get_entry(db: sqlite3.Connection, entry_id: str) -> dict[str, Any] | None:
     return _decode_row(row) if row else None
 
 
-def create_entry(db: sqlite3.Connection, entry: Mapping[str, Any], *, created_by: int) -> dict[str, Any]:
+def create_entry(
+    db: sqlite3.Connection, entry: Mapping[str, Any], *, created_by: int
+) -> dict[str, Any]:
     seed_builtin_entries(db)
-    if db.execute("SELECT 1 FROM amosclaud_registry_entries WHERE id=?", (entry["id"],)).fetchone():
+    if db.execute(
+        "SELECT 1 FROM amosclaud_registry_entries WHERE id=?", (entry["id"],)
+    ).fetchone():
         raise ValueError("Registry entry already exists")
     complete = dict(entry)
     complete["immutable"] = False
@@ -423,10 +435,10 @@ def update_entry(
         UPDATE amosclaud_registry_entries SET
             kind=?,title=?,description=?,version=?,status=?,trust=?,entrypoint=?,source_url=?,
             capabilities_json=?,platforms_json=?,metadata_json=?,immutable=?,manifest_digest=?,
-            created_at=?,updated_at=?,created_by=?
+            updated_at=?
         WHERE id=?
         """,
-        values[1:] + (entry_id,),
+        values[1:14] + (values[15], entry_id),
     )
     db.commit()
     updated = get_entry(db, entry_id)
