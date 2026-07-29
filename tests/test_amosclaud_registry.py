@@ -52,6 +52,22 @@ def test_builtin_registry_seeds_one_autonomous_identity_and_editor_clients():
     assert all(entry["manifest_digest"] for entry in entries)
 
 
+def test_unchanged_builtin_seed_is_idempotent():
+    with memory_db() as db:
+        registry.seed_builtin_entries(db)
+        first = db.execute(
+            "SELECT updated_at FROM amosclaud_registry_entries WHERE id=?",
+            ("client.vscode",),
+        ).fetchone()["updated_at"]
+        registry.seed_builtin_entries(db)
+        second = db.execute(
+            "SELECT updated_at FROM amosclaud_registry_entries WHERE id=?",
+            ("client.vscode",),
+        ).fetchone()["updated_at"]
+
+    assert second == first
+
+
 def test_registry_filters_by_kind_capability_and_platform():
     with memory_db() as db:
         clients = registry.list_entries(db, kind="client")
@@ -83,6 +99,10 @@ def test_custom_entry_lifecycle_is_durable_and_disabled_entries_are_hidden():
             created["id"],
             {"status": "active", "title": "Approved example review skill"},
         )
+        creator = db.execute(
+            "SELECT created_by FROM amosclaud_registry_entries WHERE id=?",
+            (created["id"],),
+        ).fetchone()["created_by"]
         disabled = registry.disable_entry(db, created["id"])
         visible = registry.list_entries(db)
         all_entries = registry.list_entries(db, include_disabled=True)
@@ -90,6 +110,7 @@ def test_custom_entry_lifecycle_is_durable_and_disabled_entries_are_hidden():
     assert created["immutable"] is False
     assert updated["status"] == "active"
     assert updated["manifest_digest"] != original_digest
+    assert creator == 7
     assert disabled["status"] == "disabled"
     assert created["id"] not in {entry["id"] for entry in visible}
     assert created["id"] in {entry["id"] for entry in all_entries}
