@@ -82,7 +82,4 @@ def test_vscode_terminal_router_exposes_repository_scoped_operations():
     assert "/vscode-terminal/repositories" in paths
     assert "/vscode-terminal/repositories/{repository_id}/start" in paths
     assert "/vscode-terminal/repositories/{repository_id}/ticket" in paths
-    assert (
-        "/vscode-terminal/repositories/{repository_id}/terminal/{terminal_id}"
-        in paths
-    )
+    assert "/vscode-terminal/repositories/{repository_id}/terminal/{terminal_id}" in paths
