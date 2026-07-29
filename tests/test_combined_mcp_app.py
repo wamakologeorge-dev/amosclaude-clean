@@ -28,18 +28,12 @@ def test_combined_application_mounts_mcp_before_platform():
 
 
 def test_combined_platform_registers_vscode_terminal_routes():
-    paths = {
-        getattr(route, "path", "")
-        for route in combined_app.platform_app.routes
-    }
+    paths = {getattr(route, "path", "") for route in combined_app.platform_app.routes}
 
     assert "/api/v1/vscode-terminal/repositories" in paths
     assert "/api/v1/vscode-terminal/repositories/{repository_id}/start" in paths
     assert "/api/v1/vscode-terminal/repositories/{repository_id}/ticket" in paths
-    assert (
-        "/api/v1/vscode-terminal/repositories/{repository_id}/terminal/{terminal_id}"
-        in paths
-    )
+    assert "/api/v1/vscode-terminal/repositories/{repository_id}/terminal/{terminal_id}" in paths
 
 
 def test_browser_editor_origins_are_explicitly_allowed():
