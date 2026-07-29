@@ -62,9 +62,7 @@ class LegacyAmosclaudProvider(ModelProvider):
         raw_usage: Any = getattr(result, "usage", None)
         if isinstance(raw_usage, dict):
             usage = {
-                str(key): int(value)
-                for key, value in raw_usage.items()
-                if isinstance(value, int)
+                str(key): int(value) for key, value in raw_usage.items() if isinstance(value, int)
             }
         return AmosModelResponse(
             content=str(getattr(result, "reply", "")),
