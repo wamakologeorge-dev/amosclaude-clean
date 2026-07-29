@@ -1,0 +1,51 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - amosclaud-control-plane-redis:/data
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - redis
+    ports:
+      - "127.0.0.1:8300:8300"
+    command: ["npm", "start"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  control-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - redis
+    volumes:
+      - ${AMOSCLAUD_REPOSITORY_STORAGE_ROOT_HOST:-../../data/repositories}:/var/lib/amosclaud/repositories
+      - amosclaud-skills:/var/lib/amosclaud/skills
+    command: ["npm", "run", "worker"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,noexec,nosuid
+      - /home/node/.npm:size=128m,noexec,nosuid,uid=1000,gid=1000
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  amosclaud-control-plane-redis:
+  amosclaud-skills:

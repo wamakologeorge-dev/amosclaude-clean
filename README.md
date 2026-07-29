@@ -118,3 +118,20 @@ Isolated builder or Server Station
 ```
 
 Generated websites should not run inside the main Amosclaud API process. Publish them to a dedicated preview service and return a `preview_url` for the dashboard’s **Open website** button.
+
+## Node.js asynchronous control plane
+
+The first private Node.js/npm orchestration service now lives in `services/control_plane`.
+
+It provides:
+
+- a Fastify task API protected by a private bearer token;
+- BullMQ and Redis durable background jobs;
+- separate workers with bounded concurrency and cancellation;
+- allowlisted, shell-free local command execution for trusted local installations;
+- live task logs through Server-Sent Events;
+- Chokidar repository watchers with Redis leader election;
+- lifecycle coordination with the existing isolated workspace runtime;
+- versioned `SKILL.md` distribution through installed npm packages.
+
+See `docs/NODE_NPM_CONTROL_PLANE.md` for architecture and `services/control_plane/README.md` for deployment and API examples.
