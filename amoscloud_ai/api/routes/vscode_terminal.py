@@ -8,7 +8,6 @@ platform database credential or a reusable WebSocket credential.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import pty
 import secrets
@@ -227,9 +226,7 @@ async def vscode_terminal_websocket(
     key = (user_id, terminal_id)
     with managed_terminal._ACTIVE_LOCK:
         user_sessions = sum(
-            1
-            for active in managed_terminal._ACTIVE.values()
-            if active.user_id == user_id
+            1 for active in managed_terminal._ACTIVE.values() if active.user_id == user_id
         )
         allowed = user_sessions < managed_terminal._MAX_SESSIONS_PER_USER
     if not allowed:
@@ -293,9 +290,7 @@ async def vscode_terminal_websocket(
             await websocket.send_bytes(data)
         code = process.poll()
         try:
-            await websocket.send_text(
-                f"\r\n\x1b[2m[terminal process exited: {code}]\x1b[0m\r\n"
-            )
+            await websocket.send_text(f"\r\n\x1b[2m[terminal process exited: {code}]\x1b[0m\r\n")
         except RuntimeError:
             pass
 
