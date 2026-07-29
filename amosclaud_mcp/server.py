@@ -8,7 +8,6 @@ from mcp.server.fastmcp import FastMCP
 
 from amosclaud_mcp.client import AmosclaudClient, AmosclaudMCPError
 
-
 mcp = FastMCP(
     "Amosclaud",
     instructions=(
