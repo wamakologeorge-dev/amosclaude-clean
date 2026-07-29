@@ -4,7 +4,15 @@
   "description": "Repository-aware Amosclaud chat, planning, governed execution, and MCP tools inside VS Code.",
   "version": "0.2.0",
   "publisher": "amosclaud",
-  "license": "SEE LICENSE IN ../../LICENSE",
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://www.amosclaud.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wamakologeorge-dev/amosclaude-clean.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wamakologeorge-dev/amosclaude-clean/issues"
+  },
   "engines": {
     "vscode": "^1.99.0"
   },
