@@ -20,7 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from amosclaud_mcp.server import mcp as amosclaud_mcp
 from amoscloud_ai.main import app as platform_app
 
-ASGIApp = Callable[[dict[str, Any], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]], Awaitable[None]]
+ASGIApp = Callable[
+    [dict[str, Any], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]], Awaitable[None]
+]
 
 EDITOR_ORIGINS = (
     "https://vscode.dev",
@@ -60,7 +62,12 @@ class BearerProtectedASGI:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict[str, Any], receive: Callable[..., Awaitable[Any]], send: Callable[..., Awaitable[Any]]) -> None:
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Callable[..., Awaitable[Any]],
+        send: Callable[..., Awaitable[Any]],
+    ) -> None:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
