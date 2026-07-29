@@ -46,6 +46,12 @@ def ensure_agent_schema(db: sqlite3.Connection) -> None:
             UNIQUE(reason, reference),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS agent_billing_customers (
+            user_id INTEGER PRIMARY KEY,
+            stripe_customer_id TEXT NOT NULL UNIQUE,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """
     )
     db.commit()
