@@ -210,12 +210,14 @@ for _module in (cloud_workspaces, terminal_tools):
 
 from amoscloud_ai.api.routes import auth as auth
 from amoscloud_ai.api.routes import account_recovery as account_recovery
+from amoscloud_ai.api.routes import google_auth as google_auth
 
 _auth_paths = {getattr(route, "path", None) for route in auth.router.routes}
-for _route in account_recovery.router.routes:
-    if getattr(_route, "path", None) not in _auth_paths:
-        auth.router.routes.append(_route)
-        _auth_paths.add(getattr(_route, "path", None))
+for _module in (account_recovery, google_auth):
+    for _route in _module.router.routes:
+        if getattr(_route, "path", None) not in _auth_paths:
+            auth.router.routes.append(_route)
+            _auth_paths.add(getattr(_route, "path", None))
 
 from amoscloud_ai.api.routes import github_repositories as github_repositories
 from amoscloud_ai.api.routes import github_organization_publish as github_organization_publish
