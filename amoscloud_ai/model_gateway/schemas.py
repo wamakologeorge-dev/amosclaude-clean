@@ -86,9 +86,7 @@ class ModelCapabilities:
         if self.estimated_input_cost_per_million_usd is None:
             return None
         input_cost = (
-            request.estimated_input_tokens
-            / 1_000_000
-            * self.estimated_input_cost_per_million_usd
+            request.estimated_input_tokens / 1_000_000 * self.estimated_input_cost_per_million_usd
         )
         output_rate = self.estimated_output_cost_per_million_usd
         if output_rate is None:
