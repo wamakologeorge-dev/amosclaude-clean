@@ -202,21 +202,3 @@ def secure_reset(body: SecureResetRequest) -> None:
         db.execute("UPDATE users SET password_hash=?,provider='secure-code' WHERE id=?", (_hash_password(body.password), user["id"]))
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         db.commit()
-
-
-# Google sign-in is an authentication capability, so mount it through the same
-# /api/v1/auth surface already used by this router and the canonical session DB.
-from amoscloud_ai.api.routes import google_auth as google_auth
-
-_existing_route_keys = {
-    (getattr(item, "path", None), frozenset(getattr(item, "methods", None) or ()))
-    for item in router.routes
-}
-for _route in google_auth.router.routes:
-    _key = (
-        getattr(_route, "path", None),
-        frozenset(getattr(_route, "methods", None) or ()),
-    )
-    if _key not in _existing_route_keys:
-        router.routes.append(_route)
-        _existing_route_keys.add(_key)
