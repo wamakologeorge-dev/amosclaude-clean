@@ -145,7 +145,10 @@ class RegistryEntryUpdate(BaseModel):
         supplied = self.model_dump(exclude_none=True)
         if not supplied:
             raise ValueError("At least one registry field must be supplied")
-        if self.metadata is not None and len(json.dumps(self.metadata, sort_keys=True, default=str)) > 16_000:
+        if (
+            self.metadata is not None
+            and len(json.dumps(self.metadata, sort_keys=True, default=str)) > 16_000
+        ):
             raise ValueError("metadata is limited to 16,000 serialized characters")
         return self
 
