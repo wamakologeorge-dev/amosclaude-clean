@@ -36,17 +36,27 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check -e .
 
+      - name: Verify Ollama cloud authentication
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || vars.OLLAMA_MODEL || 'gpt-oss:120b' }}
+          OLLAMA_REQUIRE_MODEL: 'true'
+        run: python -m amosclaud_bot.ollama_connection
+
       - name: Run trusted GitHub model agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AMOSCLAUD_ALLOW_EXTERNAL_ADAPTERS: 'true'
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
           AMOSCLAUD_PROVIDER_API_URL: ${{ secrets.AMOSCLAUD_PROVIDER_API_URL }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
           # Preserve explicit first-party and Ollama endpoints. If neither is
           # configured, use Groq's OpenAI-compatible endpoint when its secret exists.
           AMOSCLAUD_MODEL_URL: ${{ secrets.AMOSCLAUD_MODEL_URL || secrets.OLLAMA_URL || ((secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA) && 'https://ollama.com') || (secrets.GROQ_API_KEY && 'https://api.groq.com/openai') }}
           AMOSCLAUD_MODEL_TOKEN: ${{ secrets.AMOSCLAUD_MODEL_TOKEN || secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA || secrets.GROQ_API_KEY }}
-          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || ((secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA) && 'gpt-oss:120b') || (secrets.GROQ_API_KEY && vars.GROQ_MODEL) || (secrets.GROQ_API_KEY && 'openai/gpt-oss-20b') || 'qwen2.5-coder:1.5b' }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || vars.OLLAMA_MODEL || ((secrets.OLLAMA_API_KEY || secrets.OLLAMA_CLOUD_API_KEY || secrets.OLLAMA_KEY || secrets.OLLAMA_TOKEN || secrets.AMOSCLAUD_OLLAMA_API_KEY || secrets.OLLAMA) && 'gpt-oss:120b') || (secrets.GROQ_API_KEY && vars.GROQ_MODEL) || (secrets.GROQ_API_KEY && 'openai/gpt-oss-20b') || 'qwen2.5-coder:1.5b' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
