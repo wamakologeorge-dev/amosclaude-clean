@@ -41,16 +41,24 @@ private struct Arguments {
 }
 
 private func normalizeBaseURL(_ value: String?) throws -> URL {
-    let raw = (value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    var raw = (value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         ? value!
         : defaultBaseURL)
-        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-    let allowed = raw.hasPrefix("https://")
-        || raw.hasPrefix("http://localhost")
-        || raw.hasPrefix("http://127.0.0.1")
-    guard allowed, let url = URL(string: raw) else {
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    while raw.hasSuffix("/") && !raw.hasSuffix("://") {
+        raw.removeLast()
+    }
+    guard let components = URLComponents(string: raw),
+          let scheme = components.scheme?.lowercased(),
+          let host = components.host?.lowercased() else {
+        throw CompanionError.message("AMOSCLAUD_URL is invalid")
+    }
+    let secureRemote = scheme == "https"
+    let localDevelopment = scheme == "http"
+        && ["localhost", "127.0.0.1", "::1"].contains(host)
+    guard secureRemote || localDevelopment, let url = URL(string: raw) else {
         throw CompanionError.message(
-            "AMOSCLAUD_URL must use HTTPS, except for localhost development endpoints"
+            "AMOSCLAUD_URL must use HTTPS, except for exact localhost development hosts"
         )
     }
     return url
@@ -81,7 +89,7 @@ private func isSensitivePath(_ value: String?) -> Bool {
     let blockedSuffixes = [".key", ".pem", ".p12", ".pfx"]
     return blockedNames.contains(name)
         || name.hasPrefix(".env.")
-        || blockedSuffixes.contains(where: name.hasSuffix)
+        || blockedSuffixes.contains(where: { name.hasSuffix($0) })
         || parts.contains("secrets")
         || parts.contains(".secrets")
 }
@@ -92,7 +100,7 @@ private func readSelectionFile(_ value: String?) throws -> String? {
     guard FileManager.default.fileExists(atPath: url.path) else {
         throw CompanionError.message("Selection file does not exist: \(url.path)")
     }
-    guard !isSensitivePath(url.lastPathComponent) else {
+    guard !isSensitivePath(url.path) else {
         throw CompanionError.message("Sensitive files cannot be read as editor selections")
     }
     let text = try String(contentsOf: url, encoding: .utf8)
