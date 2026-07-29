@@ -71,8 +71,16 @@ def currency() -> str:
     return value if _CURRENCY.fullmatch(value) else "usd"
 
 
-def stripe_configured() -> bool:
+def stripe_secret_configured() -> bool:
     return bool(os.getenv("STRIPE_SECRET_KEY", "").strip())
+
+
+def stripe_webhook_configured() -> bool:
+    return bool(os.getenv("STRIPE_WEBHOOK_SECRET", "").strip())
+
+
+def stripe_configured() -> bool:
+    return stripe_secret_configured() and stripe_webhook_configured()
 
 
 def get_pack(pack_id: str) -> AgentCreditPack:
@@ -105,8 +113,10 @@ def checkout_line_item(pack: AgentCreditPack) -> dict[str, Any]:
 
 def public_pack(pack: AgentCreditPack) -> dict[str, Any]:
     missing: list[str] = []
-    if not stripe_configured():
+    if not stripe_secret_configured():
         missing.append("STRIPE_SECRET_KEY")
+    if not stripe_webhook_configured():
+        missing.append("STRIPE_WEBHOOK_SECRET")
     if not pack.configured:
         missing.append(f"{pack.price_id_env} or {pack.amount_cents_env}")
     return {
@@ -144,6 +154,16 @@ def _value(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
+def _metadata(checkout_session: Any) -> dict[str, Any]:
+    raw = _value(checkout_session, "metadata", {}) or {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return dict(raw)
+    except (TypeError, ValueError):
+        return {}
+
+
 def settle_paid_checkout(
     db: sqlite3.Connection,
     checkout_session: Any,
@@ -152,8 +172,8 @@ def settle_paid_checkout(
 ) -> tuple[bool, int]:
     """Credit one paid Checkout Session exactly once and return wallet balance."""
 
-    metadata = _value(checkout_session, "metadata", {}) or {}
-    if not isinstance(metadata, dict) or metadata.get("kind") != "agent_tokens":
+    metadata = _metadata(checkout_session)
+    if metadata.get("kind") != "agent_tokens":
         return False, 0
     if _value(checkout_session, "payment_status") != "paid":
         return False, 0
