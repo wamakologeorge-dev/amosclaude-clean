@@ -1,0 +1,68 @@
+name: Amosclaud VS Code Extension
+
+on:
+  pull_request:
+    paths:
+      - "clients/vscode-amosclaud/**"
+      - ".github/workflows/amosclaud-vscode-extension.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "clients/vscode-amosclaud/**"
+      - ".github/workflows/amosclaud-vscode-extension.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to the Visual Studio Marketplace
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/vscode-amosclaud
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify extension source
+        run: |
+          npm run check
+          npm test
+
+      - name: Package VSIX
+        run: |
+          mkdir -p ../../artifacts
+          npx --yes @vscode/vsce package \
+            --no-dependencies \
+            --out ../../artifacts/amosclaud-autonomous.vsix
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: amosclaud-autonomous-vsix
+          path: artifacts/amosclaud-autonomous.vsix
+          if-no-files-found: error
+
+      - name: Publish extension
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT is required to publish the extension" >&2
+            exit 1
+          fi
+          npx --yes @vscode/vsce publish --no-dependencies --pat "$VSCE_PAT"
