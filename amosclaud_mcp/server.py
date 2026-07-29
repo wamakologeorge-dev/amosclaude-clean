@@ -8,7 +8,6 @@ from mcp.server.fastmcp import FastMCP
 
 from amosclaud_mcp.client import AmosclaudClient, AmosclaudMCPError
 
-
 mcp = FastMCP(
     "Amosclaud",
     instructions=(
@@ -16,6 +15,9 @@ mcp = FastMCP(
         "engineering work, and return pipeline evidence. Never claim a change was "
         "completed until the returned pipeline status and logs prove it."
     ),
+    stateless_http=True,
+    json_response=True,
+    streamable_http_path="/",
 )
 
 

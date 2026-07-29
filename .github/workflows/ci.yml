@@ -36,6 +36,13 @@ jobs:
           enable-cache: true
           cache-dependency-glob: requirements.txt
 
+      - name: Verify Amosclaud VS Code extension
+        working-directory: clients/vscode-amosclaud
+        run: |
+          npm run check
+          npm test
+          npm run build
+
       - name: Lint critical errors
         run: >-
           uv run --no-project --with-requirements requirements.txt

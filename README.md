@@ -1,5 +1,6 @@
-[![Amosclaud Autonomous Fixer](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml/badge.svg)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml)
 # Amosclaud Workflow Results Dashboard
+
+[![Amosclaud Autonomous Fixer](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml/badge.svg)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-fixer.yml)
 
 This dashboard is the real results area for Amosclaud Autonomous jobs.
 
@@ -164,11 +165,13 @@ See `docs/AMOSCLAUD_COPILOT.md` for the routing model, API contract, editor inte
 Amosclaud Autonomous can now follow a developer into local editors without creating another autonomous runtime.
 
 - `amosclaud-ide` is a dependency-free Python CLI for terminals and editor tasks.
-- `clients/vscode-amosclaud` provides a VS Code chat panel, safe planning, and explicit governed execution.
+- `clients/vscode-amosclaud` provides a VS Code chat panel, safe planning, explicit governed execution, and the multi-user Amosclaud Self Terminal.
 - `clients/xcode-amosclaud` provides a native Swift package, macOS Keychain token lookup, interactive chat, and an Xcode behavior launcher.
 - Every client sends only bounded, explicitly selected editor context and delegates to `/api/v1/copilot`.
 
 See `docs/AMOSCLAUD_IDE_COMPANION.md` for setup, authentication, safety boundaries, commands, and known limitations.
+
+See `docs/VSCODE_NATIVE_AGENT_AND_REMOTE_MCP.md` for the `@amosclaud` Chat participant, remote MCP tools, installable VSIX, and multi-user self terminal.
 
 ## Amosclaud Registry
 
