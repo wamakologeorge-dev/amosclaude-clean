@@ -1,0 +1,15 @@
+name: Amosclaud Autonomous
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Amosclaud Autonomous
+    provider: openai
+    model: amosclaud-agent
+    apiBase: https://www.amosclaud.com/v1
+    apiKey: ${{ secrets.AMOSCLAUD_API_KEY }}
+    useResponsesApi: true
+    roles:
+      - chat
+      - edit
+      - apply

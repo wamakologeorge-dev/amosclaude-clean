@@ -1,0 +1,105 @@
+name: Amosclaud Agent Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      objective:
+        description: Bounded engineering objective for Amosclaud
+        required: true
+        type: string
+      mode:
+        description: Operation mode
+        required: true
+        default: fix
+        type: choice
+        options:
+          - ask
+          - build
+          - fix
+          - test
+          - review
+          - deploy
+          - monitor
+      delivery:
+        description: Expected delivery
+        required: true
+        default: pull_request
+        type: choice
+        options:
+          - report
+          - patch
+          - pull_request
+      require_approval:
+        description: Keep the operation awaiting approval before execution
+        required: true
+        default: true
+        type: boolean
+  repository_dispatch:
+    types:
+      - amosclaud-operation
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amosclaud-agent-sync-${{ github.repository }}-${{ github.event.client_payload.request_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      task_id: ${{ steps.manual.outputs.task_id || steps.remote.outputs.task_id }}
+      bucket_id: ${{ steps.manual.outputs.bucket_id || steps.remote.outputs.bucket_id }}
+      status: ${{ steps.manual.outputs.status || steps.remote.outputs.status }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Submit manual Amosclaud operation
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_OBJECTIVE: ${{ inputs.objective }}
+          AMOSCLAUD_MODE: ${{ inputs.mode }}
+          AMOSCLAUD_DELIVERY: ${{ inputs.delivery }}
+          AMOSCLAUD_REQUIRE_APPROVAL: ${{ inputs.require_approval }}
+          AMOSCLAUD_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/amosclaud_agent_sync.py
+
+      - name: Submit control-plane Amosclaud operation
+        id: remote
+        if: github.event_name == 'repository_dispatch'
+        env:
+          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_OBJECTIVE: ${{ github.event.client_payload.objective }}
+          AMOSCLAUD_MODE: ${{ github.event.client_payload.mode || 'fix' }}
+          AMOSCLAUD_DELIVERY: ${{ github.event.client_payload.delivery || 'pull_request' }}
+          AMOSCLAUD_REQUIRE_APPROVAL: ${{ github.event.client_payload.require_approval || 'true' }}
+          AMOSCLAUD_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/amosclaud_agent_sync.py
+
+      - name: Publish operation receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-operation-${{ steps.manual.outputs.task_id || steps.remote.outputs.task_id }}
+          path: amosclaud-operation.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Show operation identity
+        env:
+          TASK_ID: ${{ steps.manual.outputs.task_id || steps.remote.outputs.task_id }}
+          BUCKET_ID: ${{ steps.manual.outputs.bucket_id || steps.remote.outputs.bucket_id }}
+          STATUS: ${{ steps.manual.outputs.status || steps.remote.outputs.status }}
+        run: |
+          echo "task_id=$TASK_ID"
+          echo "bucket_id=$BUCKET_ID"
+          echo "status=$STATUS"
