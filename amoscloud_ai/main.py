@@ -21,11 +21,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from amosclaud_metrics.integration import install_metrics
 from amoscloud_ai import __version__, model_network
 from amoscloud_ai.api.routes import (
+    academy,
     account,
     account_recovery,
-    academy,
     admin,
     agent,
     agent_buddies,
@@ -40,12 +41,13 @@ from amoscloud_ai.api.routes import (
     bundles_api_host,
     chat,
     community,
+    control_bus_dashboard,
     copilot,
     core,
     deployments,
-    downloads,
     doctor_medical,
     doctor_travel,
+    downloads,
     feed,
     first_party_chat,
     github_app,
@@ -57,16 +59,16 @@ from amoscloud_ai.api.routes import (
     hub_reports,
     local_workspace,
     mapping_bundles,
-    model_server_folder,
     metadata_dashboard,
-    organizations,
-    operation_buckets,
+    model_server_folder,
     openai_compat,
+    operation_buckets,
+    organizations,
     passkey_signup,
     pipelines,
     platform_services,
-    provider_api,
     pr_tasks,
+    provider_api,
     registry,
     repositories,
     repository_templates,
@@ -75,20 +77,18 @@ from amoscloud_ai.api.routes import (
     service_keys,
     storage,
     task_router,
-    wifi,
     webhooks,
+    wifi,
     workspaces,
-    control_bus_dashboard,
 )
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.autonomous_task_runner import install_dispatch_hook
 from amoscloud_ai.config import settings
 from amoscloud_ai.core.workspace import WorkspaceEngine
-from amoscloud_ai.server.cb import router as amosclaud_cb_router
 from amoscloud_ai.db_migrations import run_migrations
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
-from amosclaud_metrics.integration import install_metrics
+from amoscloud_ai.server.cb import router as amosclaud_cb_router
 
 
 @asynccontextmanager
