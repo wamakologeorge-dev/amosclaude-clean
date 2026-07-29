@@ -13,8 +13,8 @@ import stripe
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.agent_credit_billing import settle_paid_checkout
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
-from amoscloud_ai.agent_tokens import credit_tokens
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -238,9 +238,17 @@ def create_checkout(
         "success_url": f"{_base_url()}/plans?checkout=success",
         "cancel_url": f"{_base_url()}/plans?checkout=cancelled",
         "client_reference_id": str(user["id"]),
-        "metadata": {"amosclaud_user_id": str(user["id"]), "plan": "full", "interval": body.interval},
+        "metadata": {
+            "amosclaud_user_id": str(user["id"]),
+            "plan": "full",
+            "interval": body.interval,
+        },
         "subscription_data": {
-            "metadata": {"amosclaud_user_id": str(user["id"]), "plan": "full", "interval": body.interval}
+            "metadata": {
+                "amosclaud_user_id": str(user["id"]),
+                "plan": "full",
+                "interval": body.interval,
+            }
         },
         "allow_promotion_codes": True,
     }
@@ -319,7 +327,7 @@ def issue_license(
         cursor = db.execute(
             """INSERT INTO billing_license_keys
                (key_hash,label,plan,issued_by_user_id,issued_at,expires_at)
-               VALUES (?,?,'full',?,?,?)""",
+               VALUES (?,'full',?,?,?,?)""".replace("(?,'full'", "(?,?,'full'"),
             (
                 _license_hash(raw_key),
                 body.label.strip(),
@@ -338,7 +346,11 @@ def issue_license(
     }
 
 
-def _record_subscription(db: sqlite3.Connection, subscription: dict, user_id: int | None = None) -> None:
+def _record_subscription(
+    db: sqlite3.Connection,
+    subscription: dict,
+    user_id: int | None = None,
+) -> None:
     metadata = subscription.get("metadata") or {}
     resolved_user_id = user_id or int(metadata.get("amosclaud_user_id") or 0)
     customer_id = subscription.get("customer")
@@ -400,24 +412,22 @@ async def stripe_webhook(
 
         metadata = obj.get("metadata") or {}
         if (
-            event_type == "checkout.session.completed"
+            event_type
+            in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
             and metadata.get("kind") == "agent_tokens"
-            and obj.get("payment_status") == "paid"
         ):
-            user_id = int(metadata.get("amosclaud_user_id") or obj.get("client_reference_id") or 0)
-            credits = int(metadata.get("credits") or 0)
-            if user_id and credits:
-                credit_tokens(
-                    db,
-                    user_id,
-                    credits,
-                    reason="stripe_token_purchase",
-                    reference=event_id,
-                )
+            try:
+                settle_paid_checkout(db, obj)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid agent-credit checkout") from exc
         elif event_type == "checkout.session.completed" and obj.get("subscription"):
             stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
             subscription = stripe.Subscription.retrieve(obj["subscription"])
-            user_id = int((obj.get("metadata") or {}).get("amosclaud_user_id") or obj.get("client_reference_id") or 0)
+            user_id = int(
+                (obj.get("metadata") or {}).get("amosclaud_user_id")
+                or obj.get("client_reference_id")
+                or 0
+            )
             _record_subscription(db, dict(subscription), user_id)
         elif event_type in {
             "customer.subscription.created",
