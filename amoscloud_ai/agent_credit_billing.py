@@ -106,9 +106,7 @@ def checkout_line_item(pack: AgentCreditPack) -> dict[str, Any]:
             },
             "quantity": 1,
         }
-    raise ValueError(
-        f"Configure {pack.price_id_env} or {pack.amount_cents_env} before checkout"
-    )
+    raise ValueError(f"Configure {pack.price_id_env} or {pack.amount_cents_env} before checkout")
 
 
 def public_pack(pack: AgentCreditPack) -> dict[str, Any]:
@@ -180,9 +178,7 @@ def settle_paid_checkout(
 
     pack = get_pack(str(metadata.get("pack") or ""))
     user_id = int(
-        metadata.get("amosclaud_user_id")
-        or _value(checkout_session, "client_reference_id")
-        or 0
+        metadata.get("amosclaud_user_id") or _value(checkout_session, "client_reference_id") or 0
     )
     if not user_id or (expected_user_id is not None and user_id != expected_user_id):
         raise ValueError("Stripe Checkout session does not belong to this Amosclaud account")
