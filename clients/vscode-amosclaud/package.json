@@ -1,24 +1,35 @@
 {
   "name": "amosclaud-autonomous",
   "displayName": "Amosclaud Autonomous",
-  "description": "Repository-aware Amosclaud chat, planning, and governed execution inside VS Code.",
-  "version": "0.1.0",
+  "description": "Repository-aware Amosclaud chat, planning, governed execution, and MCP tools inside VS Code.",
+  "version": "0.2.0",
   "publisher": "amosclaud",
   "license": "SEE LICENSE IN ../../LICENSE",
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.99.0"
   },
   "categories": [
     "AI",
     "Other"
   ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": true
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Planning and read-only status are available. Repository execution remains governed by Amosclaud authorization."
+    }
+  },
   "activationEvents": [
     "onView:amosclaud.chatView",
     "onCommand:amosclaud.configureToken",
     "onCommand:amosclaud.planTask",
-    "onCommand:amosclaud.runTask"
+    "onCommand:amosclaud.runTask",
+    "onChatParticipant:amosclaud-autonomous.amosclaud"
   ],
-  "main": "./extension.js",
+  "main": "./web-extension.js",
+  "browser": "./web-extension.js",
   "contributes": {
     "commands": [
       {
@@ -32,6 +43,49 @@
       {
         "command": "amosclaud.runTask",
         "title": "Amosclaud: Run Current Task"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "amosclaud-autonomous.amosclaud",
+        "name": "amosclaud",
+        "fullName": "Amosclaud Autonomous",
+        "description": "Plan, build, fix, test, deploy, and verify through Amosclaud",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "plan",
+            "description": "Prepare a governed implementation plan"
+          },
+          {
+            "name": "run",
+            "description": "Start authorized Autonomous work"
+          },
+          {
+            "name": "fix",
+            "description": "Run a verified repair through Amosclaud Fixer"
+          },
+          {
+            "name": "build",
+            "description": "Build and test through Amosclaud Action"
+          },
+          {
+            "name": "deploy",
+            "description": "Prepare governed deployment work"
+          },
+          {
+            "name": "security",
+            "description": "Plan an Amosclaud Security review"
+          },
+          {
+            "name": "agents",
+            "description": "List internal Amosclaud capabilities"
+          },
+          {
+            "name": "status",
+            "description": "Check Amosclaud health and readiness"
+          }
+        ]
       }
     ],
     "viewsContainers": {
@@ -74,7 +128,7 @@
     }
   },
   "scripts": {
-    "check": "node --check extension.js && node --check src/client.js",
+    "check": "node --check web-extension.js && node --check src/client.js",
     "test": "node --test"
   },
   "devDependencies": {}
