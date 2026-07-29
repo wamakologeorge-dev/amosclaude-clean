@@ -63,9 +63,7 @@ def _complete_google_login(client):
     query = parse_qs(urlparse(start.headers["location"]).query)
     assert query["client_id"] == ["client.apps.googleusercontent.com"]
     assert query["scope"] == ["openid email profile"]
-    assert query["redirect_uri"] == [
-        "https://www.amosclaud.com/api/v1/auth/google/callback"
-    ]
+    assert query["redirect_uri"] == ["https://www.amosclaud.com/api/v1/auth/google/callback"]
     state = client.cookies.get(google_auth.GOOGLE_STATE_COOKIE)
     assert state
     return client.get(
@@ -104,9 +102,7 @@ def test_google_oauth_creates_one_user_and_reuses_identity(monkeypatch, tmp_path
 
     with auth._connect() as db:
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
-        assert (
-            db.execute("SELECT COUNT(*) FROM oauth_identities").fetchone()[0] == 1
-        )
+        assert db.execute("SELECT COUNT(*) FROM oauth_identities").fetchone()[0] == 1
 
 
 def test_google_oauth_links_existing_password_account(monkeypatch, tmp_path):
@@ -132,9 +128,7 @@ def test_google_oauth_links_existing_password_account(monkeypatch, tmp_path):
         assert response.status_code == 302
 
     with auth._connect() as db:
-        user = db.execute(
-            "SELECT provider FROM users WHERE email='person@example.com'"
-        ).fetchone()
+        user = db.execute("SELECT provider FROM users WHERE email='person@example.com'").fetchone()
         assert user["provider"] == "password+google"
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
 
@@ -185,6 +179,5 @@ def test_login_page_exposes_google_control_and_production_callback():
     assert "/api/v1/auth/google/status" in script
     assert "window.location.assign('/api/v1/auth/google')" in script
     assert (
-        "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback"
-        in environment
+        "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback" in environment
     )
