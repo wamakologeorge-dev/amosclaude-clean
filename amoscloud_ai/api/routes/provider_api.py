@@ -33,7 +33,11 @@ router = APIRouter(prefix="/provider", tags=["amosclaud-provider"])
 
 
 class KeyCreate(BaseModel):
-    label: str = Field(default="My Amosclaud installation", min_length=2, max_length=100)
+    label: str = Field(
+        default="My Amosclaud installation",
+        min_length=2,
+        max_length=100,
+    )
 
 
 class TokenCheckout(BaseModel):
@@ -53,7 +57,10 @@ class ChatCompletionRequest(BaseModel):
 def _user(token: str | None):
     user = get_user_from_session(token)
     if not user:
-        raise HTTPException(status_code=401, detail="Sign in to manage Amosclaud API access")
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in to manage Amosclaud API access",
+        )
     return user
 
 
@@ -77,14 +84,21 @@ def _stripe_customer_id(user: Any) -> str:
         if existing and existing["stripe_customer_id"]:
             return str(existing["stripe_customer_id"])
 
+    user_keys = user.keys() if hasattr(user, "keys") else ()
     try:
         customer = stripe.Customer.create(
             email=user["email"],
-            name=user["name"] if "name" in user.keys() else None,
-            metadata={"amosclaud_user_id": str(user["id"]), "kind": "agent_credits"},
+            name=user["name"] if "name" in user_keys else None,
+            metadata={
+                "amosclaud_user_id": str(user["id"]),
+                "kind": "agent_credits",
+            },
         )
     except stripe.error.StripeError as exc:
-        raise _stripe_error("Stripe could not create the billing customer", exc) from exc
+        raise _stripe_error(
+            "Stripe could not create the billing customer",
+            exc,
+        ) from exc
 
     customer_id = str(customer.id)
     with _connect() as db:
@@ -104,12 +118,25 @@ def _stripe_customer_id(user: Any) -> str:
 def _session_owner(session: Any) -> int:
     metadata = getattr(session, "metadata", None) or {}
     if not isinstance(metadata, dict):
-        metadata = dict(metadata)
+        try:
+            metadata = dict(metadata)
+        except (TypeError, ValueError):
+            metadata = {}
     return int(
         metadata.get("amosclaud_user_id")
         or getattr(session, "client_reference_id", None)
         or 0
     )
+
+
+def _wallet_balance(user_id: int) -> int:
+    with _connect() as db:
+        ensure_agent_schema(db)
+        wallet = db.execute(
+            "SELECT balance FROM agent_token_wallets WHERE user_id=?",
+            (user_id,),
+        ).fetchone()
+    return int(wallet["balance"]) if wallet else 0
 
 
 @router.get("/tokens")
@@ -118,7 +145,8 @@ def token_status(amos_session: str | None = Cookie(default=None)) -> dict:
     with _connect() as db:
         ensure_agent_schema(db)
         wallet = db.execute(
-            "SELECT balance,updated_at FROM agent_token_wallets WHERE user_id=?", (user["id"],)
+            "SELECT balance,updated_at FROM agent_token_wallets WHERE user_id=?",
+            (user["id"],),
         ).fetchone()
         history = db.execute(
             """SELECT delta,reason,reference,created_at FROM agent_token_ledger
@@ -132,8 +160,8 @@ def token_status(amos_session: str | None = Cookie(default=None)) -> dict:
         "checkout_available": any(pack["available"] for pack in packs),
         "checkout_provider": "stripe" if stripe_configured() else None,
         "payment_method_note": (
-            "Stripe Checkout accepts cards and debit cards. Bank-account options appear when "
-            "they are enabled and eligible in the Stripe Dashboard."
+            "Stripe Checkout accepts cards and debit cards. Bank-account options "
+            "appear when they are enabled and eligible in the Stripe Dashboard."
         ),
         "packs": packs,
         "history": [dict(row) for row in history],
@@ -148,10 +176,13 @@ def token_checkout(
     user = _user(amos_session)
     secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
     pack = get_pack(body.pack)
-    if not secret:
+    if not stripe_configured():
         raise HTTPException(
             status_code=503,
-            detail="Stripe checkout is not configured. Add STRIPE_SECRET_KEY on the server.",
+            detail=(
+                "Stripe credit checkout is not fully configured. Add "
+                "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET on the server."
+            ),
         )
     try:
         line_item = checkout_line_item(pack)
@@ -168,7 +199,10 @@ def token_checkout(
             customer=customer_id,
             client_reference_id=str(user["id"]),
             metadata=metadata,
-            payment_intent_data={"metadata": metadata, "receipt_email": user["email"]},
+            payment_intent_data={
+                "metadata": metadata,
+                "receipt_email": user["email"],
+            },
             success_url=(
                 f"{_public_url()}/api-access?checkout=success"
                 "&session_id={CHECKOUT_SESSION_ID}"
@@ -181,8 +215,14 @@ def token_checkout(
         raise _stripe_error("Stripe could not start checkout", exc) from exc
 
     if not session.url:
-        raise HTTPException(status_code=502, detail="Stripe did not return a checkout URL")
-    return {"url": str(session.url), "session_id": str(session.id)}
+        raise HTTPException(
+            status_code=502,
+            detail="Stripe did not return a checkout URL",
+        )
+    return {
+        "url": str(session.url),
+        "session_id": str(session.id),
+    }
 
 
 @router.get("/tokens/checkout/{session_id}")
@@ -192,36 +232,55 @@ def token_checkout_status(
 ) -> dict[str, object]:
     user = _user(amos_session)
     if not session_id.startswith("cs_") or len(session_id) > 255:
-        raise HTTPException(status_code=400, detail="Stripe Checkout session is invalid")
+        raise HTTPException(
+            status_code=400,
+            detail="Stripe Checkout session is invalid",
+        )
 
     secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
     if not secret:
-        raise HTTPException(status_code=503, detail="Stripe checkout is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Stripe checkout is not configured",
+        )
     stripe.api_key = secret
     try:
         session = stripe.checkout.Session.retrieve(session_id)
     except stripe.error.StripeError as exc:
-        raise _stripe_error("Stripe could not confirm this checkout", exc) from exc
+        raise _stripe_error(
+            "Stripe could not confirm this checkout",
+            exc,
+        ) from exc
 
-    if _session_owner(session) != int(user["id"]):
-        raise HTTPException(status_code=404, detail="Checkout session was not found")
+    user_id = int(user["id"])
+    if _session_owner(session) != user_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Checkout session was not found",
+        )
 
     try:
         with _connect() as db:
             credited, balance = settle_paid_checkout(
                 db,
                 session,
-                expected_user_id=int(user["id"]),
+                expected_user_id=user_id,
             )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     payment_status = str(getattr(session, "payment_status", "unpaid"))
     status = str(getattr(session, "status", "open"))
+    if payment_status != "paid":
+        balance = _wallet_balance(user_id)
+
     if payment_status == "paid":
         message = "Payment confirmed and agent credits are available."
     elif status == "complete":
-        message = "Stripe accepted the payment details. Bank payments can take time to settle."
+        message = (
+            "Stripe accepted the payment details. Bank payments can take time "
+            "to settle."
+        )
     else:
         message = "Checkout has not been completed."
     return {
@@ -248,10 +307,17 @@ def list_keys(amos_session: str | None = Cookie(default=None)) -> list[dict]:
 
 
 @router.post("/keys", status_code=201)
-def create_key(body: KeyCreate, amos_session: str | None = Cookie(default=None)) -> dict:
+def create_key(
+    body: KeyCreate,
+    amos_session: str | None = Cookie(default=None),
+) -> dict:
     user = _user(amos_session)
     with _connect() as db:
-        key_id, raw, prefix = issue_api_key(db, int(user["id"]), body.label.strip())
+        key_id, raw, prefix = issue_api_key(
+            db,
+            int(user["id"]),
+            body.label.strip(),
+        )
     return {
         "id": key_id,
         "api_key": raw,
@@ -261,12 +327,16 @@ def create_key(body: KeyCreate, amos_session: str | None = Cookie(default=None))
 
 
 @router.delete("/keys/{key_id}", status_code=204)
-def revoke_key(key_id: int, amos_session: str | None = Cookie(default=None)) -> None:
+def revoke_key(
+    key_id: int,
+    amos_session: str | None = Cookie(default=None),
+) -> None:
     user = _user(amos_session)
     with _connect() as db:
         ensure_agent_schema(db)
         cursor = db.execute(
-            "UPDATE agent_api_keys SET revoked_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL",
+            """UPDATE agent_api_keys SET revoked_at=?
+               WHERE id=? AND user_id=? AND revoked_at IS NULL""",
             (now(), key_id, user["id"]),
         )
         db.commit()
@@ -276,7 +346,10 @@ def revoke_key(key_id: int, amos_session: str | None = Cookie(default=None)) -> 
 
 def _authenticate(authorization: str | None):
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="A valid Amosclaud API key is required")
+        raise HTTPException(
+            status_code=401,
+            detail="A valid Amosclaud API key is required",
+        )
     raw = authorization.removeprefix("Bearer ").strip()
     with _connect() as db:
         ensure_agent_schema(db)
@@ -287,8 +360,14 @@ def _authenticate(authorization: str | None):
             (key_hash(raw),),
         ).fetchone()
         if not row:
-            raise HTTPException(status_code=401, detail="Amosclaud API key is invalid or revoked")
-        db.execute("UPDATE agent_api_keys SET last_used_at=? WHERE id=?", (now(), row["id"]))
+            raise HTTPException(
+                status_code=401,
+                detail="Amosclaud API key is invalid or revoked",
+            )
+        db.execute(
+            "UPDATE agent_api_keys SET last_used_at=? WHERE id=?",
+            (now(), row["id"]),
+        )
         db.commit()
         return dict(row)
 
@@ -299,20 +378,37 @@ def chat_completions(
     authorization: str | None = Header(default=None),
 ) -> dict:
     credential = _authenticate(authorization)
-    cost = max(1, int(os.getenv("AMOSCLAUD_AGENT_CREDITS_PER_REQUEST", "1")))
+    cost = max(
+        1,
+        int(os.getenv("AMOSCLAUD_AGENT_CREDITS_PER_REQUEST", "1")),
+    )
     request_id = "agent-" + uuid.uuid4().hex
     with _connect() as db:
-        if not debit_tokens(db, int(credential["user_id"]), cost, reference=request_id):
+        if not debit_tokens(
+            db,
+            int(credential["user_id"]),
+            cost,
+            reference=request_id,
+        ):
             raise HTTPException(
                 status_code=402,
-                detail={"code": "agent_tokens_required", "purchase_url": "/api-access"},
+                detail={
+                    "code": "agent_tokens_required",
+                    "purchase_url": "/api-access",
+                },
             )
 
     messages = [message.model_dump() for message in body.messages]
     system = "\n".join(
-        message["content"] for message in messages if message["role"] == "system"
+        message["content"]
+        for message in messages
+        if message["role"] == "system"
     ) or "You are Amosclaud, a professional engineering agent."
-    history = [message for message in messages if message["role"] != "system"]
+    history = [
+        message
+        for message in messages
+        if message["role"] != "system"
+    ]
     try:
         result = provider.reply(history, system)
         if result.status != "ready":
@@ -326,7 +422,10 @@ def chat_completions(
                 reason="agent_request_refund",
                 reference=request_id,
             )
-        raise HTTPException(status_code=503, detail="Amosclaud agent runtime is unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="Amosclaud agent runtime is unavailable",
+        )
 
     return {
         "id": request_id,
@@ -336,7 +435,10 @@ def chat_completions(
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": result.reply},
+                "message": {
+                    "role": "assistant",
+                    "content": result.reply,
+                },
                 "finish_reason": "stop",
             }
         ],
