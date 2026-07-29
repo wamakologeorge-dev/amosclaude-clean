@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from amosclaud_mcp.server import mcp as amosclaud_mcp
+from amoscloud_ai.api.routes import vscode_terminal
 from amoscloud_ai.main import app as platform_app
 
 ASGIApp = Callable[
@@ -117,6 +118,11 @@ async def lifespan(_app: FastAPI):
         await stack.enter_async_context(amosclaud_mcp.session_manager.run())
         yield
 
+
+# The production combined application is also the browser-editor gateway.
+# Mount this router directly so the same deployment serves Chat, MCP, and each
+# user's repository-scoped terminal without a second public service.
+platform_app.include_router(vscode_terminal.router, prefix="/api/v1")
 
 app = FastAPI(
     title="Amosclaud Platform and MCP",
