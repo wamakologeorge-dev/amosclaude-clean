@@ -72,7 +72,10 @@ def verify_connection() -> int:
 
     models = payload.get("models") if isinstance(payload, dict) else None
     if not isinstance(models, list):
-        print("Ollama connection check failed: /api/tags returned an invalid response.", file=sys.stderr)
+        print(
+            "Ollama connection check failed: /api/tags returned an invalid response.",
+            file=sys.stderr,
+        )
         return 1
 
     names = {
