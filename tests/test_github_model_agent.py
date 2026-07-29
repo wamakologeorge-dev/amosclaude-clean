@@ -93,10 +93,7 @@ def test_trusted_comment_returns_real_provider_metadata(tmp_path, monkeypatch):
 
 def test_workflow_wires_first_party_ollama_and_fallback_secret_names():
     workflow = (
-        Path(__file__).resolve().parents[1]
-        / ".github"
-        / "workflows"
-        / "amosclaud-model-agent.yml"
+        Path(__file__).resolve().parents[1] / ".github" / "workflows" / "amosclaud-model-agent.yml"
     ).read_text(encoding="utf-8")
 
     for required in (
