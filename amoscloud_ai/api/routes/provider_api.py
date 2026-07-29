@@ -123,9 +123,7 @@ def _session_owner(session: Any) -> int:
         except (TypeError, ValueError):
             metadata = {}
     return int(
-        metadata.get("amosclaud_user_id")
-        or getattr(session, "client_reference_id", None)
-        or 0
+        metadata.get("amosclaud_user_id") or getattr(session, "client_reference_id", None) or 0
     )
 
 
@@ -204,8 +202,7 @@ def token_checkout(
                 "receipt_email": user["email"],
             },
             success_url=(
-                f"{_public_url()}/api-access?checkout=success"
-                "&session_id={CHECKOUT_SESSION_ID}"
+                f"{_public_url()}/api-access?checkout=success" "&session_id={CHECKOUT_SESSION_ID}"
             ),
             cancel_url=f"{_public_url()}/api-access?checkout=cancelled",
             submit_type="pay",
@@ -277,10 +274,7 @@ def token_checkout_status(
     if payment_status == "paid":
         message = "Payment confirmed and agent credits are available."
     elif status == "complete":
-        message = (
-            "Stripe accepted the payment details. Bank payments can take time "
-            "to settle."
-        )
+        message = "Stripe accepted the payment details. Bank payments can take time " "to settle."
     else:
         message = "Checkout has not been completed."
     return {
@@ -399,16 +393,11 @@ def chat_completions(
             )
 
     messages = [message.model_dump() for message in body.messages]
-    system = "\n".join(
-        message["content"]
-        for message in messages
-        if message["role"] == "system"
-    ) or "You are Amosclaud, a professional engineering agent."
-    history = [
-        message
-        for message in messages
-        if message["role"] != "system"
-    ]
+    system = (
+        "\n".join(message["content"] for message in messages if message["role"] == "system")
+        or "You are Amosclaud, a professional engineering agent."
+    )
+    history = [message for message in messages if message["role"] != "system"]
     try:
         result = provider.reply(history, system)
         if result.status != "ready":
