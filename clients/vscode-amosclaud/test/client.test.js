@@ -12,10 +12,12 @@ const {
   normalizeRelativePath,
 } = require('../src/client');
 
-test('normalizes secure platform and localhost URLs', () => {
+test('normalizes secure platform and exact localhost URLs', () => {
   assert.equal(normalizeBaseUrl('https://www.amosclaud.com/'), 'https://www.amosclaud.com');
   assert.equal(normalizeBaseUrl('http://localhost:8000/'), 'http://localhost:8000');
+  assert.equal(normalizeBaseUrl('http://127.0.0.1:8000/'), 'http://127.0.0.1:8000');
   assert.throws(() => normalizeBaseUrl('http://example.com'), /must use HTTPS/);
+  assert.throws(() => normalizeBaseUrl('http://localhost.example.com'), /must use HTTPS/);
 });
 
 test('rejects absolute and escaping editor paths', () => {
@@ -28,6 +30,7 @@ test('blocks sensitive paths', () => {
   assert.equal(isSensitivePath('.env'), true);
   assert.equal(isSensitivePath('config/.env.production'), true);
   assert.equal(isSensitivePath('certs/server.pem'), true);
+  assert.equal(isSensitivePath('secrets/provider.json'), true);
   assert.throws(
     () => buildEditorContext({ filePath: '.env', selection: 'TOKEN=value' }),
     /Sensitive files/,
