@@ -1,89 +1,137 @@
-# Amosclaud native VS Code agent and remote MCP
+# Amosclaud native VS Code agent, remote MCP, and self terminal
 
-## Why the earlier integration did not appear
+Amosclaud can operate in desktop VS Code, Codespaces, `vscode.dev`,
+`insiders.vscode.dev`, and `github.dev` through three connected surfaces:
 
-The first IDE companion was merged as source code, but three runtime pieces were
-missing:
+- the `@amosclaud` Chat participant;
+- the protected remote MCP endpoint at `/mcp/`;
+- the **Amosclaud Self Terminal** terminal profile.
 
-1. its extension manifest had only a Node.js `main` entry point, so the browser
-   extension host used by `vscode.dev`, `insiders.vscode.dev`, and `github.dev`
-   ignored it;
-2. it contributed a separate webview but did not register a VS Code Chat
-   participant, so VS Code Chat had no `@amosclaud` participant to route to;
-3. the first-party MCP server used local `stdio` only and the workspace did not
-   contain `.vscode/mcp.json`, so browser VS Code could not start or discover
-   Amosclaud tools.
+These surfaces delegate to the existing governed Amosclaud platform. They do not
+create a second orchestration root or bypass repository permissions, approvals,
+branch protection, verification, or Results reporting.
 
-## Implemented surfaces
+## VS Code chat
 
-The extension now uses one browser-safe entry point for desktop and web VS Code.
-It registers:
+The extension registers `@amosclaud` with these commands:
 
-- the independent Amosclaud activity-bar chat view;
-- the `@amosclaud` VS Code Chat participant;
-- `/plan`, `/run`, `/fix`, `/build`, `/deploy`, `/security`, `/agents`, and
-  `/status` chat commands;
-- Command Palette plan, run, and token commands.
+- `/plan`
+- `/run`
+- `/fix`
+- `/build`
+- `/deploy`
+- `/security`
+- `/agents`
+- `/status`
 
-The repository also includes:
+The independent Amosclaud activity-bar panel remains available for users who do
+not want to use the shared VS Code Chat interface.
 
-- `.vscode/mcp.json`, which configures the remote `amosclaud` MCP server;
-- `.github/agents/amosclaud.agent.md`, which exposes one Amosclaud Autonomous
-  custom agent using all `amosclaud/*` MCP tools;
-- a workflow that tests and packages the extension as a VSIX.
+## Remote MCP
 
-## Remote MCP transport
+The combined production ASGI application serves the existing platform at `/`
+and the first-party Streamable HTTP MCP server at `/mcp/`.
 
-The production container serves `amoscloud_ai.combined_app:app`.
-
-- `/` is the existing Amosclaud FastAPI platform.
-- `/mcp` is the first-party MCP server over stateless Streamable HTTP.
-- browser editor origins are allowed by an outer CORS layer.
-- every MCP protocol request requires a bearer key.
-
-Configure these Railway variables:
+Remote MCP requests require a bearer key. Configure:
 
 ```text
-AMOSCLAUD_AUTONOMOUS_KEY=<existing protected Autonomous API key>
-AMOSCLAUD_MCP_ACCESS_KEY=<separate optional MCP access key>
+AMOSCLAUD_AUTONOMOUS_KEY=<protected Autonomous API key>
+AMOSCLAUD_MCP_ACCESS_KEY=<optional separate remote MCP key>
 AMOSCLAUD_API_URL=https://www.amosclaud.com
 ```
 
-When `AMOSCLAUD_MCP_ACCESS_KEY` is not set, the remote MCP endpoint accepts the
-configured `AMOSCLAUD_AUTONOMOUS_KEY`. A dedicated MCP key is preferred because
-it can be rotated independently.
+When `AMOSCLAUD_MCP_ACCESS_KEY` is blank, the MCP endpoint accepts the configured
+Autonomous key. Never commit either key.
 
-Never commit either value. VS Code prompts for the MCP key from `.vscode/mcp.json`
-and stores the value as a protected input. The extension stores its API token in
-VS Code Secret Storage.
+The repository includes `.vscode/mcp.json`, which asks each VS Code user for the
+key through a protected input rather than storing it in the repository.
 
-## Install and publish the extension
+## Multi-user self terminal
 
-The `Amosclaud VS Code Extension` workflow packages:
+The self terminal is a VS Code Pseudoterminal connected to Amosclaud over a
+short-lived WebSocket ticket. It works in browser VS Code without requiring a
+local PowerShell process or a Codespace merely to display the Amosclaud shell.
 
-```text
-artifacts/amosclaud-autonomous.vsix
+The sequence is:
+
+1. VS Code reads that user's Autonomous key from Secret Storage.
+2. `GET /api/v1/vscode-terminal/repositories` returns only repositories owned by
+   the authenticated account.
+3. The user chooses a repository.
+4. `POST /api/v1/vscode-terminal/repositories/{id}/start` starts its managed
+   workspace.
+5. `POST /api/v1/vscode-terminal/repositories/{id}/ticket` creates a 120-second,
+   single-use ticket.
+6. VS Code connects to the returned `wss://` address and streams the repository
+   PTY into the integrated terminal.
+
+Every ticket is bound to:
+
+- one Amosclaud user;
+- one repository;
+- one workspace;
+- one terminal identifier;
+- one runtime profile;
+- one expiration time.
+
+Tickets are removed on first use. The server rechecks repository ownership when
+the WebSocket opens. Managed terminals run with per-user runtime identities,
+private home directories, scrubbed environments, repository-scoped working
+directories, and per-user active-session limits.
+
+The available profiles are:
+
+- `bash`
+- `sh`
+- `python`
+
+Managed same-service terminals remain owner-only because they run in the public
+service fallback. Organization developers should use the separate isolated
+workspace runtime when collaborative terminal access is enabled.
+
+## Opening the terminal
+
+After installing the extension and configuring a personal Autonomous key:
+
+1. Open the Command Palette.
+2. Run **Amosclaud: Open Self Terminal**; or
+3. Open **Terminal: Select Default Profile** and select **Amosclaud Self
+   Terminal**.
+4. Choose one of the repositories owned by the current account.
+
+## Packaging
+
+The extension package lives in `clients/vscode-amosclaud`.
+
+```bash
+cd clients/vscode-amosclaud
+npm run check
+npm test
+npm run build
+npx --yes @vscode/vsce package --no-dependencies
 ```
 
-Desktop VS Code and Codespaces can install the VSIX for testing. Browser VS Code
-loads coded extensions from the Visual Studio Marketplace, so create the
-`amosclaud` Marketplace publisher, add a repository secret named `VSCE_PAT`, and
-run the workflow manually with **publish** enabled.
+The `Amosclaud VS Code Extension` workflow performs the same checks, builds the
+browser bundle, packages a VSIX, and uploads it as a workflow artifact.
+Marketplace publication remains a release operation requiring the Amosclaud
+publisher account and its protected publishing credential.
 
-After publication, search for **Amosclaud Autonomous** in Extensions and install
-it. Then type:
+## Deployment
+
+The production Docker command runs:
 
 ```text
-@amosclaud /status
-@amosclaud /plan inspect this repository and identify the first verified blocker
-@amosclaud /run build and test this project
+uvicorn amoscloud_ai.combined_app:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
+
+After merge, Railway must deploy the new image before `/mcp/` and the VS Code
+terminal transport become available. Browser users must also install the built
+VSIX or the Marketplace release of the extension.
 
 ## GitHub integration boundary
 
 Amosclaud performs approved GitHub operations through its GitHub App,
-repository-scoped Actions, webhooks, issues, branches, pull requests, checks, and
-its protected Autonomous pipeline. GitHub's own chat interface remains a
-separate product surface. The supported integration is explicit and auditable:
-Amosclaud's chat participant, MCP tools, GitHub App permissions, and workflow
-jobs all use the permissions granted by the repository owner.
+repository-scoped Actions, webhooks, issues, branches, pull requests, checks,
+and protected Autonomous pipeline. GitHub's own chat interface remains a
+separate product surface. Amosclaud uses only the permissions granted by the
+repository owner.
