@@ -58,7 +58,9 @@ def validate_relative_path(value: str | None) -> str | None:
     normalized = value.replace("\\", "/").strip()
     path = PurePosixPath(normalized)
     if path.is_absolute() or ".." in path.parts:
-        raise IDEClientError("Editor file paths must be repository-relative and cannot contain '..'")
+        raise IDEClientError(
+            "Editor file paths must be repository-relative and cannot contain '..'"
+        )
     return str(path)
 
 
