@@ -116,7 +116,6 @@ def test_autonomous_sequence_delegates_to_the_single_governed_kernel() -> None:
     assert call["authorized_writes"] is False
     assert call["security_grant"] is None
     assert call["metadata"]["atomic_context_keys"] == ["path"]
-    assert call["metadata"]["atomic_task"]["runtime"] if False else True
     assert call["metadata"]["atomic_task"]["metadata"] == {
         "category": "container",
         "runtime": "amosclaud-autonomous",
