@@ -36,6 +36,10 @@ class MemoryLearnRequest(BaseModel):
     source_run_id: str = Field(default="", max_length=200)
 
 
+class MemoryFailureRequest(BaseModel):
+    reason: str = Field(min_length=2, max_length=2_000)
+
+
 def _memory() -> VerifiedRepairMemory:
     return VerifiedRepairMemory(default_catalog_path())
 
@@ -106,10 +110,7 @@ def memory_learn(
             detail="Every verification check must pass before memory learning",
         )
 
-    verification = [
-        {"name": item.name, "returncode": 0}
-        for item in body.checks
-    ]
+    verification = [{"name": item.name, "returncode": 0} for item in body.checks]
     try:
         return _memory().learn_verified(
             failure_evidence=body.failure_evidence,
@@ -120,3 +121,12 @@ def memory_learn(
         )
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/failed")
+def memory_failed(
+    body: MemoryFailureRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _authorize(authorization)
+    return _memory().record_failure(body.reason)
