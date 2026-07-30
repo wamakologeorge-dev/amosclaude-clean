@@ -6,6 +6,7 @@ from pathlib import Path
 
 from amoscloud_ai.repair_knowledge import VerifiedRepairMemory
 
+from .asset_checks import safer_local_assets
 from .core import (
     AutonomousRepairEngine,
     Doctor,
@@ -19,7 +20,6 @@ from .core import (
     Verdict,
     Verifier,
 )
-from .asset_checks import safer_local_assets
 from .decision_engine import AutonomousDecisionEngine, RepairDecision
 from .healing import HealingRecommendation, doctor_healing_run, recommendations
 from .json_repairs import json_aware_fixer_apply, safer_json_syntax
