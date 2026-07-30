@@ -1,7 +1,10 @@
 """Amosclaud autonomous decision and self-healing repair engine."""
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
+
+from amoscloud_ai.repair_knowledge import VerifiedRepairMemory
 
 from .core import (
     AutonomousRepairEngine,
@@ -21,18 +24,13 @@ from .decision_engine import AutonomousDecisionEngine, RepairDecision
 from .healing import HealingRecommendation, doctor_healing_run, recommendations
 from .json_repairs import json_aware_fixer_apply, safer_json_syntax
 
-# Root-relative links are application URLs, not host filesystem paths. Keep the
-# core class API stable while replacing the overly broad legacy asset check.
 Doctor._local_assets = safer_local_assets  # type: ignore[method-assign]
-
-# JSON-with-comments is common in developer tooling such as CodeSandbox. It is
-# repairable only when comments/trailing commas can be removed without touching
-# quoted strings and the normalized result parses successfully.
 Doctor._json_syntax = safer_json_syntax  # type: ignore[method-assign]
 _core_basic_text_checks = Doctor._basic_text_checks
 _core_fixer_apply = Fixer.apply
 _core_decide = AutonomousDecisionEngine.decide
 _core_run = AutonomousDecisionEngine.run
+_core_autonomous_run = AutonomousRepairEngine.run
 
 
 def _has_conflict_block(lines: list[str], separator_index: int) -> bool:
@@ -53,12 +51,10 @@ def _precise_basic_text_checks(self: Doctor, path: Path) -> list[Finding]:
     findings = _core_basic_text_checks(self, path)
     if not any(item.code == "merge-conflict" for item in findings):
         return findings
-
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeDecodeError):
         return findings
-
     verified: list[Finding] = []
     for finding in findings:
         if finding.code != "merge-conflict" or not finding.line:
@@ -116,10 +112,160 @@ def _doctor_led_run(self: AutonomousDecisionEngine, apply: bool = False) -> Repa
     return doctor_healing_run(_core_run, self, apply=apply)
 
 
+def _finding_query(findings: Sequence[Finding]) -> str:
+    return "\n".join(
+        f"{item.code} {item.message} {item.path or ''}" for item in findings
+    )
+
+
+def _memory_guided_decide(
+    self: AutonomousDecisionEngine,
+    findings: Sequence[Finding],
+) -> RepairDecision | None:
+    """Prefer a previously verified technique without executing stored code."""
+    try:
+        memory = VerifiedRepairMemory.for_repository(self.root)
+        paths = [item.path for item in findings if item.path]
+        matches = memory.recall(_finding_query(findings), changed_files=paths)
+    except (OSError, ValueError):
+        matches = []
+    if matches:
+        known = {
+            signal.replace("_", "-").replace(" ", "-")
+            for signal in matches[0].signals
+        }
+        selected = [
+            item
+            for item in findings
+            if item.severity == Severity.REPAIRABLE
+            and item.path
+            and item.code.replace("_", "-") in known
+        ]
+        if selected:
+            selected_paths = tuple(sorted({item.path for item in selected if item.path}))
+            return RepairDecision(
+                paths=selected_paths,
+                finding_codes=tuple(sorted({item.code for item in selected})),
+                confidence=99,
+                risk="low",
+                reason=(
+                    "Amosclaud Storage Memory matched verified technique "
+                    f"{matches[0].technique_id}; Fixer will still use only trusted "
+                    "deterministic handlers and Doctor will re-verify the current files."
+                ),
+            )
+    return _verified_decide(self, findings)
+
+
+def _memory_evidence(memory: VerifiedRepairMemory, findings: Sequence[Finding]) -> Evidence:
+    try:
+        paths = [item.path for item in findings if item.path]
+        matches = memory.recall(_finding_query(findings), changed_files=paths)
+    except (OSError, ValueError) as exc:
+        return Evidence(
+            "Amosclaud Storage Memory recall",
+            True,
+            output=f"Memory unavailable; no stored technique was executed: {type(exc).__name__}",
+        )
+    if not matches:
+        return Evidence(
+            "Amosclaud Storage Memory recall",
+            True,
+            output="No verified technique matched; normal bounded diagnosis continued.",
+        )
+    ids = ", ".join(item.technique_id for item in matches)
+    return Evidence(
+        "Amosclaud Storage Memory recall",
+        True,
+        output=f"Matched declarative verified technique(s): {ids}. No old patch was executed.",
+    )
+
+
+def _record_capability(
+    memory: VerifiedRepairMemory,
+    report: RepairReport,
+    *,
+    apply: bool,
+) -> Evidence:
+    if not apply:
+        return Evidence(
+            "Amosclaud capability level",
+            True,
+            output="Diagnosis-only run; no learning or level change was attempted.",
+        )
+    try:
+        if report.final_verdict == Verdict.PASS and report.changed_files:
+            result = memory.record_report(
+                report,
+                source_run_id=os.getenv("GITHUB_RUN_ID", ""),
+            )
+            state = "new technique" if result.get("novel") else "known technique reused"
+            return Evidence(
+                "Amosclaud capability level",
+                True,
+                output=(
+                    f"{state}; level={result.get('level', 1)}/{result.get('max_level', 5)}; "
+                    f"technique={result.get('technique_id', 'none')}"
+                ),
+            )
+        if report.final_verdict != Verdict.PASS:
+            status = memory.record_failure("repair verification failed")
+            return Evidence(
+                "Amosclaud capability level",
+                True,
+                output=(
+                    "Repair failed verification; no level awarded; "
+                    f"level={status.get('level', 1)}/{status.get('max_level', 5)}"
+                ),
+            )
+        status = memory.status()
+        return Evidence(
+            "Amosclaud capability level",
+            True,
+            output=(
+                "No repository change was required; no level awarded; "
+                f"level={status.get('level', 1)}/{status.get('max_level', 5)}"
+            ),
+        )
+    except (OSError, ValueError) as exc:
+        return Evidence(
+            "Amosclaud capability level",
+            True,
+            output=f"Verified repair completed but memory was not updated: {type(exc).__name__}",
+        )
+
+
+def _memory_aware_decision_run(
+    self: AutonomousDecisionEngine,
+    apply: bool = False,
+) -> RepairReport:
+    initial = self.diagnose()
+    memory = VerifiedRepairMemory.for_repository(self.root)
+    recall = _memory_evidence(memory, initial)
+    report = _doctor_led_run(self, apply=apply)
+    report.evidence.append(recall)
+    report.evidence.append(_record_capability(memory, report, apply=apply))
+    return report
+
+
+def _memory_aware_autonomous_run(
+    self: AutonomousRepairEngine,
+    apply: bool = False,
+) -> RepairReport:
+    initial = self.doctor.diagnose()
+    memory = VerifiedRepairMemory.for_repository(self.root)
+    recall = _memory_evidence(memory, initial)
+    report = _core_autonomous_run(self, apply=apply)
+    report.evidence.append(recall)
+    report.evidence.append(_record_capability(memory, report, apply=apply))
+    return report
+
+
 Doctor._basic_text_checks = _precise_basic_text_checks  # type: ignore[method-assign]
 Fixer.apply = _verified_fixer_apply  # type: ignore[method-assign]
-AutonomousDecisionEngine.decide = _verified_decide  # type: ignore[method-assign]
-AutonomousDecisionEngine.run = _doctor_led_run  # type: ignore[method-assign]
+AutonomousDecisionEngine.decide = _memory_guided_decide  # type: ignore[method-assign]
+AutonomousDecisionEngine.run = _memory_aware_decision_run  # type: ignore[method-assign]
+AutonomousRepairEngine.run = _memory_aware_autonomous_run  # type: ignore[method-assign]
 
 __all__ = [
     "AutonomousDecisionEngine",
@@ -135,6 +281,7 @@ __all__ = [
     "RepairReport",
     "Severity",
     "Verdict",
+    "VerifiedRepairMemory",
     "Verifier",
     "recommendations",
 ]
