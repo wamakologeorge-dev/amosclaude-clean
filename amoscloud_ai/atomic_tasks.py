@@ -136,7 +136,9 @@ class AtomicTask(BaseModel):
         except AtomicTaskError:
             raise
         except Exception as exc:
-            raise AtomicTaskError(f"atomic action {self.name} could not prepare its instruction") from exc
+            raise AtomicTaskError(
+                f"atomic action {self.name} could not prepare its instruction"
+            ) from exc
         if instruction.mode not in self.allowed_modes:
             raise AtomicTaskError(
                 f"atomic action {self.name} requested disallowed mode {instruction.mode}"
