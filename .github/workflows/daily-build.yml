@@ -28,6 +28,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Check out Amosclaud Storage Memory
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: amosclaud-memory
+          path: amosclaud-memory-store
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -42,6 +50,17 @@ jobs:
           python -m pip install --disable-pip-version-check -e .
           python -m pip install --disable-pip-version-check pytest pytest-asyncio
 
+      - name: Report earned capability level
+        env:
+          AMOSCLAUD_REPAIR_MEMORY_CATALOG: ${{ github.workspace }}/amosclaud-memory-store/Amosclaud-storage/repair-memory/catalog.json
+        run: |
+          set -euo pipefail
+          python -m amoscloud_ai.repair_knowledge \
+            --catalog "$AMOSCLAUD_REPAIR_MEMORY_CATALOG" \
+            status \
+            --summary "$RUNNER_TEMP/amosclaud-capability.md"
+          cat "$RUNNER_TEMP/amosclaud-capability.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate and verify one reviewable proposal
         env:
           AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
@@ -50,6 +69,13 @@ jobs:
           AMOSCLAUD_API_COMPLETIONS_PATH: ${{ vars.AMOSCLAUD_API_COMPLETIONS_PATH || '/api/v1/provider/chat/completions' }}
           AMOSCLAUD_CRON_MODEL: ${{ vars.AMOSCLAUD_CRON_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_DEFAULT_BRANCH: main
+          AMOSCLAUD_REPAIR_MEMORY_CATALOG: ${{ github.workspace }}/amosclaud-memory-store/Amosclaud-storage/repair-memory/catalog.json
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          AMOSCLAUD_MODEL_URL: ${{ secrets.OLLAMA_URL || 'https://ollama.com' }}
+          AMOSCLAUD_MODEL_TOKEN: ${{ secrets.OLLAMA_API_KEY }}
+          AMOSCLAUD_MODEL_COMPLETIONS_PATH: /v1/chat/completions
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL || vars.OLLAMA_MODEL || 'gpt-oss:120b' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
