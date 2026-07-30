@@ -1,0 +1,59 @@
+name: Temporary Capability Formatter
+
+on:
+  push:
+    branches:
+      - agent/capability-levels
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-capability-format
+  cancel-in-progress: false
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out capability branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: agent/capability-levels
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Format and remove this one-time workflow
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check black==26.5.1
+          python -m black \
+            .github/scripts/amosclaud_repair_candidate.py \
+            amosclaud_cron_gateway.py \
+            amosclaud_daily_memory_runner.py \
+            amoscloud_ai/api/routes/__init__.py \
+            amoscloud_ai/api/routes/capability_memory_api.py \
+            amoscloud_ai/repair_engine/__init__.py \
+            amoscloud_ai/repair_knowledge.py \
+            tests/test_capability_memory_levels.py \
+            tests/test_repair_knowledge.py \
+            tests/test_repair_memory_integration_contract.py
+          python -m compileall -q \
+            amosclaud_cron_gateway.py \
+            amosclaud_daily_memory_runner.py \
+            amoscloud_ai \
+            tests/test_capability_memory_levels.py \
+            tests/test_repair_knowledge.py \
+            tests/test_repair_memory_integration_contract.py
+          rm .github/workflows/temporary-capability-format.yml
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: format capability memory implementation"
+          git push origin HEAD:agent/capability-levels
