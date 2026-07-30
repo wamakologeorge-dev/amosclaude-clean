@@ -72,6 +72,13 @@ def memory_status(authorization: str | None = Header(default=None)) -> dict[str,
     }
 
 
+@router.post("/export")
+def memory_export(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Return only the sanitized declarative catalog for the Actions mirror."""
+    _authorize(authorization)
+    return {"catalog": _memory().initialize()}
+
+
 @router.post("/search")
 def memory_search(
     body: MemorySearchRequest,
