@@ -118,7 +118,8 @@ def _flat_include_router(
         if isinstance(route, APIWebSocketRoute):
             path = _join_prefix(prefix, route.path)
             if any(
-                isinstance(existing, APIWebSocketRoute) and getattr(existing, "path", None) == path
+                isinstance(existing, APIWebSocketRoute)
+                and getattr(existing, "path", None) == path
                 for existing in target.routes
             ):
                 continue
@@ -270,3 +271,18 @@ for _module in (autonomy, workforce):
             continue
         task_router.router.routes.append(_route)
         _task_keys |= _keys
+
+# Capability memory shares the authenticated provider service surface. It is a
+# single storage authority for Actions, Autonomous, Doctor, and repair workers.
+from amoscloud_ai.api.routes import capability_memory_api as capability_memory_api
+from amoscloud_ai.api.routes import provider_api as provider_api
+
+_provider_keys = set()
+for _route in provider_api.router.routes:
+    _provider_keys |= _route_keys(_route)
+for _route in capability_memory_api.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _provider_keys:
+        continue
+    provider_api.router.routes.append(_route)
+    _provider_keys |= _keys
