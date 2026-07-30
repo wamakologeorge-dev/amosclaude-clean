@@ -1,28 +1,24 @@
-"""Protected API for shared Amosclaud repair knowledge and capability levels."""
+"""Protected API for the authoritative Amosclaud Storage repair memory."""
 
 from __future__ import annotations
 
 import hmac
 import os
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from amoscloud_ai.capability_memory import (
-    capability_profile,
-    connect_memory,
-    memory_injection,
-    record_verified_technique,
-    search_verified_techniques,
-)
+from amoscloud_ai.repair_knowledge import VerifiedRepairMemory, default_catalog_path
 
 router = APIRouter(prefix="/provider/memory", tags=["amosclaud-capability-memory"])
 
 
 class MemorySearchRequest(BaseModel):
-    query: str = Field(min_length=3, max_length=10_000)
-    limit: int = Field(default=5, ge=1, le=10)
+    query: str = Field(min_length=3, max_length=20_000)
+    changed_files: list[str] = Field(default_factory=list, max_length=100)
+    limit: int = Field(default=4, ge=1, le=10)
 
 
 class VerificationCheck(BaseModel):
@@ -30,23 +26,18 @@ class VerificationCheck(BaseModel):
     passed: bool
 
 
-class MemoryEvidence(BaseModel):
-    proof_id: str = Field(min_length=4, max_length=200)
+class MemoryLearnRequest(BaseModel):
+    failure_evidence: str = Field(min_length=3, max_length=40_000)
+    changed_files: list[str] = Field(min_length=1, max_length=100)
     verified: bool
     final_verdict: str = Field(min_length=2, max_length=30)
     checks: list[VerificationCheck] = Field(min_length=1, max_length=50)
+    source: str = Field(default="amosclaud", min_length=2, max_length=200)
+    source_run_id: str = Field(default="", max_length=200)
 
 
-class MemoryLearnRequest(BaseModel):
-    category: str = Field(min_length=2, max_length=120)
-    problem_pattern: str = Field(min_length=5, max_length=1_000)
-    root_cause: str = Field(min_length=5, max_length=1_000)
-    strategy: list[str] = Field(min_length=1, max_length=20)
-    target: str = Field(min_length=1, max_length=500)
-    source: str = Field(default="amosclaud", min_length=2, max_length=120)
-    confidence: int = Field(default=100, ge=0, le=100)
-    combined_fingerprints: list[str] = Field(default_factory=list, max_length=20)
-    evidence: MemoryEvidence
+def _memory() -> VerifiedRepairMemory:
+    return VerifiedRepairMemory(default_catalog_path())
 
 
 def _authorize(authorization: str | None) -> None:
@@ -54,7 +45,7 @@ def _authorize(authorization: str | None) -> None:
     if not expected:
         raise HTTPException(
             status_code=503,
-            detail="Amosclaud capability memory access is not configured",
+            detail="Amosclaud Storage memory access is not configured",
         )
     supplied = ""
     if authorization and authorization.startswith("Bearer "):
@@ -69,17 +60,11 @@ def _authorize(authorization: str | None) -> None:
 @router.get("/status")
 def memory_status(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _authorize(authorization)
-    with connect_memory() as db:
-        profile = capability_profile(db)
-        techniques = db.execute(
-            """SELECT COUNT(*) AS count FROM amosclaud_repair_techniques
-               WHERE active=1"""
-        ).fetchone()["count"]
+    status = _memory().status()
     return {
         "status": "ready",
-        "storage": "amosclaud-capability-memory",
-        "techniques": int(techniques),
-        "profile": profile,
+        "storage": "amosclaud-storage",
+        **status,
     }
 
 
@@ -89,13 +74,16 @@ def memory_search(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _authorize(authorization)
-    with connect_memory() as db:
-        matches = search_verified_techniques(db, body.query, limit=body.limit)
-        profile = capability_profile(db)
+    memory = _memory()
+    matches = memory.recall(
+        body.query,
+        changed_files=body.changed_files,
+        limit=body.limit,
+    )
     return {
-        "matches": matches,
-        "injection": memory_injection(matches),
-        "profile": profile,
+        "matches": [asdict(item) for item in matches],
+        "injection": memory.prompt_context(matches),
+        "profile": memory.status(),
     }
 
 
@@ -105,21 +93,30 @@ def memory_learn(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     _authorize(authorization)
-    evidence = body.evidence.model_dump()
-    evidence["checks"] = [item.model_dump() for item in body.evidence.checks]
+    if body.verified is not True:
+        raise HTTPException(status_code=400, detail="Memory learning requires verified=true")
+    if body.final_verdict.upper() not in {"PASS", "PASSED", "SUCCESS", "SUCCEEDED"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Only a successful final verdict may enter Amosclaud Storage memory",
+        )
+    if any(item.passed is not True for item in body.checks):
+        raise HTTPException(
+            status_code=400,
+            detail="Every verification check must pass before memory learning",
+        )
+
+    verification = [
+        {"name": item.name, "returncode": 0}
+        for item in body.checks
+    ]
     try:
-        with connect_memory() as db:
-            return record_verified_technique(
-                db,
-                category=body.category,
-                problem_pattern=body.problem_pattern,
-                root_cause=body.root_cause,
-                strategy=body.strategy,
-                target=body.target,
-                evidence=evidence,
-                source=body.source,
-                confidence=body.confidence,
-                combined_fingerprints=body.combined_fingerprints,
-            )
-    except ValueError as exc:
+        return _memory().learn_verified(
+            failure_evidence=body.failure_evidence,
+            changed_files=body.changed_files,
+            verification_results=verification,
+            source=body.source,
+            source_run_id=body.source_run_id,
+        )
+    except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
