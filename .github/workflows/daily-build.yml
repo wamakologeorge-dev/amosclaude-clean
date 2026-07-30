@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      AMOSCLAUD_REPAIR_MEMORY_CATALOG: ${{ github.workspace }}/amosclaud-memory-store/Amosclaud-storage/repair-memory/catalog.json
     steps:
       - name: Check out default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -34,7 +35,7 @@ jobs:
           ref: amosclaud-memory
           path: amosclaud-memory-store
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -51,8 +52,6 @@ jobs:
           python -m pip install --disable-pip-version-check pytest pytest-asyncio
 
       - name: Report earned capability level
-        env:
-          AMOSCLAUD_REPAIR_MEMORY_CATALOG: ${{ github.workspace }}/amosclaud-memory-store/Amosclaud-storage/repair-memory/catalog.json
         run: |
           set -euo pipefail
           python -m amoscloud_ai.repair_knowledge \
@@ -69,7 +68,8 @@ jobs:
           AMOSCLAUD_API_COMPLETIONS_PATH: ${{ vars.AMOSCLAUD_API_COMPLETIONS_PATH || '/api/v1/provider/chat/completions' }}
           AMOSCLAUD_CRON_MODEL: ${{ vars.AMOSCLAUD_CRON_MODEL || 'amosclaud-agent' }}
           AMOSCLAUD_DEFAULT_BRANCH: main
-          AMOSCLAUD_REPAIR_MEMORY_CATALOG: ${{ github.workspace }}/amosclaud-memory-store/Amosclaud-storage/repair-memory/catalog.json
+          AMOSCLAUD_MEMORY_ACCESS_KEY: ${{ secrets.AMOSCLAUD_MEMORY_ACCESS_KEY }}
+          AMOSCLAUD_MEMORY_API_URL: ${{ secrets.AMOSCLAUD_MEMORY_API_URL || secrets.AMOSCLAUD_PROVIDER_API_URL || vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
           OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
           AMOSCLAUD_MODEL_URL: ${{ secrets.OLLAMA_URL || 'https://ollama.com' }}
@@ -79,4 +79,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          python amosclaud_cron_gateway.py
+          python amosclaud_daily_memory_runner.py
+
+      - name: Persist sanitized memory mirror
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$AMOSCLAUD_REPAIR_MEMORY_CATALOG" ]; then
+            echo "No memory catalog was produced."
+            exit 0
+          fi
+          git -C amosclaud-memory-store config user.name "Amosclaud Storage Memory"
+          git -C amosclaud-memory-store config user.email "memory@amosclaud.internal"
+          git -C amosclaud-memory-store add Amosclaud-storage/repair-memory/catalog.json
+          if git -C amosclaud-memory-store diff --cached --quiet; then
+            echo "Memory catalog is unchanged."
+            exit 0
+          fi
+          git -C amosclaud-memory-store commit -m "chore(memory): update verified repair catalog"
+          git -C amosclaud-memory-store push origin HEAD:amosclaud-memory
