@@ -105,9 +105,7 @@ def _memory_url() -> str:
     configured = os.getenv("AMOSCLAUD_REPAIR_MEMORY_URL", "").strip()
     if configured:
         return configured
-    repository = os.getenv(
-        "GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean"
-    ).strip()
+    repository = os.getenv("GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean").strip()
     return (
         f"https://raw.githubusercontent.com/{repository}/amosclaud-memory/"
         "Amosclaud-storage/repair-memory/catalog.json"

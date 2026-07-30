@@ -131,11 +131,7 @@ def _with_memory(prompt: str) -> str:
     result = _memory_search(prompt)
     if not result.get("matches"):
         return prompt
-    return (
-        prompt
-        + "\n\n=== AMOSCLAUD STORAGE MEMORY ===\n"
-        + str(result.get("injection") or "")
-    )
+    return prompt + "\n\n=== AMOSCLAUD STORAGE MEMORY ===\n" + str(result.get("injection") or "")
 
 
 def _provider_fallback(prompt: str) -> str:
@@ -187,9 +183,7 @@ def _request_completion(prompt: str) -> str:
                         break
             except urllib.error.HTTPError as error:
                 detail = error.read().decode("utf-8", errors="replace")
-                route_errors.append(
-                    f"{path} -> HTTP {error.code}: {agent.redact(detail[:300])}"
-                )
+                route_errors.append(f"{path} -> HTTP {error.code}: {agent.redact(detail[:300])}")
                 if error.code in {404, 405}:
                     continue
                 break

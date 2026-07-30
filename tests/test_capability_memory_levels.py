@@ -135,9 +135,7 @@ def test_memory_api_requires_service_key_and_all_green_checks(
         changed_files=["web/a.json"],
         verified=True,
         final_verdict="PASS",
-        checks=[
-            capability_memory_api.VerificationCheck(name="pytest", passed=False)
-        ],
+        checks=[capability_memory_api.VerificationCheck(name="pytest", passed=False)],
         source="test",
     )
     with pytest.raises(HTTPException) as rejected:

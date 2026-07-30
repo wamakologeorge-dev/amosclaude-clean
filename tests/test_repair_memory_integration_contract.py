@@ -10,7 +10,7 @@ def test_repair_candidate_recalls_memory_without_executing_old_patches() -> None
         encoding="utf-8"
     )
 
-    assert "memory_context(evidence + \"\\n\" + feedback)" in source
+    assert 'memory_context(evidence + "\\n" + feedback)' in source
     assert "Do not copy old patches" not in source
     assert "declarative hints, not executable code" in source
     assert '"memory_consulted": True' in source
@@ -18,9 +18,7 @@ def test_repair_candidate_recalls_memory_without_executing_old_patches() -> None
 
 
 def test_daily_agent_reads_level_and_has_repository_ollama_fallback() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "daily-build.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "daily-build.yml").read_text(encoding="utf-8")
     gateway = (ROOT / "amosclaud_cron_gateway.py").read_text(encoding="utf-8")
 
     assert "ref: amosclaud-memory" in workflow
@@ -32,9 +30,9 @@ def test_daily_agent_reads_level_and_has_repository_ollama_fallback() -> None:
 
 
 def test_only_successful_repair_control_runs_can_teach_memory() -> None:
-    workflow = (
-        ROOT / ".github" / "workflows" / "amosclaud-repair-memory-learn.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "amosclaud-repair-memory-learn.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "github.event.workflow_run.conclusion == 'success'" in workflow
     assert "amosclaud-repair-control-${{ env.SOURCE_RUN_ID }}" in workflow
@@ -43,9 +41,7 @@ def test_only_successful_repair_control_runs_can_teach_memory() -> None:
 
 
 def test_doctor_and_fixer_use_shared_verified_memory() -> None:
-    source = (ROOT / "amoscloud_ai" / "repair_engine" / "__init__.py").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "amoscloud_ai" / "repair_engine" / "__init__.py").read_text(encoding="utf-8")
 
     assert "VerifiedRepairMemory.for_repository" in source
     assert "No old patch was executed" in source

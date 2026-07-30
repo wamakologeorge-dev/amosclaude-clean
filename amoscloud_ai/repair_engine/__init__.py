@@ -87,9 +87,7 @@ def _verified_decide(
             (
                 item
                 for item in findings
-                if item.code == "json-syntax"
-                and item.severity == Severity.REPAIRABLE
-                and item.path
+                if item.code == "json-syntax" and item.severity == Severity.REPAIRABLE and item.path
             ),
             key=lambda item: (item.path or "", item.line or 0),
         )
@@ -113,9 +111,7 @@ def _doctor_led_run(self: AutonomousDecisionEngine, apply: bool = False) -> Repa
 
 
 def _finding_query(findings: Sequence[Finding]) -> str:
-    return "\n".join(
-        f"{item.code} {item.message} {item.path or ''}" for item in findings
-    )
+    return "\n".join(f"{item.code} {item.message} {item.path or ''}" for item in findings)
 
 
 def _memory_guided_decide(
@@ -130,10 +126,7 @@ def _memory_guided_decide(
     except (OSError, ValueError):
         matches = []
     if matches:
-        known = {
-            signal.replace("_", "-").replace(" ", "-")
-            for signal in matches[0].signals
-        }
+        known = {signal.replace("_", "-").replace(" ", "-") for signal in matches[0].signals}
         selected = [
             item
             for item in findings

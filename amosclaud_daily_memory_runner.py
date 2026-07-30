@@ -66,9 +66,10 @@ def _local_learn(payload: dict[str, Any]) -> dict[str, Any] | None:
     memory = _local_memory()
     if memory is None:
         return None
-    if payload.get("verified") is not True or str(
-        payload.get("final_verdict") or ""
-    ).upper() != "PASS":
+    if (
+        payload.get("verified") is not True
+        or str(payload.get("final_verdict") or "").upper() != "PASS"
+    ):
         return None
     checks = payload.get("checks") or []
     if not checks or any(item.get("passed") is not True for item in checks):
@@ -77,8 +78,7 @@ def _local_learn(payload: dict[str, Any]) -> dict[str, Any] | None:
         failure_evidence=str(payload.get("failure_evidence") or ""),
         changed_files=[str(item) for item in payload.get("changed_files") or []],
         verification_results=[
-            {"name": str(item.get("name") or "verification"), "returncode": 0}
-            for item in checks
+            {"name": str(item.get("name") or "verification"), "returncode": 0} for item in checks
         ],
         source=str(payload.get("source") or "amosclaud-daily-agent"),
         source_run_id=str(payload.get("source_run_id") or ""),
