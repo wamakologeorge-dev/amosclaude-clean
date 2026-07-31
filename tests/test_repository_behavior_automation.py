@@ -1,14 +1,50 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "repository_behavior.py"
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / ".github"
+    / "scripts"
+    / "repository_behavior.py"
+)
+WORKFLOW_PATH = (
+    Path(__file__).resolve().parents[1]
+    / ".github"
+    / "workflows"
+    / "behavior-automation.yml"
+)
 SPEC = importlib.util.spec_from_file_location("repository_behavior", MODULE_PATH)
 assert SPEC and SPEC.loader
 repository_behavior = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(repository_behavior)
+
+
+class RecordingClient:
+    def __init__(self, labels: set[str] | None = None) -> None:
+        self.labels = labels or set()
+        self.requests: list[tuple[str, str]] = []
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        payload: object | None = None,
+        *,
+        expected: tuple[int, ...] = (200,),
+    ) -> object:
+        del payload, expected
+        self.requests.append((method, path))
+        if method == "GET" and path.startswith("/issues/"):
+            return {"labels": [{"name": label} for label in sorted(self.labels)]}
+        if method == "DELETE":
+            return []
+        raise AssertionError(f"Unexpected request: {method} {path}")
 
 
 class RepositoryBehaviorClassificationTests(unittest.TestCase):
@@ -36,7 +72,13 @@ class RepositoryBehaviorClassificationTests(unittest.TestCase):
             title="Fix authentication checks",
         )
         self.assertTrue(
-            {"area:backend", "area:tests", "area:ci", "type:bug", "size:xs"}.issubset(labels)
+            {
+                "area:backend",
+                "area:tests",
+                "area:ci",
+                "type:bug",
+                "size:xs",
+            }.issubset(labels)
         )
         self.assertIn("security-sensitive", labels)
 
@@ -56,6 +98,60 @@ class RepositoryBehaviorClassificationTests(unittest.TestCase):
         )
         self.assertIn("area:docs", labels)
         self.assertNotIn("area:backend", labels)
+
+
+class RepositoryBehaviorRefreshTests(unittest.TestCase):
+    def test_refresh_without_stale_label_is_a_read_only_noop(self) -> None:
+        client = RecordingClient()
+
+        refreshed = repository_behavior.refresh_item(client, 41)
+
+        self.assertFalse(refreshed)
+        self.assertEqual(client.requests, [("GET", "/issues/41")])
+
+    def test_refresh_removes_only_the_stale_label(self) -> None:
+        client = RecordingClient({"type:bug", "status:stale"})
+
+        refreshed = repository_behavior.refresh_item(client, 42)
+
+        self.assertTrue(refreshed)
+        self.assertEqual(
+            client.requests,
+            [
+                ("GET", "/issues/42"),
+                ("DELETE", "/issues/42/labels/status%3Astale"),
+            ],
+        )
+
+    def test_refresh_command_does_not_provision_repository_labels(self) -> None:
+        client = RecordingClient()
+        output = io.StringIO()
+
+        with (
+            mock.patch.object(repository_behavior, "GitHubClient", return_value=client),
+            mock.patch.object(repository_behavior, "ensure_labels") as ensure_labels,
+            redirect_stdout(output),
+        ):
+            status = repository_behavior.main(
+                [
+                    "--repository",
+                    "owner/repository",
+                    "--token",
+                    "token",
+                    "refresh",
+                    "--number",
+                    "43",
+                ]
+            )
+
+        self.assertEqual(status, 0)
+        ensure_labels.assert_not_called()
+        self.assertEqual(output.getvalue().strip(), '{"refreshed": false}')
+
+    def test_workflow_ignores_automation_comments(self) -> None:
+        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("github.event.comment.user.type != 'Bot'", workflow)
 
 
 if __name__ == "__main__":
