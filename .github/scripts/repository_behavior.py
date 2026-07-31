@@ -345,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repository",
         default=os.getenv("GITHUB_REPOSITORY", ""),
-        help="GitHub repository in owner/name form",
+        help="GitHub repository in owner/name format",
     )
     parser.add_argument(
         "--token",
@@ -371,15 +371,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     client = GitHubClient(args.repository, args.token)
-    ensure_labels(client)
 
     if args.command == "label-issue":
+        ensure_labels(client)
         result: Any = sorted(label_issue(client, args.number))
     elif args.command == "label-pr":
+        ensure_labels(client)
         result = sorted(label_pull_request(client, args.number))
     elif args.command == "refresh":
         result = {"refreshed": refresh_item(client, args.number)}
     else:
+        ensure_labels(client)
         result = run_maintenance(client, stale_days=args.stale_days)
 
     print(json.dumps(result, sort_keys=True))
