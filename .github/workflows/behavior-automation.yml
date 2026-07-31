@@ -181,7 +181,9 @@ jobs:
 
   refresh-active-item:
     name: refresh-active-item
-    if: github.event_name == 'issue_comment'
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
     permissions:
       contents: read
