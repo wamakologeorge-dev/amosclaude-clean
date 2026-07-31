@@ -18,7 +18,7 @@ fi
 
 VENV_PYTHON="$ROOT/.venv/bin/python"
 "$VENV_PYTHON" -m pip install --upgrade pip
-"$VENV_PYTHON" -m pip install -e "$APP_ROOT"
+"$VENV_PYTHON" -m pip install  -e .
 
 [[ -f .env ]] || cp .env.example .env
 mkdir -p data data/repositories data/storage
