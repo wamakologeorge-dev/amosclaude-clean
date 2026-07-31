@@ -7,17 +7,9 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "scripts"
-    / "repository_behavior.py"
-)
+MODULE_PATH = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "repository_behavior.py"
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "workflows"
-    / "behavior-automation.yml"
+    Path(__file__).resolve().parents[1] / ".github" / "workflows" / "behavior-automation.yml"
 )
 SPEC = importlib.util.spec_from_file_location("repository_behavior", MODULE_PATH)
 assert SPEC and SPEC.loader
