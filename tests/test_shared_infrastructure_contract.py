@@ -11,7 +11,7 @@ COMPOSE = Path("Infrastructure/docker-compose.yml").read_text(encoding="utf-8")
 def test_compose_and_shared_runtime_use_the_same_services(monkeypatch):
     monkeypatch.delenv("AMOSCLAUD_API_URL", raising=False)
     monkeypatch.delenv("AMOSCLAUD_MODEL_URL", raising=False)
-    monkeypatch.delenv("AMOSCLAUD_CREDENTIAL_AUTHORITY_URL", raising=False)
+    monkeypatch.delenv("AMOSCLAUD_CREDENTIAL_URL", raising=False)
     monkeypatch.delenv("AMOSCLAUD_METRICS_URL", raising=False)
     monkeypatch.delenv("AMOSCLAUD_REDIS_URL", raising=False)
     monkeypatch.delenv("REDIS_URL", raising=False)
