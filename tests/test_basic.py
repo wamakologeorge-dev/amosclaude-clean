@@ -46,6 +46,18 @@ class TestSettings:
         assert isinstance(settings.redis_url, str)
         assert isinstance(settings.debug, bool)
 
+    def test_settings_ignore_unknown_env_file_keys(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "DEPLOYMENT_RETRIES=5\n"
+            "UNRELATED_SETTING=should-be-ignored\n",
+            encoding="utf-8",
+        )
+
+        config = settings.__class__(_env_file=env_file)
+
+        assert config.deployment_retries == 5
+
 
 class TestCIOrchestrator:
     def test_initial_status(self):
