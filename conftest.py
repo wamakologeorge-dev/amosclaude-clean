@@ -12,5 +12,37 @@ every environment that runs pytest.
 """
 
 import sys
+import importlib.util
+import os
+from pathlib import Path
 
 sys.dont_write_bytecode = True
+
+
+def _ensure_repository_sitecustomize_exports() -> None:
+    root = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location(
+        "_amosclaud_repository_sitecustomize",
+        root / "sitecustomize.py",
+    )
+    if spec is None or spec.loader is None:
+        return
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    system_module = sys.modules.get("sitecustomize")
+    if system_module is None:
+        sys.modules["sitecustomize"] = module
+    else:
+        for name in ("normalize_public_amosclaud_url", "normalize_public_environment"):
+            setattr(system_module, name, getattr(module, name))
+
+    existing = os.environ.get("PYTHONPATH", "")
+    root_path = str(root)
+    if not existing:
+        os.environ["PYTHONPATH"] = root_path
+    elif root_path not in existing.split(os.pathsep):
+        os.environ["PYTHONPATH"] = f"{root_path}{os.pathsep}{existing}"
+
+
+_ensure_repository_sitecustomize_exports()

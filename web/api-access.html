@@ -279,7 +279,7 @@
           return;
         }
         if (checkout.status === "complete") {
-          say(checkout.message || "Your bank payment is processing. Credits will appear after Stripe confirms settlement.", "warning");
+          say(checkout.message || "Bank payments can take time to settle. Credits will appear after Stripe confirms settlement.", "warning");
           return;
         }
         await delay(1400);

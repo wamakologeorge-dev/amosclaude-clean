@@ -1,6 +1,6 @@
 import os
 
-from sitecustomize import normalize_public_amosclaud_url
+from amoscloud_ai.public_url_policy import normalize_public_amosclaud_url
 
 
 class WorkerConfig:

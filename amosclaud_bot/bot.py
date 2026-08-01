@@ -457,6 +457,15 @@ class AmosclaudBot:
             "repository": self.repository,
             "github_run_id": os.getenv("GITHUB_RUN_ID", ""),
         }
+        if command == "fix" and not allow_writes:
+            return {
+                "status": "blocked",
+                "error": "write_not_authorized",
+                "evidence": [
+                    "Amosclaud-Fixer is available, but repository writes are limited to trusted repository collaborators."
+                ],
+            }
+
         try:
             security_grant = self._issue_grant(
                 command=command,
@@ -480,14 +489,6 @@ class AmosclaudBot:
             }
 
         if command == "fix":
-            if not allow_writes:
-                return {
-                    "status": "blocked",
-                    "error": "write_not_authorized",
-                    "evidence": [
-                        "Amosclaud-Fixer is available, but repository writes are limited to trusted repository collaborators."
-                    ],
-                }
             return kernel.repair(
                 issue=objective,
                 authorized_writes=bool(allow_writes and not security_enforced()),

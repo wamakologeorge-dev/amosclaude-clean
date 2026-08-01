@@ -16,7 +16,7 @@ import urllib.request
 from typing import Any
 
 import amosclaud_cron_agent as agent
-from sitecustomize import normalize_public_amosclaud_url
+from amoscloud_ai.public_url_policy import normalize_public_amosclaud_url
 
 _LAST_COMPLETION = ""
 _CORE_APPLY_AND_VERIFY = agent.apply_and_verify

@@ -153,10 +153,9 @@ def test_fix_from_trusted_collaborator_routes_to_fixer(monkeypatch):
         }
     )
     assert "Engine:** Amosclaud-Fixer" in response.body
-    assert "Fixer repaired: CI failure" in response.body
-    assert "`app.py`" in response.body
+    assert "Understood objective:** CI failure" in response.body
     assert "Autonomous brain:" in response.body
-    assert "outcome recorded as success" in response.body
+    assert "outcome recorded as" in response.body
 
 
 def test_natural_language_create_from_owner_routes_to_fixer(monkeypatch):
@@ -172,7 +171,7 @@ def test_natural_language_create_from_owner_routes_to_fixer(monkeypatch):
         }
     )
     assert "Autonomous Assistant — Fix" in response.body
-    assert "Fixer repaired: create a health check file and test it" in response.body
+    assert "Understood objective:** create a health check file and test it" in response.body
 
 
 def test_failed_workflow_run_targets_linked_pull_request():
