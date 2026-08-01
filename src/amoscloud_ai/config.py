@@ -1,7 +1,7 @@
 """Application settings loaded from environment variables"""
 
-from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     # Upload limits
     max_upload_size_mb: int = Field(default=20, alias="MAX_UPLOAD_SIZE_MB")
 
-    model_config = {"env_file": ".env", "populate_by_name": True}
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        populate_by_name=True,
+        extra="ignore",
+    )
 
     @field_validator("debug", mode="before")
     @classmethod
