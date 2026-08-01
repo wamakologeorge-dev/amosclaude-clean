@@ -112,6 +112,15 @@ def test_dependency_install_failure_is_handed_to_autonomous_repair() -> None:
     assert '"-e",\n            "."' in fixer
 
 
+def test_engineer_receives_signed_repair_grant_before_execution() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Issue one-time Fixer security grant" in workflow
+    assert ".github/scripts/issue_amosclaud_security_grant.py repair" in workflow
+    assert "AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}" in workflow
+    assert "AMOSCLAUD_FIXER_GRANT: ${{ steps.issue_repair_grant.outputs.fixer_grant }}" in workflow
+
+
 def test_fixer_follows_and_protects_repository_instructions() -> None:
     fixer = _load_fixer()
     source = FIXER.read_text(encoding="utf-8")
