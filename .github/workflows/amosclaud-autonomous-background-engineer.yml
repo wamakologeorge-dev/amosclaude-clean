@@ -292,6 +292,33 @@ jobs:
           echo "The repair was not published because GITHUB_TOKEN-created pull requests do not trigger required workflows."
           exit 1
 
+      - name: Issue one-time Publisher security grant
+        if: >-
+          steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair' &&
+          steps.preflight.outputs.publisher_configured == 'true' &&
+          steps.preflight.outputs.security_configured == 'true'
+        id: issue_publish_grant
+        env:
+          AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/issue_amosclaud_security_grant.py publish \
+            --report amosclaud-fixer-report.json
+
+      - name: Verify publisher security grant
+        if: >-
+          steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair' &&
+          steps.preflight.outputs.publisher_configured == 'true' &&
+          steps.issue_publish_grant.result == 'success'
+        id: verify_publish_grant
+        env:
+          AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}
+          AMOSCLAUD_PUBLISHER_GRANT: ${{ steps.issue_publish_grant.outputs.publisher_grant }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/verify_amosclaud_publish_grant.py authorize \
+            --report amosclaud-fixer-report.json
+
       - name: Redact engineering evidence
         if: always()
         run: |
@@ -322,7 +349,8 @@ jobs:
         id: publish
         if: >-
           steps.engineer.outputs.AMOSCLAUD_BACKGROUND_ENGINEER_STATUS == 'verified-repair' &&
-          steps.preflight.outputs.publisher_configured == 'true'
+          steps.preflight.outputs.publisher_configured == 'true' &&
+          steps.verify_publish_grant.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
