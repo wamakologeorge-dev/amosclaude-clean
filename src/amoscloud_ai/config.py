@@ -33,11 +33,7 @@ class Settings(BaseSettings):
     # Upload limits
     max_upload_size_mb: int = Field(default=20, alias="MAX_UPLOAD_SIZE_MB")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        populate_by_name=True,
-        extra="ignore",
-    )
+    model_config = {"env_file": ".env", "populate_by_name": True, "extra": "ignore"}
 
     @field_validator("debug", mode="before")
     @classmethod

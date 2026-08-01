@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from sitecustomize import normalize_public_amosclaud_url
+from amoscloud_ai.public_url_policy import normalize_public_amosclaud_url
 
 TERMINAL_PIPELINE_STATES = {"success", "failed", "cancelled"}
 
