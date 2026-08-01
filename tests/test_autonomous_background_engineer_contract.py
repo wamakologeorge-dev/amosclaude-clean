@@ -219,3 +219,44 @@ def test_linter_dependency_constraints_can_be_resolved_together() -> None:
     assert "pylint>=4.0.6,<5" in requirements
     assert "isort>=8.0.1,<9" in requirements
     assert "pylint>=3,<4" not in requirements
+
+
+def test_publisher_grant_connects_command_bus_secret_to_autonomous_token() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+    # Publisher grant must be issued using the command-bus secret before publish
+    assert "Issue one-time Publisher security grant" in workflow
+    assert ".github/scripts/issue_amosclaud_security_grant.py publish" in workflow
+    issue_pos = workflow.index("Issue one-time Publisher security grant")
+    issue_grant_env = workflow.index(
+        "AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}",
+        issue_pos,
+        workflow.index("Verify publisher security grant", issue_pos),
+    )
+    assert issue_grant_env > issue_pos
+
+    # Publisher grant must be verified using the command-bus secret before publish
+    assert "Verify publisher security grant" in workflow
+    assert ".github/scripts/verify_amosclaud_publish_grant.py authorize" in workflow
+    verify_pos = workflow.index("Verify publisher security grant")
+    redact_pos = workflow.index("Redact engineering evidence", verify_pos)
+    assert workflow.index(
+        "AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}",
+        verify_pos,
+        redact_pos,
+    ) > verify_pos
+    assert workflow.index(
+        "AMOSCLAUD_PUBLISHER_GRANT: ${{ steps.issue_publish_grant.outputs.publisher_grant }}",
+        verify_pos,
+        redact_pos,
+    ) > verify_pos
+
+    # Verification must gate the publish step (AUTONOMOUS_TOKEN only executes after grant check)
+    publish_pos = workflow.index("Publish verified repair and enable autonomous merge")
+    assert verify_pos < publish_pos
+    assert "steps.verify_publish_grant.result == 'success'" in workflow
+    publish_condition_pos = workflow.index("steps.verify_publish_grant.result == 'success'")
+    assert publish_condition_pos < workflow.index("GH_TOKEN: ${{ secrets.AMOSCLAUD_AUTONOMOUS_TOKEN }}", publish_pos)
+
+    # Grant steps must appear before the publish step
+    assert issue_pos < verify_pos < publish_pos
