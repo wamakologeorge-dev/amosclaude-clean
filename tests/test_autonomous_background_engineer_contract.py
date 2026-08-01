@@ -231,6 +231,7 @@ def test_publisher_grant_connects_command_bus_secret_to_autonomous_token() -> No
     issue_grant_env = workflow.index(
         "AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}",
         issue_pos,
+        workflow.index("Verify publisher security grant", issue_pos),
     )
     assert issue_grant_env > issue_pos
 
