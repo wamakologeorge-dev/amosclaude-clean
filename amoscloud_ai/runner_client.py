@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 
 from amoscloud_ai.engineering_agent import EngineeringAgentError, run_engineering_agent
-from sitecustomize import normalize_public_amosclaud_url
+from amoscloud_ai.public_url_policy import normalize_public_amosclaud_url
 
 
 class RunnerConfigurationError(RuntimeError):
