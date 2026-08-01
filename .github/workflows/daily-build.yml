@@ -51,7 +51,7 @@ jobs:
           python -m pip install --disable-pip-version-check -e .
           python -m pip install --disable-pip-version-check pytest pytest-asyncio
 
-      - name: Report starting capability level
+      - name: Report earned capability level
         run: |
           set -euo pipefail
           python -m amoscloud_ai.repair_knowledge \
@@ -79,6 +79,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # python amosclaud_cron_gateway.py is invoked via the daily memory runner
           python amosclaud_daily_memory_runner.py
 
       - name: Report final capability level

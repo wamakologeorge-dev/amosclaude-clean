@@ -75,8 +75,10 @@ def test_react_executes_registered_tool_and_verifies() -> None:
     assert outcome.observations[0].summary == "verified"
 
 
-def test_controller_inspects_real_workspace(tmp_path: Path) -> None:
+def test_controller_inspects_real_workspace(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "example.py").write_text("value = 1\n", encoding="utf-8")
+    import src.agent.model as _model_module
+    monkeypatch.setattr(_model_module.AutonomousModelGateway, "available", lambda self: False)
     outcome = AutonomousReactController(tmp_path).run("inspect the workspace")
     assert outcome.status == "success"
     assert outcome.observations[0].tool == "inspect_workspace"

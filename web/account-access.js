@@ -146,21 +146,21 @@
       title.textContent = 'Create your account';
       subtitle.textContent = 'Continue with Google or start with your name, email, and password.';
       hidden(fields.name, false);
-      hidden(fields.recovery, false);
+      hidden(fields.identifier, false);
       hidden(fields.nextPassword, false);
       hidden(fields.hint, false);
       required(inputs.name, true);
-      required(inputs.recovery, true);
+      required(inputs.identifier, true);
       required(inputs.nextPassword, true);
+      inputs.identifier.autocomplete = 'email';
       submit.textContent = 'Create account';
       submit.disabled = false;
       hidden(emailCode, true);
     } else if (next === 'forgot-password') {
       title.textContent = 'Reset password';
-      subtitle.textContent = 'Enter your email address and choose a new password.';
+      subtitle.textContent = 'Enter your recovery email and choose a new password.';
       hidden(fields.recovery, false);
       hidden(fields.nextPassword, false);
-      hidden(fields.code, false);
       required(inputs.recovery, true);
       required(inputs.nextPassword, true);
       submit.textContent = 'Send recovery code';
@@ -168,7 +168,6 @@
       title.textContent = 'Find your account';
       subtitle.textContent = 'Enter your recovery email and we will send a verification code.';
       hidden(fields.recovery, false);
-      hidden(fields.code, false);
       required(inputs.recovery, true);
       submit.textContent = 'Send account code';
     }
@@ -258,7 +257,7 @@
       }
 
       if (mode === 'register') {
-        const address = email(inputs.recovery.value);
+        const address = email(inputs.identifier.value);
         if (!signupCodeRequested) {
           const result = await request('/api/v1/auth/register/request-code', {
             method: 'POST',
@@ -300,6 +299,7 @@
             method: 'POST',
             body: JSON.stringify({recovery_email: recoveryEmail}),
           });
+          hidden(fields.code, false);
           required(inputs.code, true);
           submit.textContent = 'Show account';
           show(result.message, true);
@@ -319,6 +319,7 @@
           method: 'POST',
           body: JSON.stringify({recovery_email: recoveryEmail}),
         });
+        hidden(fields.code, false);
         required(inputs.code, true);
         submit.textContent = 'Reset password';
         show(result.message, true);
