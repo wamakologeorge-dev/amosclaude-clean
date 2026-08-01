@@ -82,6 +82,8 @@ def test_failure_trigger_watches_real_main_branch_workflows_only() -> None:
         "github.event.workflow_run.head_branch == "
         "github.event.repository.default_branch"
     ) in workflow
+    assert "github.event.workflow_run.event == 'push'" in workflow
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in workflow
 
 
 def test_retries_update_one_revision_branch_and_pull_request() -> None:
