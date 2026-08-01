@@ -198,6 +198,151 @@ async function runScenario(passwordRequestOk) {
     assert result["failure"]["codeRequiredAfterSubmit"] is False
 
 
+def test_registration_mode_uses_identifier_field() -> None:
+    node = shutil.which("node")
+    if not node:  # pragma: no cover - only on hosts without Node.js
+        return
+
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+
+const source = fs.readFileSync(process.argv[1], 'utf8');
+
+function element(id) {
+  const startHidden = new Set([
+    'name-field', 'recovery-email-field', 'password-field', 'new-password-field',
+    'email-code-field', 'password-hint',
+  ]);
+  const classes = new Set(startHidden.has(id) ? ['hidden'] : []);
+  return {
+    id,
+    value: '',
+    required: false,
+    disabled: false,
+    hidden: false,
+    textContent: '',
+    className: '',
+    autocomplete: '',
+    focus() {},
+    listeners: {},
+    classList: {
+      toggle(name, force) {
+        if (force === undefined) {
+          if (classes.has(name)) classes.delete(name); else classes.add(name);
+        } else if (force) {
+          classes.add(name);
+        } else {
+          classes.delete(name);
+        }
+      },
+      contains(name) { return classes.has(name); },
+    },
+    addEventListener(type, fn) {
+      this.listeners[type] = this.listeners[type] || [];
+      this.listeners[type].push(fn);
+    },
+  };
+}
+
+(async () => {
+  const ids = [
+    'auth-form', 'name-field', 'identifier-field', 'recovery-email-field', 'password-field',
+    'new-password-field', 'email-code-field', 'password-hint', 'name', 'identifier',
+    'recovery-email', 'password', 'new-password', 'email-code', 'login-tab', 'register-tab',
+    'forgot-password-button', 'forgot-username-button', 'submit-button', 'email-code-button',
+    'passkey-login-button', 'google-login-button', 'auth-title', 'auth-subtitle', 'message'
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, element(id)]));
+  elements['auth-form'].reset = () => {
+    for (const id of ['name', 'identifier', 'recovery-email', 'password', 'new-password', 'email-code']) {
+      elements[id].value = '';
+    }
+  };
+  elements['auth-form'].reportValidity = () => true;
+
+  const requestBodies = [];
+  const fetch = async (url, opts) => {
+    requestBodies.push({url, body: opts && opts.body ? JSON.parse(opts.body) : null});
+    if (url === '/api/v1/auth/google/status') {
+      return {ok: true, status: 200, text: async () => JSON.stringify({enabled: false})};
+    }
+    return {ok: true, status: 200, text: async () => JSON.stringify({message: 'Code sent'})};
+  };
+
+  const window = {
+    location: {href: 'https://example.test/login', assign() {}, replace() {}},
+    history: {replaceState() {}},
+    isSecureContext: false,
+  };
+
+  const context = {
+    window,
+    navigator: {},
+    document: {getElementById: (id) => elements[id] || null},
+    fetch,
+    URL,
+    setTimeout: (fn) => fn(),
+    clearTimeout: () => {},
+    atob: (value) => Buffer.from(value, 'base64').toString('binary'),
+    btoa: (value) => Buffer.from(value, 'binary').toString('base64'),
+  };
+  context.window.PublicKeyCredential = undefined;
+  vm.runInNewContext(source, context);
+
+  const click = async (id) => {
+    for (const fn of elements[id].listeners.click || []) await fn({});
+  };
+  const submit = async () => {
+    for (const fn of elements['auth-form'].listeners.submit || []) {
+      await fn({preventDefault() {}});
+    }
+  };
+
+  // Enter registration mode
+  await click('register-tab');
+
+  const identifierVisible = !elements['identifier-field'].classList.contains('hidden');
+  const recoveryHidden = elements['recovery-email-field'].classList.contains('hidden');
+  const identifierRequired = elements['identifier'].required;
+
+  // Submit with a known email address in the identifier field
+  elements['identifier'].value = 'signup@example.com';
+  elements['name'].value = 'Test User';
+  elements['new-password'].value = 'Secret123!';
+  await submit();
+
+  const registerRequest = requestBodies.find((r) => r.url === '/api/v1/auth/register/request-code');
+
+  process.stdout.write(JSON.stringify({
+    identifierVisible,
+    recoveryHidden,
+    identifierRequired,
+    registerEmailField: registerRequest ? registerRequest.body.email : null,
+  }));
+})().catch((error) => {
+  process.stderr.write(String(error && error.stack || error));
+  process.exit(1);
+});
+"""
+    completed = subprocess.run(
+        [node, "-e", script, str(ROOT / "web" / "account-access.js")],
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=60,
+    )
+    result = json.loads(completed.stdout)
+
+    # identifier-field is visible; recovery-email-field stays hidden
+    assert result["identifierVisible"] is True
+    assert result["recoveryHidden"] is True
+    # identifier input must be required in registration mode
+    assert result["identifierRequired"] is True
+    # registration request payload must use the identifier value, not recovery email
+    assert result["registerEmailField"] == "signup@example.com"
+
+
 def test_security_mail_sender_is_amosclaud_owned() -> None:
     source = (ROOT / "amoscloud_ai" / "mail_delivery.py").read_text(encoding="utf-8")
     assert "no-reply@amosclaud.com" in source
