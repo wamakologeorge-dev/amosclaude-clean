@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "amosclaud-autonomous-background-engineer.yml"
 BOT = (
@@ -56,9 +55,7 @@ def test_daily_inspection_opens_issue_before_the_fixer_and_pull_request() -> Non
 
     assert "cron: '17 4 * * *'" in workflow
     assert "Inspect repository health before opening an issue" in workflow
-    issue_step = workflow.index(
-        "Create or update repair issue before Amosclaud Fixer runs"
-    )
+    issue_step = workflow.index("Create or update repair issue before Amosclaud Fixer runs")
     fixer_step = workflow.index("Run Amosclaud autonomous background engineer")
     publish_step = workflow.index("Publish verified repair and enable autonomous merge")
     assert issue_step < fixer_step < publish_step
@@ -79,8 +76,7 @@ def test_failure_trigger_watches_real_main_branch_workflows_only() -> None:
     ):
         assert f"- {name}" in workflow
     assert (
-        "github.event.workflow_run.head_branch == "
-        "github.event.repository.default_branch"
+        "github.event.workflow_run.head_branch == " "github.event.repository.default_branch"
     ) in workflow
     assert "github.event.workflow_run.event == 'push'" in workflow
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in workflow
@@ -90,10 +86,7 @@ def test_retries_update_one_revision_branch_and_pull_request() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert 'branch="amosclaud-background-engineer/${short_sha}"' in workflow
-    assert (
-        'branch="amosclaud-background-engineer/${short_sha}-${GITHUB_RUN_ID}"'
-        not in workflow
-    )
+    assert 'branch="amosclaud-background-engineer/${short_sha}-${GITHUB_RUN_ID}"' not in workflow
     assert 'git checkout -B "$branch"' in workflow
     assert 'git push --force-with-lease --set-upstream origin "$branch"' in workflow
     assert 'gh pr list --state open --head "$branch"' in workflow
