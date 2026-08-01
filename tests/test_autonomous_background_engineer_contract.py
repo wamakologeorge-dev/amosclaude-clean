@@ -239,7 +239,17 @@ def test_publisher_grant_connects_command_bus_secret_to_autonomous_token() -> No
     assert "Verify publisher security grant" in workflow
     assert ".github/scripts/verify_amosclaud_publish_grant.py authorize" in workflow
     verify_pos = workflow.index("Verify publisher security grant")
-    assert workflow.index("AMOSCLAUD_PUBLISHER_GRANT: ${{ steps.issue_publish_grant.outputs.publisher_grant }}") > verify_pos
+    redact_pos = workflow.index("Redact engineering evidence", verify_pos)
+    assert workflow.index(
+        "AMOSCLAUD_COMMAND_BUS_SECRET: ${{ secrets.AMOSCLAUD_COMMAND_BUS_SECRET }}",
+        verify_pos,
+        redact_pos,
+    ) > verify_pos
+    assert workflow.index(
+        "AMOSCLAUD_PUBLISHER_GRANT: ${{ steps.issue_publish_grant.outputs.publisher_grant }}",
+        verify_pos,
+        redact_pos,
+    ) > verify_pos
 
     # Verification must gate the publish step (AUTONOMOUS_TOKEN only executes after grant check)
     publish_pos = workflow.index("Publish verified repair and enable autonomous merge")
