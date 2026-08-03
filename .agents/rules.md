@@ -30,8 +30,8 @@ tell the agent to document the pattern here so it mathematically never repeats t
 
 # Learned Patterns
 
-- Always: decision in txn.json — confirmed 12x (seen 12x)
-- Always: discovery in lexical-metadata.json — confirmed 14x (seen 14x)
-- Always: discovery in vector-metadata.json — confirmed 16x (seen 16x)
+- Always: decision in txn.json — confirmed 14x (seen 14x)
+- Always: discovery in lexical-metadata.json — confirmed 15x (seen 15x)
+- Always: discovery in vector-metadata.json — confirmed 18x (seen 18x)
 - Always: decision in txn.json — confirmed 7x (seen 7x)
 - Always: discovery in lexical-metadata.json — confirmed 7x (seen 7x)
