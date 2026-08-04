@@ -1,0 +1,102 @@
+{
+  "project": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 66,
+    "skillCount": 1,
+    "domain": "project",
+    "triggerGlobs": [
+      "**/*"
+    ],
+    "description": "Project for amosclaude-clean. 8 gotchas, 14 conventions."
+  },
+  "typescript": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 9,
+    "skillCount": 1,
+    "domain": "typescript",
+    "triggerGlobs": [
+      "**/*.ts",
+      "**/*.tsx"
+    ],
+    "description": "Typescript for amosclaude-clean. 4 gotchas, 5 conventions."
+  },
+  "react": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 6,
+    "skillCount": 1,
+    "domain": "react",
+    "triggerGlobs": [
+      "**/*.tsx",
+      "**/*.jsx"
+    ],
+    "description": "React for amosclaude-clean. 2 gotchas, 4 conventions."
+  },
+  "java": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 19,
+    "skillCount": 1,
+    "domain": "java",
+    "triggerGlobs": [
+      "**/*.java",
+      "**/*.kt",
+      "**/*.gradle",
+      "**/*.xml"
+    ],
+    "description": "Java for amosclaude-clean. 11 gotchas, 8 conventions."
+  },
+  "python": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 19,
+    "skillCount": 1,
+    "domain": "python",
+    "triggerGlobs": [
+      "**/*.py",
+      "**/requirements*.txt",
+      "**/pyproject.toml"
+    ],
+    "description": "Python for amosclaude-clean. 8 gotchas, 6 conventions."
+  },
+  "config": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 64,
+    "skillCount": 1,
+    "domain": "config",
+    "triggerGlobs": [
+      "**/*.json",
+      "**/*.yaml",
+      "**/*.yml",
+      "**/*.toml",
+      "**/*.env*",
+      "**/*.properties"
+    ],
+    "description": "Config for amosclaude-clean. 2 gotchas, 5 conventions."
+  },
+  "convention": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 5,
+    "skillCount": 1,
+    "domain": "convention",
+    "triggerGlobs": [
+      "**/*"
+    ],
+    "description": "Convention for amosclaude-clean. 0 gotchas, 5 conventions."
+  },
+  "decision": {
+    "enabled": true,
+    "lastGenerated": "2026-08-03T23:30:57.470Z",
+    "observationCount": 2,
+    "skillCount": 1,
+    "domain": "decision",
+    "triggerGlobs": [
+      "**/*"
+    ],
+    "description": "Decision for amosclaude-clean. 0 gotchas, 0 conventions."
+  }
+}
