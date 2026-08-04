@@ -34,7 +34,7 @@ Create pages with properties:
 ## Views
 
 **By Type**: Group by Type property
-**By Category**: Group by Category property  
+**By Category**: Group by Category property
 **Recent Updates**: Sort by Last Updated descending
 **Needs Review**: Filter where Last Reviewed > 90 days ago
 **Draft Docs**: Filter where Status = "Draft"

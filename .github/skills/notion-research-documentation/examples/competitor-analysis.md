@@ -71,7 +71,7 @@ pages: [{
 ```markdown
 # Competitor Pricing Analysis - Payment Processors
 
-**Date**: October 14, 2025  
+**Date**: October 14, 2025
 **Research Team**: Product Strategy
 
 ## Executive Summary
@@ -205,9 +205,9 @@ All competitors offer discounts at scale:
 High Volume / Enterprise
     ↑
     |                    Adyen
-    |                      
-    |         Stripe             
-    |    
+    |
+    |         Stripe
+    |
     |  Square    PayPal
     |
     └──────────────────→

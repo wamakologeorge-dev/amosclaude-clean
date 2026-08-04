@@ -51,7 +51,7 @@ title: "Sprint 25 Planning - Pre-Read (Internal)"
 
 ### 5. Create Agenda
 ```
-Notion:notion-create-pages  
+Notion:notion-create-pages
 title: "Sprint 25 Planning - Agenda"
 ```
 

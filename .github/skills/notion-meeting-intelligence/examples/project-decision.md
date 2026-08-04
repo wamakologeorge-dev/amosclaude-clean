@@ -89,10 +89,10 @@ pages: [{
 # Architecture Decision: Database Migration Strategy
 
 ## Meeting Details
-**Date & Time**: October 15, 2025 at 2:00 PM  
-**Duration**: 90 minutes  
-**Location**: Conference Room B / Zoom  
-**Facilitator**: Sarah Chen (Engineering Lead)  
+**Date & Time**: October 15, 2025 at 2:00 PM
+**Duration**: 90 minutes
+**Location**: Conference Room B / Zoom
+**Facilitator**: Sarah Chen (Engineering Lead)
 **Attendees**:
 - Sarah Chen (Engineering Lead)
 - David Kim (CTO)
@@ -138,7 +138,7 @@ We successfully migrated from Redis to Memcached in 2023, which took 6 weeks. Ke
 
 **Timeline**: Need decision by end of week to include in Q4 planning
 
-**Impact**: 
+**Impact**:
 - Engineering team (4-8 weeks of work)
 - Application architecture
 - Operations & monitoring

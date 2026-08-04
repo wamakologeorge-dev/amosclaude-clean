@@ -8,15 +8,15 @@ Before creating tasks, locate the task database:
 1. Search for task database:
    Notion:notion-search
    query: "Tasks" or "Task Management" or "[Project] Tasks"
-   
+
 2. Fetch database schema:
    Notion:notion-fetch
    id: "database-id-from-search"
-   
+
 3. Identify data source:
    - Look for <data-source url="collection://..."> tags
    - Extract collection ID for parent parameter
-   
+
 4. Note schema:
    - Required properties
    - Property types and options

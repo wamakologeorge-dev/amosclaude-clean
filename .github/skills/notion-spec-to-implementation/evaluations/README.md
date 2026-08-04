@@ -16,7 +16,7 @@ These evaluations ensure the Spec to Implementation skill:
 ### basic-spec-implementation.json
 Tests basic workflow of turning a spec into an implementation plan.
 
-**Scenario**: Implement user authentication feature from spec  
+**Scenario**: Implement user authentication feature from spec
 **Key Behaviors**:
 - Searches for and finds the authentication spec page
 - Fetches spec and extracts requirements
@@ -28,7 +28,7 @@ Tests basic workflow of turning a spec into an implementation plan.
 ### spec-to-tasks.json
 Tests creating concrete tasks from a specification in a task database.
 
-**Scenario**: Create tasks from API redesign spec  
+**Scenario**: Create tasks from API redesign spec
 **Key Behaviors**:
 - Finds spec page in Notion
 - Extracts specific requirements and acceptance criteria

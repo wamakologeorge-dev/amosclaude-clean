@@ -8,7 +8,7 @@ Before parsing, locate the spec page:
 1. Search for spec:
    Notion:notion-search
    query: "[Feature Name] spec" or "[Feature Name] specification"
-   
+
 2. Handle results:
    - If found → use page URL/ID
    - If multiple → ask user which one

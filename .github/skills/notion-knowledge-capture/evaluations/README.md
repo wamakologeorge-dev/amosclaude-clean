@@ -16,7 +16,7 @@ These evaluations ensure the Knowledge Capture skill:
 ### conversation-to-wiki.json
 Tests capturing conversation content as a how-to guide for the team wiki.
 
-**Scenario**: Save deployment discussion to wiki  
+**Scenario**: Save deployment discussion to wiki
 **Key Behaviors**:
 - Extracts steps, gotchas, and best practices from conversation
 - Identifies content as How-To Guide
@@ -27,7 +27,7 @@ Tests capturing conversation content as a how-to guide for the team wiki.
 ### decision-record.json
 Tests capturing architectural or technical decisions with full context.
 
-**Scenario**: Document database migration decision  
+**Scenario**: Document database migration decision
 **Key Behaviors**:
 - Extracts decision context, alternatives, and rationale
 - Follows decision record structure (Context, Decision, Alternatives, Consequences)

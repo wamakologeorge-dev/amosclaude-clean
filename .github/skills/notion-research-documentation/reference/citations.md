@@ -123,8 +123,8 @@ When attributing information to specific people:
 
 **Over-citing** (every sentence):
 ```markdown
-The revenue increased (<mention-page url="...">Report</mention-page>). 
-Costs decreased (<mention-page url="...">Report</mention-page>). 
+The revenue increased (<mention-page url="...">Report</mention-page>).
+Costs decreased (<mention-page url="...">Report</mention-page>).
 Margin improved (<mention-page url="...">Report</mention-page>).
 ```
 

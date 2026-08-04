@@ -59,7 +59,7 @@ pages: [{
 - Visit Tsukiji Market, Imperial Palace, Sensoji Temple
 - Experience Tokyo nightlife, teamLab Borderless
 
-**Days 4-5: Hakone**  
+**Days 4-5: Hakone**
 - Day trip from Tokyo
 - Hot springs, Mt. Fuji views, Lake Ashi cruise
 

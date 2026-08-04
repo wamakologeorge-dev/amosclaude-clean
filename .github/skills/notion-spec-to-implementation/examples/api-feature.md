@@ -150,7 +150,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 - [ ] <mention-page url="...">Setup Redis cache</mention-page>
 - [ ] <mention-page url="...">Create API scaffolding</mention-page>
 
-**Deliverables**: Working skeleton with DB, storage, cache ready  
+**Deliverables**: Working skeleton with DB, storage, cache ready
 **Estimated effort**: 2 days
 
 ### Phase 2: Core Endpoints (Days 3-5)
@@ -163,7 +163,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 - [ ] <mention-page url="...">Add JWT authentication middleware</mention-page>
 - [ ] <mention-page url="...">Implement rate limiting</mention-page>
 
-**Deliverables**: Working CRUD operations with auth  
+**Deliverables**: Working CRUD operations with auth
 **Estimated effort**: 3 days
 
 ### Phase 3: Avatar Upload (Days 6-7)
@@ -175,7 +175,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 - [ ] <mention-page url="...">Process and resize images</mention-page>
 - [ ] <mention-page url="...">Upload to S3 with signed URLs</mention-page>
 
-**Deliverables**: Avatar upload/update functionality  
+**Deliverables**: Avatar upload/update functionality
 **Estimated effort**: 2 days
 
 ### Phase 4: Search & Public Profile (Days 8-9)
@@ -187,7 +187,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 - [ ] <mention-page url="...">Add search indexing</mention-page>
 - [ ] <mention-page url="...">Optimize search queries</mention-page>
 
-**Deliverables**: Search and public profiles working  
+**Deliverables**: Search and public profiles working
 **Estimated effort**: 2 days
 
 ### Phase 5: Testing & Optimization (Days 10-12)
@@ -200,7 +200,7 @@ Build RESTful API for user profile management with CRUD operations, avatar uploa
 - [ ] <mention-page url="...">Security audit</mention-page>
 - [ ] <mention-page url="...">API documentation</mention-page>
 
-**Deliverables**: Tested, documented, production-ready API  
+**Deliverables**: Tested, documented, production-ready API
 **Estimated effort**: 3 days
 
 ## Dependencies

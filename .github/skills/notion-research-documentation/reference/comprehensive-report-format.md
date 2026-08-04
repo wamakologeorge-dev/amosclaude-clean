@@ -1,6 +1,6 @@
 # Comprehensive Report Format
 
-**When to use**: 
+**When to use**:
 - Formal documentation requirements
 - Strategic decision support
 - Complex topics requiring extensive analysis

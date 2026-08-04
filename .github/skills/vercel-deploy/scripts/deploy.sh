@@ -264,7 +264,7 @@ ATTEMPT=0
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$PREVIEW_URL")
-    
+
     if [ "$HTTP_STATUS" -eq 200 ]; then
         echo "" >&2
         echo "Deployment ready!" >&2

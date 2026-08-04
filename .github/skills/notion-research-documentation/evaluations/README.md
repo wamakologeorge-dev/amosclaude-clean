@@ -16,7 +16,7 @@ These evaluations ensure the Research & Documentation skill:
 ### basic-research.json
 Tests basic research workflow with synthesis across multiple Notion pages.
 
-**Scenario**: Research Q4 product roadmap and create summary  
+**Scenario**: Research Q4 product roadmap and create summary
 **Key Behaviors**:
 - Searches Notion for roadmap-related pages
 - Fetches multiple relevant pages (roadmap, product docs, meeting notes)
@@ -28,7 +28,7 @@ Tests basic research workflow with synthesis across multiple Notion pages.
 ### research-to-database.json
 Tests creating research documentation in a Notion database with properties.
 
-**Scenario**: Research competitor landscape and save to Research database  
+**Scenario**: Research competitor landscape and save to Research database
 **Key Behaviors**:
 - Searches for existing competitive intelligence in Notion
 - Identifies Research database as target

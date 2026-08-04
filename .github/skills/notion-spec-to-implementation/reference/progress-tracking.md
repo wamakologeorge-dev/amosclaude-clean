@@ -416,7 +416,7 @@ Generate status from task database:
 
 ```
 Query task database:
-SELECT 
+SELECT
   "Status",
   COUNT(*) as count
 FROM "collection://tasks-uuid"
