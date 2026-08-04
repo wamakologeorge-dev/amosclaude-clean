@@ -1,0 +1,404 @@
+# PROJECT MAP (HINT)
+descr: Non-authoritative workspace snapshot. It may be intentionally stale within a bounded tolerance. Never treat paths in this block as verified; verify with fs_* and/or index_* / symbol_* / file_load* before acting.
+
+FORMAT:
+format: orientation report
+format_descr: A deterministic, bounded orientation report derived from the file listing (paths only).
+
+GUIDANCE:
+- Use this report for orientation; verify before edits or claims.
+- If the snapshot and the workspace disagree, the workspace wins.
+
+## WORKSPACE ROOTS
+descr: List of workspace roots (multi-root). Each root is the prefix of a CAN path: "<projectName>/<relativePosixPath>".
+- amosclaude-clean/
+
+## ROOT: amosclaude-clean/
+descr: This block summarizes one workspace root: counts, directory structure (macro + detail), and detected configuration files.
+
+### SNAPSHOT METRICS
+descr: High-level counts derived from the project map listing snapshot (paths only; no file content reads).
+- Files: 1518
+- Directories: 290
+
+### ROOT FILES
+descr: Files directly under the workspace root (no subdirectories), printed as full CAN paths.
+- amosclaude-clean/.dockerignore
+- amosclaude-clean/.env.example
+- amosclaude-clean/.env.production.example
+- amosclaude-clean/.env.workspace.example
+- amosclaude-clean/.flake8
+- amosclaude-clean/.gitignore
+- amosclaude-clean/AGENTS.md
+- amosclaude-clean/AMOSCLAUD_AUTONOMOUS_INTEGRATION.md
+- amosclaude-clean/Amosclaud.md
+- amosclaude-clean/Amosclaud.py
+- amosclaude-clean/BILLING.md
+- amosclaude-clean/CNAME
+- amosclaude-clean/CODE_OF_CONDUCT.md
+- amosclaude-clean/CONTRIBUTING.md
+- amosclaude-clean/Caddyfile
+- amosclaude-clean/Dockerfile
+- amosclaude-clean/LICENSE
+- amosclaude-clean/LICENSE-COMMERCIAL.txt
+- amosclaude-clean/Makefile
+- amosclaude-clean/PACKAGE_MANIFEST.json
+- amosclaude-clean/PLATFORM_ARCHITECTURE.md
+- amosclaude-clean/PORTABLE_SERVER.md
+- amosclaude-clean/Procfile
+- amosclaude-clean/RAILWAY_BUILD.md
+- amosclaude-clean/README.md
+- amosclaude-clean/SECURITY.md
+- amosclaude-clean/SELF_HOSTING.md
+- amosclaude-clean/START_HERE.html
+- amosclaude-clean/TASK_ROUTER.md
+- amosclaude-clean/__noop__
+- amosclaude-clean/agent_core-1.py
+- amosclaude-clean/amos-autonomous
+- amosclaude-clean/amosclaud-workspace.ps1
+- amosclaude-clean/amosclaud-workspace.sh
+- amosclaude-clean/amosclaud.bat
+- amosclaude-clean/amosclaud.ipynb
+- amosclaude-clean/amosclaud_action.py
+- amosclaude-clean/amosclaud_autonomous_conversation.py
+- amosclaude-clean/amosclaud_autonomous_conversation_package.zip
+- amosclaude-clean/amosclaud_cron_agent.py
+- amosclaude-clean/amosclaud_cron_gateway.py
+- amosclaude-clean/amosclaud_daily_memory_runner.py
+- amosclaude-clean/amosclaude-repository-repair-1.patch
+- amosclaude-clean/app.js
+- amosclaude-clean/app.py
+- amosclaude-clean/cmood.py
+- amosclaude-clean/conftest.py
+- amosclaude-clean/deploy.py
+- amosclaude-clean/deployment
+- amosclaude-clean/docker-compose.local-cloud.yml
+- amosclaude-clean/docker-compose.prod.yml
+- amosclaude-clean/docker-compose.selfhost.yml
+- amosclaude-clean/docker-compose.storage-controller.yml
+- amosclaude-clean/docker-compose.workspace-runtime.yml
+- amosclaude-clean/docker-compose.workspace.yml
+- amosclaude-clean/docker-compose.yml
+- amosclaude-clean/environment.yml
+- amosclaude-clean/fix_chat_api.py
+- amosclaude-clean/fix_chat_api_secret.py
+- amosclaude-clean/fix_main.py
+- amosclaude-clean/fix_newline.py
+- amosclaude-clean/fix_newline2.py
+- amosclaude-clean/generate_token.py
+- amosclaude-clean/index.html
+- amosclaude-clean/install-amosclaud.ps1
+- amosclaude-clean/install-amosclaud.sh
+- amosclaude-clean/install-virtual-memory.ps1
+- amosclaude-clean/install-virtual-memory.sh
+- amosclaude-clean/main.py
+- amosclaude-clean/main.tf
+- amosclaude-clean/nginx.conf
+- amosclaude-clean/openapi.yaml
+- amosclaude-clean/oryx-build-commands.txt
+- amosclaude-clean/particles.html
+- amosclaude-clean/patch_chat_api.py
+- amosclaude-clean/patch_deploy.py
+- amosclaude-clean/pyproject.toml
+- amosclaude-clean/pytest.ini
+- amosclaude-clean/railway.json
+- amosclaude-clean/railway.toml
+- amosclaude-clean/render.yaml
+- amosclaude-clean/report_bot.py
+- amosclaude-clean/requirements-1.txt
+- amosclaude-clean/requirements-ci-fast.txt
+- amosclaude-clean/requirements-dev.txt
+- amosclaude-clean/requirements-model-server.txt
+- amosclaude-clean/requirements-platform.txt
+- amosclaude-clean/requirements.txt
+- amosclaude-clean/schemas.py
+- amosclaude-clean/server.js
+- amosclaude-clean/setup.py
+- amosclaude-clean/sitecustomize.py
+- amosclaude-clean/start-amosclaud.bat
+- amosclaude-clean/start-local.sh
+- amosclaude-clean/start-windows.bat
+- amosclaude-clean/start-windows.ps1
+- amosclaude-clean/stop-amosclaud.bat
+- amosclaude-clean/test_case.xls
+- amosclaude-clean/usercustomize.py
+
+### EXTENSIONS HISTOGRAM
+descr: File extension counts computed from basenames (e.g. ".ts"). This is a purely statistical signal used for orientation.
+- .py=917, .md=132, .js=92, .yml=68, .css=46, .html=46, (no-ext)=45, .json=25, .sh=19, .xml=17, .txt=16, .kt=14, (dotfile)=9, .example=9, .mjs=9, .toml=7, .kts=6, .ps1=6, .bat=4, .yaml=4, .ipynb=2, .jsonl=2, .properties=2, .svg=2, .swift=2, .ts=2, .amcl=1, .amo=1, .amos=1, .conf=1, .go=1, .ini=1, .mod=1, .patch=1, .png=1, .pro=1, .tf=1, .tsx=1, .webmanifest=1, .xls=1, .zip=1
+
+### MACRO PARTITION
+descr: Deterministic selection of major child directories (coverage-based) to provide a coarse structure view.
+- Split (amosclaude-clean/): selected=['amosclaude-clean/amoscloud_ai/', 'amosclaude-clean/tests/', 'amosclaude-clean/web/', 'amosclaude-clean/docs/', 'amosclaude-clean/src/', 'amosclaude-clean/.github/', 'amosclaude-clean/services/', 'amosclaude-clean/android/', 'amosclaude-clean/Amosclaud/', 'amosclaude-clean/amosclaud_bot/', 'amosclaude-clean/amosclaud_os/', 'amosclaude-clean/amosclaud_agent_sdk/'], other_files=424, other_dirs=74
+- Split (amosclaude-clean/amoscloud_ai/): selected=['amosclaude-clean/amoscloud_ai/api/', 'amosclaude-clean/amoscloud_ai/model_server/', 'amosclaude-clean/amoscloud_ai/agent/', 'amosclaude-clean/amoscloud_ai/model_gateway/', 'amosclaude-clean/amoscloud_ai/local_cloud/', 'amosclaude-clean/amoscloud_ai/repair_engine/', 'amosclaude-clean/amoscloud_ai/autonomous/', 'amosclaude-clean/amoscloud_ai/core/', 'amosclaude-clean/amoscloud_ai/cdn/', 'amosclaude-clean/amoscloud_ai/monitoring/', 'amosclaude-clean/amoscloud_ai/extensions/', 'amosclaude-clean/amoscloud_ai/hub/'], other_files=101, other_dirs=6
+- Split (amosclaude-clean/tests/): selected=['amosclaude-clean/tests/fixtures/'], other_files=273, other_dirs=0
+
+### DETAIL TREE CUT
+descr: Deterministic subtree cut (PARTIAL view; NOT a full directory listing). Expansion is limited by a fixed node budget (see budget_nodes=... on each root line) and max_depth=7.
+amosclaude-clean/amoscloud_ai/ — 287 files — child_dirs=18 tree_height=6 — budget_nodes=12 — .py(286) .md(1)
+amosclaude-clean/tests/ — 274 files — child_dirs=1 tree_height=1 — budget_nodes=12 — .py(271) (no-ext)(1) .amos(1)
+↳ amosclaude-clean/tests/fixtures/ — 1 files — child_dirs=0 tree_height=0 — .md(1)
+amosclaude-clean/web/ — 146 files — child_dirs=2 tree_height=1 — budget_nodes=12 — .js(65) .html(39) .css(38)
+↳ amosclaude-clean/web/cloud-terminal/ — 8 files — child_dirs=0 tree_height=0 — .js(6) .css(2)
+↳ amosclaude-clean/web/static/ — 2 files — child_dirs=0 tree_height=0 — .css(2)
+amosclaude-clean/docs/ — 74 files — child_dirs=1 tree_height=1 — budget_nodes=12 — .md(73) (no-ext)(1)
+↳ amosclaude-clean/docs/legal/ — 3 files — child_dirs=0 tree_height=0 — .md(3)
+amosclaude-clean/src/ — 72 files — child_dirs=11 tree_height=2 — budget_nodes=12 — .py(71) .html(1)
+↳ amosclaude-clean/src/agent/ — 17 files — child_dirs=0 tree_height=0 — .py(17)
+↳ amosclaude-clean/src/ai/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+↳ amosclaude-clean/src/amosclaud_os/ — 5 files — child_dirs=1 tree_height=1 — .py(5)
+↳ amosclaude-clean/src/amosclaud_security/ — 4 files — child_dirs=0 tree_height=0 — .py(4)
+↳ amosclaude-clean/src/amoscloud_ai/ — 15 files — child_dirs=3 tree_height=1 — .py(14) .html(1)
+↳ amosclaude-clean/src/core/ — 5 files — child_dirs=0 tree_height=0 — .py(5)
+↳ amosclaude-clean/src/database/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+↳ amosclaude-clean/src/foundation/ — 4 files — child_dirs=0 tree_height=0 — .py(4)
+↳ amosclaude-clean/src/platform/ — 7 files — child_dirs=0 tree_height=0 — .py(7)
+↳ amosclaude-clean/src/server/ — 5 files — child_dirs=0 tree_height=0 — .py(5)
+↳ amosclaude-clean/src/services/ — 5 files — child_dirs=0 tree_height=0 — .py(5)
+amosclaude-clean/.github/ — 70 files — child_dirs=5 tree_height=4 — budget_nodes=12 — .yml(49) .py(17) .md(2)
+↳ amosclaude-clean/.github/ISSUE_TEMPLATE/ — 1 files — child_dirs=0 tree_height=0 — .yml(1)
+↳ amosclaude-clean/.github/agents/ — 1 files — child_dirs=0 tree_height=0 — .md(1)
+↳ amosclaude-clean/.github/amosclaud-fixer/ — 2 files — child_dirs=1 tree_height=3 — .json(1) .py(1)
+↳↳ amosclaude-clean/.github/amosclaud-fixer/amosclaud-autonomous-agent/ — 2 files — child_dirs=1 tree_height=2 — .json(1) .py(1)
+↳↳↳ amosclaude-clean/.github/amosclaud-fixer/amosclaud-autonomous-agent/ci/ — 2 files — child_dirs=1 tree_height=1 — .json(1) .py(1)
+↳↳↳↳ amosclaude-clean/.github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/ — 2 files — child_dirs=0 tree_height=0 — .json(1) .py(1)
+↳ amosclaude-clean/.github/scripts/ — 16 files — child_dirs=0 tree_height=0 — .py(16)
+↳ amosclaude-clean/.github/workflows/ — 47 files — child_dirs=0 tree_height=0 — .yml(47)
+amosclaude-clean/services/ — 49 files — child_dirs=5 tree_height=2 — budget_nodes=12 — .py(13) .mjs(9) (no-ext)(6)
+↳ amosclaude-clean/services/control_plane/ — 16 files — child_dirs=3 tree_height=1 — .mjs(9) (dotfile)(2) (no-ext)(1)
+↳↳ amosclaude-clean/services/control_plane/scripts/ — 1 files — child_dirs=0 tree_height=0 — .mjs(1)
+↳↳ amosclaude-clean/services/control_plane/src/ — 7 files — child_dirs=0 tree_height=0 — .mjs(7)
+↳↳ amosclaude-clean/services/control_plane/test/ — 1 files — child_dirs=0 tree_height=0 — .mjs(1)
+↳ amosclaude-clean/services/gateway/ — 1 files — child_dirs=0 tree_height=0 — .md(1)
+↳ amosclaude-clean/services/storage_controller/ — 7 files — child_dirs=0 tree_height=0 — .py(5) (no-ext)(1) .txt(1)
+↳ amosclaude-clean/services/template_studio/ — 13 files — child_dirs=2 tree_height=1 — .py(6) (no-ext)(1) .css(1)
+↳↳ amosclaude-clean/services/template_studio/static/ — 3 files — child_dirs=0 tree_height=0 — .css(1) .html(1) .js(1)
+↳↳ amosclaude-clean/services/template_studio/tests/ — 1 files — child_dirs=0 tree_height=0 — .py(1)
+↳ amosclaude-clean/services/workspace_runtime/ — 10 files — child_dirs=1 tree_height=1 — (no-ext)(3) .py(2) .sh(2)
+↳↳ amosclaude-clean/services/workspace_runtime/workspace-image/ — 4 files — child_dirs=0 tree_height=0 — (no-ext)(2) .sh(2)
+amosclaude-clean/android/ — 32 files — child_dirs=2 tree_height=7 — budget_nodes=12 — .xml(14) .kt(12) .kts(3)
+↳ amosclaude-clean/android/app/ — 27 files — child_dirs=1 tree_height=6 — .xml(14) .kt(12) .kts(1)
+↳↳ amosclaude-clean/android/app/src/ — 26 files — child_dirs=1 tree_height=5 — .xml(14) .kt(12)
+↳↳↳ amosclaude-clean/android/app/src/main/ — 26 files — child_dirs=2 tree_height=4 — .xml(14) .kt(12)
+↳↳↳↳ amosclaude-clean/android/app/src/main/java/ — 12 files — child_dirs=1 tree_height=3 — .kt(12)
+↳↳↳↳ amosclaude-clean/android/app/src/main/res/ — 13 files — child_dirs=4 tree_height=1 — .xml(13)
+↳↳↳↳↳ amosclaude-clean/android/app/src/main/res/drawable/ — 4 files — child_dirs=0 tree_height=0 — .xml(4)
+↳↳↳↳↳ amosclaude-clean/android/app/src/main/res/layout/ — 5 files — child_dirs=0 tree_height=0 — .xml(5)
+↳↳↳↳↳ amosclaude-clean/android/app/src/main/res/values/ — 3 files — child_dirs=0 tree_height=0 — .xml(3)
+↳↳↳↳↳ amosclaude-clean/android/app/src/main/res/xml/ — 1 files — child_dirs=0 tree_height=0 — .xml(1)
+↳ amosclaude-clean/android/gradle/ — 2 files — child_dirs=1 tree_height=1 — .properties(1) .toml(1)
+↳↳ amosclaude-clean/android/gradle/wrapper/ — 1 files — child_dirs=0 tree_height=0 — .properties(1)
+amosclaude-clean/Amosclaud/ — 29 files — child_dirs=5 tree_height=28 — budget_nodes=12 — .py(26) .md(2) .json(1)
+↳ amosclaude-clean/Amosclaud/api/ — 2 files — child_dirs=1 tree_height=9 — .py(2)
+↳↳ amosclaude-clean/Amosclaud/api/path/ — 1 files — child_dirs=1 tree_height=8 — .py(1)
+↳ amosclaude-clean/Amosclaud/byte/ — 12 files — child_dirs=2 tree_height=5 — .py(12)
+↳↳ amosclaude-clean/Amosclaud/byte/doc/ — 2 files — child_dirs=1 tree_height=3 — .py(2)
+↳↳ amosclaude-clean/Amosclaud/byte/py/ — 3 files — child_dirs=1 tree_height=4 — .py(3)
+↳ amosclaude-clean/Amosclaud/lib/ — 3 files — child_dirs=0 tree_height=0 — .py(3)
+↳ amosclaude-clean/Amosclaud/server.cb/ — 3 files — child_dirs=1 tree_height=27 — .json(1) .md(1) .py(1)
+↳↳ amosclaude-clean/Amosclaud/server.cb/api.cb/ — 3 files — child_dirs=1 tree_height=26 — .json(1) .md(1) .py(1)
+↳↳↳ amosclaude-clean/Amosclaud/server.cb/api.cb/rest.cb/ — 3 files — child_dirs=1 tree_height=25 — .json(1) .md(1) .py(1)
+↳ amosclaude-clean/Amosclaud/y/ — 4 files — child_dirs=1 tree_height=2 — .py(4)
+↳↳ amosclaude-clean/Amosclaud/y/bundle/ — 3 files — child_dirs=1 tree_height=1 — .py(3)
+amosclaude-clean/amosclaud_bot/ — 22 files — child_dirs=0 tree_height=0 — budget_nodes=12 — .py(22)
+amosclaude-clean/amosclaud_os/ — 20 files — child_dirs=7 tree_height=1 — budget_nodes=12 — .py(20)
+↳ amosclaude-clean/amosclaud_os/agent/ — 5 files — child_dirs=0 tree_height=0 — .py(5)
+↳ amosclaude-clean/amosclaud_os/api/ — 1 files — child_dirs=0 tree_height=0 — .py(1)
+↳ amosclaude-clean/amosclaud_os/gateway/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+↳ amosclaude-clean/amosclaud_os/identity/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+↳ amosclaude-clean/amosclaud_os/kernel/ — 5 files — child_dirs=0 tree_height=0 — .py(5)
+↳ amosclaude-clean/amosclaud_os/repository/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+↳ amosclaude-clean/amosclaud_os/workspace/ — 2 files — child_dirs=0 tree_height=0 — .py(2)
+amosclaude-clean/amosclaud_agent_sdk/ — 19 files — child_dirs=0 tree_height=0 — budget_nodes=12 — .py(19)
+
+### POSSIBLE CONFIGURATION FILES
+descr: Deterministic detection of common configuration files across ecosystems. Only existing paths are printed. max_per_section=60.
+
+#### REPO META / DOCS
+descr: Project-level documentation and governance files that describe the repository purpose, policies, and conventions.
+- amosclaude-clean/README.md
+- amosclaude-clean/.amosclaud/README.md
+- amosclaude-clean/Amosclaud-metadata/README.md
+- amosclaude-clean/Amosclaud/README.md
+- amosclaude-clean/amomodel/README.md
+- amosclaude-clean/amosclaud-os/README.md
+- amosclaude-clean/appliance/README.md
+- amosclaude-clean/authentication/README.md
+- amosclaude-clean/metrics-server/README.md
+- amosclaude-clean/model-workspace/README.md
+- amosclaude-clean/preview_service/README.md
+- amosclaude-clean/runner/README.md
+- amosclaude-clean/secrets/README.md
+- amosclaude-clean/station/README.md
+- amosclaude-clean/system-profile/README.md
+- amosclaude-clean/tools/README.md
+- amosclaude-clean/amoscloud_ai/model_gateway/README.md
+- amosclaude-clean/clients/vscode-amosclaud/README.md
+- amosclaude-clean/clients/xcode-amosclaud/README.md
+- amosclaude-clean/connectors/codex/README.md
+- amosclaude-clean/deploy/bundles-api-host/README.md
+- amosclaude-clean/deploy/model-station/README.md
+- amosclaude-clean/mobile/android/README.md
+- amosclaude-clean/packages/agent-core/README.md
+- amosclaude-clean/packages/sdk-python/README.md
+- amosclaude-clean/railway/model/README.md
+- amosclaude-clean/services/control_plane/README.md
+- amosclaude-clean/services/gateway/README.md
+- amosclaude-clean/services/template_studio/README.md
+- amosclaude-clean/services/workspace_runtime/README.md
+- amosclaude-clean/tests/fixtures/README.md
+- amosclaude-clean/LICENSE
+- amosclaude-clean/clients/vscode-amosclaud/LICENSE
+- amosclaude-clean/CODE_OF_CONDUCT.md
+- amosclaude-clean/CONTRIBUTING.md
+- amosclaude-clean/SECURITY.md
+
+#### VCS / SCM
+descr: Version control configuration files that affect ignore rules, diffs, blame behavior, and checkout behavior.
+- amosclaude-clean/.gitignore
+
+#### EDITOR / IDE
+descr: Editor and IDE configuration files (VS Code, JetBrains, EditorConfig) and common local environment files (.env*).
+- amosclaude-clean/.env.example
+- amosclaude-clean/deploy/bundles-api-host/.env.example
+- amosclaude-clean/deploy/model-station/.env.example
+- amosclaude-clean/services/control_plane/.env.example
+- amosclaude-clean/services/workspace_runtime/.env.example
+
+#### CI / CD
+descr: Continuous Integration / Continuous Delivery configuration (GitHub Actions, GitLab CI, Jenkins, CircleCI, dependency automation).
+- amosclaude-clean/.github/workflows/agent-sdk-wheel.yml
+- amosclaude-clean/.github/workflows/amosclaud-agent-sync.yml
+- amosclaude-clean/.github/workflows/amosclaud-ai-feedback.yml
+- amosclaude-clean/.github/workflows/amosclaud-autonomous-background-engineer.yml
+- amosclaude-clean/.github/workflows/amosclaud-bot.yml
+- amosclaude-clean/.github/workflows/amosclaud-fixer.yml
+- amosclaude-clean/.github/workflows/amosclaud-incident-deduplicator.yml
+- amosclaude-clean/.github/workflows/amosclaud-metadata.yml
+- amosclaude-clean/.github/workflows/amosclaud-model-agent.yml
+- amosclaude-clean/.github/workflows/amosclaud-model-server.yml
+- amosclaude-clean/.github/workflows/amosclaud-pr-ci-repair.yml
+- amosclaude-clean/.github/workflows/amosclaud-pr-repair-callback.yml
+- amosclaude-clean/.github/workflows/amosclaud-pr-self-healing-callback.yml
+- amosclaude-clean/.github/workflows/amosclaud-react.yml
+- amosclaude-clean/.github/workflows/amosclaud-repair-control-plane.yml
+- amosclaude-clean/.github/workflows/amosclaud-repair-memory-learn.yml
+- amosclaude-clean/.github/workflows/amosclaud-vscode-extension.yml
+- amosclaude-clean/.github/workflows/amoscloud-ai-24-7.yml
+- amosclaude-clean/.github/workflows/android-native.yml
+- amosclaude-clean/.github/workflows/behavior-automation.yml
+- amosclaude-clean/.github/workflows/ci-pipeline.yml
+- amosclaude-clean/.github/workflows/ci.yml
+- amosclaude-clean/.github/workflows/cmood_agent_trigger.yml
+- amosclaude-clean/.github/workflows/codeql.yml
+- amosclaude-clean/.github/workflows/command-center-receiver.yml
+- amosclaude-clean/.github/workflows/daily-build.yml
+- amosclaude-clean/.github/workflows/deploy-amosclaud.yml
+- amosclaude-clean/.github/workflows/deploy.yml
+- amosclaude-clean/.github/workflows/desktop-release.yml
+- amosclaude-clean/.github/workflows/docker-image.yml
+- amosclaude-clean/.github/workflows/docker-publish.yml
+- amosclaude-clean/.github/workflows/fast-pr-gate.yml
+- amosclaude-clean/.github/workflows/fortify.yml
+- amosclaude-clean/.github/workflows/new-workflow.yml
+- amosclaude-clean/.github/workflows/node-control-plane.yml
+- amosclaude-clean/.github/workflows/ollama-model-verify.yml
+- amosclaude-clean/.github/workflows/pages.yml
+- amosclaude-clean/.github/workflows/platform-check.yml
+- amosclaude-clean/.github/workflows/production-compose.yml
+- amosclaude-clean/.github/workflows/python-package-conda.yml
+- amosclaude-clean/.github/workflows/python-package.yml
+- amosclaude-clean/.github/workflows/real-operations-audit.yml
+- amosclaude-clean/.github/workflows/review-receiver.yml
+- amosclaude-clean/.github/workflows/server-release.yml
+- amosclaude-clean/.github/workflows/server-run.yml
+- amosclaude-clean/.github/workflows/status.yml
+- amosclaude-clean/.github/workflows/workspace-ci.yml
+- amosclaude-clean/.circleci/config.yml
+- amosclaude-clean/.github/dependabot.yml
+
+#### CONTAINERS / RUNTIME / ORCHESTRATION
+descr: Container and orchestration configuration files (Docker, Compose, Kubernetes/Kustomize, Helm charts).
+- amosclaude-clean/Dockerfile
+- amosclaude-clean/.devcontainer/Dockerfile
+- amosclaude-clean/Infrastructure/Dockerfile
+- amosclaude-clean/api-gateway/Dockerfile
+- amosclaude-clean/metrics-server/Dockerfile
+- amosclaude-clean/model-workspace/Dockerfile
+- amosclaude-clean/preview_service/Dockerfile
+- amosclaude-clean/runner/Dockerfile
+- amosclaude-clean/station/Dockerfile
+- amosclaude-clean/workspace_worker/Dockerfile
+- amosclaude-clean/deploy/bundles-api-host/Dockerfile
+- amosclaude-clean/deploy/model-station/Dockerfile
+- amosclaude-clean/railway/model/Dockerfile
+- amosclaude-clean/services/control_plane/Dockerfile
+- amosclaude-clean/services/storage_controller/Dockerfile
+- amosclaude-clean/services/template_studio/Dockerfile
+- amosclaude-clean/services/workspace_runtime/Dockerfile
+- amosclaude-clean/services/workspace_runtime/workspace-image/Dockerfile
+- amosclaude-clean/docker-compose.yml
+- amosclaude-clean/.devcontainer/docker-compose.yml
+- amosclaude-clean/Infrastructure/docker-compose.yml
+- amosclaude-clean/deploy/bundles-api-host/docker-compose.yml
+- amosclaude-clean/deploy/model-station/docker-compose.yml
+- amosclaude-clean/deploy/workspace-worker/docker-compose.yml
+- amosclaude-clean/docker-compose.local-cloud.yml
+- amosclaude-clean/docker-compose.prod.yml
+- amosclaude-clean/docker-compose.selfhost.yml
+- amosclaude-clean/docker-compose.storage-controller.yml
+- amosclaude-clean/docker-compose.workspace-runtime.yml
+- amosclaude-clean/docker-compose.workspace.yml
+
+#### INFRA AS CODE
+descr: Infrastructure-as-code and environment provisioning configuration (Terraform, Bazel workspace files, Nix).
+- amosclaude-clean/main.tf
+
+#### GENERAL BUILD TOOLS (LANGUAGE-AGNOSTIC)
+descr: Language-agnostic build tool configuration (Make, Autotools, CMake/Meson/Ninja, toolchain and dependency managers).
+- amosclaude-clean/Makefile
+
+#### NODE / JS / TS TOOLING
+descr: JavaScript/TypeScript ecosystem configuration: package managers, toolchain configs (lint/format), bundlers, and test runners.
+- amosclaude-clean/desktop/package.json
+- amosclaude-clean/clients/vscode-amosclaud/package.json
+- amosclaude-clean/services/control_plane/package.json
+- amosclaude-clean/services/control_plane/.npmrc
+- amosclaude-clean/pages-site/jsconfig.json
+
+#### GO
+descr: Go module/workspace files and common Go tooling configuration (linting, releases).
+- amosclaude-clean/daemon/go.mod
+
+#### PYTHON
+descr: Python packaging, dependency, environment, and common tooling configuration (linters, type checkers, test runners).
+- amosclaude-clean/pyproject.toml
+- amosclaude-clean/Amosclaud-metadata/pyproject.toml
+- amosclaude-clean/amosclaud-os/pyproject.toml
+- amosclaude-clean/setup.py
+- amosclaude-clean/requirements.txt
+- amosclaude-clean/api-gateway/requirements.txt
+- amosclaude-clean/cmood/requirements.txt
+- amosclaude-clean/deployment_worker/requirements.txt
+- amosclaude-clean/workspace_worker/requirements.txt
+- amosclaude-clean/connectors/codex/requirements.txt
+- amosclaude-clean/services/storage_controller/requirements.txt
+- amosclaude-clean/services/template_studio/requirements.txt
+- amosclaude-clean/services/workspace_runtime/requirements.txt
+- amosclaude-clean/requirements-dev.txt
+- amosclaude-clean/environment.yml
+- amosclaude-clean/pytest.ini
+
+#### JAVA / JVM
+descr: JVM build system configuration (Maven/Gradle) including wrappers and build entrypoints.
+- amosclaude-clean/android/settings.gradle.kts
+- amosclaude-clean/mobile/android/settings.gradle.kts
+- amosclaude-clean/android/build.gradle.kts
+- amosclaude-clean/android/app/build.gradle.kts
+- amosclaude-clean/mobile/android/build.gradle.kts
+- amosclaude-clean/mobile/android/app/build.gradle.kts
+- amosclaude-clean/android/gradle.properties
+
+#### SWIFT
+descr: Swift Package Manager manifests and common Xcode project/workspace markers.
+- amosclaude-clean/clients/xcode-amosclaud/Package.swift

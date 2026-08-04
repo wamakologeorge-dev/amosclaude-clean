@@ -49,3 +49,24 @@ data/*
 # OS
 .DS_Store
 Thumbs.db
+
+# NeuroSync — auto-generated / private (do not commit)
+# To share a file with your team: remove its line from this block in .gitignore
+#
+# ── Always private (never commit) ─────────────────────────────────────────
+.neurosync/.context-key
+.neurosync/store.json
+.neurosync/rules/
+.neurosync/agent-rules.md
+.agent-mem/
+#
+# ── Shareable with team (remove line to commit) ────────────────────────────
+# ip_rules.md — your architecture constraints for all AI agents
+.neurosync/ip_rules.md
+#
+# ── Auto-generated AI context (remove line to share with team) ─────────────
+# These regenerate on every sync — commit to share AI context across teammates
+CLAUDE.md
+AGENT.md
+.cursorrules
+.windsurfrules
