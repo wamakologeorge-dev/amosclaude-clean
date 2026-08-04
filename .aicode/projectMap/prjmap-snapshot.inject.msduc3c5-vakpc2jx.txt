@@ -1,0 +1,252 @@
+# PROJECT MAP (HINT)
+descr: Non-authoritative workspace snapshot. It may be intentionally stale within a bounded tolerance. Never treat paths in this block as verified; verify with fs_* and/or index_* / symbol_* / file_load* before acting.
+
+FORMAT:
+format: D/| listing + append-only diff ops
+format_descr: One directory per line: `D <projectName>/<relative/dir/> → file1 | file2 | ...`
+format_descr: Separator between files is exactly ` | ` (space + pipe + space). After splitting, unescape filename tokens: `\|` → `|` and `\\` → `\`.
+format_descr: Multi-root workspace: `<projectName>` may differ across lines; treat each line as self-contained.
+
+DIFF SECTION (APPEND-ONLY):
+format_diff: Optional section appended after the file list.
+format_diff: Marker line: `## PROJECT MAP DIFF (APPEND-ONLY)`.
+format_diff: Then a `descr:` line, then append-only op lines: `+ <canPath>` or `- <canPath>`.
+format_diff: Apply op lines sequentially; if a path appears multiple times, the last occurrence wins.
+
+RECONSTRUCTING A PATH FROM ONE LINE:
+1) Read the directory prefix: `<projectName>/<dir>/`.
+2) Split the rest on ` | ` to get filenames.
+3) Full path = `<projectName>/<dir>/` + `<filename>`.
+
+GUIDANCE:
+- Use this list for orientation; verify before edits or claims.
+- If the snapshot and the workspace disagree, the workspace wins.
+
+## WORKSPACE ROOTS
+- The project is named "amosclaude-clean" and has a single root directory at "amosclaude-clean/".
+
+## PROJECT MAP FILE LIST
+D amosclaude-clean/ → .dockerignore | .env.example | .env.production.example | .env.workspace.example | .flake8 | .gitignore | __noop__ | agent_core-1.py | AGENTS.md | amos-autonomous | amosclaud-workspace.ps1 | amosclaud-workspace.sh | amosclaud.bat | amosclaud.ipynb | Amosclaud.md | Amosclaud.py | amosclaud_action.py | amosclaud_autonomous_conversation.py | amosclaud_autonomous_conversation_package.zip | AMOSCLAUD_AUTONOMOUS_INTEGRATION.md | amosclaud_cron_agent.py | amosclaud_cron_gateway.py | amosclaud_daily_memory_runner.py | amosclaude-repository-repair-1.patch | app.js | app.py | BILLING.md | Caddyfile | cmood.py | CNAME | CODE_OF_CONDUCT.md | conftest.py | CONTRIBUTING.md | deploy.py | deployment | docker-compose.local-cloud.yml | docker-compose.prod.yml | docker-compose.selfhost.yml | docker-compose.storage-controller.yml | docker-compose.workspace-runtime.yml | docker-compose.workspace.yml | docker-compose.yml | Dockerfile | environment.yml | fix_chat_api.py | fix_chat_api_secret.py | fix_main.py | fix_newline.py | fix_newline2.py | generate_token.py | index.html | install-amosclaud.ps1 | install-amosclaud.sh | install-virtual-memory.ps1 | install-virtual-memory.sh | LICENSE | LICENSE-COMMERCIAL.txt | main.py | main.tf | Makefile | nginx.conf | openapi.yaml | oryx-build-commands.txt | PACKAGE_MANIFEST.json | particles.html | patch_chat_api.py | patch_deploy.py | PLATFORM_ARCHITECTURE.md | PORTABLE_SERVER.md | Procfile | pyproject.toml | pytest.ini | railway.json | railway.toml | RAILWAY_BUILD.md | README.md | render.yaml | report_bot.py | requirements-1.txt | requirements-ci-fast.txt | requirements-dev.txt | requirements-model-server.txt | requirements-platform.txt | requirements.txt | schemas.py | SECURITY.md | SELF_HOSTING.md | server.js | setup.py | sitecustomize.py | start-amosclaud.bat | start-local.sh | start-windows.bat | start-windows.ps1 | START_HERE.html | stop-amosclaud.bat | TASK_ROUTER.md | test_case.xls | usercustomize.py
+D amosclaude-clean/.agents/ → ARCHITECTURE.md | CONTEXT.md | lessons.md | rules.md
+D amosclaude-clean/.agents/rules/ → neurosync-context.md
+D amosclaude-clean/.agents/skills/ → skills-manifest.json
+D amosclaude-clean/.agents/skills/config/ → SKILL.md
+D amosclaude-clean/.agents/skills/convention/ → SKILL.md
+D amosclaude-clean/.agents/skills/decision/ → SKILL.md
+D amosclaude-clean/.agents/skills/java/ → SKILL.md
+D amosclaude-clean/.agents/skills/project/ → SKILL.md
+D amosclaude-clean/.agents/skills/python/ → SKILL.md
+D amosclaude-clean/.agents/skills/react/ → SKILL.md
+D amosclaude-clean/.agents/skills/typescript/ → SKILL.md
+D amosclaude-clean/.amosclaud/ → amosclaud_codex_underground.py | amosclaud_native_shell.py | amosclaud_policy_engine.py | amosclaud_shell_bridge.py | amosclaud_underground_master.py | approvals.yml | local_ci_healer.py | platform-requirements.json | pr-ci-repair.json | README.md | repair-control-plane.json | repair-policy.json | review.yml | security.yml | startup.json
+D amosclaude-clean/.circleci/ → config.yml
+D amosclaude-clean/.devcontainer/ → devcontainer.json | docker-compose.yml | Dockerfile
+D amosclaude-clean/.github/ → CODEOWNERS | dependabot.yml | PULL_REQUEST_TEMPLATE.md
+D amosclaude-clean/.github/agents/ → amosclaud.agent.md
+D amosclaude-clean/.github/amosclaud-fixer/amosclaud-autonomous-agent/ci/bot-fixer-operations-autonomous-background-engineer/ → bot.py | plugin.json
+D amosclaude-clean/.github/ISSUE_TEMPLATE/ → bug_report.yml
+D amosclaude-clean/.github/scripts/ → ai_reviewer.py | amosclaud_agent_sync.py | amosclaud_fixer.py | amosclaud_incident_deduplicator.py | amosclaud_pr_ci_patch.py | amosclaud_repair_callback.py | amosclaud_repair_candidate.py | amosclaud_repair_control.py | amosclaud_repair_evidence.py | amosclaud_repair_verify.py | issue_amosclaud_security_grant.py | redact_amosclaud_evidence.py | repository_behavior.py | run_secured_amosclaud_fixer.py | sitecustomize.py | verify_amosclaud_publish_grant.py
+D amosclaude-clean/.github/workflows/ → agent-sdk-wheel.yml | amosclaud-agent-sync.yml | amosclaud-ai-feedback.yml | amosclaud-autonomous-background-engineer.yml | amosclaud-bot.yml | amosclaud-fixer.yml | amosclaud-incident-deduplicator.yml | amosclaud-metadata.yml | amosclaud-model-agent.yml | amosclaud-model-server.yml | amosclaud-pr-ci-repair.yml | amosclaud-pr-repair-callback.yml | amosclaud-pr-self-healing-callback.yml | amosclaud-react.yml | amosclaud-repair-control-plane.yml | amosclaud-repair-memory-learn.yml | amosclaud-vscode-extension.yml | amoscloud-ai-24-7.yml | android-native.yml | behavior-automation.yml | ci-pipeline.yml | ci.yml | cmood_agent_trigger.yml | codeql.yml | command-center-receiver.yml | daily-build.yml | deploy-amosclaud.yml | deploy.yml | desktop-release.yml | docker-image.yml | docker-publish.yml | fast-pr-gate.yml | fortify.yml | new-workflow.yml | node-control-plane.yml | ollama-model-verify.yml | pages.yml | platform-check.yml | production-compose.yml | python-package-conda.yml | python-package.yml | real-operations-audit.yml | review-receiver.yml | server-release.yml | server-run.yml | status.yml | workspace-ci.yml
+D amosclaude-clean/agents/ → __init__.py | codex_agent.py | manifest.json
+D amosclaude-clean/amomodel/ → __init__.py | api.py | README.md | runtime.py | service_graph.py | state.py
+D amosclaude-clean/Amosclaud-metadata/ → manifest.json | pyproject.toml | README.md
+D amosclaude-clean/Amosclaud-metadata/src/amosclaud_metadata/ → __init__.py | git_metadata.py | models.py | service.py | storage.py | validation.py
+D amosclaude-clean/Amosclaud-metadata/tests/ → conftest.py | test_metadata_core.py | test_storage_concurrency.py
+D amosclaude-clean/amosclaud-os/ → pyproject.toml | README.md
+D amosclaude-clean/Amosclaud-storage/repair-memory/ → catalog.json
+D amosclaude-clean/Amosclaud/ → __init__.py | Amosclaud.py | platform_bus.py | programming_bytes_system_cb.py | README.md
+D amosclaude-clean/amosclaud/ → __init__.py | cb.py
+D amosclaude-clean/Amosclaud/api/ → __init__.py
+D amosclaude-clean/Amosclaud/api/path/byte/server/router/folder/cb/chapter/core/system/ → py.py
+D amosclaude-clean/Amosclaud/byte/ → __init__.py | core.py | router.py | server.py | system.py | tamper_server.py | tools.py
+D amosclaude-clean/amosclaud/byte/ → __init__.py | cb.py
+D amosclaude-clean/Amosclaud/byte/doc/ → __init__.py
+D amosclaude-clean/Amosclaud/byte/doc/json/tools/card/ → cb.py
+D amosclaude-clean/Amosclaud/byte/py/ → __init__.py
+D amosclaude-clean/Amosclaud/byte/py/ci/api/config/core/ → cb.py
+D amosclaude-clean/Amosclaud/byte/py/ci/json/config/ → cb.py
+D amosclaude-clean/amosclaud/core/ → __init__.py
+D amosclaude-clean/amosclaud/core/cb/db/py/ci/api/ → __init__.py | buddle.py | bundle.py
+D amosclaude-clean/amosclaud/db/ → __init__.py | cb.py
+D amosclaude-clean/Amosclaud/lib/ → __init__.py | buddles.py | bundles.py
+D amosclaude-clean/Amosclaud/server.cb/api.cb/rest.cb/next.cb/cmood.cb/remote.cb/meta-package.cb/autonomous.cb/command.cb/bumps.cb/byte.cb/pages.cb/router.cb/graphics.cb/agent.cb/word.cb/global.cb/.com.cb/path.cb/engine.cb/github.cb/yml.cb/ci.cb/meter.cb/matrix.cb/3d.cb/localhost.cb/programming.bytes.system.cb/ → manifest.json | README.md | system.py
+D amosclaude-clean/amosclaud/src/ → __init__.py | cb.py
+D amosclaude-clean/Amosclaud/y/ → __init__.py
+D amosclaude-clean/Amosclaud/y/bundle/ → __init__.py
+D amosclaude-clean/Amosclaud/y/bundle/system/ → __init__.py | cb.py
+D amosclaude-clean/amosclaud_agent_sdk/ → __init__.py | async_client.py | cli.py | client.py | errors.py | message_parser.py | options.py | query.py | runtime_version.py | session_import.py | session_mutations.py | session_resume.py | session_store.py | session_store_validation.py | session_summary.py | sessions.py | tools.py | transcript_mirror_batcher.py | version.py
+D amosclaude-clean/amosclaud_bot/ → __init__.py | approval_gate.py | approvals.py | autonomous_brain.py | autonomous_planning.py | bot.py | ci_repair_callback.py | codex_capabilities.py | comment_style.py | continuation_state.py | dispatcher.py | execution_dashboard.py | github_intelligence.py | intelligence_router.py | mission_ledger.py | model_agent.py | ollama_connection.py | privacy_gate.py | professional.py | security_context.py | status_board.py | verified_repair.py
+D amosclaude-clean/amosclaud_language/ → __init__.py | __main__.py | cli.py | lexer.py | parser.py | runtime.py
+D amosclaude-clean/amosclaud_mcp/ → __init__.py | client.py | server.py
+D amosclaude-clean/amosclaud_metrics/ → __init__.py | collectors.py | history.py | integration.py | platform.py | registry.py | server.py
+D amosclaude-clean/amosclaud_model/ → __init__.py | cli.py | config.py | metadata.py | model.py | server.py | service_log.py | training_service.py | workspace.py
+D amosclaude-clean/amosclaud_os/ → __init__.py
+D amosclaude-clean/amosclaud_os/agent/ → __init__.py | coding_runtime.py | executor.py | memory.py | runtime_bridge.py
+D amosclaude-clean/amosclaud_os/api/ → __init__.py
+D amosclaude-clean/amosclaud_os/gateway/ → __init__.py | routing.py
+D amosclaude-clean/amosclaud_os/identity/ → __init__.py | permissions.py
+D amosclaude-clean/amosclaud_os/kernel/ → __init__.py | events.py | registry.py | runtime.py | scheduler.py
+D amosclaude-clean/amosclaud_os/repository/ → __init__.py | issues.py
+D amosclaude-clean/amosclaud_os/workspace/ → __init__.py | context.py
+D amosclaude-clean/amosclaud_platform/ → __init__.py | __main__.py | control.py
+D amosclaude-clean/amosclaud_serverless/ → __init__.py
+D amosclaude-clean/amoscloud_ai/ → __init__.py | admin_bootstrap.py | agent.py | agent_actions.py | agent_chain.py | agent_credit_billing.py | agent_memory.py | agent_tokens.py | agentic_cloud_engine.py | amos_test_language.py | Amosclaud.py | atomic_tasks.py | auth_self_repair.py | autonomous_api_chain.py | autonomous_builder.py | autonomous_codex_config.py | autonomous_learning_academy.py | autonomous_learning_level2.py | autonomous_models_integra.py | autonomous_server.py | autonomous_task_runner.py | bundles.py | bundles_host.py | cli.py | cloud_configuration.py | cloud_task_runner.py | Codex.py | codex_memory.py | codex_system_bundle.py | combined_app.py | config.py | copilot.py | dashboard_worker.py | db_migrations.py | engineering_agent.py | engineering_verification.py | engineering_workforce.py | feature_flags.py | github_git_auth.py | github_issue_commands.py | github_relay_recovery.py | github_repository_sync.py | guardrails.py | ide_client.py | isolated_runner.py | live_repair_probe.py | logger.py | mail_delivery.py | mail_http.py | main.py | managed_terminal.py | mapping_bundles.py | markdown_service.py | mcp_manager.py | model_api_response.py | model_network.py | model_runtime.py | model_services.py | model_station.py | models.py | operator.py | pr_agent.py | preview_client.py | professionalism.py | project_platform.py | provider.py | public_url_policy.py | railway_health.py | registry.py | repair_knowledge.py | repository_control.py | route.py | route_discovery.py | runner_client.py | security.py | solo_shell.py | storage_capacity.py | storage_provisioning.py | task_dispatch.py | verification.py | virtual_memory.py | worker.py | workforce_task_runner.py | workspace_control.py | workspace_provider.py | workspace_runtime.py | workspace_runtime_service.py | workspace_terminal.py
+D amosclaude-clean/amoscloud_ai/agent/ → __init__.py | assistant_system_template.py | autonomous_keys.py | bootstrap.py | compatibility.py | computation_engine.py | conversation_intelligence.py | interaction_orchestrator.py | preflight.py | professional_reliability.py | result_experience.py | runtime.py
+D amosclaude-clean/amoscloud_ai/agent/models/ → codex_provider.py
+D amosclaude-clean/amoscloud_ai/amo_lang/ → __init__.py | runtime.py
+D amosclaude-clean/amoscloud_ai/api/ → __init__.py
+D amosclaude-clean/amoscloud_ai/api/routes/ → __init__.py | academy.py | account.py | account_recovery.py | admin.py | agent.py | agent_buddies.py | agent_chain.py | agent_readiness.py | amo_runtime.py | amo_tokens.py | amos_mail.py | amos_secure_code.py | approvals_api.py | artifacts.py | auth.py | autonomous_codex.py | autonomous_keys.py | autonomy.py | billing.py | bundle_pages.py | bundles.py | bundles_api_host.py | capability_memory_api.py | cdn.py | chat.py | cloud_configuration.py | cloud_workspaces.py | codex_system_bundle.py | command_agent.py | community.py | connections.py | control_bus_dashboard.py | copilot.py | core.py | deployments.py | doctor_medical.py | doctor_travel.py | downloads.py | extensions.py | feed.py | first_party_chat.py | github_app.py | github_organization_publish.py | github_pull_requests.py | github_repositories.py | github_repository_management.py | github_travel.py | google_auth.py | health.py | hub_architecture.py | hub_reports.py | industrial_autonomy.py | local_workspace.py | logs.py | mapping_bundles.py | metadata.py | metadata_dashboard.py | model_server_folder.py | model_services.py | monitoring.py | native_issue_timeline.py | openai_compat.py | operation_buckets.py | organizations.py | owner_bootstrap.py | passkey_signup.py | pipelines.py | platform_services.py | pr_tasks.py | profile.py | provider_api.py | real_repositories.py | registry.py | repositories.py | repository_history.py | repository_templates.py | reviews.py | server_stations.py | service_keys.py | solo_development.py | storage.py | storage_capacity.py | storage_capacity_impl.py | task_router.py | terminal_tools.py | vscode_terminal.py | webhooks.py | wifi.py | workforce.py | workspaces.py
+D amosclaude-clean/amoscloud_ai/autonomous/ → __init__.py
+D amosclaude-clean/amoscloud_ai/autonomous/server/ → __init__.py
+D amosclaude-clean/amoscloud_ai/autonomous/server/api/ → __init__.py
+D amosclaude-clean/amoscloud_ai/autonomous/server/api/cb/ → __init__.py
+D amosclaude-clean/amoscloud_ai/autonomous/server/api/cb/router/ → __init__.py
+D amosclaude-clean/amoscloud_ai/autonomous/server/api/cb/router/byte/ → __init__.py | metadata.py
+D amosclaude-clean/amoscloud_ai/cdn/ → __init__.py | application.py | domain.py | infrastructure.py | ports.py
+D amosclaude-clean/amoscloud_ai/core/ → __init__.py | access.py | command_agent.py | registry.py | tokens.py | vault.py | workspace.py
+D amosclaude-clean/amoscloud_ai/extensions/ → __init__.py | registry.py | runtime.py
+D amosclaude-clean/amoscloud_ai/hub/ → __init__.py | architecture.py | report.py
+D amosclaude-clean/amoscloud_ai/industrial_autonomy/ → __init__.py | control_plane.py
+D amosclaude-clean/amoscloud_ai/intelligence/ → output_generation.py | scaled_dot_product_attention.py
+D amosclaude-clean/amoscloud_ai/local_cloud/ → __init__.py | agent_guard.py | app.py | authority.py | crypto_identity.py | executor.py | p2p.py | plugins.py | sandbox.py | workspaces.py
+D amosclaude-clean/amoscloud_ai/model_gateway/ → __init__.py | base.py | factory.py | policy.py | README.md | registry.py | router.py | schemas.py
+D amosclaude-clean/amoscloud_ai/model_gateway/providers/ → __init__.py | anthropic.py | gemini.py | legacy.py | openai_compatible.py
+D amosclaude-clean/amoscloud_ai/model_server/ → __init__.py | attention.py | context.py | embeddings.py | feed_forward.py | generator.py | kv_cache.py | lm_head.py | metrics.py | model_loader.py | multi_head_attention.py | positional_encoding.py | prompt_builder.py | routing.py | sampling.py | stop_tokens.py | stream.py | tokenizer.py | transformer_block.py | transformer_stack.py
+D amosclaude-clean/amoscloud_ai/monitoring/ → __init__.py | application.py | domain.py | infrastructure.py | ports.py
+D amosclaude-clean/amoscloud_ai/plugins/ → __init__.py | control_plane.py
+D amosclaude-clean/amoscloud_ai/repair_engine/ → __init__.py | asset_checks.py | cli.py | core.py | decision_engine.py | failure_strategy.py | healing.py | json_repairs.py
+D amosclaude-clean/amoscloud_ai/server/ → __init__.py
+D amosclaude-clean/amoscloud_ai/server/cb/ → __init__.py | Amosclaud.py
+D amosclaude-clean/amoscloud_ai/system_core/ → __init__.py | registry.py
+D amosclaude-clean/amoscloud_local_agent/ → __init__.py | agent.py
+D amosclaude-clean/amosflow/ → main.py
+D amosclaude-clean/android/ → build.gradle.kts | gradle.properties | settings.gradle.kts
+D amosclaude-clean/android/app/ → build.gradle.kts
+D amosclaude-clean/android/app/src/main/ → AndroidManifest.xml
+D amosclaude-clean/android/app/src/main/java/com/amosclaudai/ → AdminActivity.kt | AiChatActivity.kt | AuthActivity.kt | BrowserActivity.kt | MainActivity.kt | NativeModuleActivity.kt | RepositoriesActivity.kt | SettingsActivity.kt
+D amosclaude-clean/android/app/src/main/java/com/amosclaudai/adapter/ → ChatAdapter.kt
+D amosclaude-clean/android/app/src/main/java/com/amosclaudai/api/ → AmosclaudApiClient.kt
+D amosclaude-clean/android/app/src/main/java/com/amosclaudai/model/ → ChatMessage.kt | ChatResponse.kt
+D amosclaude-clean/android/app/src/main/res/drawable/ → amosclaud_launcher.xml | bg_bubble_assistant.xml | bg_bubble_user.xml | bg_url_bar.xml
+D amosclaude-clean/android/app/src/main/res/layout/ → activity_ai_chat.xml | activity_browser.xml | activity_main.xml | activity_settings.xml | item_chat_message.xml
+D amosclaude-clean/android/app/src/main/res/values/ → colors.xml | strings.xml | themes.xml
+D amosclaude-clean/android/app/src/main/res/xml/ → network_security_config.xml
+D amosclaude-clean/android/gradle/ → libs.versions.toml
+D amosclaude-clean/android/gradle/wrapper/ → gradle-wrapper.properties
+D amosclaude-clean/api-gateway/ → __init__.py | config.py | conftest.py | dependencies.py | Dockerfile | generate_token.py | main.py | requirements.txt | sitecustomize.py | test_build_endpoints.py
+D amosclaude-clean/api-gateway/services/ → Dockerfile_service_a | service_a.py | service_c.py
+D amosclaude-clean/api_key_manager/ → auth.py | crud.py | database.py | main.py | models.py | schemas.py
+D amosclaude-clean/app/ → __init__.py
+D amosclaude-clean/app/models/ → __init__.py | models.py
+D amosclaude-clean/appliance/ → README.md
+D amosclaude-clean/apps/ → main.py
+D amosclaude-clean/authentication/ → railway.env.example | README.md
+D amosclaude-clean/build-worker/ → V
+D amosclaude-clean/CircleCI-Public/circleci/ → chunk
+D amosclaude-clean/cli/ → __init__.py | client.py | commands.py | config.py | main.py
+D amosclaude-clean/clients/vscode-amosclaud/ → extension.js | LICENSE | package.json | README.md | web-extension.js
+D amosclaude-clean/clients/vscode-amosclaud/media/ → amosclaud.svg
+D amosclaude-clean/clients/vscode-amosclaud/src/ → browser-entry.js | client.js | terminal.js
+D amosclaude-clean/clients/vscode-amosclaud/test/ → client.test.js | manifest.test.js
+D amosclaude-clean/clients/xcode-amosclaud/ → Package.swift | README.md | store-token.sh | xcode-behavior.sh
+D amosclaude-clean/clients/xcode-amosclaud/Sources/AmosclaudXcode/ → main.swift
+D amosclaude-clean/cmood/ → __init__.py | agent.py | collector.py | config.py | main.py | orchestrator.py | requirements.txt
+D amosclaude-clean/config/ → agent_policy.json | amosclaud-os.yaml | autonomous-codex.toml | gateway.yaml | organization-settings.json
+D amosclaude-clean/config/continue/ → amosclaud.yaml.example
+D amosclaude-clean/connectors/codex/ → README.md | requirements.txt | server.py
+D amosclaude-clean/controllers/ → book.controller.js
+D amosclaude-clean/daemon/ → go.mod | main.go
+D amosclaude-clean/dashboard/ → Dashboard.tsx
+D amosclaude-clean/data/ → .gitkeep
+D amosclaude-clean/database/ → __init__.py | async_session.py | models.py | session.py
+D amosclaude-clean/deploy/bundles-api-host/ → .env.example | docker-compose.yml | Dockerfile | README.md
+D amosclaude-clean/deploy/model-station/ → .env.example | check-real-model-station.py | docker-compose.yml | Dockerfile | README.md | start-real-model-station.sh
+D amosclaude-clean/deploy/workspace-worker/ → docker-compose.yml
+D amosclaude-clean/deployment_worker/ → config.py | executor.py | main.py | models.py | requirements.txt
+D amosclaude-clean/desktop/ → main.js | package.json | preload.js
+D amosclaude-clean/docker/ → production-entrypoint.sh | V
+D amosclaude-clean/docs/ → ABSOLUTE_SECURITY_HARDENING.md | AGENT_SDK.md | amo-runtime.md | AMOSCLAUD_API_KEY.md | AMOSCLAUD_ATOMIC_TASKS.md | AMOSCLAUD_BOT_COMMANDS.md | AMOSCLAUD_BOT_REVIEW.md | AMOSCLAUD_COPILOT.md | AMOSCLAUD_DEVELOPER_CLOUD_ARCHITECTURE.md | AMOSCLAUD_IDE_COMPANION.md | AMOSCLAUD_MARKDOWN_SECURITY.md | AMOSCLAUD_MARKDOWN_SERVICE.md | AMOSCLAUD_MCP_SERVER.md | AMOSCLAUD_REGISTRY.md | AMOSCLAUD_REPAIR_MEMORY_LEVELS.md | AMOSCLAUD_SENTINELGRID.md | AMOSCLAUD_SYSTEM_CORE.md | AMOSCLOUD_WIREGUARD_GATEWAY.md | ARCHITECTURE_CONTRACT.md | AUTH_EMAIL_SETUP.md | AUTONOMOUS_ENGINEERING_WORKFORCE.md | AUTONOMOUS_JOB_AND_HEAD_SURFACES.md | AUTONOMOUS_REPAIR_ENGINE_V1.md | AUTONOMOUS_WORKFORCE_DELIVERY_CHECKLIST.md | AUTONOMOUS_WORKFORCE_EDGE_RUNNER_CONTRACT.md | AUTONOMOUS_WORKFORCE_PRODUCT_POSITION.md | AUTONOMOUS_WORKFORCE_ROADMAP.md | CDN_EDGE_SERVICE.md | CHROMEOS_LOCAL_DEVELOPMENT.md | ci-safety.md | CI_ACCELERATION.md | cmood-workflow-repair.md | continuous-integration.md | DAILY_AUTONOMOUS_BUILDER.md | DECENTRALIZED_NODE_FOUNDATION.md | doctor-healing-coordinator.md | DOMAIN_OWNERSHIP.md | FUTURISTIC_AUTONOMOUS_ARCHITECTURE.md | GATEWAY_GITHUB_VSCODE_INTEGRATION.md | GITHUB_BIDIRECTIONAL_SYNC.md | GITHUB_COPILOT_INDEPENDENCE.md | GITHUB_REPOSITORY_DEVELOPER_CONTROLS.md | GITHUB_TRAVEL_API.md | GOOGLE_OAUTH_SIGN_IN.md | LOCAL_FIRST_CLOUD_ENGINE.md | LOCAL_FIRST_MULTI_USER_COLLABORATION.md | LOCAL_MATRIX_AGENT.md | MODULAR_PLUGIN_MCP_FEATURE_FLAGS.md | MONITORING_SERVICES.md | NODE_NPM_CONTROL_PLANE.md | OLLAMA_ACTIONS_SECRET.md | openai-compatible-api.md | OPERATION_BUCKETS.md | OWNER_ACCOUNT_SETUP.md | PRODUCT_SPECIFICATION.md | PRODUCTION_DOCKER.md | PYTHON_AUTONOMOUS_ENGINEERING_BOOK.md | RAILWAY_PERSISTENCE.md | REPOSITORY_BEHAVIOR_AUTOMATION.md | SELF_HEALING_PR_LOOP.md | STANDALONE_REPOSITORY_PLATFORM.md | UNIFIED_AMOSCLAUD_PLATFORM.md | UNIFIED_AMOSCLAUD_WORKSPACES.md | UNIVERSAL_MODEL_GATEWAY.md | V | verified-json-autorepair.md | VSCODE_NATIVE_AGENT_AND_REMOTE_MCP.md | WEBSITE_APPROVAL_BACKEND.md | WIFI_ACCESS_POINT.md | WORKFORCE_TELEMETRY_EXAMPLE.md | WORKSPACE_20_TIB_VOLUME.md
+D amosclaude-clean/docs/legal/ → AMOSCLAUD_COMMERCIAL_TRAINING_DATA_LICENSE.md | AMOSCLAUD_DATASET_RIGHTS_SCHEDULE.md | AMOSCLAUD_TRAINING_DATA_CONTRIBUTOR_AGREEMENT.md
+D amosclaude-clean/examples/ → hello-agent.amo | hello.amcl | request_verified_work.py
+D amosclaude-clean/github/workflows/ → ci-pipeline.yml
+D amosclaude-clean/Infrastructure/ → docker-compose.yml | Dockerfile
+D amosclaude-clean/metrics-server/ → Dockerfile | README.md
+D amosclaude-clean/mobile/android/ → build.gradle.kts | README.md | settings.gradle.kts
+D amosclaude-clean/mobile/android/app/ → build.gradle.kts | proguard-rules.pro
+D amosclaude-clean/mobile/android/app/src/main/ → AndroidManifest.xml
+D amosclaude-clean/mobile/android/app/src/main/java/com/amosclaud/support/ → MainActivity.kt | SupportService.kt
+D amosclaude-clean/mobile/android/app/src/main/res/layout/ → activity_main.xml
+D amosclaude-clean/mobile/android/app/src/main/res/values/ → styles.xml
+D amosclaude-clean/model-workspace/ → Dockerfile | README.md | start-model.sh
+D amosclaude-clean/model-workspace/checkpoints/ → .gitkeep
+D amosclaude-clean/model-workspace/config/ → model.json | model_metadata.json
+D amosclaude-clean/model-workspace/datasets/ → manifest.jsonl
+D amosclaude-clean/model-workspace/datasets/curated/ → bootstrap.jsonl
+D amosclaude-clean/model-workspace/tokenizer/ → .gitkeep
+D amosclaude-clean/models/ → apiKey.js | book.model.js | book.model.ts | main.py
+D amosclaude-clean/models/ollama/ → Modelfile
+D amosclaude-clean/monitoring/ → V
+D amosclaude-clean/network/gateway/ → generate_wireguard.py | install_ubuntu_gateway.sh
+D amosclaude-clean/notebooks/ → amosclaud_autonomous_lab.ipynb
+D amosclaude-clean/organization/ → V
+D amosclaude-clean/packages/agent-core/ → README.md
+D amosclaude-clean/packages/sdk-python/ → __init__.py | amosclaud_client.py | README.md
+D amosclaude-clean/pages-site/ → app.js | autonomous-approval-queue.css | autonomous-approval-queue.js | control-api-config.js | control-plane-enhancements.css | control-plane-enhancements.js | control-plane.js | hub.css | index.html | jsconfig.json | public-fixer-mirror.css | public-fixer-mirror.js | settings-review-center.css | settings-review-center.js | styles.css
+D amosclaude-clean/preview_service/ → __init__.py | app.py | Caddyfile | Dockerfile | README.md | server.py
+D amosclaude-clean/proxy/ → V
+D amosclaude-clean/public/ → index.html | script.js | style.css
+D amosclaude-clean/railway/model/ → Dockerfile | railway.toml | README.md | start-model.sh
+D amosclaude-clean/repository/ → __init__.py | connector.py | git_server.py
+D amosclaude-clean/routes/ → apiKey.js | book.route.js
+D amosclaude-clean/runner/ → Dockerfile | README.md
+D amosclaude-clean/Scripts/ → start.sh
+D amosclaude-clean/scripts/ → agent_guard_cli.py | amosclaud-shell | amosclaud_autonomous_required.py | audit_real_operations.py | bootstrap-workspace.sh | build_wheel.py | check_persistence.py | deploy-amosclaud.sh | generate_amosclaud_api_key.py | generate_autonomous_self_key.py | publish_ollama_model.sh | railway-deploy.sh | run_local_cloud.py | startup_check.py | validate_workspace_volume.sh | workspace_task.py
+D amosclaude-clean/scripts/ci/ → fast_gate.py
+D amosclaude-clean/sdk/ → V
+D amosclaude-clean/secrets/ → README.md
+D amosclaude-clean/services/ → book.service.js | book.service.ts
+D amosclaude-clean/services/control_plane/ → .env.example | .npmrc | .nvmrc | docker-compose.control-plane.yml | Dockerfile | package.json | README.md
+D amosclaude-clean/services/control_plane/scripts/ → supply-chain-check.mjs
+D amosclaude-clean/services/control_plane/src/ → config.mjs | contracts.mjs | platform.mjs | policy.mjs | server.mjs | skills-sync.mjs | worker.mjs
+D amosclaude-clean/services/control_plane/test/ → policy.test.mjs
+D amosclaude-clean/services/gateway/ → README.md
+D amosclaude-clean/services/storage_controller/ → __init__.py | app.py | controller.py | Dockerfile | requirements.txt | volume_api.py | volume_provisioner.py
+D amosclaude-clean/services/template_studio/ → __init__.py | __main__.py | app.py | Dockerfile | policy.py | railway.json | README.md | requirements.txt | storage.py
+D amosclaude-clean/services/template_studio/static/ → app.js | index.html | styles.css
+D amosclaude-clean/services/template_studio/tests/ → __init__.py
+D amosclaude-clean/services/workspace_runtime/ → .env.example | app.py | Dockerfile | README.md | requirements.txt | terminal_runtime.py
+D amosclaude-clean/services/workspace_runtime/workspace-image/ → amos | Dockerfile | entrypoint.sh | terminal-profile.sh
+D amosclaude-clean/shared/ → __init__.py | runtime.py | statuses.py | v | verification.py
+D amosclaude-clean/src/ → __init__.py
+D amosclaude-clean/src/agent/ → __init__.py | action_policy.py | actions.py | autonomy_supervisor.py | cloud_agent.py | engineering_loop.py | mini_autonomous.py | model.py | observations.py | operations_controller.py | prompts.py | react_integration.py | react_loop.py | reasoning.py | rollimage.py | tool_registry.py | verification.py
+D amosclaude-clean/src/ai/ → __init__.py | agent_contingency.py
+D amosclaude-clean/src/amosclaud_os/ → __init__.py | kernel.py
+D amosclaude-clean/src/amosclaud_os/intelligence/ → __init__.py | autonomous_connectors.py | model_engine.py
+D amosclaude-clean/src/amosclaud_security/ → __init__.py | command_bus.py | repair.py | runtime.py
+D amosclaude-clean/src/amoscloud_ai/ → __init__.py | autonomous_agent.py | builder.py | cli.py | config.py | logger.py | main.py | models.py | worker.py
+D amosclaude-clean/src/amoscloud_ai/api/ → __init__.py | chat_api.py
+D amosclaude-clean/src/amoscloud_ai/services/ → __init__.py | database_service.py | deploy_service.py
+D amosclaude-clean/src/amoscloud_ai/templates/ → index.html
+D amosclaude-clean/src/core/ → __init__.py | ci_orchestrator.py | code_analyzer.py | git_manager.py | smart_deployer.py
+D amosclaude-clean/src/database/ → __init__.py | db_manager.py
+D amosclaude-clean/src/foundation/ → __init__.py | curriculum.py | practice_station.py | six_systems.py
+D amosclaude-clean/src/platform/ → __init__.py | ai_assistant.py | build_engine.py | developer_tools.py | platform_api.py | platform_cli.py | software_creator.py
+D amosclaude-clean/src/server/ → __init__.py | main.py | operations_router.py | router.py | schemas.py
+D amosclaude-clean/src/services/ → __init__.py | code_analyzer.py | file_manager.py | git_service.py | runtime_exec.py
+D amosclaude-clean/static/ → .gitkeep
+D amosclaude-clean/station/ → __init__.py | __main__.py | agent.py | backend.py | client.py | config.py | Dockerfile | healthcheck.py | logs.py | railway.json | README.md | register.py | transport.py
+D amosclaude-clean/storage/ → V
+D amosclaude-clean/system-profile/ → install-profile.ps1 | Microsoft.PowerShell_profile.ps1 | README.md
+D amosclaude-clean/tests/ → __init__.py | conftest.py | server.focus.amos | station_stubs.py | test_account_access_recovery_contract.py | test_account_deletion.py | test_account_settings.py | test_admin_bootstrap.py | test_agent_assistant.py | test_agent_buddies.py | test_agent_conversation_followup.py | test_agent_conversation_intake.py | test_agent_credit_checkout.py | test_agent_guard.py | test_agent_guidance.py | test_agent_memory.py | test_agent_model_deterministic.py | test_agent_operations_controller.py | test_agent_professionalism.py | test_agent_readiness.py | test_agent_repository_action_api.py | test_agent_repository_actions.py | test_agent_runtime.py | test_agent_sdk.py | test_agent_sdk_sessions.py | test_agent_sdk_tools.py | test_agent_tokens.py | test_agentic_cloud_engine.py | test_agents_codex_worker.py | test_ai_assistant_real_generation.py | test_ai_reviewer.py | test_amo_command_agent.py | test_amo_runtime.py | test_amomodel_runtime.py | test_amos_test_language.py | test_amosclaud_approval_gate.py | test_amosclaud_approvals.py | test_amosclaud_autonomous_agent.py | test_amosclaud_bot.py | test_amosclaud_byte.py | test_amosclaud_cb.py | test_amosclaud_command_ownership.py | test_amosclaud_comment_style.py | test_amosclaud_config_contracts.py | test_amosclaud_copilot.py | test_amosclaud_cron_agent_contract.py | test_amosclaud_dashboard.py | test_amosclaud_fixer_output_contract.py | test_amosclaud_identity_and_workspace.py | test_amosclaud_incident_deduplicator.py | test_amosclaud_language.py | test_amosclaud_live_repair_probe.py | test_amosclaud_markdown_service.py | test_amosclaud_mcp.py | test_amosclaud_namespace_contract.py | test_amosclaud_operator.py | test_amosclaud_os_foundation.py | test_amosclaud_os_kernel.py | test_amosclaud_platform_bus.py | test_amosclaud_privacy_gate.py | test_amosclaud_professional_review.py | test_amosclaud_py_bundle.py | test_amosclaud_registry.py | test_amosclaud_repair_callback.py | test_amosclaud_repair_control_plane_contract.py | test_amosclaud_server_cb.py | test_amosclaud_status_board.py | test_amosclaud_tamper_server.py | test_amosclaud_y_bundle_system.py | test_api_key_manager.py | test_api_key_manager_platform.py | test_assistant_system_template.py | test_async_database_session_contract.py | test_atomic_tasks.py | test_auth_self_repair.py | test_autonomous_background_engineer_contract.py | test_autonomous_brain.py | test_autonomous_bundle_results.py | test_autonomous_byte_metadata_router.py | test_autonomous_codex_bot_scan_contract.py | test_autonomous_codex_configuration.py | test_autonomous_configuration.py | test_autonomous_continuation.py | test_autonomous_contract.py | test_autonomous_conversation_gate.py | test_autonomous_engineering_loop.py | test_autonomous_engineering_workforce.py | test_autonomous_foundation.py | test_autonomous_integrated_intelligence.py | test_autonomous_learning_academy.py | test_autonomous_models_integra.py | test_autonomous_operation_control_plane.py | test_autonomous_planning.py | test_autonomous_react_loop.py | test_autonomous_required_bootstrap.py | test_autonomous_runtime_connection.py | test_autonomous_server_identity.py | test_basic.py | test_big_ci_platform.py | test_billing.py | test_book_controller_contract.py | test_bot_autonomous_codex_integration.py | test_build_endpoints.py | test_bundles.py | test_bundles_api_host.py | test_bundles_ui.py | test_capability_memory_levels.py | test_cdn_edge_service.py | test_chat_api.py | test_chat_recovery.py | test_ci_repair_callback.py | test_circleci_config_structure.py | test_cloud_agent_health_ui.py | test_cloud_agent_route.py | test_cmood_agent.py | test_cmood_workflow_contract.py | test_codex_memory.py | test_codex_system_bundle.py | test_combined_mcp_app.py | test_command_center_bridge_contract.py | test_command_center_primary.py | test_command_center_route.py | test_complete_cloud_terminal.py | test_computation_engine.py | test_conflict_marker_detection.py | test_connection_preflight_ui.py | test_control_bus_dashboard.py | test_conversation_intelligence.py | test_conversational_dashboard_results.py | test_core_independence.py | test_daily_autonomous_builder.py | test_daily_builder_ci_regressions.py | test_dashboard_security_contract.py | test_db_migrations.py | test_decentralized_node_foundation.py | test_distributed_rate_limit.py | test_doctor_healing_coordinator.py | test_domain_ownership.py | test_downloads.py | test_editor_of_the_web_contract.py | test_editor_real_editing_experience.py | test_email_code_login.py | test_engineering_agent.py | test_engineering_verification.py | test_execution_dashboard.py | test_failure_strategy.py | test_fast_pr_gate.py | test_first_party_provider.py | test_folder_workspace.py | test_four_head_surfaces.py | test_futuristic_autonomous.py | test_gateway_database_team.py | test_gateway_github_vscode_integration.py | test_github_actions_failure_probe.py | test_github_app_webhook.py | test_github_intelligence.py | test_github_issue_commands.py | test_github_model_agent.py | test_github_organization_pushback.py | test_github_pages_deployment_contract.py | test_github_publish_authorization_recovery.py | test_github_repository_management.py | test_github_repository_sync_schema.py | test_github_travel_api.py | test_google_oauth.py | test_groq_workflow_wiring.py | test_hub_architecture_map.py | test_hub_report_card.py | test_ide_client.py | test_industrial_autonomy.py | test_intelligent_model_runtime.py | test_interaction_orchestrator.py | test_isolated_runner_security.py | test_json_repair_strategy.py | test_local_agent_api.py | test_local_cloud_engine.py | test_login_profile_shell.py | test_login_recovery_contract.py | test_mail_http_transport.py | test_mapping_bundles.py | test_metadata_dashboard.py | test_metrics_server.py | test_mission_ledger.py | test_model_metadata.py | test_model_network.py | test_model_runtime_dashboard_corrections.py | test_model_server.py | test_model_server_folder.py | test_model_service_log.py | test_model_services.py | test_model_station.py | test_model_workspace_contract.py | test_monitoring_services.py | test_native_model.py | test_native_platform_repository_context.py | test_native_repository_authorization.py | test_ollama_connection.py | test_ollama_model_assets.py | test_openai_compat.py | test_operation_buckets.py | test_platform.py | test_platform_api_contracts.py | test_platform_command.py | test_platform_contract.py | test_platform_services_dashboard.py | test_plugin_mcp_feature_flags.py | test_pr_ci_repair_contract.py | test_pr_task_persistence.py | test_pr_task_stale_recovery.py | test_pr_tasks.py | test_preview_client_security.py | test_preview_service_security.py | test_production_docker_config.py | test_professional_agent_policy.py | test_professional_change_detection.py | test_professional_reliability.py | test_programming_bytes_system_cb.py | test_project_dashboard_contract.py | test_project_platform_contract.py | test_public_fixer_mirror.py | test_public_https_contract.py | test_railway_health.py | test_real_autonomous_coding_runtime.py | test_real_native_agent_execution.py | test_real_operations_audit.py | test_real_repositories.py | test_recent_agent_task_history.py | test_repair_engine.py | test_repair_engine_asset_checks.py | test_repair_knowledge.py | test_repair_memory_integration_contract.py | test_repository_behavior_automation.py | test_repository_control_startup.py | test_repository_service_connector.py | test_result_experience.py | test_root_main_database_connection.py | test_runner_verification.py | test_runtime_exec.py | test_server.py | test_server_stations.py | test_service_keys.py | test_shared_infrastructure_contract.py | test_single_autonomous_compatibility.py | test_solo_repository_platform.py | test_start_script_contract.py | test_station_agent.py | test_station_end_to_end.py | test_storage_20tib_provisioning.py | test_system_core_registry.py | test_task_router.py | test_training_service.py | test_unified_cloud_workspace.py | test_unified_professional_agent.py | test_universal_model_gateway.py | test_verified_repair.py | test_virtual_memory.py | test_vscode_terminal.py | test_webhooks.py | test_website_approval_backend.py | test_website_autonomous_approval_queue.py | test_website_control_plane.py | test_website_settings_review_center.py | test_website_useful_v2.py | test_wifi_diagnostics.py | test_workspace_chat_navigation_contract.py | test_workspace_control.py | test_workspace_issue_timeline.py | test_workspace_repository_forge.py | test_workspace_terminal_and_github_pr_feed.py | test_workspace_visibility_and_highlighting.py | test_workspace_worker_deployment.py | test_workspace_worker_security.py | V
+D amosclaude-clean/tests/fixtures/ → README.md
+D amosclaude-clean/tools/ → README.md
+D amosclaude-clean/ui/ → cmood.py
+D amosclaude-clean/utils/ → encryption.js
+D amosclaude-clean/web/ → academy-dashboard.html | account-access.js | account.js | admin.css | admin.html | admin.js | agent-3d-loader.js | agent-3d.js | agent-control.js | agent-handoff.js | agent-team.js | agent-visual.css | ai-plugin.json | amomodel-controls.js | amosclaud-agent-server-banner.png | amosclaud-app-icon.svg | amosclaud-command-center.css | amosclaud-command-center.html | amosclaud-command-center.js | amosclaud-control-bus.css | amosclaud-control-bus.html | amosclaud-control-bus.js | api-access.html | app-install.js | app.js | autonomous-codex.html | autonomous-result-cards.css | autonomous-result-cards.js | autonomous-result-intelligence.js | autonomous-services.js | big-ci.html | big-ci.js | bootstrap-access.js | bundles-api-docs.html | bundles.css | bundles.html | bundles.js | chat-scroll-fix.css | chat-scroll-fix.js | chat-scroll.css | ci.html | ci_new.html | cloud-workspace.css | cloud-workspace.js | command-center.css | command-center.html | command-center.js | community.css | community.html | community.js | conversational-agent.css | conversational-agent.js | doctor.html | download.html | editor-autostart.js | editor-experience.css | editor-of-the-web.css | editor-of-the-web.html | editor-of-the-web.js | engineering-verification.html | engineering-verification.js | extensions.css | extensions.html | extensions.js | feed-reviews.css | feed.css | feed.html | feed.js | github-organization-publish.js | github-repositories.js | github-setup.html | highlight.js | index.html | install.html | live-autonomous-workbench.css | live-autonomous-workbench.js | login-recovery.js | login.css | login.html | login.js | mail.css | mail.html | mail.js | manifest.webmanifest | mapping-bundles.css | mapping-bundles.html | mapping-bundles.js | markdown-service.css | markdown-service.js | metadata-dashboard.html | metadata.css | metadata.html | metadata.js | notebook-dashboard.css | operator-bridge.js | operator-products.html | owner.html | plans.html | projects.html | projects.js | repositories-page.css | repositories-page.js | repositories.css | repositories.html | repositories.js | repository-developer-controls-link.js | repository-developer-settings.css | repository-developer-settings.html | repository-developer-settings.js | runtime-readiness.js | runtime-status.js | service-key-control-panel.html | service-worker.js | settings.html | settings.js | sidebar.css | sidebar.js | single-autonomous-dock.css | single-autonomous-dock.js | style.css | styles.css | tasks.html | unified-agent-runtime.js | wifi.html | wifi.js | workforce.css | workforce.html | workforce.js | workspace-chat.css | workspace-chat.js | workspace-enhancements.js | workspace-issues.js | workspace-tools.js | workspace.css | workspace.html | workspace.js
+D amosclaude-clean/web/cloud-terminal/ → agent-hub.js | api.js | main.js | project-tools.css | project-tools.js | session.js | workspace-features.css | workspace-features.js
+D amosclaude-clean/web/static/ → agent-console.css | autonomous-dashboard.css
+D amosclaude-clean/workers/ → V
+D amosclaude-clean/workspace_worker/ → __init__.py | app.py | Dockerfile | requirements.txt | runtime.py
+
+## PROJECT MAP DIFF (APPEND-ONLY)
+descr: Append-only diff ops since last rebase; verify paths before acting.
