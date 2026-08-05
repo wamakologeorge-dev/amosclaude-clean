@@ -1,0 +1,89 @@
+name: Publish Ollama Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Namespaced Ollama model to publish
+        required: true
+        default: wamakologeorge/amosclaud-clean:latest
+        type: string
+      base_model:
+        description: Base model used by the Modelfile
+        required: true
+        default: llama3.2
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ollama-model-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, probe, and push
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 90
+    env:
+      OLLAMA_MODEL_NAME: ${{ inputs.model }}
+      OLLAMA_BASE_MODEL: ${{ inputs.base_model }}
+      OLLAMA_MODELFILE: models/ollama/Modelfile
+    steps:
+      - name: Check out trusted repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Validate trusted model station
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! command -v ollama >/dev/null 2>&1; then
+            echo "Ollama is not installed on this self-hosted runner." >&2
+            exit 1
+          fi
+
+          if [[ ! -f "$OLLAMA_MODELFILE" ]]; then
+            echo "Modelfile not found: $OLLAMA_MODELFILE" >&2
+            exit 1
+          fi
+
+          if [[ "$OLLAMA_MODEL_NAME" != "${OLLAMA_MODEL_NAME,,}" ]]; then
+            echo "Use a lowercase model name." >&2
+            exit 1
+          fi
+
+          case "$OLLAMA_MODEL_NAME" in
+            wamakologeorge/*:*) ;;
+            *)
+              echo "Model must use the wamakologeorge namespace and an explicit tag." >&2
+              exit 1
+              ;;
+          esac
+
+          if ! ollama list >/dev/null 2>&1; then
+            echo "The Ollama service is not reachable on this runner." >&2
+            exit 1
+          fi
+
+      - name: Build, test, and publish model
+        shell: bash
+        run: bash scripts/publish_ollama_model.sh
+
+      - name: Record publication evidence
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Ollama model publication"
+            echo
+            echo "- Model: \`$OLLAMA_MODEL_NAME\`"
+            echo "- Base model: \`$OLLAMA_BASE_MODEL\`"
+            echo "- Runner: self-hosted Linux model station"
+            echo "- Result: \`${{ job.status }}\`"
+            echo
+            echo "A successful job means the local model was created, answered the readiness probe, and the Ollama push command completed."
+          } >> "$GITHUB_STEP_SUMMARY"
