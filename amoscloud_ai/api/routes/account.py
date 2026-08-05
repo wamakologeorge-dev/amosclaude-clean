@@ -17,6 +17,8 @@ from amoscloud_ai.api.routes.auth import (
     SESSION_DAYS,
     _connect,
     _cookie_secure,
+    _create_session,
+    _token_hash,
     _verify_password,
     get_user_from_session,
 )
@@ -129,22 +131,30 @@ def share_session_across_domains(
     response: Response,
     amos_session: str | None = Cookie(default=None),
 ) -> Response:
-    """Reissue a verified session for the configured parent domain."""
+    """Rotate and reissue a verified session for the configured parent domain."""
     user = get_user_from_session(amos_session)
     if not user or not amos_session:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    domain = _cookie_domain()
-    if domain:
-        response.set_cookie(
-            SESSION_COOKIE,
-            amos_session,
-            max_age=SESSION_DAYS * 86400,
-            httponly=True,
-            secure=_cookie_secure(),
-            samesite="lax",
-            path="/",
-            domain=domain,
+
+    with _connect() as db:
+        shared_token = _create_session(db, int(user["id"]))
+        db.execute(
+            "DELETE FROM sessions WHERE token_hash=?",
+            (_token_hash(amos_session),),
         )
+        db.commit()
+
+    domain = _cookie_domain()
+    response.set_cookie(
+        SESSION_COOKIE,
+        shared_token,
+        max_age=SESSION_DAYS * 86400,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+        path="/",
+        domain=domain,
+    )
     response.status_code = 204
     return response
 
