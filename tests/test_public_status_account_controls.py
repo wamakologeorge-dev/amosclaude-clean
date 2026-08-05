@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -15,9 +14,12 @@ def test_public_status_is_read_only_and_available_without_login() -> None:
 
     assert '@router.get("/status", include_in_schema=False)' in health
     assert '@router.get("/api/v1/public/status"' in health
-    assert "get_user_from_session" not in health.split(
-        '@router.get("/status", include_in_schema=False)', 1
-    )[1].split('@router.get("/account", include_in_schema=False)', 1)[0]
+    assert (
+        "get_user_from_session"
+        not in health.split('@router.get("/status", include_in_schema=False)', 1)[1].split(
+            '@router.get("/account", include_in_schema=False)', 1
+        )[0]
+    )
     assert "/api/v1/public/status" in script
     assert "credentials: 'omit'" in script
     assert "private repositories, keys, task logs" in page
@@ -45,7 +47,7 @@ def test_login_offers_public_status_and_promotes_new_sessions() -> None:
     bridge = _read("web/session-cookie-bridge.js")
 
     assert 'href="/status"' in login
-    assert '/static/session-cookie-bridge.js' in login
+    assert "/static/session-cookie-bridge.js" in login
     assert "/api/v1/auth/login" in bridge
     assert "/api/v1/auth/register/verify" in bridge
     assert "/api/v1/account/share-session" in bridge
