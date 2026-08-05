@@ -22,8 +22,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  authorize:
+    name: Authorize protected default branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require default-branch dispatch
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          expected_ref="refs/heads/${DEFAULT_BRANCH}"
+          if [[ "$GITHUB_REF" != "$expected_ref" ]]; then
+            echo "Model publication is allowed only from ${expected_ref}; received ${GITHUB_REF}." >&2
+            exit 1
+          fi
+
   publish:
     name: Build, probe, and push
+    needs: authorize
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    environment:
+      name: ollama-model-publication
     runs-on: [self-hosted, linux]
     timeout-minutes: 90
     env:
@@ -31,15 +52,22 @@ jobs:
       OLLAMA_BASE_MODEL: ${{ inputs.base_model }}
       OLLAMA_MODELFILE: models/ollama/Modelfile
     steps:
-      - name: Check out trusted repository
+      - name: Check out protected default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - name: Validate trusted model station
         shell: bash
         run: |
           set -euo pipefail
+
+          checked_out_branch="$(git branch --show-current)"
+          if [[ "$checked_out_branch" != "${{ github.event.repository.default_branch }}" ]]; then
+            echo "Refusing publication from unexpected branch: $checked_out_branch" >&2
+            exit 1
+          fi
 
           if ! command -v ollama >/dev/null 2>&1; then
             echo "Ollama is not installed on this self-hosted runner." >&2
@@ -82,8 +110,10 @@ jobs:
             echo
             echo "- Model: \`$OLLAMA_MODEL_NAME\`"
             echo "- Base model: \`$OLLAMA_BASE_MODEL\`"
+            echo "- Source: protected default branch"
+            echo "- Environment: \`ollama-model-publication\`"
             echo "- Runner: self-hosted Linux model station"
             echo "- Result: \`${{ job.status }}\`"
             echo
-            echo "A successful job means the local model was created, answered the readiness probe, and the Ollama push command completed."
+            echo "A successful job means the default-branch model was created, answered the readiness probe, and the Ollama push command completed."
           } >> "$GITHUB_STEP_SUMMARY"
