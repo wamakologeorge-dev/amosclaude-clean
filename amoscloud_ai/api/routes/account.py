@@ -14,7 +14,9 @@ from pydantic import BaseModel, Field
 from amoscloud_ai.api.routes.auth import (
     DB_PATH,
     SESSION_COOKIE,
+    SESSION_DAYS,
     _connect,
+    _cookie_secure,
     _verify_password,
     get_user_from_session,
 )
@@ -134,6 +136,31 @@ def account_domains(
         for host in _configured_domains()
     ]
     return {"domains": domains, "current_host": current_host}
+
+
+@router.post("/share-session", status_code=204, response_class=Response)
+def share_session_across_domains(
+    response: Response,
+    amos_session: str | None = Cookie(default=None),
+) -> Response:
+    """Reissue a verified session for the configured parent domain."""
+    user = get_user_from_session(amos_session)
+    if not user or not amos_session:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    domain = _cookie_domain()
+    if domain:
+        response.set_cookie(
+            SESSION_COOKIE,
+            amos_session,
+            max_age=SESSION_DAYS * 86400,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite="lax",
+            path="/",
+            domain=domain,
+        )
+    response.status_code = 204
+    return response
 
 
 @router.post("/logout-all", status_code=204, response_class=Response)
