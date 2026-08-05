@@ -62,6 +62,12 @@ async def public_status_page() -> FileResponse:
     return FileResponse(WEB_DIR / "status.html")
 
 
+@router.get("/support", include_in_schema=False)
+async def public_support_page() -> FileResponse:
+    """Serve the public, read-only Amosclaud contribution policy and payment link."""
+    return FileResponse(WEB_DIR / "support.html")
+
+
 @router.get("/account", include_in_schema=False)
 async def account_page(request: Request):
     """Serve self-service account controls to an authenticated user."""
