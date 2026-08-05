@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Account · Amosclaud</title>
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/account.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/cloud/agent"><span class="brand-mark" aria-hidden="true">A</span><span>AMOSCLAUD</span></a>
+    <nav aria-label="Account navigation">
+      <a href="/status">Public status</a>
+      <a href="/repositories">Repositories</a>
+      <a href="/cloud/agent">Command Center</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="page-heading">
+      <p class="eyebrow">Self-service account controls</p>
+      <h1>Your Amosclaud account</h1>
+      <p>Create and use one account across supported devices, control sessions, and delete your account without administrator intervention.</p>
+      <p id="message" class="message" role="status" aria-live="polite">Loading account…</p>
+    </section>
+
+    <section class="grid">
+      <article class="panel" aria-labelledby="profile-title">
+        <h2 id="profile-title">Profile</h2>
+        <dl class="details">
+          <dt>Name</dt><dd id="profile-name">—</dd>
+          <dt>Email</dt><dd id="profile-email">—</dd>
+          <dt>Account type</dt><dd id="profile-provider">—</dd>
+          <dt>Role</dt><dd id="profile-role">—</dd>
+        </dl>
+      </article>
+
+      <article class="panel" aria-labelledby="session-title">
+        <h2 id="session-title">Sign-in sessions</h2>
+        <p>Sign out only this browser, or revoke every Amosclaud session on all devices.</p>
+        <div class="actions">
+          <button id="logout-current" type="button">Sign out this device</button>
+          <button id="logout-all" class="secondary" type="button">Sign out all devices</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel" aria-labelledby="tools-title">
+      <h2 id="tools-title">Account tools</h2>
+      <ul id="tool-list" class="tool-list">
+        <li>Loading available account tools…</li>
+      </ul>
+    </section>
+
+    <section class="panel danger-zone" aria-labelledby="delete-title">
+      <p class="eyebrow">Danger zone</p>
+      <h2 id="delete-title">Delete account permanently</h2>
+      <p>This removes the account, active sessions, owned native repositories, and account storage managed by this Amosclaud deployment. This action cannot be undone.</p>
+      <form id="delete-account-form">
+        <label>Type your account email to confirm
+          <input id="delete-confirmation" type="email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input id="delete-password" type="password" autocomplete="current-password" placeholder="Required for password accounts">
+        </label>
+        <label class="confirm-row">
+          <input id="delete-acknowledgement" type="checkbox" required>
+          <span>I understand that my Amosclaud account data will be removed.</span>
+        </label>
+        <button class="danger-button" type="submit">Delete my account</button>
+      </form>
+    </section>
+  </main>
+  <script src="/static/account.js"></script>
+</body>
+</html>
