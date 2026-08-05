@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 
 from .repository_control import initialize_repository_control
 
-
 # Repository-local control configuration must load before the ordinary root
 # dotenv file. The control loader reads configuration only; mutating scripts are never
 # executed during package import.
