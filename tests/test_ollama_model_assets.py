@@ -26,6 +26,22 @@ def test_publish_script_creates_tests_and_pushes_namespaced_model():
     assert "AMOSCLAUD_MODEL_READY" in script
 
 
+def test_manual_publish_workflow_uses_a_trusted_self_hosted_model_station():
+    workflow = (ROOT / ".github" / "workflows" / "ollama-model-publish.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for required in (
+        "workflow_dispatch:",
+        MODEL_NAME,
+        "runs-on: [self-hosted, linux]",
+        "bash scripts/publish_ollama_model.sh",
+        "ollama list",
+        "Build, probe, and push",
+    ):
+        assert required in workflow
+
+
 def test_manual_workflow_verifies_published_model_with_repository_secret():
     workflow = (ROOT / ".github" / "workflows" / "ollama-model-verify.yml").read_text(
         encoding="utf-8"
