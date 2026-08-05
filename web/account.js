@@ -1,114 +1,68 @@
 (() => {
-  const message = document.getElementById('message');
-  const logoutCurrent = document.getElementById('logout-current');
-  const logoutAll = document.getElementById('logout-all');
-  const deleteForm = document.getElementById('delete-account-form');
-  let currentUser = null;
+  const userLabel = document.getElementById('current-user');
+  const logoutButtons = document.querySelectorAll('#btn-logout,[data-account-logout]');
+  const menuButton = document.getElementById('account-menu-button');
+  const drawer = document.getElementById('account-drawer');
+  const backdrop = document.getElementById('account-drawer-backdrop');
 
-  function setMessage(text, kind = '') {
-    message.textContent = text;
-    message.className = `message ${kind}`.trim();
+  function initials(value) {
+    return String(value || 'A').trim().split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'A';
   }
 
-  async function request(path, options = {}) {
-    const response = await fetch(path, {
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-      ...options,
-    });
-    if (response.status === 401) {
-      window.location.assign('/login');
-      throw new Error('Sign in required');
-    }
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed with HTTP ${response.status}`);
-    }
-    return response.status === 204 ? null : response.json();
+  function setDrawer(open) {
+    if (!drawer) return;
+    drawer.hidden = !open;
+    backdrop?.toggleAttribute('hidden', !open);
+    menuButton?.setAttribute('aria-expanded', String(open));
   }
 
-  function renderTools(settings) {
-    const tools = [
-      '<li><a href="/status">View public platform status</a></li>',
-      '<li><a href="/repositories">Manage repositories</a></li>',
-      '<li><a href="/plans">View plans and billing</a></li>',
-    ];
-    if (settings.github_connection?.available) {
-      tools.push('<li><a href="/api/v1/auth/github/link">Connect GitHub account</a></li>');
-    } else {
-      tools.push('<li>GitHub connection is not configured on this deployment.</li>');
-    }
-    if (settings.is_admin) {
-      tools.push('<li><a href="/admin">Open administrator controls</a></li>');
-    }
-    document.getElementById('tool-list').innerHTML = tools.join('');
-  }
-
-  async function loadAccount() {
-    const [user, settings] = await Promise.all([
-      request('/api/v1/auth/me'),
-      request('/api/v1/account/settings'),
-    ]);
-    currentUser = user;
-    document.getElementById('profile-name').textContent = user.name;
-    document.getElementById('profile-email').textContent = user.email;
-    document.getElementById('profile-provider').textContent = user.provider;
-    document.getElementById('profile-role').textContent = user.is_admin
-      ? 'Administrator'
-      : 'Member';
-    document.getElementById('delete-confirmation').placeholder = user.email;
-    renderTools(settings);
-    setMessage('Account controls are ready.', 'success');
-  }
-
-  async function signOut(path, button) {
-    button.disabled = true;
+  async function loadUser() {
     try {
-      await request(path, { method: 'POST' });
-      window.location.assign('/login');
+      const response = await fetch('/api/v1/auth/me', { credentials: 'same-origin', cache: 'no-store' });
+      if (response.status === 401) return window.location.assign('/login');
+      if (!response.ok) throw new Error(`Profile unavailable (${response.status})`);
+      const user = await response.json();
+      const displayName = user.name || user.email || 'Amosclaud user';
+      if (userLabel) userLabel.textContent = displayName;
+      document.querySelectorAll('[data-profile-name]').forEach(element => { element.textContent = displayName; });
+      document.querySelectorAll('[data-profile-email]').forEach(element => { element.textContent = user.email || 'Email unavailable'; });
+      document.querySelectorAll('[data-profile-avatar]').forEach(element => { element.textContent = initials(displayName); });
+      document.querySelectorAll('[data-profile-role]').forEach(element => { element.textContent = user.is_admin ? 'Administrator' : 'Member'; });
+      document.querySelectorAll('[data-admin-only]').forEach(element => { element.hidden = !user.is_admin; });
+      loadDomainStatus();
     } catch (error) {
-      setMessage(error.message || 'Sign out failed.', 'error');
-      button.disabled = false;
+      document.querySelectorAll('[data-profile-status]').forEach(element => { element.textContent = error.message; });
     }
   }
 
-  logoutCurrent.addEventListener('click', () => {
-    signOut('/api/v1/auth/logout', logoutCurrent);
-  });
-
-  logoutAll.addEventListener('click', () => {
-    signOut('/api/v1/account/logout-all', logoutAll);
-  });
-
-  deleteForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!currentUser) return;
-    const confirmation = document
-      .getElementById('delete-confirmation')
-      .value.trim();
-    const password = document.getElementById('delete-password').value;
-    if (confirmation.toLowerCase() !== currentUser.email.toLowerCase()) {
-      setMessage(
-        'Type your account email exactly before deleting the account.',
-        'error',
-      );
-      return;
-    }
-    const submit = deleteForm.querySelector('button[type="submit"]');
-    submit.disabled = true;
+  async function loadDomainStatus() {
+    const targets = document.querySelectorAll('[data-domain-status]');
+    if (!targets.length) return;
     try {
-      await request('/api/v1/account', {
-        method: 'DELETE',
-        body: JSON.stringify({ confirmation, password: password || null }),
-      });
-      window.location.assign('/login?account=deleted');
+      const response = await fetch('/api/v1/account/domains', { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Domain status unavailable');
+      const payload = await response.json();
+      const domains = payload.domains || [];
+      const text = domains.length
+        ? domains.map(d => `${d.domain} — ${d.https ? 'verified (HTTPS)' : 'HTTP only'}${d.active ? ' · active' : ''}`).join(' | ')
+        : 'No custom domains configured.';
+      targets.forEach(element => { element.textContent = text; });
     } catch (error) {
-      setMessage(error.message || 'Account deletion failed.', 'error');
-      submit.disabled = false;
+      targets.forEach(element => { element.textContent = error.message; });
     }
-  });
+  }
 
-  loadAccount().catch((error) => {
-    setMessage(error.message || 'Account could not be loaded.', 'error');
-  });
+  async function logout() {
+    try {
+      await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } finally {
+      window.location.assign('/login');
+    }
+  }
+
+  menuButton?.addEventListener('click', () => setDrawer(drawer?.hidden !== false));
+  backdrop?.addEventListener('click', () => setDrawer(false));
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') setDrawer(false); });
+  logoutButtons.forEach(button => button.addEventListener('click', logout));
+  loadUser();
 })();
