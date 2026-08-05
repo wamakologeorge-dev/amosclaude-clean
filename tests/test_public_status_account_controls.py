@@ -30,6 +30,7 @@ def test_account_page_requires_session_and_exposes_self_service_controls() -> No
     account = _read("amoscloud_ai/api/routes/account.py")
     page = _read("web/account.html")
     script = _read("web/account-settings.js")
+    command_center = _read("web/command-center.html")
 
     assert '@router.get("/account", include_in_schema=False)' in health
     assert 'RedirectResponse("/login", status_code=302)' in health
@@ -41,6 +42,7 @@ def test_account_page_requires_session_and_exposes_self_service_controls() -> No
     assert '@router.delete("", status_code=204)' in account
     assert "Sign out all devices" in page
     assert "Delete account permanently" in page
+    assert 'href="/account">Account</a>' in command_center
     assert "/api/v1/account/logout-all" in script
     assert "method: 'DELETE'" in script
 
