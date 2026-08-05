@@ -40,4 +40,4 @@ Signed-in users can open `/account` to:
 - sign out the current browser;
 - revoke all sessions on all devices;
 - open available account tools;
-- permanently delete their account after explicit email and password confirmation.
+- permanently delete their account after explicit email confirmation and, for password-backed accounts, password confirmation.
