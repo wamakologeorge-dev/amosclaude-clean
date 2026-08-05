@@ -145,6 +145,8 @@ def share_session_across_domains(
         db.commit()
 
     domain = _cookie_domain()
+    if domain:
+        response.delete_cookie(SESSION_COOKIE, path="/")
     response.set_cookie(
         SESSION_COOKIE,
         shared_token,
