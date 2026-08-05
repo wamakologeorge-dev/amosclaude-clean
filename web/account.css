@@ -69,5 +69,7 @@ input { width: 100%; border: 1px solid #c7ccd5; border-radius: .7rem; padding: .
   .topbar, .panel, button.secondary, input { background: #151b23; border-color: #30363d; color: #f3f4f6; }
   .page-heading > p:not(.eyebrow, .message), .panel > p, .details dt { color: #aeb6c2; }
   .eyebrow { color: #9ca3af; }
+  .message.error { color: #fca5a5; }
+  .message.success { color: #86efac; }
   .danger-zone { border-color: #7f1d1d; }
 }
