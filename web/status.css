@@ -129,4 +129,8 @@ footer { padding: 1rem; text-align: center; color: #6b7280; }
   .component-card { border-color: #30363d; }
   .hero > p:not(.eyebrow), .component-card p, .access-panel p, .muted, .brand small, footer { color: #aeb6c2; }
   .eyebrow, .summary-grid span { color: #9ca3af; }
+  .component-card[data-state="operational"] .state { color: #86efac; }
+  .component-card[data-state="degraded"] .state { color: #fcd34d; }
+  .component-card[data-state="not_configured"] .state { color: #d1d5db; }
+  .component-card[data-state="unreachable"] .state { color: #fca5a5; }
 }
