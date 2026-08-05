@@ -35,6 +35,9 @@ def test_account_page_requires_session_and_exposes_self_service_controls() -> No
     assert 'RedirectResponse("/login", status_code=302)' in health
     assert '@router.post("/logout-all"' in account
     assert '@router.post("/share-session"' in account
+    assert "shared_token = _create_session" in account
+    assert "_token_hash(amos_session)" in account
+    assert 'response.delete_cookie(SESSION_COOKIE, path="/")' in account
     assert '@router.delete("", status_code=204)' in account
     assert "Sign out all devices" in page
     assert "Delete account permanently" in page
