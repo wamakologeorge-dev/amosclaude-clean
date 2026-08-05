@@ -45,18 +45,8 @@ def _configured_domains() -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     for host in hosts:
-        host = (
-            host.split("://", 1)[-1]
-            .split("/", 1)[0]
-            .split(":", 1)[0]
-            .strip()
-            .lower()
-        )
-        if (
-            host
-            and host not in ("*", "localhost", "127.0.0.1", "testserver")
-            and host not in seen
-        ):
+        host = host.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0].strip().lower()
+        if host and host not in ("*", "localhost", "127.0.0.1", "testserver") and host not in seen:
             seen.add(host)
             ordered.append(host)
     return ordered
@@ -91,9 +81,7 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     billing_ready = bool(os.getenv("STRIPE_SECRET_KEY"))
-    github_ready = bool(
-        os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET")
-    )
+    github_ready = bool(os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET"))
     return {
         "profile": {"available": True},
         "github_connection": {
@@ -123,9 +111,7 @@ def account_domains(
     user = get_user_from_session(amos_session)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    current_host = (request.headers.get("host") or request.url.netloc or "").split(
-        ":", 1
-    )[0]
+    current_host = (request.headers.get("host") or request.url.netloc or "").split(":", 1)[0]
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     domains = [
         {
@@ -195,9 +181,7 @@ def _owned_repository_ids(db: sqlite3.Connection, user_id: int) -> list[int]:
         return []
     return [
         int(row[0])
-        for row in db.execute(
-            "SELECT id FROM repositories WHERE owner_id=?", (user_id,)
-        ).fetchall()
+        for row in db.execute("SELECT id FROM repositories WHERE owner_id=?", (user_id,)).fetchall()
     ]
 
 
@@ -205,18 +189,13 @@ def _delete_foreign_key_rows(db: sqlite3.Connection, user_id: int) -> None:
     tables = [
         row[0]
         for row in db.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            "SELECT name FROM sqlite_master " "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
         if row[0] != "users"
     ]
     for table in tables:
         foreign_keys = db.execute(f'PRAGMA foreign_key_list("{table}")').fetchall()
-        user_columns = [
-            row[3]
-            for row in foreign_keys
-            if row[2] == "users" and row[4] == "id"
-        ]
+        user_columns = [row[3] for row in foreign_keys if row[2] == "users" and row[4] == "id"]
         for column in user_columns:
             db.execute(f'DELETE FROM "{table}" WHERE "{column}"=?', (user_id,))
 
@@ -240,15 +219,11 @@ def delete_account(
 
     repository_ids: list[int] = []
     with _connect() as db:
-        full_user = db.execute(
-            "SELECT * FROM users WHERE id=?", (user["id"],)
-        ).fetchone()
+        full_user = db.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
         if not full_user:
             raise HTTPException(status_code=404, detail="Account not found")
         if full_user["password_hash"]:
-            if not body.password or not _verify_password(
-                body.password, full_user["password_hash"]
-            ):
+            if not body.password or not _verify_password(body.password, full_user["password_hash"]):
                 raise HTTPException(
                     status_code=401,
                     detail="Password confirmation is required",
