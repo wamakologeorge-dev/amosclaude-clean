@@ -15,7 +15,6 @@ from fastapi.responses import RedirectResponse
 from amoscloud_ai.admin_bootstrap import (
     configured_admin_emails,
     configured_admin_github_email,
-    configured_admin_github_repository,
     is_configured_github_admin,
 )
 from amoscloud_ai.api.routes import auth
@@ -226,7 +225,7 @@ async def github_admin_callback(
     request: Request,
     amos_github_admin_state: str | None = Cookie(default=None),
 ) -> RedirectResponse:
-    """Create a passwordless root session for the verified repository owner."""
+    """Create a passwordless root session for the verified GitHub owner."""
     if not amos_github_admin_state or not hmac.compare_digest(
         state,
         amos_github_admin_state,
@@ -281,29 +280,11 @@ async def github_admin_callback(
                 detail="This GitHub account is not the configured Amosclaud owner",
             )
 
-        repository_name = configured_admin_github_repository()
-        repository_response = await client.get(
-            f"https://api.github.com/repos/{repository_name}",
-            headers=headers,
-        )
-        repository = repository_response.json()
-        permissions = repository.get("permissions") or {}
-        owner = repository.get("owner") or {}
-        owns_repository = (
-            repository_response.status_code == 200
-            and str(repository.get("full_name") or "").lower() == repository_name.lower()
-            and str(owner.get("login") or "").lower() == login.lower()
-            and permissions.get("admin") is True
-        )
-        if not owns_repository:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "GitHub verified the account, but it does not currently own "
-                    "and administer the configured Amosclaud repository"
-                ),
-            )
-
+        # GitHub App authorization and GitHub App installation are separate.
+        # Root sign-in proves identity with the immutable configured GitHub user
+        # ID and exact login above. Requiring repository installation here made
+        # the real owner unable to sign in before the App was installed. Repository
+        # permissions are checked later when repository operations are requested.
         emails_response = await client.get(
             "https://api.github.com/user/emails",
             headers=headers,
