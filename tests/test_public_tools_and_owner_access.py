@@ -1,10 +1,10 @@
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException, Response
+from fastapi import HTTPException
 from starlette.requests import Request
 
-from amoscloud_ai.api.routes import auth, owner_access_gateway, public_developer_tools
+from amoscloud_ai.api.routes import auth, public_developer_tools
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,7 +44,7 @@ def test_public_catalog_exposes_source_but_not_free_official_execution() -> None
     assert payload["official_tools"]["support_url"].endswith("/organization-support")
 
 
-def test_public_source_and_github_access_routes_precede_paid_platform() -> None:
+def test_public_account_and_github_routes_precede_paid_platform() -> None:
     combined = (ROOT / "amoscloud_ai/combined_app.py").read_text(encoding="utf-8")
     login = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
@@ -53,69 +53,40 @@ def test_public_source_and_github_access_routes_precede_paid_platform() -> None:
     platform_index = combined.index('app.mount("/", HostedToolSupportASGI(platform_app)')
     assert public_index < platform_index
     assert github_index < platform_index
-    assert "location.replace('/auth/github')" in login
-    assert "<form" not in login
-    assert 'type="password"' not in login
+    assert "location.replace('/auth/github')" not in login
+    assert "<form" in login
+    assert 'type="password"' in login
+    assert "/static/account-access.js" in login
 
 
-def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "owner-bootstrap.db")
-    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+def test_mail_failure_never_creates_an_unverified_account(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "mail-failure.db")
 
-    def unavailable(_body):
+    def unavailable(_email: str, _code: str, _purpose: str) -> None:
         raise HTTPException(status_code=503, detail="mail unavailable")
 
-    monkeypatch.setattr(auth, "request_registration_code", unavailable)
-    response = Response()
-    result = owner_access_gateway.request_registration_or_owner_bootstrap(
-        auth.RegisterCodeRequest(
-            name="George Mmakulu",
-            email="gmmakulu@gmail.com",
-            password="owner-password-123",
-        ),
-        response,
-    )
-
-    assert result["account_created"] is True
-    assert "amos_session=" in response.headers["set-cookie"]
-    with auth._connect() as db:
-        owner = db.execute(
-            "SELECT email,is_admin FROM users WHERE email=?",
-            ("gmmakulu@gmail.com",),
-        ).fetchone()
-    assert owner["is_admin"] == 1
-
+    monkeypatch.setattr(auth, "_send_code", unavailable)
     with pytest.raises(HTTPException) as error:
-        owner_access_gateway.request_registration_or_owner_bootstrap(
+        auth.request_registration_code(
             auth.RegisterCodeRequest(
-                name="Another Owner",
-                email="gmmakulu@gmail.com",
-                password="another-password-123",
-            ),
-            Response(),
+                name="Developer",
+                email="developer@example.com",
+                password="developer-password-123",
+            )
         )
-    assert error.value.status_code == 503
 
-
-def test_unconfigured_email_never_receives_owner_fallback(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "non-owner-bootstrap.db")
-
-    def unavailable(_body):
-        raise HTTPException(status_code=503, detail="mail unavailable")
-
-    monkeypatch.setattr(auth, "request_registration_code", unavailable)
-    with pytest.raises(HTTPException) as error:
-        owner_access_gateway.request_registration_or_owner_bootstrap(
-            auth.RegisterCodeRequest(
-                name="Unknown Person",
-                email="unknown@example.com",
-                password="unknown-password-123",
-            ),
-            Response(),
-        )
     assert error.value.status_code == 503
     with auth._connect() as db:
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        assert db.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0] == 0
+
+
+def test_owner_recovery_is_separate_from_public_registration() -> None:
+    owner_gateway = (ROOT / "amoscloud_ai/api/routes/owner_access_gateway.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert '@router.get("/github/admin-login"' in owner_gateway
+    assert '@router.get("/github/admin-callback"' in owner_gateway
+    assert "request_registration_or_owner_bootstrap" not in owner_gateway
+    assert "RegisterCodeRequest" not in owner_gateway
