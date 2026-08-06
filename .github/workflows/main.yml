@@ -1,0 +1,170 @@
+name: Amosclaud Autonomous Repair Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      objective:
+        description: Task for Amosclaud
+        required: true
+        default: Inspect this repository, fix failing checks, verify the repair, and open a pull request.
+        type: string
+      mode:
+        description: Amosclaud task mode
+        required: true
+        default: fix
+        type: choice
+        options:
+          - fix
+          - test
+          - review
+          - build
+      delivery:
+        description: Result delivery
+        required: true
+        default: pull_request
+        type: choice
+        options:
+          - pull_request
+          - patch
+          - report
+  workflow_run:
+    workflows:
+      - Amosclaud CI
+      - Python package
+      - Fast PR Gate
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: amosclaud-trigger-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-amosclaud:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
+      AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+      EVENT_NAME: ${{ github.event_name }}
+      REPOSITORY: ${{ github.repository }}
+      ACTOR: ${{ github.actor }}
+      INPUT_OBJECTIVE: ${{ inputs.objective || '' }}
+      INPUT_MODE: ${{ inputs.mode || 'fix' }}
+      INPUT_DELIVERY: ${{ inputs.delivery || 'pull_request' }}
+      WORKFLOW_NAME: ${{ github.event.workflow_run.name || '' }}
+      WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || github.run_id }}
+      WORKFLOW_RUN_URL: ${{ github.event.workflow_run.html_url || '' }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+
+    steps:
+      - name: Validate Amosclaud configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${AMOSCLAUD_API_KEY}" ]]; then
+            echo "::error::Add AMOSCLAUD_API_KEY as a GitHub Actions repository secret."
+            exit 1
+          fi
+          if [[ "${AMOSCLAUD_API_URL}" != https://* ]]; then
+            echo "::error::AMOSCLAUD_API_URL must use HTTPS."
+            exit 1
+          fi
+
+      - name: Build autonomous task request
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          objective="${INPUT_OBJECTIVE}"
+          if [[ -z "${objective}" ]]; then
+            objective="Inspect and repair the failed GitHub Actions workflow '${WORKFLOW_NAME}' (run ${WORKFLOW_RUN_ID}). Verify the repair and open a pull request."
+          fi
+
+          jq -n \
+            --arg objective "${objective}" \
+            --arg repository "${REPOSITORY}" \
+            --arg mode "${INPUT_MODE}" \
+            --arg delivery "${INPUT_DELIVERY}" \
+            --arg event_name "${EVENT_NAME}" \
+            --arg actor "${ACTOR}" \
+            --arg workflow_name "${WORKFLOW_NAME}" \
+            --arg workflow_run_id "${WORKFLOW_RUN_ID}" \
+            --arg workflow_run_url "${WORKFLOW_RUN_URL}" \
+            --arg head_sha "${HEAD_SHA}" \
+            --arg head_branch "${HEAD_BRANCH}" \
+            '{
+              objective: $objective,
+              repository: $repository,
+              mode: $mode,
+              delivery: $delivery,
+              execution_target: "github",
+              require_approval: false,
+              metadata: {
+                source: "github_actions",
+                event_name: $event_name,
+                actor: $actor,
+                workflow_name: $workflow_name,
+                workflow_run_id: $workflow_run_id,
+                workflow_run_url: $workflow_run_url,
+                head_sha: $head_sha,
+                head_branch: $head_branch,
+                approval_policy: "automatic_except_sensitive",
+                sensitive_requires_human_approval: true,
+                sensitive_categories: [
+                  ".env files",
+                  "secrets and credentials",
+                  "private keys",
+                  "personal information"
+                ]
+              }
+            }' > "${RUNNER_TEMP}/amosclaud-task.json"
+
+          jq . "${RUNNER_TEMP}/amosclaud-task.json"
+
+      - name: Send task to Amosclaud
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          response_file="${RUNNER_TEMP}/amosclaud-response.json"
+          endpoint="${AMOSCLAUD_API_URL%/}/api/v1/tasks"
+          http_code="$(curl \
+            --silent \
+            --show-error \
+            --output "${response_file}" \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer ${AMOSCLAUD_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --header "User-Agent: Amosclaud-GitHub-Actions/${GITHUB_RUN_ID}" \
+            --data-binary "@${RUNNER_TEMP}/amosclaud-task.json" \
+            "${endpoint}")"
+
+          if jq empty "${response_file}" >/dev/null 2>&1; then
+            jq . "${response_file}"
+          else
+            cat "${response_file}"
+          fi
+
+          if [[ "${http_code}" -lt 200 || "${http_code}" -ge 300 ]]; then
+            echo "::error::Amosclaud rejected the task with HTTP ${http_code}."
+            exit 1
+          fi
+
+          task_id="$(jq -r '.id // .task_id // empty' "${response_file}")"
+          if [[ -n "${task_id}" ]]; then
+            echo "### Amosclaud task accepted" >> "${GITHUB_STEP_SUMMARY}"
+            echo "- Task: \`${task_id}\`" >> "${GITHUB_STEP_SUMMARY}"
+            echo "- Repository: \`${REPOSITORY}\`" >> "${GITHUB_STEP_SUMMARY}"
+            echo "- Mode: \`${INPUT_MODE}\`" >> "${GITHUB_STEP_SUMMARY}"
+            echo "- Delivery: \`${INPUT_DELIVERY}\`" >> "${GITHUB_STEP_SUMMARY}"
+          fi
