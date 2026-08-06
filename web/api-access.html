@@ -52,39 +52,61 @@
     section { margin-top: 34px; }
     section h2 { margin: 0 0 18px; font-size: clamp(28px, 4vw, 38px); }
     .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .pack { min-height: 260px; display: flex; flex-direction: column; gap: 10px; }
+    .pack { min-height: 270px; display: flex; flex-direction: column; gap: 10px; }
     .pack h3 { margin: 0; font-size: 26px; }
     .credits { margin: 0; color: var(--muted); font-size: 19px; }
     .price { min-height: 30px; margin: 2px 0 10px; color: var(--text); font-weight: 750; }
-    .pack-message { min-height: 44px; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+    .pack-message { min-height: 64px; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
     .button {
-      width: 100%; min-height: 54px; margin-top: auto; padding: 13px 18px;
-      border: 1px solid var(--line); border-radius: 14px;
-      background: #19233d; color: var(--text); font-weight: 850;
-      cursor: pointer; touch-action: manipulation; transition: transform .12s ease, background .12s ease, opacity .12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 54px;
+      margin-top: auto;
+      padding: 13px 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #19233d;
+      color: var(--text);
+      font-weight: 850;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: transform .12s ease, background .12s ease, opacity .12s ease;
     }
-    .button:hover:not(:disabled) { transform: translateY(-1px); }
+    .button:hover { transform: translateY(-1px); }
     .button:focus-visible { outline: 3px solid rgb(117 134 255 / 45%); outline-offset: 3px; }
     .button.primary { background: var(--brand); border-color: var(--brand); }
-    .button.primary:hover:not(:disabled) { background: var(--brand-hover); }
-    .button:disabled { cursor: not-allowed; opacity: .46; transform: none; }
+    .button.primary:hover { background: var(--brand-hover); }
     .keybox { display: flex; gap: 12px; align-items: stretch; }
     .keybox input {
-      flex: 1; min-width: 0; min-height: 54px; padding: 12px 14px;
-      border: 1px solid var(--line); border-radius: 13px;
-      background: #080c16; color: var(--text);
+      flex: 1;
+      min-width: 0;
+      min-height: 54px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: #080c16;
+      color: var(--text);
     }
     .keybox .button { width: auto; min-width: 170px; margin: 0; }
     pre { white-space: pre-wrap; word-break: break-all; background: #050811; border: 1px solid var(--line); padding: 16px; border-radius: 12px; color: #cbd4ff; }
     .notice {
-      min-height: 48px; margin: 24px 0 0; padding: 13px 16px;
-      border: 1px solid transparent; border-radius: 13px;
-      color: var(--muted); background: rgb(17 25 44 / 72%);
+      min-height: 48px;
+      margin: 24px 0 0;
+      padding: 13px 16px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      color: var(--muted);
+      background: rgb(17 25 44 / 72%);
     }
     .notice[data-kind="error"] { color: var(--danger); border-color: rgb(255 157 168 / 35%); }
     .notice[data-kind="success"] { color: var(--green); border-color: rgb(87 215 165 / 35%); }
     .notice[data-kind="warning"] { color: var(--warning); border-color: rgb(255 212 121 / 35%); }
     .checkout-note { margin: 14px 0 0; color: var(--muted); }
+    .cash-handle { color: var(--green); font-weight: 850; }
     code { overflow-wrap: anywhere; }
     @media (max-width: 760px) {
       .shell { padding: 20px 18px 44px; }
@@ -118,34 +140,34 @@
       <div class="muted">Credits are charged by Amosclaud agent request. Failed runtime requests are automatically refunded.</div>
     </section>
 
-    <p id="status" class="notice" role="status" aria-live="polite">Loading your account and Stripe checkout status…</p>
+    <p id="status" class="notice" role="status" aria-live="polite">Loading your account and Cash App access…</p>
 
     <section>
-      <h2>Buy agent credits</h2>
+      <h2>Add agent credits with Cash App</h2>
       <div class="grid">
-        <article class="card pack" data-pack-card="starter">
+        <article class="card pack">
           <h3>Starter</h3>
           <p class="credits">1,000 credits</p>
-          <p class="price" data-pack-price="starter">Checking price…</p>
-          <p class="pack-message" data-pack-message="starter"></p>
-          <button class="button primary" type="button" data-pack="starter" disabled>Buy Starter</button>
+          <p class="price">Cash App only</p>
+          <p class="pack-message">Include “Amosclaud Starter” and your Amosclaud account email or GitHub username in the Cash App note.</p>
+          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Starter">Pay with Cash App</a>
         </article>
-        <article class="card pack" data-pack-card="builder">
+        <article class="card pack">
           <h3>Builder</h3>
           <p class="credits">5,000 credits</p>
-          <p class="price" data-pack-price="builder">Checking price…</p>
-          <p class="pack-message" data-pack-message="builder"></p>
-          <button class="button primary" type="button" data-pack="builder" disabled>Buy Builder</button>
+          <p class="price">Cash App only</p>
+          <p class="pack-message">Include “Amosclaud Builder” and your Amosclaud account email or GitHub username in the Cash App note.</p>
+          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Builder">Pay with Cash App</a>
         </article>
-        <article class="card pack" data-pack-card="studio">
+        <article class="card pack">
           <h3>Studio</h3>
           <p class="credits">15,000 credits</p>
-          <p class="price" data-pack-price="studio">Checking price…</p>
-          <p class="pack-message" data-pack-message="studio"></p>
-          <button class="button primary" type="button" data-pack="studio" disabled>Buy Studio</button>
+          <p class="price">Cash App only</p>
+          <p class="pack-message">Include “Amosclaud Studio” and your Amosclaud account email or GitHub username in the Cash App note.</p>
+          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Studio">Pay with Cash App</a>
         </article>
       </div>
-      <p id="checkout-note" class="checkout-note">Stripe securely collects payment details. Amosclaud never stores your card or bank-account numbers.</p>
+      <p id="checkout-note" class="checkout-note">Official Cash App: <span class="cash-handle">$kenjamakulu</span>. Credits are added only after Amosclaud verifies the payment. Never include passwords, API keys, recovery codes, or private keys in the payment note. Review the <a href="/support">contribution and verification policy</a>.</p>
     </section>
 
     <section class="card">
@@ -161,7 +183,6 @@
 
   <script>
     const statusNode = document.querySelector("#status");
-    const checkoutButtons = [...document.querySelectorAll("[data-pack]")];
     const say = (message, kind = "info") => {
       statusNode.textContent = message;
       statusNode.dataset.kind = kind;
@@ -191,55 +212,17 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const formatPrice = pack => {
-      if (Number.isInteger(pack.unit_amount) && pack.unit_amount > 0) {
-        return new Intl.NumberFormat("en-US", { style: "currency", currency: String(pack.currency || "usd").toUpperCase() }).format(pack.unit_amount / 100);
-      }
-      return pack.available ? "Price shown securely in Stripe" : "Checkout unavailable";
-    };
-    function renderPack(pack) {
-      const button = document.querySelector(`[data-pack="${pack.id}"]`);
-      const price = document.querySelector(`[data-pack-price="${pack.id}"]`);
-      const message = document.querySelector(`[data-pack-message="${pack.id}"]`);
-      if (!button || !price || !message) return;
-      price.textContent = formatPrice(pack);
-      message.textContent = pack.configuration_message || "";
-      button.disabled = !pack.available;
-      button.setAttribute("aria-disabled", String(!pack.available));
-      button.title = pack.available ? `Open secure Stripe Checkout for ${pack.name}` : pack.configuration_message;
-    }
     async function refresh() {
       const payload = await api("/api/v1/provider/tokens");
       document.querySelector("#balance").textContent = Number(payload.balance || 0).toLocaleString("en-US");
-      (payload.packs || []).forEach(renderPack);
-      document.querySelector("#checkout-note").textContent = payload.payment_method_note || "Stripe securely collects your payment details.";
-      const available = (payload.packs || []).some(pack => pack.available);
-      if (!new URLSearchParams(location.search).has("checkout")) {
-        say(available ? "Your account is ready. Choose a credit pack to open secure Stripe Checkout." : "Credit checkout is not configured on the server yet.", available ? "success" : "warning");
-      }
-      return payload;
+      say("Cash App is the only payment option currently enabled. Payments require manual verification before credits are added.", "success");
     }
-    function setCheckoutLoading(active, selected) {
-      checkoutButtons.forEach(button => {
-        button.disabled = active || button.getAttribute("aria-disabled") === "true";
-        button.textContent = active && button === selected ? "Opening Stripe…" : `Buy ${button.dataset.pack[0].toUpperCase()}${button.dataset.pack.slice(1)}`;
+    document.querySelectorAll("[data-cash-pack]").forEach(link => {
+      link.addEventListener("click", () => {
+        const pack = link.dataset.cashPack;
+        say(`Cash App opened for the ${pack} pack. Include “Amosclaud ${pack}” and your account email or GitHub username in the payment note.`, "warning");
       });
-    }
-    checkoutButtons.forEach(button => button.addEventListener("click", async () => {
-      if (button.disabled) return;
-      setCheckoutLoading(true, button);
-      try {
-        say("Creating a secure Stripe Checkout session…");
-        const payload = await post("/api/v1/provider/tokens/checkout", { pack: button.dataset.pack });
-        if (!payload.url || !String(payload.url).startsWith("https://")) throw new Error("Stripe did not return a secure checkout link");
-        location.assign(payload.url);
-      } catch (error) {
-        say(error.message || "Checkout could not be opened", "error");
-        await refresh().catch(() => {});
-      } finally {
-        setCheckoutLoading(false, button);
-      }
-    }));
+    });
     document.querySelector("#create-key").addEventListener("click", async event => {
       const button = event.currentTarget;
       button.disabled = true;
@@ -257,43 +240,9 @@
         button.textContent = "Create key";
       }
     });
-    const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
-    async function confirmCheckout() {
-      const params = new URLSearchParams(location.search);
-      const result = params.get("checkout");
-      if (result === "cancelled") {
-        say("Checkout was cancelled. No payment was taken and no credits were added.", "warning");
-        history.replaceState({}, "", "/api-access");
-        return;
-      }
-      if (result !== "success") return;
-      const sessionId = params.get("session_id");
-      if (!sessionId) { say("Stripe returned without a Checkout session identifier.", "error"); return; }
-      say("Stripe returned successfully. Confirming your payment and credits…");
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const checkout = await api(`/api/v1/provider/tokens/checkout/${encodeURIComponent(sessionId)}`);
-        if (checkout.payment_status === "paid") {
-          document.querySelector("#balance").textContent = Number(checkout.balance || 0).toLocaleString("en-US");
-          say("Payment confirmed. Your agent credits are ready.", "success");
-          history.replaceState({}, "", "/api-access");
-          return;
-        }
-        if (checkout.status === "complete") {
-          say(checkout.message || "Bank payments can take time to settle. Credits will appear after Stripe confirms settlement.", "warning");
-          return;
-        }
-        await delay(1400);
-      }
-      say("Stripe is still processing this checkout. Refresh this page in a moment.", "warning");
-    }
-    (async () => {
-      try {
-        await refresh();
-        await confirmCheckout();
-      } catch (error) {
-        if (error.message !== "Sign in required") say(error.message || "The account could not be loaded", "error");
-      }
-    })();
+    refresh().catch(error => {
+      if (error.message !== "Sign in required") say(error.message || "The account could not be loaded", "error");
+    });
   </script>
 </body>
 </html>
