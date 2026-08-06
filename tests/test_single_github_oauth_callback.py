@@ -10,9 +10,7 @@ from amoscloud_ai.security import (
 def _request(path: str, state: str, cookie_state: str | None) -> Request:
     headers = []
     if cookie_state is not None:
-        headers.append(
-            (b"cookie", f"amos_github_oauth_state={cookie_state}".encode())
-        )
+        headers.append((b"cookie", f"amos_github_oauth_state={cookie_state}".encode()))
     return Request(
         {
             "type": "http",
