@@ -52,22 +52,39 @@ def test_organization_admin_can_revoke_membership_but_not_final_owner() -> None:
     assert "Only an owner can remove an owner" in identity
 
 
-def test_only_owner_can_change_public_organization_id() -> None:
+def test_owner_controls_identifier_and_ownership_transfer() -> None:
     identity = _read("amoscloud_ai/api/routes/organization_identity.py")
 
     assert '@router.patch("/{public_id}/identifier")' in identity
+    assert '@router.post("/{public_id}/transfer-ownership")' in identity
     assert 'if actor["role"] != "owner"' in identity
     assert "Owner access required" in identity
+    assert "organization.ownership_transferred" in identity
 
 
-def test_login_page_exposes_organization_access() -> None:
+def test_login_page_exposes_public_organization_access() -> None:
+    health = _read("amoscloud_ai/api/routes/health.py")
     login = _read("web/login.html")
     page = _read("web/organization-access.html")
     script = _read("web/organization-access.js")
 
-    assert 'href="/static/organization-access.html"' in login
+    assert '@router.get("/organization-access", include_in_schema=False)' in health
+    assert 'FileResponse(WEB_DIR / "organization-access.html")' in health
+    assert 'href="/organization-access"' in login
     assert "No email code required" in page
     assert "/api/v1/organization-access/login" in script
     assert "/api/v1/organization-access/register" in script
     assert "/api/v1/organization-access/join" in script
     assert "/api/v1/organization-access/recover" in script
+
+
+def test_organization_credential_routes_are_rate_limited() -> None:
+    security = _read("amoscloud_ai/security.py")
+
+    for path in (
+        "/api/v1/organization-access/register",
+        "/api/v1/organization-access/login",
+        "/api/v1/organization-access/join",
+        "/api/v1/organization-access/recover",
+    ):
+        assert path in security
