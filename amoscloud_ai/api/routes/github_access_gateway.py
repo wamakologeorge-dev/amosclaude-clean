@@ -112,13 +112,8 @@ def _verified_email(emails: list[dict[str, Any]]) -> str | None:
     return auth._normalise_email(str(selected["email"]))
 
 
-def _display_email(profile: dict[str, Any], verified_email: str | None, github_id: str) -> str:
-    if verified_email:
-        return verified_email
-    profile_email = str(profile.get("email") or "").strip()
-    if profile_email:
-        return auth._normalise_email(profile_email)
-    return f"github-{github_id}@users.noreply.amosclaud.local"
+def _account_email(verified_email: str | None, github_id: str) -> str:
+    return verified_email or f"github-{github_id}@users.noreply.amosclaud.local"
 
 
 async def _github_identity(code: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -166,7 +161,7 @@ def _find_or_create_github_user(
         raise HTTPException(status_code=400, detail="GitHub account identity is incomplete")
 
     verified_email = _verified_email(emails)
-    account_email = _display_email(profile, verified_email, github_id)
+    account_email = _account_email(verified_email, github_id)
     display_name = str(profile.get("name") or github_login).strip() or github_login
 
     with auth._connect() as db:
