@@ -64,9 +64,7 @@ def _summary(result: dict) -> str:
             for item in guardrails["failures"]
         )
     if context["sensitive_files_skipped"]:
-        lines.append(
-            f"Sensitive files skipped: {len(context['sensitive_files_skipped'])}"
-        )
+        lines.append(f"Sensitive files skipped: {len(context['sensitive_files_skipped'])}")
     return "\n".join(lines)
 
 
