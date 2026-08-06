@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from amoscloud_ai.domain_policy import (
@@ -22,16 +23,16 @@ def test_apex_configuration_is_normalised_to_the_www_platform(monkeypatch) -> No
 
     enforce_platform_domain_policy()
 
-    assert __import__("os").environ["AMOSCLAUD_PUBLIC_URL"] == WWW_PLATFORM_URL
+    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == WWW_PLATFORM_URL
     assert (
-        __import__("os").environ["GITHUB_ADMIN_CALLBACK_URL"]
+        os.environ["GITHUB_ADMIN_CALLBACK_URL"]
         == "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
     )
     assert (
-        __import__("os").environ["GITHUB_REPOSITORY_CALLBACK_URL"]
+        os.environ["GITHUB_REPOSITORY_CALLBACK_URL"]
         == "https://www.amosclaud.com/api/v1/github/callback"
     )
-    assert __import__("os").environ["AUTH_COOKIE_DOMAIN"] == ""
+    assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
 def test_www_configuration_uses_host_only_session_cookies(monkeypatch) -> None:
@@ -40,7 +41,7 @@ def test_www_configuration_uses_host_only_session_cookies(monkeypatch) -> None:
 
     enforce_platform_domain_policy()
 
-    assert __import__("os").environ["AUTH_COOKIE_DOMAIN"] == ""
+    assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
 def test_custom_self_hosted_domain_is_preserved(monkeypatch) -> None:
@@ -51,15 +52,14 @@ def test_custom_self_hosted_domain_is_preserved(monkeypatch) -> None:
 
     enforce_platform_domain_policy()
 
-    environment = __import__("os").environ
-    assert environment["AMOSCLAUD_PUBLIC_URL"] == "https://amos.example.net"
-    assert environment["AUTH_COOKIE_DOMAIN"] == ".example.net"
+    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == "https://amos.example.net"
+    assert os.environ["AUTH_COOKIE_DOMAIN"] == ".example.net"
     assert (
-        environment["GITHUB_ADMIN_CALLBACK_URL"]
+        os.environ["GITHUB_ADMIN_CALLBACK_URL"]
         == "https://amos.example.net/api/v1/auth/github/admin-callback"
     )
     assert (
-        environment["GITHUB_REPOSITORY_CALLBACK_URL"]
+        os.environ["GITHUB_REPOSITORY_CALLBACK_URL"]
         == "https://amos.example.net/api/v1/github/callback"
     )
 
