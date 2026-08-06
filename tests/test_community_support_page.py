@@ -43,9 +43,7 @@ def test_support_page_contains_non_refundable_and_tax_status_disclosures() -> No
     assert "except where a refund is required by applicable law" in page
     assert "does not claim that Amosclaud is a tax-exempt charity" in page
     assert "not represented as tax-deductible" in page
-    assert (
-        "does not claim that Amosclaud is a legally registered tax-exempt charity"
-    ) in policy
+    assert ("does not claim that Amosclaud is a legally registered tax-exempt charity") in policy
 
 
 def test_public_pages_make_support_discoverable() -> None:
