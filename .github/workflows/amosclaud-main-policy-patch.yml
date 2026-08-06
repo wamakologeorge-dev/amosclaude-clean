@@ -1,0 +1,154 @@
+name: Wire Amosclaud Sensitive-Only Repair Policy
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/amosclaud-main-policy-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  wire-policy:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pull request branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: 0.11.16
+
+      - name: Wire the policy into the main repair control plane
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path(".github/workflows/amosclaud-repair-control-plane.yml")
+          workflow = workflow_path.read_text(encoding="utf-8")
+
+          approval_step = '''      - name: Resolve sensitive pull request approval
+            if: steps.route.outputs.should_repair == 'true'
+            id: sensitive
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            run: |
+              set -euo pipefail
+              python trusted/.github/scripts/amosclaud_pr_sensitive_approval.py \\
+                --repository "$GITHUB_REPOSITORY" \\
+                --pull-request-number "${{ steps.route.outputs.pull_request_number }}" \\
+                --token "$GITHUB_TOKEN"
+
+          '''
+          candidate_marker = "      - name: Generate bounded repair candidate\n"
+          if "amosclaud_pr_sensitive_approval.py" not in workflow:
+              if candidate_marker not in workflow:
+                  raise RuntimeError("Candidate step marker was not found")
+              workflow = workflow.replace(
+                  candidate_marker,
+                  approval_step + candidate_marker,
+                  1,
+              )
+
+          workflow = workflow.replace(
+              "python trusted/.github/scripts/amosclaud_repair_candidate.py \\",
+              "python trusted/.github/scripts/amosclaud_repair_candidate_v2.py \\",
+              1,
+          )
+
+          sensitive_env_anchor = (
+              "          AMOSCLAUD_GATEWAY_FIXER_MODEL: "
+              "${{ vars.AMOSCLAUD_FIXER_MODEL }}\n"
+          )
+          if "AMOSCLAUD_SENSITIVE_APPROVED:" not in workflow:
+              if sensitive_env_anchor not in workflow:
+                  raise RuntimeError("Candidate environment marker was not found")
+              workflow = workflow.replace(
+                  sensitive_env_anchor,
+                  sensitive_env_anchor
+                  + "          AMOSCLAUD_SENSITIVE_APPROVED: "
+                  + "${{ steps.sensitive.outputs.approved }}\n",
+                  1,
+              )
+
+          consume_step = '''      - name: Consume sensitive repair approval
+            if: >-
+              steps.publish.outputs.repair_sha != '' &&
+              steps.sensitive.outputs.approved == 'true' &&
+              steps.sensitive.outputs.approval_issue_number != ''
+            env:
+              GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              APPROVAL_ISSUE: ${{ steps.sensitive.outputs.approval_issue_number }}
+            run: |
+              gh issue comment "$APPROVAL_ISSUE" --repo "$GITHUB_REPOSITORY" --body "<!-- amosclaud-approval-consumed -->
+              Approval consumed by verified repair commit ${{ steps.publish.outputs.repair_sha }}."
+
+          '''
+          finalize_marker = "      - name: Mark incident as published\n"
+          if "Consume sensitive repair approval" not in workflow:
+              if finalize_marker not in workflow:
+                  raise RuntimeError("Incident finalization marker was not found")
+              workflow = workflow.replace(
+                  finalize_marker,
+                  consume_step + finalize_marker,
+                  1,
+              )
+
+          workflow_path.write_text(workflow, encoding="utf-8")
+
+          test_path = Path("tests/test_amosclaud_approval_gate.py")
+          tests = test_path.read_text(encoding="utf-8")
+          start = tests.index(
+              "def test_repository_policy_records_the_same_bounded_authorization() -> None:"
+          )
+          end = tests.find("\ndef ", start + 1)
+          if end == -1:
+              end = len(tests)
+          replacement = '''def test_repository_policy_records_sensitive_only_authorization() -> None:
+              policy = APPROVAL_POLICY.read_text(encoding="utf-8")
+
+              assert "all_open_pull_requests: true" in policy
+              assert "fork_pull_requests: repair_via_verified_base_repository_branch" in policy
+              assert "ordinary_code_repairs: false" in policy
+              assert "workflow_or_infrastructure_repairs: false" in policy
+              assert '".env.*"' in policy
+              assert '"**/personal_information.*"' in policy
+              assert "force_push: false" in policy
+          '''
+          tests = tests[:start] + replacement.rstrip() + "\n\n" + tests[end + 1 :]
+          test_path.write_text(tests, encoding="utf-8")
+          PY
+
+      - name: Format and validate policy wiring
+        run: |
+          uv run --no-project --with-requirements requirements-ci-fast.txt black \
+            amosclaud_bot/approval_gate_v2.py \
+            amosclaud_bot/dispatcher.py \
+            .github/scripts/amosclaud_fork_pr_route.py \
+            .github/scripts/amosclaud_pr_sensitive_approval.py \
+            .github/scripts/amosclaud_repair_candidate_v2.py \
+            tests/test_amosclaud_approval_gate.py \
+            tests/test_amosclaud_sensitive_only_approval.py \
+            tests/test_amosclaud_fork_pr_fixer_contract.py
+          uv run --no-project --with-requirements requirements-ci-fast.txt pytest -q \
+            tests/test_amosclaud_approval_gate.py \
+            tests/test_amosclaud_sensitive_only_approval.py \
+            tests/test_amosclaud_fork_pr_fixer_contract.py \
+            tests/test_automatic_ollama_repair_routing.py
+
+      - name: Commit final policy wiring and remove temporary workflows
+        run: |
+          rm -f .github/workflows/amosclaud-fixer-policy-migration.yml
+          rm -f .github/workflows/amosclaud-main-policy-patch.yml
+          git config user.name "Amosclaud Policy Wiring"
+          git config user.email "policy@amosclaud.internal"
+          git add -A
+          git commit -m "fix: make Amosclaud-Fixer automatic across open PRs"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
