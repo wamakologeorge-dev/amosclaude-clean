@@ -16,6 +16,7 @@ for value in (str(SCRIPT_DIR), str(ROOT)):
         sys.path.insert(0, value)
 
 import amosclaud_repair_candidate as legacy
+
 from amosclaud_bot.approval_gate_v2 import (
     _patch_contains_sensitive_information,
     _path_requires_human_approval,
