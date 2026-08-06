@@ -203,9 +203,7 @@ def test_security_mail_sender_is_amosclaud_owned() -> None:
 
 
 def test_primary_password_reset_revokes_existing_sessions() -> None:
-    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "auth.py").read_text(
-        encoding="utf-8"
-    )
+    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "auth.py").read_text(encoding="utf-8")
     assert '@router.post("/password/reset"' in source
     assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in source
     assert "Invalid or expired verification code" in source
