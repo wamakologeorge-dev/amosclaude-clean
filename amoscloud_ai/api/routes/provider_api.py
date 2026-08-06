@@ -213,9 +213,7 @@ def token_status(amos_session: str | None = Cookie(default=None)) -> dict:
         "payment_required": not activated,
         "checkout_available": True,
         "checkout_provider": "cash_app_or_bitcoin_manual_verification",
-        "payment_methods": [
-            {"id": method, "url": url} for method, url in PAYMENT_LINKS.items()
-        ],
+        "payment_methods": [{"id": method, "url": url} for method, url in PAYMENT_LINKS.items()],
         "payment_method_note": (
             "Cash App and Bitcoin are the only enabled payment methods. Amosclaud "
             "activates API access only after an administrator verifies the payment."
