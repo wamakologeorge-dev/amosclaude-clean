@@ -89,8 +89,7 @@ def support_tiers() -> list[dict[str, object]]:
 
 
 def ensure_support_schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS organization_support_wallets (
             user_id INTEGER PRIMARY KEY,
             remaining_seconds INTEGER NOT NULL DEFAULT 0 CHECK(remaining_seconds>=0),
@@ -109,8 +108,7 @@ def ensure_support_schema(db: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_support_ledger_user
             ON organization_support_ledger(user_id, id DESC);
-        """
-    )
+        """)
     db.commit()
 
 
@@ -316,8 +314,7 @@ def _hours(seconds: int) -> str:
 
 @page_router.get("/organization-support", response_class=HTMLResponse, include_in_schema=False)
 def organization_support_page() -> HTMLResponse:
-    cards = "".join(
-        f"""
+    cards = "".join(f"""
         <article class="card">
           <h2>{escape(str(tier['name']))}</h2>
           <p class="hours">{_hours(int(tier['working_seconds']))} hosted hours</p>
@@ -326,9 +323,7 @@ def organization_support_page() -> HTMLResponse:
           <a class="cash" href="{PAYMENT_LINKS['cash_app']}" target="_blank" rel="noopener">Support with Cash App</a>
           <a class="bitcoin" href="{PAYMENT_LINKS['bitcoin']}" target="_blank" rel="noopener">Support with Bitcoin</a>
         </article>
-        """
-        for tier in support_tiers()
-    )
+        """ for tier in support_tiers())
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Organization Support · Amosclaud</title>
