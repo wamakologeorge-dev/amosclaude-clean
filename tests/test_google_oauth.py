@@ -84,9 +84,7 @@ def test_google_status_is_disabled_without_credentials(monkeypatch, tmp_path):
     assert response.json() == {"enabled": False, "callback_url": None}
 
 
-def test_legacy_google_module_can_read_existing_identity_data(monkeypatch, tmp_path):
-    """The inner module remains migration-compatible but is not publicly routed."""
-
+def test_google_oauth_creates_one_user_and_reuses_identity(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
 
     with TestClient(create_app()) as client:
@@ -107,7 +105,7 @@ def test_legacy_google_module_can_read_existing_identity_data(monkeypatch, tmp_p
         assert db.execute("SELECT COUNT(*) FROM oauth_identities").fetchone()[0] == 1
 
 
-def test_legacy_google_module_links_existing_account(monkeypatch, tmp_path):
+def test_google_oauth_links_existing_password_account(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     with auth._connect() as db:
         db.execute(
@@ -135,7 +133,7 @@ def test_legacy_google_module_links_existing_account(monkeypatch, tmp_path):
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
 
 
-def test_legacy_google_module_rejects_state_mismatch(monkeypatch, tmp_path):
+def test_google_oauth_rejects_state_mismatch(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
 
     with TestClient(create_app()) as client:
@@ -150,7 +148,7 @@ def test_legacy_google_module_rejects_state_mismatch(monkeypatch, tmp_path):
     assert response.json()["detail"] == "Invalid Google OAuth state"
 
 
-def test_legacy_google_module_requires_verified_email(monkeypatch, tmp_path):
+def test_google_oauth_requires_verified_email(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     monkeypatch.setattr(
         _FakeGoogleClient,
@@ -172,15 +170,14 @@ def test_legacy_google_module_requires_verified_email(monkeypatch, tmp_path):
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
 
 
-def test_production_gateway_disables_google_as_public_account_provider():
+def test_google_oauth_remains_available_without_cluttering_primary_login():
     login = open("web/login.html", encoding="utf-8").read()
-    gateway = open("amoscloud_ai/api/routes/github_access_gateway.py", encoding="utf-8").read()
+    routes = open("amoscloud_ai/api/routes/google_auth.py", encoding="utf-8").read()
     environment = open(".env.production.example", encoding="utf-8").read()
 
-    assert "google-login-button" not in login
-    assert '@router.get("/auth/google"' in gateway
-    assert '@router.get("/auth/google/callback"' in gateway
-    assert 'RedirectResponse("/auth/github"' in gateway
-    assert '"provider": "github"' in gateway
-    assert "GOOGLE_CLIENT_ID=\n" in environment
-    assert "GOOGLE_CALLBACK_URL=\n" in environment
+    assert 'id="google-login-button"' not in login
+    assert '@router.get("/google/status")' in routes
+    assert '@router.get("/google")' in routes
+    assert (
+        "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback" in environment
+    )
