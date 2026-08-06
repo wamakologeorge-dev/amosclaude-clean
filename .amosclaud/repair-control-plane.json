@@ -1,5 +1,5 @@
 {
-  "schema": "amosclaud.repair-control-plane/v1",
+  "schema": "amosclaud.repair-control-plane/v2",
   "enabled": true,
   "max_attempts_per_incident": 3,
   "incident_title_prefix": "Amosclaud Repair Incident",
@@ -7,8 +7,8 @@
   "routes": {
     "default_branch": "review_branch",
     "same_repository_pull_request": "original_pull_request_branch",
-    "protected_repair_engine": "maintenance_pull_request",
-    "fork_pull_request": "report_only"
+    "protected_repair_engine": "verified_repair_branch",
+    "fork_pull_request": "verified_base_repository_branch"
   },
   "providers": {
     "github_actions": {
@@ -29,43 +29,44 @@
     "pull_request_publish_secret": "AMOSCLAUD_AUTONOMOUS_TOKEN",
     "verification_must_be_credential_free": true
   },
+  "approval": {
+    "required_only_for": [
+      "environment_or_secret_content",
+      "personal_information_content"
+    ],
+    "ordinary_code": false,
+    "workflows": false,
+    "infrastructure": false,
+    "fork_origin": false
+  },
   "regular_patch": {
-    "max_changed_files": 12,
-    "max_patch_bytes": 250000,
+    "max_changed_files": 25,
+    "max_patch_bytes": 350000,
     "protected_prefixes": [
-      ".git/",
-      ".github/",
-      ".amosclaud/",
-      "Infrastructure/",
-      "infrastructure/"
+      ".git/"
     ],
-    "protected_paths": [
-      "AGENTS.md",
-      "SECURITY.md",
-      "CODEOWNERS",
-      "Dockerfile",
-      "railway.json",
-      "vercel.json"
-    ],
+    "protected_paths": [],
     "protected_names": [
       ".env",
       "secrets.json",
-      "credentials.json"
+      "credentials.json",
+      "personal-information.json",
+      "personal_information.json",
+      "pii.json",
+      "pii.csv"
     ]
   },
   "maintenance_patch": {
-    "max_changed_files": 8,
-    "max_patch_bytes": 180000,
+    "max_changed_files": 16,
+    "max_patch_bytes": 250000,
     "allowed_prefixes": [
-      ".github/workflows/amosclaud-",
-      ".github/scripts/amosclaud_",
-      ".amosclaud/repair-control-plane.json",
-      "tests/test_amosclaud_repair_",
-      "tests/test_amosclaud_fixer_",
-      "tests/test_pr_ci_repair_"
+      ".github/",
+      ".amosclaud/",
+      "amosclaud_bot/",
+      "tests/"
     ],
     "requires_test_change": true,
-    "human_approval_required": true
+    "human_approval_required": false
   },
   "verification": {
     "base": [
@@ -85,7 +86,8 @@
   "publishing": {
     "direct_default_branch_writes": false,
     "force_push": false,
-    "same_repository_pull_requests_only": true,
+    "same_repository_pull_requests_only": false,
+    "fork_pull_request_strategy": "verified_base_repository_branch",
     "maintenance_always_uses_new_pull_request": true
   }
 }
