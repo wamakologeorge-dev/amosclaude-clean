@@ -148,6 +148,13 @@ def test_owner_removes_member_and_member_cannot_sign_in(isolated_identity_db) ->
     )
     assert removal_response.status_code == 204
 
+    with organization_identity._db() as db:
+        disabled = db.execute(
+            "SELECT password_hash FROM users WHERE name='sameG'"
+        ).fetchone()
+    assert disabled is not None
+    assert disabled["password_hash"] is None
+
     with pytest.raises(HTTPException) as error:
         organization_identity.login(
             organization_identity.OrganizationLogin(
