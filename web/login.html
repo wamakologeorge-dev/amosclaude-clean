@@ -1,86 +1,14 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
-  <meta name="application-name" content="Amosclaud">
-  <title>Sign in to Amosclaud</title>
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/login.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="refresh" content="0;url=/auth/github">
+  <title>Continue with GitHub · Amosclaud</title>
+  <link rel="canonical" href="/auth/github">
 </head>
 <body>
-  <main class="auth-shell">
-    <section class="auth-card" aria-labelledby="portal-title">
-      <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true">A</div>
-        <div>
-          <p class="eyebrow">AMOSCLAUD</p>
-          <p class="brand-note">One secure account</p>
-        </div>
-      </div>
-
-      <header class="portal-heading">
-        <h1 id="portal-title">Welcome to Amosclaud</h1>
-        <p>Sign in for Amosclaud services, receive a secure code on any device, or view the public repository and documentation.</p>
-      </header>
-
-      <section id="email-access-panel" aria-labelledby="auth-title">
-        <div class="tabs" role="tablist" aria-label="Account access">
-          <button id="login-tab" class="tab active" type="button" role="tab" aria-selected="true">Sign in</button>
-          <button id="register-tab" class="tab" type="button" role="tab" aria-selected="false">Create account</button>
-        </div>
-
-        <h2 id="auth-title">Welcome back</h2>
-        <p id="auth-subtitle" class="muted">Use your email address and password.</p>
-
-        <form id="auth-form" autocomplete="on" novalidate>
-          <label id="name-field" class="hidden">Full name
-            <input id="name" name="name" autocomplete="name" minlength="2" maxlength="100">
-          </label>
-
-          <label id="identifier-field">Email address
-            <input id="identifier" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required>
-          </label>
-
-          <label id="password-field">Password
-            <input id="password" name="password" type="password" autocomplete="current-password">
-          </label>
-
-          <label id="new-password-field" class="hidden">Create password
-            <input id="new-password" name="new-password" type="password" autocomplete="new-password" minlength="10">
-            <small>Use at least 10 characters.</small>
-          </label>
-
-          <label id="email-code-field" class="hidden">Six-digit security code
-            <input id="email-code" name="email-code" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="6" pattern="[0-9]{6}">
-          </label>
-
-          <p id="password-hint" class="hint hidden">Use at least 10 characters.</p>
-          <button id="submit-button" class="primary-button" type="submit">Sign in</button>
-        </form>
-
-        <div class="quick-access">
-          <a class="secondary-button" style="display:grid;place-items:center;text-decoration:none" href="/developer-tools">View public source and documentation</a>
-          <a class="secondary-button" style="display:grid;place-items:center;text-decoration:none" href="/organization-support">Cash App or Bitcoin support time</a>
-          <button id="email-code-button" class="secondary-button" type="button">Email me a sign-in code</button>
-          <button id="forgot-password-button" class="text-button" type="button">Forgot password?</button>
-          <a class="text-button" style="display:grid;place-items:center;text-decoration:none" href="/auth/github/admin-login">Platform owner access with GitHub</a>
-        </div>
-
-        <p class="recovery-note">Official Amosclaud tools require an account with verified organization-support working time. Public repository source and documentation remain available without an account.</p>
-        <p id="message" class="message" role="alert" aria-live="polite"></p>
-      </section>
-
-      <footer class="portal-footer">
-        <a href="/status">Platform status</a>
-        <a href="/organization-support">Support Amosclaud</a>
-      </footer>
-    </section>
-  </main>
-  <script src="/static/session-cookie-bridge.js"></script>
-  <script src="/static/account-access.js"></script>
-  <script src="/static/app-install.js"></script>
+  <p>Amosclaud account access now uses GitHub. <a href="/auth/github">Continue with GitHub</a>.</p>
+  <script>location.replace('/auth/github');</script>
 </body>
 </html>
