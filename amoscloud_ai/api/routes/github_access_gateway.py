@@ -158,7 +158,9 @@ async def _github_identity(code: str) -> tuple[dict[str, Any], list[dict[str, An
         }
         profile_response = await client.get("https://api.github.com/user", headers=headers)
         if profile_response.status_code != 200:
-            raise HTTPException(status_code=401, detail="GitHub account profile could not be verified")
+            raise HTTPException(
+                status_code=401, detail="GitHub account profile could not be verified"
+            )
         profile = profile_response.json()
 
         emails_response = await client.get("https://api.github.com/user/emails", headers=headers)
