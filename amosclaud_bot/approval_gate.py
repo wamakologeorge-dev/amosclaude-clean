@@ -1,42 +1,42 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
 from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 
 SENSITIVE_HINTS = (
-    "production",
-    "deploy",
-    "deployment",
-    "workflow",
-    "permission",
-    "authentication",
-    "authorization",
-    "secret",
-    "credential",
-    "token",
-    "infrastructure",
-    "security",
+    "leaked secret",
+    "exposed secret",
+    "leaked key",
+    "exposed key",
+    "credential leak",
+    "password leak",
+    "private information",
+    "personal information",
+    "private data",
+    "recovery code leak",
 )
 
-HIGH_RISK_PREFIXES = (
-    ".github/workflows/",
-    ".github/actions/",
-    "Infrastructure/",
-    "infrastructure/",
-)
-
-HIGH_RISK_FILES = {
-    "SECURITY.md",
-    ".github/SECURITY.md",
-    "CODEOWNERS",
-    ".github/CODEOWNERS",
-    "Dockerfile",
-    "railway.json",
-    "vercel.json",
+PRIVATE_DATA_FILES = {
+    ".env",
+    "secrets.json",
+    "credentials.json",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
 }
+PRIVATE_DATA_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+PRIVATE_DATA_PATCH_MARKERS = (
+    "BEGIN PRIVATE KEY",
+    "BEGIN RSA PRIVATE KEY",
+    "BEGIN OPENSSH PRIVATE KEY",
+    "social security number",
+    "recovery phrase",
+)
 
 AUTONOMOUS_REPAIR_MARKER = "<!-- amosclaud-autonomous-repair:v1 -->"
 AUTONOMOUS_REPAIR_BRANCH_PREFIX = "amosclaud-background-engineer/"
@@ -87,17 +87,23 @@ def _approval_source(source_number: int | str, objective: str) -> str:
 
 
 def _high_risk_files(files: list[dict[str, Any]]) -> list[str]:
-    names = [str(item.get("filename") or "") for item in files]
-    return [
-        name
-        for name in names
-        if name in HIGH_RISK_FILES
-        or any(name.startswith(prefix) for prefix in HIGH_RISK_PREFIXES)
-        or any(
-            hint in name.lower()
-            for hint in ("security", "auth", "permission", "secret", "credential")
-        )
-    ]
+    """Require approval only for private information or credential material."""
+    findings: list[str] = []
+    for item in files:
+        paths = [str(item.get("filename") or "")]
+        previous = str(item.get("previous_filename") or "")
+        if previous:
+            paths.append(previous)
+        for raw_path in paths:
+            normalized = _normalize_repo_path(raw_path)
+            name = Path(normalized).name.lower()
+            if name in PRIVATE_DATA_FILES or name.endswith(PRIVATE_DATA_SUFFIXES):
+                findings.append(f"Private or credential-bearing file changed: `{normalized}`")
+        patch = str(item.get("patch") or "")
+        if any(marker in patch for marker in PRIVATE_DATA_PATCH_MARKERS):
+            filename = _normalize_repo_path(str(item.get("filename") or "unknown"))
+            findings.append(f"Potential private information detected in `{filename}`")
+    return list(dict.fromkeys(findings))
 
 
 def _path_is_outside_autonomous_boundary(path: str) -> bool:
@@ -107,10 +113,7 @@ def _path_is_outside_autonomous_boundary(path: str) -> bool:
     name = Path(normalized).name.lower()
     return (
         normalized in AUTONOMOUS_REPAIR_PROTECTED_PATHS
-        or any(
-            normalized.startswith(prefix)
-            for prefix in AUTONOMOUS_REPAIR_PROTECTED_PREFIXES
-        )
+        or any(normalized.startswith(prefix) for prefix in AUTONOMOUS_REPAIR_PROTECTED_PREFIXES)
         or name == ".env"
         or name.startswith(".env.")
         or name in {"secrets.json", "credentials.json"}
@@ -281,7 +284,9 @@ def _create_approval_issue(
     if existing is not None:
         return existing
 
-    reasons = "\n".join(f"- {line}" for line in reason_lines) or "- Sensitive Amosclaud action detected"
+    reasons = (
+        "\n".join(f"- {line}" for line in reason_lines) or "- Sensitive Amosclaud action detected"
+    )
     body = (
         f"{APPROVAL_MARKER}{source} -->\n"
         "## Amosclaud Human Approval Required\n\n"
@@ -334,14 +339,18 @@ def _record_decision(bot: AmosclaudBot, payload: dict[str, Any], command: str) -
     return 0
 
 
-def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name: str) -> int | None:
+def handle_approval_event(
+    bot: AmosclaudBot, payload: dict[str, Any], event_name: str
+) -> int | None:
     if event_name == "issue_comment":
         comment = payload.get("comment") or {}
         command, objective = parse_command(str(comment.get("body") or ""))
         normalized = " ".join(str(comment.get("body") or "").strip().split()).lower()
         association = str(comment.get("author_association") or "NONE").upper()
 
-        if normalized.startswith("@amosclaud approve") or normalized.startswith("@amosclaud-bot approve"):
+        if normalized.startswith("@amosclaud approve") or normalized.startswith(
+            "@amosclaud-bot approve"
+        ):
             return _record_decision(bot, payload, "approve")
         if normalized.startswith("@amosclaud deny") or normalized.startswith("@amosclaud-bot deny"):
             return _record_decision(bot, payload, "deny")
@@ -374,7 +383,9 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
                 bot,
                 source=_approval_source(source_number, objective),
                 title=f"Sensitive Amosclaud-Fixer request from #{source_number}",
-                reason_lines=[f"Sensitive capability keyword detected in requested repair: `{objective}`"],
+                reason_lines=[
+                    f"Sensitive capability keyword detected in requested repair: `{objective}`"
+                ],
                 requested_capability="Amosclaud-Fixer",
             )
             bot.post_comment(
@@ -406,13 +417,13 @@ def handle_approval_event(bot: AmosclaudBot, payload: dict[str, Any], event_name
                 bot,
                 source=f"pull-request-{number}",
                 title=f"Sensitive changes in PR #{number}",
-                reason_lines=[f"High-risk path changed: `{name}`" for name in risky[:12]],
+                reason_lines=risky[:12],
                 requested_capability="Pull request merge/review decision",
             )
             bot.post_comment(
                 number,
                 "### Amosclaud Bot — Human approval required\n"
-                f"Sensitive paths were detected. Approval issue: #{approval}",
+                f"Private information or credential material was detected. Approval issue: #{approval}",
             )
             return 0
 
