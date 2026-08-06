@@ -128,11 +128,9 @@ def test_unverified_profile_email_cannot_take_over_existing_account(
 ) -> None:
     monkeypatch.setattr(auth, "DB_PATH", tmp_path / "unverified-email.db")
     with auth._connect() as db:
-        cursor = db.execute(
-            """INSERT INTO users(
+        cursor = db.execute("""INSERT INTO users(
                    name,email,password_hash,provider,is_admin,created_at
-               ) VALUES ('Existing','victim@example.com',NULL,'password',0,'now')"""
-        )
+               ) VALUES ('Existing','victim@example.com',NULL,'password',0,'now')""")
         existing_id = int(cursor.lastrowid)
         db.commit()
 
