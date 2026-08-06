@@ -12,6 +12,8 @@ from email.message import EmailMessage
 
 from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 
+MAIL_FROM = "no-reply@amosclaud.com"
+
 
 class MailDeliveryError(RuntimeError):
     """Raised when Amosclaud cannot deliver a security message."""
@@ -29,7 +31,7 @@ def _security_sender() -> str:
         _setting("AMOSCLAUD_SECURITY_FROM")
         or _setting("MAIL_SMTP_FROM")
         or _setting("SMTP_FROM")
-        or "no-reply@amosclaud.com"
+        or MAIL_FROM
     )
     domain = sender.rsplit("@", 1)[-1].lower() if "@" in sender else ""
     if domain != "amosclaud.com" and not domain.endswith(".amosclaud.com"):
@@ -97,4 +99,4 @@ def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: i
         raise MailDeliveryError("Amosclaud could not deliver the security code") from exc
 
 
-__all__ = ["MailDeliveryError", "deliver_security_code"]
+__all__ = ["MAIL_FROM", "MailDeliveryError", "deliver_security_code"]
