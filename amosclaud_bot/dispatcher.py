@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from .private_data_approval import (
+from .approval_gate import (
     _find_approved_request,
     _is_sensitive_objective,
     handle_approval_event,
