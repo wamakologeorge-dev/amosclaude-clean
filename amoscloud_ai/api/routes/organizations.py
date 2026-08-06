@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.api.routes import organization_identity
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -167,3 +168,8 @@ def attach_repository(organization_id: int, body: RepositoryAttach, user: sqlite
         "repository_id": body.repository_id,
         "path": f"/organizations/{membership['slug']}/repositories/{repository['name']}",
     }
+
+
+# Flatten the organization identity routes into this router so FastAPI exposes
+# them as first-class operations under the application's /api/v1 prefix.
+router.routes.extend(organization_identity.router.routes)
