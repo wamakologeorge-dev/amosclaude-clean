@@ -59,7 +59,7 @@ def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down
     monkeypatch,
     tmp_path,
 ) -> None:
-    auth.DB_PATH = tmp_path / "owner-bootstrap.db"
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "owner-bootstrap.db")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
 
     def unavailable(_body):
@@ -98,7 +98,7 @@ def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down
 
 
 def test_unconfigured_email_never_receives_owner_fallback(monkeypatch, tmp_path) -> None:
-    auth.DB_PATH = tmp_path / "non-owner-bootstrap.db"
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "non-owner-bootstrap.db")
 
     def unavailable(_body):
         raise HTTPException(status_code=503, detail="mail unavailable")
