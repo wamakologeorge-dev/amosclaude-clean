@@ -55,7 +55,7 @@ def test_public_source_and_github_access_routes_precede_paid_platform() -> None:
     assert github_index < platform_index
     assert "location.replace('/auth/github')" in login
     assert "<form" not in login
-    assert "type=\"password\"" not in login
+    assert 'type="password"' not in login
 
 
 def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down(
