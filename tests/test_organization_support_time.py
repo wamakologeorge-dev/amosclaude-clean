@@ -8,13 +8,11 @@ from amoscloud_ai import agent_tokens, organization_support
 def _database() -> sqlite3.Connection:
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
-    db.execute(
-        """CREATE TABLE users (
+    db.execute("""CREATE TABLE users (
                id INTEGER PRIMARY KEY,
                email TEXT NOT NULL,
                is_admin INTEGER NOT NULL DEFAULT 0
-           )"""
-    )
+           )""")
     db.execute("INSERT INTO users(id,email,is_admin) VALUES (1,'builder@example.com',0)")
     db.commit()
     return db
