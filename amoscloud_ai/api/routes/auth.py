@@ -7,8 +7,6 @@ import hmac
 import os
 import secrets
 import smtplib
-
-from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -21,6 +19,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.admin_bootstrap import should_grant_admin
+from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

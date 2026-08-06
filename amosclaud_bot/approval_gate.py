@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 
 SENSITIVE_HINTS = (
     "leaked secret",
