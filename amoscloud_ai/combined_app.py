@@ -1,4 +1,4 @@
-"""Combined Amosclaud platform, GitHub access, paid tools, and remote MCP."""
+"""Combined Amosclaud platform, optional GitHub access, paid tools, and remote MCP."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from amosclaud_mcp.server import mcp as amosclaud_mcp
 from amoscloud_ai.api.routes import (
-    auth,
     github_access_gateway,
     owner_access_gateway,
     public_developer_tools,
@@ -46,9 +45,9 @@ EDITOR_ORIGINS = (
     "https://github.dev",
 )
 
-# GitHub account access, payments, support status, and public source must remain
-# reachable before hosted working time exists. Every other official API route is
-# treated as a working tool and is charged through the central support wallet.
+# Account access, payments, support status, and public source remain reachable
+# before hosted working time exists. Every other official API route is treated
+# as a hosted tool and is charged through the central support wallet.
 SUPPORT_EXEMPT_API_PREFIXES = (
     "/api/v1/auth",
     "/api/v1/account",
@@ -148,7 +147,7 @@ class HostedToolSupportASGI:
             await self._json_response(
                 send,
                 401,
-                {"detail": "Sign in with GitHub or provide a valid Amosclaud API key"},
+                {"detail": "Sign in to Amosclaud or provide a valid Amosclaud API key"},
                 extra_headers=[(b"www-authenticate", b"Bearer")],
             )
             return
@@ -220,7 +219,6 @@ async def lifespan(_app: FastAPI):
         yield
 
 
-# The production combined application is also the browser-editor gateway.
 platform_app.include_router(vscode_terminal.router, prefix="/api/v1")
 
 app = FastAPI(
@@ -239,16 +237,13 @@ app.add_middleware(
     expose_headers=["Mcp-Session-Id", "X-Amosclaud-Support-Seconds-Remaining"],
 )
 
-# Public source and organization support pages remain reachable without a
-# session. The old password page is replaced by the GitHub OAuth redirect.
+# Public source, support pages, and optional identity-provider routes are
+# registered before the mounted platform. They do not replace /login or the
+# normal email signup, email-code, and password-recovery routes.
 app.include_router(public_developer_tools.router)
 app.include_router(support_page_router)
 app.include_router(support_api_router, prefix="/api/v1")
 app.include_router(github_access_gateway.router)
-app.include_router(github_access_gateway.router, prefix="/api/v1")
-
-# Keep the separate owner-recovery callback, but register it after GitHub-only
-# access so its legacy email registration endpoint cannot become public again.
 app.include_router(owner_access_gateway.router)
 
 amosclaud_mcp.settings.streamable_http_path = "/"
