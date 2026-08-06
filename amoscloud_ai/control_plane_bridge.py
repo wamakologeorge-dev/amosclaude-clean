@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Mapping
 
 from amoscloud_ai.control_plane import (
@@ -109,6 +110,8 @@ def sign_task_record(
     runner_kind: str | None = None,
     sensitive_approved: bool = False,
     ttl_seconds: int = 300,
+    issued_at: datetime | None = None,
+    nonce: str | None = None,
 ) -> dict[str, Any]:
     """Create the executable authorization for one approved Amosclaud task."""
 
@@ -118,7 +121,23 @@ def sign_task_record(
             "only queued or atomically claimed tasks may receive an execution signature"
         )
 
+    task_account_id = task.get("user_id", task.get("account_id"))
+    if task_account_id is not None and str(task_account_id) != str(account_id):
+        raise ControlPlaneError("task belongs to a different developer account")
+
     target = execution_target_for_task(task, runner_kind=runner_kind)
+    repository = str(task.get("repository") or "").strip() or None
+    runner_id = str(task.get("runner_id") or "").strip() or None
+    if target in {ExecutionTarget.LOCAL_COMPUTER, ExecutionTarget.PRIVATE_SERVER}:
+        if status != "running":
+            raise ControlPlaneError(
+                "runner jobs must be atomically claimed before they are signed"
+            )
+        if not runner_id:
+            raise ControlPlaneError("runner jobs must be bound to a runner_id")
+    if target is ExecutionTarget.GITHUB_REPOSITORY and not repository:
+        raise ControlPlaneError("GitHub jobs must be bound to a repository")
+
     permissions = permissions_for_task(task)
     request = {
         "mode": str(task.get("mode") or ""),
@@ -135,8 +154,10 @@ def sign_task_record(
         objective=str(task.get("objective") or ""),
         permissions=permissions,
         request=request,
-        repository=str(task.get("repository") or "").strip() or None,
-        runner_id=str(task.get("runner_id") or "").strip() or None,
+        repository=repository,
+        runner_id=runner_id,
         sensitive_approved=sensitive_approved,
         ttl_seconds=ttl_seconds,
+        issued_at=issued_at,
+        nonce=nonce,
     )
