@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "name": "Amosclaud main ecosystem",
+  "root": ".Amosclaud/main",
+  "canonical_runtime": "amoscloud_ai.main:app",
+  "canonical_cli_package": "amoscloud_ai",
+  "completion_comment": ".Amosclaud/main clean_100%",
+  "required_paths": [
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "main.py",
+    "amoscloud_ai",
+    "amosclaud_mcp",
+    "amosclaud_bot",
+    "web",
+    "docs",
+    "scripts",
+    "tests",
+    ".github/workflows",
+    ".github/workflows/fast-pr-gate.yml"
+  ],
+  "subsystems": {
+    "platform_runtime": {
+      "path": "amoscloud_ai",
+      "purpose": "FastAPI services, accounts, agents, repositories, execution and platform APIs"
+    },
+    "model_context_protocol": {
+      "path": "amosclaud_mcp",
+      "purpose": "Standalone MCP server and open tool protocol integration"
+    },
+    "github_automation": {
+      "path": "amosclaud_bot",
+      "purpose": "GitHub events, repair callbacks and repository automation"
+    },
+    "developer_web": {
+      "path": "web",
+      "purpose": "Account, dashboard, terminal and developer-facing web experience"
+    },
+    "verification": {
+      "path": "tests",
+      "purpose": "Deterministic regression and ecosystem contract tests"
+    },
+    "delivery": {
+      "path": ".github/workflows",
+      "purpose": "Pinned CI, repair, security and deployment automation"
+    },
+    "documentation": {
+      "path": "docs",
+      "purpose": "Architecture, APIs, deployment and developer guidance"
+    }
+  },
+  "forbidden_root_files": [
+    ".DS_Store",
+    "Thumbs.db",
+    ".coverage",
+    "coverage.xml"
+  ],
+  "forbidden_root_globs": [
+    "*.tmp",
+    "*.temp",
+    "*.bak",
+    "*.orig",
+    "*.rej",
+    "*.swp",
+    "*.swo",
+    "*.pyc",
+    "*.pyo",
+    "*.log",
+    "*.zip",
+    "*.tar",
+    "*.tgz"
+  ],
+  "forbidden_root_directories": [
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "htmlcov",
+    "test-results",
+    "artifacts"
+  ]
+}
