@@ -3,6 +3,9 @@ name: Amosclaud Repair Control Plane
 on:
   workflow_run:
     workflows:
+      - Fast PR Gate
+      - Repository Behavior Automation
+      - Amosclaud Bot
       - Amosclaud CI
       - 🚀 Amosclaud AI - CI Pipeline
       - Build and Verify
@@ -227,25 +230,74 @@ jobs:
           set -e
           echo "requested=$([ "$status" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve sensitive pull request approval
+        if: steps.route.outputs.should_repair == 'true'
+        id: sensitive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python trusted/.github/scripts/amosclaud_pr_sensitive_approval.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --pull-request-number "${{ steps.route.outputs.pull_request_number }}" \
+            --token "$GITHUB_TOKEN"
+
+      - name: Pause sensitive repair until human approval
+        if: >-
+          steps.sensitive.outputs.sensitive_detected == 'true' &&
+          steps.sensitive.outputs.approved != 'true'
+        run: |
+          echo "Amosclaud-Fixer paused because this PR contains environment secrets or personal information."
+          echo "Sensitive files: ${{ steps.sensitive.outputs.sensitive_files }}"
+          echo "Approve the generated Amosclaud approval issue, then rerun the failed check."
+
       - name: Generate bounded repair candidate
         if: >-
           steps.route.outputs.should_repair == 'true' &&
-          steps.reproduce.outputs.reproduced == 'true'
+          steps.reproduce.outputs.reproduced == 'true' &&
+          (steps.sensitive.outputs.sensitive_detected != 'true' ||
+           steps.sensitive.outputs.approved == 'true')
         id: candidate
         env:
-          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
-          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL }}
+          AMOSCLAUD_GATEWAY_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_GATEWAY_API_URL: ${{ vars.AMOSCLAUD_API_URL }}
+          AMOSCLAUD_GATEWAY_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL }}
+          AMOSCLAUD_SENSITIVE_APPROVED: ${{ steps.sensitive.outputs.approved }}
           FAILURE_LOG: ${{ runner.temp }}/amosclaud-repair-failure.log
           PATCH_PATH: ${{ runner.temp }}/amosclaud-repair.patch
           CANDIDATE_REPORT: ${{ runner.temp }}/amosclaud-candidate-report.json
         run: |
           set +e
+          if [ -n "$OLLAMA_API_KEY" ]; then
+            export AMOSCLAUD_API_KEY="$OLLAMA_API_KEY"
+            export AMOSCLAUD_API_URL="${OLLAMA_URL:-https://ollama.com}"
+            export AMOSCLAUD_FIXER_MODEL="${OLLAMA_MODEL:-${AMOSCLAUD_MODEL:-gpt-oss:120b}}"
+            export AMOSCLAUD_REPAIR_PROVIDER="ollama-cloud"
+          else
+            export AMOSCLAUD_API_KEY="$AMOSCLAUD_GATEWAY_API_KEY"
+            export AMOSCLAUD_API_URL="${AMOSCLAUD_GATEWAY_API_URL:-https://www.amosclaud.com}"
+            export AMOSCLAUD_FIXER_MODEL="${AMOSCLAUD_GATEWAY_FIXER_MODEL:-amosclaud-agent}"
+            export AMOSCLAUD_REPAIR_PROVIDER="amosclaud-gateway"
+          fi
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          endpoint = os.environ.get("AMOSCLAUD_API_URL", "")
+          host = urlsplit(endpoint).netloc or "invalid"
+          print(f"Repair provider: {os.environ.get('AMOSCLAUD_REPAIR_PROVIDER', 'unknown')}")
+          print(f"Repair endpoint host: {host}")
+          print(f"Repair model: {os.environ.get('AMOSCLAUD_FIXER_MODEL', 'unknown')}")
+          PY
           mode=regular
           if [ "${{ steps.route.outputs.route }}" = "maintenance" ]; then
             mode=maintenance
           fi
-          python trusted/.github/scripts/amosclaud_repair_candidate.py \
+          python trusted/.github/scripts/amosclaud_repair_candidate_v2.py \
             --target target \
             --instructions-root trusted \
             --policy trusted/.amosclaud/repair-control-plane.json \
@@ -372,12 +424,24 @@ jobs:
           - Verification: credential-free adaptive pre-run passed
           - Force push: not used
 
-          Normal required checks and review still apply. Maintenance proposals require explicit owner approval.
+          Normal required checks and review still apply. Only environment-secret or personal-information changes require explicit human approval.
           EOF
             pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$BASE_REF" --head "$branch" --title "$title" --body-file "$body_file")"
             echo "publication=$pr_url" >> "$GITHUB_OUTPUT"
           fi
           echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Consume sensitive repair approval
+        if: >-
+          steps.publish.outputs.repair_sha != '' &&
+          steps.sensitive.outputs.approved == 'true' &&
+          steps.sensitive.outputs.approval_issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPROVAL_ISSUE: ${{ steps.sensitive.outputs.approval_issue_number }}
+        run: |
+          gh issue comment "$APPROVAL_ISSUE" --repo "$GITHUB_REPOSITORY" --body "<!-- amosclaud-approval-consumed -->
+          Approval consumed by verified repair commit ${{ steps.publish.outputs.repair_sha }}."
 
       - name: Mark incident as published
         if: steps.publish.outputs.repair_sha != ''
@@ -412,7 +476,9 @@ jobs:
           fi
           state=blocked
           message="No repair was published."
-          if [ "${{ steps.reproduce.outputs.reproduced }}" != "true" ]; then
+          if [ "${{ steps.sensitive.outputs.sensitive_detected }}" = "true" ] && [ "${{ steps.sensitive.outputs.approved }}" != "true" ]; then
+            message="Repair paused because environment-secret or personal-information content requires human approval."
+          elif [ "${{ steps.reproduce.outputs.reproduced }}" != "true" ]; then
             message="The reported failure could not be reproduced. Evidence was preserved; an external or intermittent provider failure is likely."
           elif [ "${{ steps.candidate.outputs.applied }}" != "true" ]; then
             message="Amosclaud did not produce a safe, applicable candidate. Evidence and rejected attempts were preserved."

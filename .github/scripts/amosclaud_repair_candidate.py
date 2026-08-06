@@ -338,7 +338,8 @@ def main() -> int:
             report = {
                 "status": "candidate_applied",
                 "mode": args.mode,
-                "provider": "amosclaud",
+                "provider": os.getenv("AMOSCLAUD_REPAIR_PROVIDER", "amosclaud").strip()
+                or "amosclaud",
                 "model": args.model,
                 "attempt": attempt,
                 "memory_consulted": True,
@@ -361,7 +362,8 @@ def main() -> int:
             {
                 "status": "failed",
                 "mode": args.mode,
-                "provider": "amosclaud",
+                "provider": os.getenv("AMOSCLAUD_REPAIR_PROVIDER", "amosclaud").strip()
+                or "amosclaud",
                 "model": args.model,
                 "memory_consulted": True,
                 "attempts": attempts,

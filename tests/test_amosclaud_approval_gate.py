@@ -3,15 +3,15 @@ from pathlib import Path
 from amosclaud_bot.approval_gate import (
     APPROVAL_CONSUMED_MARKER,
     APPROVAL_RECORD_MARKER,
-    AUTONOMOUS_REPAIR_MARKER,
     _approval_decision,
     _approval_source,
+    _normalize_objective,
+)
+from amosclaud_bot.approval_gate_v2 import (
     _high_risk_files,
     _is_authorized_autonomous_repair,
     _is_sensitive_objective,
-    _normalize_objective,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 APPROVAL_POLICY = ROOT / ".amosclaud" / "approvals.yml"
@@ -29,94 +29,70 @@ class ApprovalBot:
         return self.pages.get(page, [])
 
 
-def _autonomous_pr(
-    *,
-    head_ref: str = "amosclaud-background-engineer/abc12345-99",
-    head_repo: str = "owner/repo",
-    base_repo: str = "owner/repo",
-    body: str = AUTONOMOUS_REPAIR_MARKER,
-) -> dict[str, object]:
-    return {
-        "head": {"ref": head_ref, "repo": {"full_name": head_repo}},
-        "base": {"repo": {"full_name": base_repo}},
-        "body": body,
+def test_sensitive_fix_objective_detection() -> None:
+    assert _is_sensitive_objective("repair the .env production configuration")
+    assert _is_sensitive_objective("remove personal information from customer data")
+    assert _is_sensitive_objective("rotate a leaked API key")
+    assert not _is_sensitive_objective("fix the deployment workflow")
+    assert not _is_sensitive_objective("repair an authentication test")
+
+
+def test_high_risk_pull_request_paths_and_content() -> None:
+    files = [
+        {"filename": ".github/workflows/deploy.yml", "patch": "+name: Deploy"},
+        {"filename": "src/service.py", "patch": "+return fixed"},
+        {"filename": ".env.production", "patch": "+API_KEY=real-value"},
+        {
+            "filename": "data/customer.csv",
+            "patch": "+social security: 123-45-6789",
+        },
+    ]
+
+    assert _high_risk_files(files) == [
+        ".env.production",
+        "data/customer.csv",
+    ]
+
+
+def test_open_same_repository_and_fork_repairs_skip_separate_approval() -> None:
+    files = [{"filename": "src/service.py", "patch": "+return fixed"}]
+
+    assert _is_authorized_autonomous_repair(
+        {"state": "open", "head": {"repo": {"full_name": "owner/repo"}}},
+        files,
+    )
+    assert _is_authorized_autonomous_repair(
+        {"state": "open", "head": {"repo": {"full_name": "contributor/fork"}}},
+        files,
+    )
+
+
+def test_sensitive_repairs_still_require_approval() -> None:
+    pull_request = {
+        "state": "open",
+        "head": {"repo": {"full_name": "contributor/fork"}},
     }
 
-
-def test_sensitive_fix_objective_detection() -> None:
-    assert _is_sensitive_objective("update production deployment workflow")
-    assert _is_sensitive_objective("rotate authentication credential handling")
-    assert not _is_sensitive_objective("fix typo in README")
-
-
-def test_high_risk_pull_request_paths() -> None:
-    files = [
-        {"filename": ".github/workflows/deploy.yml"},
-        {"filename": "src/service.py"},
-        {"filename": "SECURITY.md"},
-    ]
-    assert _high_risk_files(files) == [".github/workflows/deploy.yml", "SECURITY.md"]
-
-
-def test_marked_bounded_autonomous_repair_skips_separate_approval() -> None:
-    pull_request = _autonomous_pr(
-        body=f"{AUTONOMOUS_REPAIR_MARKER}\nVerified repair evidence"
-    )
-    files = [
-        {"filename": "amoscloud_ai/api/routes/auth.py"},
-        {"filename": "tests/test_auth.py"},
-    ]
-
-    assert _is_authorized_autonomous_repair(pull_request, files)
-
-
-def test_autonomous_marker_cannot_bypass_protected_path_policy() -> None:
-    pull_request = _autonomous_pr()
-
     assert not _is_authorized_autonomous_repair(
         pull_request,
-        [{"filename": ".github/workflows/deploy.yml"}],
+        [{"filename": ".env.production", "patch": "+API_KEY=real-value"}],
     )
     assert not _is_authorized_autonomous_repair(
         pull_request,
-        [{"filename": ".amosclaud/approvals.yml"}],
-    )
-    assert not _is_authorized_autonomous_repair(
-        pull_request,
-        [{"filename": "AGENTS.md"}],
-    )
-    assert not _is_authorized_autonomous_repair(
-        _autonomous_pr(head_ref="feature/not-autonomous"),
-        [{"filename": "src/service.py"}],
+        [{"filename": "data/pii/customers.csv", "patch": "+name,address"}],
     )
 
 
-def test_fork_and_protected_rename_cannot_forge_autonomous_authorization() -> None:
-    assert not _is_authorized_autonomous_repair(
-        _autonomous_pr(head_repo="attacker/repo"),
-        [{"filename": "src/service.py"}],
-    )
-    assert not _is_authorized_autonomous_repair(
-        _autonomous_pr(),
-        [
-            {
-                "filename": "docs/renamed-policy.md",
-                "previous_filename": "AGENTS.md",
-            }
-        ],
-    )
-
-
-def test_repository_policy_records_the_same_bounded_authorization() -> None:
+def test_repository_policy_records_sensitive_only_authorization() -> None:
     policy = APPROVAL_POLICY.read_text(encoding="utf-8")
 
-    assert "authorized_autonomous_repairs:" in policy
-    assert 'branch_prefix: "amosclaud-background-engineer/"' in policy
-    assert AUTONOMOUS_REPAIR_MARKER in policy
-    assert "direct_default_branch_writes: false" in policy
-    assert '"AGENTS.md"' in policy
-    assert '".amosclaud/**"' in policy
-    assert '".github/**"' in policy
+    assert "all_open_pull_requests: true" in policy
+    assert "fork_pull_requests: repair_via_verified_base_repository_branch" in policy
+    assert "ordinary_code_repairs: false" in policy
+    assert "workflow_or_infrastructure_repairs: false" in policy
+    assert '".env.*"' in policy
+    assert '"**/personal_information.*"' in policy
+    assert "force_push: false" in policy
 
 
 def test_approval_source_is_bound_to_exact_normalized_objective() -> None:
@@ -167,10 +143,7 @@ def test_consumed_marker_on_later_page_wins() -> None:
             "body": f"{APPROVAL_RECORD_MARKER}\n**Decision:** **APPROVED**",
             "user": {"login": "github-actions[bot]", "type": "Bot"},
         }
-    ] + [
-        {"body": "noise", "user": {"login": "someone", "type": "User"}}
-        for _ in range(99)
-    ]
+    ] + [{"body": "noise", "user": {"login": "someone", "type": "User"}} for _ in range(99)]
     bot = ApprovalBot(
         {
             1: first_page,
