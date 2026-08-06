@@ -26,10 +26,7 @@ def test_configured_repository_owner_is_the_default_root_identity(monkeypatch) -
         admin_bootstrap.configured_admin_github_repository()
         == "wamakologeorge-dev/amosclaude-clean"
     )
-    assert (
-        admin_bootstrap.configured_admin_github_email()
-        == "wamakologeorge@gmail.com"
-    )
+    assert admin_bootstrap.configured_admin_github_email() == "wamakologeorge@gmail.com"
 
 
 def test_unknown_github_identity_never_receives_root_access() -> None:
@@ -90,12 +87,8 @@ def test_production_example_documents_exact_oauth_callback() -> None:
     example = _read(".env.production.example")
 
     assert (
-        "GITHUB_ADMIN_CALLBACK_URL=https://www.amosclaud.com/"
-        "api/v1/auth/github/admin-callback"
+        "GITHUB_ADMIN_CALLBACK_URL=https://www.amosclaud.com/" "api/v1/auth/github/admin-callback"
     ) in example
     assert "AMOSCLAUD_ADMIN_GITHUB_IDS=271083488" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_LOGINS=wamakologeorge-dev" in example
-    assert (
-        "AMOSCLAUD_ADMIN_GITHUB_REPOSITORY="
-        "wamakologeorge-dev/amosclaude-clean"
-    ) in example
+    assert ("AMOSCLAUD_ADMIN_GITHUB_REPOSITORY=" "wamakologeorge-dev/amosclaude-clean") in example
