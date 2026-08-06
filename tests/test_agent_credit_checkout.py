@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -133,14 +132,19 @@ def test_checkout_rejects_an_amount_that_does_not_match_pack(monkeypatch):
         )
 
 
-def test_checkout_requires_webhook_before_opening_stripe(monkeypatch):
+def test_public_stripe_checkout_is_disabled(monkeypatch):
     _clear_stripe_environment(monkeypatch)
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_safe")
     monkeypatch.setenv("STRIPE_AGENT_STARTER_PRICE_ID", "price_starter")
     monkeypatch.setattr(
         provider_api,
         "_user",
-        lambda _token: {"id": 1, "email": "owner@example.com"},
+        lambda _token: {
+            "id": 1,
+            "email": "owner@example.com",
+            "is_admin": 0,
+        },
     )
 
     with pytest.raises(HTTPException) as caught:
@@ -149,54 +153,29 @@ def test_checkout_requires_webhook_before_opening_stripe(monkeypatch):
             amos_session="session",
         )
 
-    assert caught.value.status_code == 503
-    assert "STRIPE_WEBHOOK_SECRET" in str(caught.value.detail)
+    assert caught.value.status_code == 410
+    assert "Cash App or Bitcoin" in str(caught.value.detail)
 
 
-def test_checkout_redirects_to_hosted_stripe_and_returns_to_api_access(monkeypatch):
-    _clear_stripe_environment(monkeypatch)
-    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_safe")
-    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_safe")
-    monkeypatch.setenv("STRIPE_AGENT_STARTER_PRICE_ID", "price_starter")
-    monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://www.amosclaud.com")
+def test_stripe_checkout_status_is_disabled(monkeypatch):
     monkeypatch.setattr(
         provider_api,
         "_user",
-        lambda _token: {"id": 1, "email": "owner@example.com"},
+        lambda _token: {
+            "id": 1,
+            "email": "owner@example.com",
+            "is_admin": 0,
+        },
     )
-    monkeypatch.setattr(
-        provider_api,
-        "_stripe_customer_id",
-        lambda _user: "cus_amosclaud",
-    )
-    captured: dict[str, object] = {}
 
-    def create_session(**parameters):
-        captured.update(parameters)
-        return SimpleNamespace(
-            id="cs_test_checkout",
-            url="https://checkout.stripe.com/c/pay/cs_test_checkout",
+    with pytest.raises(HTTPException) as caught:
+        provider_api.token_checkout_status(
+            "cs_test_checkout",
+            amos_session="session",
         )
 
-    monkeypatch.setattr(
-        provider_api.stripe.checkout.Session,
-        "create",
-        create_session,
-    )
-
-    result = provider_api.token_checkout(
-        provider_api.TokenCheckout(pack="starter"),
-        amos_session="session",
-    )
-
-    assert result["url"].startswith("https://checkout.stripe.com/")
-    assert captured["customer"] == "cus_amosclaud"
-    assert captured["line_items"] == [{"price": "price_starter", "quantity": 1}]
-    assert captured["success_url"] == (
-        "https://www.amosclaud.com/api-access?checkout=success" "&session_id={CHECKOUT_SESSION_ID}"
-    )
-    assert captured["cancel_url"] == ("https://www.amosclaud.com/api-access?checkout=cancelled")
-    assert "payment_method_types" not in captured
+    assert caught.value.status_code == 410
+    assert "manual verification" in str(caught.value.detail)
 
 
 def test_mobile_page_uses_cash_app_and_bitcoin_for_agent_credit_payments():

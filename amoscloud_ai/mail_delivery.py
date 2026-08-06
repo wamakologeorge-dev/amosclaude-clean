@@ -1,8 +1,9 @@
 """Central outbound mail delivery for Amosclaud account security.
 
-All authentication and recovery messages use an @amosclaud.com sender. SMTP
+Authentication and recovery messages use an Amosclaud-owned sender. SMTP
 credentials remain environment-only and are never written to logs or storage.
 """
+
 from __future__ import annotations
 
 import os
@@ -10,6 +11,8 @@ import smtplib
 from email.message import EmailMessage
 
 from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
+
+MAIL_FROM = "no-reply@amosclaud.com"
 
 
 class MailDeliveryError(RuntimeError):
@@ -23,8 +26,24 @@ def _setting(primary: str, fallback: str | None = None, default: str = "") -> st
     return (value if value is not None else default).strip()
 
 
+def _security_sender() -> str:
+    sender = (
+        _setting("AMOSCLAUD_SECURITY_FROM")
+        or _setting("MAIL_SMTP_FROM")
+        or _setting("SMTP_FROM")
+        or MAIL_FROM
+    )
+    domain = sender.rsplit("@", 1)[-1].lower() if "@" in sender else ""
+    if domain != "amosclaud.com" and not domain.endswith(".amosclaud.com"):
+        raise MailDeliveryError(
+            "The security email sender must use amosclaud.com or an Amosclaud subdomain"
+        )
+    return sender
+
+
 def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: int = 15) -> None:
-    """Deliver a one-time account-security code through Amosclaud SMTP."""
+    """Deliver a one-time account-security code through HTTPS mail or SMTP."""
+
     host = _setting("MAIL_SMTP_HOST", "SMTP_HOST")
     if not host and not http_mail_configured():
         raise MailDeliveryError("Amosclaud email delivery is not configured")
@@ -32,10 +51,13 @@ def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: i
     port = int(_setting("MAIL_SMTP_PORT", "SMTP_PORT", "587"))
     username = _setting("MAIL_SMTP_USERNAME", "SMTP_USERNAME")
     password = _setting("MAIL_SMTP_PASSWORD", "SMTP_PASSWORD")
-    use_tls = _setting("MAIL_SMTP_TLS", "SMTP_TLS", "true").lower() in {"1", "true", "yes", "on"}
-    sender = _setting("AMOSCLAUD_SECURITY_FROM", "MAIL_SMTP_FROM", "no-reply@amosclaud.com")
-    if not sender.lower().endswith("@amosclaud.com"):
-        raise MailDeliveryError("AMOSCLAUD_SECURITY_FROM must use the @amosclaud.com domain")
+    use_tls = _setting("MAIL_SMTP_TLS", "SMTP_TLS", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    sender = _security_sender()
 
     messages = {
         "recovery-email": ("Verify your Amosclaud recovery email", "verify your recovery email"),
@@ -64,7 +86,7 @@ def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: i
         except HttpMailError as exc:
             if not host:
                 raise MailDeliveryError("Amosclaud could not deliver the security code") from exc
-            # fall back to SMTP below when it is configured
+            # Fall back to SMTP when both transports are configured.
 
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
@@ -77,4 +99,4 @@ def deliver_security_code(recipient: str, code: str, purpose: str, *, minutes: i
         raise MailDeliveryError("Amosclaud could not deliver the security code") from exc
 
 
-__all__ = ["MailDeliveryError", "deliver_security_code"]
+__all__ = ["MAIL_FROM", "MailDeliveryError", "deliver_security_code"]

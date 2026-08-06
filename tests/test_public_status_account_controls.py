@@ -47,12 +47,19 @@ def test_account_page_requires_session_and_exposes_self_service_controls() -> No
     assert "method: 'DELETE'" in script
 
 
-def test_login_offers_public_status_and_promotes_new_sessions() -> None:
+def test_login_exposes_accounts_and_github_remains_optional() -> None:
     login = _read("web/login.html")
-    bridge = _read("web/session-cookie-bridge.js")
+    github_access = _read("amoscloud_ai/api/routes/github_access_gateway.py")
 
-    assert 'href="/status"' in login
-    assert "/static/session-cookie-bridge.js" in login
-    assert "/api/v1/auth/login" in bridge
-    assert "/api/v1/auth/register/verify" in bridge
-    assert "/api/v1/account/share-session" in bridge
+    assert "<form" in login
+    assert 'type="password"' in login
+    assert "/static/account-access.js" in login
+    assert "location.replace('/auth/github')" not in login
+    assert "Create account" in login
+    assert "Email me a sign-in code" in login
+    assert "Forgot password?" in login
+    assert '@router.get("/auth/github"' in github_access
+    assert '@router.get("/auth/github/callback"' in github_access
+    assert '"optional": True' in github_access
+    assert "auth._set_session_cookie(response, token)" in github_access
+    assert "_find_or_create_github_user" in github_access
