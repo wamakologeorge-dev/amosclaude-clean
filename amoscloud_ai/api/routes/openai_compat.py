@@ -148,9 +148,7 @@ def _generate_reply(model: str, messages: list[dict[str, str]]) -> str:
         return text
 
     system = "\n".join(
-        message["content"]
-        for message in messages
-        if message["role"] in {"system", "developer"}
+        message["content"] for message in messages if message["role"] in {"system", "developer"}
     )
     system = system or "You are Amosclaud, a professional engineering agent."
     history = [
