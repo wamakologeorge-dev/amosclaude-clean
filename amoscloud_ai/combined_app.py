@@ -18,7 +18,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from amosclaud_mcp.server import mcp as amosclaud_mcp
-from amoscloud_ai.api.routes import vscode_terminal
+from amoscloud_ai.api.routes import auth, owner_access_gateway, vscode_terminal
+from amoscloud_ai.auth_mail_bridge import install_auth_mail_delivery
 from amoscloud_ai.main import app as platform_app
 
 ASGIApp = Callable[
@@ -30,6 +31,12 @@ EDITOR_ORIGINS = (
     "https://insiders.vscode.dev",
     "https://github.dev",
 )
+
+# The production application historically used an older SMTP-only sender inside
+# the account router. Replace that private hook before the first request so
+# registration, email-code login, and password recovery all use the central
+# HTTPS-or-SMTP mail transport.
+install_auth_mail_delivery(auth)
 
 
 def expected_mcp_access_key() -> str | None:
@@ -139,6 +146,11 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Mcp-Session-Id", "MCP-Protocol-Version"],
     expose_headers=["Mcp-Session-Id"],
 )
+
+# These owner routes must be registered before the catch-all platform mount.
+# They preserve normal email verification and add only a bounded first-owner
+# fallback plus the existing GitHub-verified owner recovery flow.
+app.include_router(owner_access_gateway.router)
 
 amosclaud_mcp.settings.streamable_http_path = "/"
 app.mount("/mcp", BearerProtectedASGI(amosclaud_mcp.streamable_http_app()), name="amosclaud-mcp")
