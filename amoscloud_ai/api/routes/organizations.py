@@ -36,8 +36,7 @@ def _db() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS organizations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -63,8 +62,7 @@ def _db() -> sqlite3.Connection:
             FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
             FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     db.commit()
     return db
 
@@ -90,14 +88,22 @@ def _membership(db: sqlite3.Connection, organization_id: int, user_id: int) -> s
 
 def _require_admin(row: sqlite3.Row) -> None:
     if row["role"] not in {"owner", "admin"}:
-        raise HTTPException(status_code=403, detail="Organization administrator access required")
+        raise HTTPException(
+            status_code=403,
+            detail="Organization administrator access required",
+        )
 
 
 @router.post("", status_code=201)
-def create_organization(body: OrganizationCreate, user: sqlite3.Row = Depends(_current_user)) -> dict:
+def create_organization(
+    body: OrganizationCreate, user: sqlite3.Row = Depends(_current_user)
+) -> dict:
     slug = body.slug.strip().lower()
     if not _SLUG_RE.fullmatch(slug):
-        raise HTTPException(status_code=422, detail="Use lowercase letters, numbers, and hyphens for the organization path")
+        raise HTTPException(
+            status_code=422,
+            detail="Use lowercase letters, numbers, and hyphens for the organization path",
+        )
     now = datetime.now(timezone.utc).isoformat()
     with _db() as db:
         try:
@@ -112,8 +118,16 @@ def create_organization(body: OrganizationCreate, user: sqlite3.Row = Depends(_c
             )
             db.commit()
         except sqlite3.IntegrityError as exc:
-            raise HTTPException(status_code=409, detail="Organization path is already taken") from exc
-    return {"id": organization_id, "name": body.name.strip(), "slug": slug, "role": "owner", "path": f"/organizations/{slug}"}
+            raise HTTPException(
+                status_code=409, detail="Organization path is already taken"
+            ) from exc
+    return {
+        "id": organization_id,
+        "name": body.name.strip(),
+        "slug": slug,
+        "role": "owner",
+        "path": f"/organizations/{slug}",
+    }
 
 
 @router.get("")
@@ -129,40 +143,74 @@ def list_organizations(user: sqlite3.Row = Depends(_current_user)) -> list[dict]
 
 
 @router.post("/{organization_id}/members", status_code=201)
-def add_member(organization_id: int, body: OrganizationMemberAdd, user: sqlite3.Row = Depends(_current_user)) -> dict:
+def add_member(
+    organization_id: int,
+    body: OrganizationMemberAdd,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
     with _db() as db:
         membership = _membership(db, organization_id, user["id"])
         _require_admin(membership)
-        member = db.execute("SELECT id,name,email FROM users WHERE email=?", (body.email.strip().lower(),)).fetchone()
+        member = db.execute(
+            "SELECT id,name,email FROM users WHERE email=?",
+            (body.email.strip().lower(),),
+        ).fetchone()
         if not member:
             raise HTTPException(status_code=404, detail="User not found")
         db.execute(
             """INSERT INTO organization_members(organization_id,user_id,role,created_at)
                VALUES (?,?,?,?) ON CONFLICT(organization_id,user_id) DO UPDATE SET role=excluded.role""",
-            (organization_id, member["id"], body.role, datetime.now(timezone.utc).isoformat()),
+            (
+                organization_id,
+                member["id"],
+                body.role,
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         db.commit()
-    return {"user_id": member["id"], "name": member["name"], "email": member["email"], "role": body.role}
+    return {
+        "user_id": member["id"],
+        "name": member["name"],
+        "email": member["email"],
+        "role": body.role,
+    }
 
 
 @router.post("/{organization_id}/repositories", status_code=201)
-def attach_repository(organization_id: int, body: RepositoryAttach, user: sqlite3.Row = Depends(_current_user)) -> dict:
+def attach_repository(
+    organization_id: int,
+    body: RepositoryAttach,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
     with _db() as db:
         membership = _membership(db, organization_id, user["id"])
         _require_admin(membership)
-        repository = db.execute("SELECT id,name,owner_id FROM repositories WHERE id=?", (body.repository_id,)).fetchone()
+        repository = db.execute(
+            "SELECT id,name,owner_id FROM repositories WHERE id=?",
+            (body.repository_id,),
+        ).fetchone()
         if not repository:
             raise HTTPException(status_code=404, detail="Repository not found")
         if repository["owner_id"] != user["id"] and membership["role"] != "owner":
-            raise HTTPException(status_code=403, detail="Only the repository owner can move it into an organization")
+            raise HTTPException(
+                status_code=403,
+                detail="Only the repository owner can move it into an organization",
+            )
         try:
             db.execute(
                 "INSERT INTO organization_repositories(organization_id,repository_id,created_at) VALUES (?,?,?)",
-                (organization_id, body.repository_id, datetime.now(timezone.utc).isoformat()),
+                (
+                    organization_id,
+                    body.repository_id,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
             db.commit()
         except sqlite3.IntegrityError as exc:
-            raise HTTPException(status_code=409, detail="Repository already belongs to an organization") from exc
+            raise HTTPException(
+                status_code=409,
+                detail="Repository already belongs to an organization",
+            ) from exc
     return {
         "organization_id": organization_id,
         "repository_id": body.repository_id,
