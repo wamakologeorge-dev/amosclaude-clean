@@ -193,9 +193,7 @@ def test_mobile_page_uses_cash_app_and_bitcoin_for_agent_credit_payments():
 
 
 def test_billing_webhook_handles_delayed_bank_payment_success():
-    billing = (ROOT / "amoscloud_ai" / "api" / "routes" / "billing.py").read_text(
-        encoding="utf-8"
-    )
+    billing = (ROOT / "amoscloud_ai" / "api" / "routes" / "billing.py").read_text(encoding="utf-8")
 
     assert "checkout.session.async_payment_succeeded" in billing
     assert "settle_paid_checkout(db, obj)" in billing
