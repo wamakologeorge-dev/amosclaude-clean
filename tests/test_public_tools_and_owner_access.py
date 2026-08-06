@@ -57,6 +57,8 @@ def test_public_account_and_github_routes_precede_paid_platform() -> None:
     assert "<form" in login
     assert 'type="password"' in login
     assert "/static/account-access.js" in login
+    assert 'href="/auth/github/admin-login"' in login
+    assert "Sign in directly as platform owner" in login
 
 
 def test_mail_failure_never_creates_an_unverified_account(monkeypatch, tmp_path) -> None:
@@ -85,8 +87,12 @@ def test_owner_recovery_is_separate_from_public_registration() -> None:
     owner_gateway = (ROOT / "amoscloud_ai/api/routes/owner_access_gateway.py").read_text(
         encoding="utf-8"
     )
+    owner_bootstrap = (ROOT / "amoscloud_ai/api/routes/owner_bootstrap.py").read_text(
+        encoding="utf-8"
+    )
 
     assert '@router.get("/github/admin-login"' in owner_gateway
     assert '@router.get("/github/admin-callback"' in owner_gateway
     assert "request_registration_or_owner_bootstrap" not in owner_gateway
     assert "RegisterCodeRequest" not in owner_gateway
+    assert 'RedirectResponse("/admin?github=owner"' in owner_bootstrap
