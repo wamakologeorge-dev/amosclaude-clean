@@ -27,32 +27,33 @@ def _request(path: str = "/api/v1/open-source/tools") -> Request:
     )
 
 
-def test_open_source_tool_catalog_requires_no_account() -> None:
+def test_public_catalog_exposes_source_but_not_free_official_execution() -> None:
     payload = public_developer_tools.open_source_tools(_request())
 
-    assert payload["access"] == "public"
+    assert payload["access"] == "public_source_only"
     assert payload["account_required"] is False
     assert payload["source_repository"].endswith("/amosclaude-clean")
-    assert all(tool["account_required"] is False for tool in payload["tools"])
-    assert {tool["id"] for tool in payload["tools"]} >= {
+    assert all(resource["account_required"] is False for resource in payload["public_resources"])
+    assert {resource["id"] for resource in payload["public_resources"]} == {
         "source",
-        "linux-server",
-        "vscode",
-        "ide-cli",
-        "mcp",
+        "documentation",
+        "license",
     }
-    assert payload["paid_amosclaud_features"]["account_required"] is True
+    assert payload["official_tools"]["account_required"] is True
+    assert payload["official_tools"]["verified_support_time_required"] is True
+    assert payload["official_tools"]["support_url"].endswith("/organization-support")
 
 
-def test_public_developer_routes_are_mounted_before_the_platform() -> None:
+def test_public_source_routes_are_mounted_before_the_paid_platform() -> None:
     combined = (ROOT / "amoscloud_ai/combined_app.py").read_text(encoding="utf-8")
     login = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     public_index = combined.index("app.include_router(public_developer_tools.router)")
-    platform_index = combined.index('app.mount("/", platform_app')
+    platform_index = combined.index('app.mount("/", HostedToolSupportASGI(platform_app)')
     assert public_index < platform_index
     assert 'href="/developer-tools"' in login
-    assert "Continue without an account" in login
+    assert "View public source and documentation" in login
+    assert 'href="/organization-support"' in login
 
 
 def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down(
