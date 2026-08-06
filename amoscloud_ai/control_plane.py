@@ -8,6 +8,7 @@ or GitHub execution adapter verify the job before touching developer resources.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 import secrets
@@ -97,7 +98,7 @@ def _decode(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     try:
         return base64.urlsafe_b64decode(value + padding)
-    except (TypeError, ValueError) as exc:
+    except (binascii.Error, TypeError, ValueError) as exc:
         raise SignatureVerificationError("invalid base64 value") from exc
 
 
@@ -132,6 +133,8 @@ def _permissions(
     *,
     sensitive_approved: bool,
 ) -> tuple[str, ...]:
+    if isinstance(values, (str, bytes)):
+        raise PermissionDeniedError("job permissions must be a list of capability names")
     normalized = tuple(sorted({str(value).strip() for value in values if str(value).strip()}))
     unknown = set(normalized).difference(KNOWN_JOB_PERMISSIONS)
     if unknown:
@@ -356,8 +359,11 @@ def verify_authorized_job(
     if authorization.get("request_sha256") != _request_digest(request):
         raise SignatureVerificationError("job request digest does not match its contents")
 
+    permissions = authorization.get("permissions")
+    if not isinstance(permissions, Sequence):
+        raise SignatureVerificationError("job permissions must be a list")
     _permissions(
-        authorization.get("permissions", []),
+        permissions,
         sensitive_approved=bool(authorization.get("sensitive_approved")),
     )
     return dict(authorization)
