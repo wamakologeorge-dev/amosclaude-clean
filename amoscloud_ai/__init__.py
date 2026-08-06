@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dotenv import load_dotenv
 
+from .domain_policy import enforce_platform_domain_policy
 from .repository_control import initialize_repository_control
 
 # Repository-local control configuration must load before the ordinary root
@@ -11,6 +12,7 @@ from .repository_control import initialize_repository_control
 # executed during package import.
 REPOSITORY_CONTROL = initialize_repository_control()
 load_dotenv(override=False)
+enforce_platform_domain_policy()
 
 PRODUCT_NAME = "Amosclaud"
 RUNTIME_NAME = "Amosclaud Autonomous"
