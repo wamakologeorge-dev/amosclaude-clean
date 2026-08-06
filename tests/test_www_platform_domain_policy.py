@@ -80,6 +80,5 @@ def test_production_example_keeps_the_apex_platform_separate() -> None:
     assert "AMOSCLAUD_PUBLIC_URL=https://www.amosclaud.com" in production
     assert "AUTH_COOKIE_DOMAIN=\n" in production
     assert (
-        "GITHUB_REPOSITORY_CALLBACK_URL="
-        "https://www.amosclaud.com/api/v1/github/callback"
+        "GITHUB_REPOSITORY_CALLBACK_URL=" "https://www.amosclaud.com/api/v1/github/callback"
     ) in production
