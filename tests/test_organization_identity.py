@@ -101,9 +101,9 @@ def test_organization_signup_shows_only_the_fields_needed_for_each_mode() -> Non
     assert 'id="organization-name-field" hidden' in page
     assert 'id="access-code-field" hidden' in page
     assert 'id="recovery-code-field" hidden' in page
-    assert "data-mode=\"register\"" in page
-    assert "data-mode=\"join\"" in page
-    assert "data-mode=\"recover\"" in page
+    assert 'data-mode="register"' in page
+    assert 'data-mode="join"' in page
+    assert 'data-mode="recover"' in page
     assert "/api/v1/organization-access/register" in script
     assert "[hidden], .hidden { display: none !important; }" in login_css
     assert "[hidden] { display: none !important; }" in legacy_css
