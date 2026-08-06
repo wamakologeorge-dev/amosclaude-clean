@@ -76,7 +76,7 @@
     <section class="panel owner-panel" aria-labelledby="owner-title">
       <p class="eyebrow">Organization owner and admin controls</p>
       <h2 id="owner-title">Manage organization access</h2>
-      <p class="muted">You must already be signed in as the organization owner or an authorized admin. Owners can create temporary access codes, remove memberships, and change the public organization ID.</p>
+      <p class="muted">You must already be signed in as the organization owner or an authorized admin. Owners can create temporary access codes, remove memberships, transfer ownership, and change the public organization ID.</p>
       <form id="owner-form" class="stack" novalidate>
         <label>Organization ID
           <input id="owner-organization-id" inputmode="numeric" pattern="[0-9]{5}" minlength="5" maxlength="5" placeholder="11111" required>
@@ -85,6 +85,7 @@
           <select id="owner-action">
             <option value="join-code">Create temporary access code</option>
             <option value="remove-member">Remove organization member</option>
+            <option value="transfer-ownership">Transfer organization ownership</option>
             <option value="change-id">Change organization ID</option>
           </select>
         </label>
@@ -117,6 +118,7 @@
         <li>Temporary access codes are hashed, expire, and have a limited number of uses.</li>
         <li>Recovery codes are generated randomly, shown once, hashed in storage, and invalidated after use.</li>
         <li>Removing a member revokes that membership and ends the member's active Amosclaud sessions, but does not expose their password or recovery codes.</li>
+        <li>The final owner must transfer ownership to another active member before leaving the organization.</li>
       </ul>
     </section>
   </main>
