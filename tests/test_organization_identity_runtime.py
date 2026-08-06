@@ -149,9 +149,7 @@ def test_owner_removes_member_and_member_cannot_sign_in(isolated_identity_db) ->
     assert removal_response.status_code == 204
 
     with organization_identity._db() as db:
-        disabled = db.execute(
-            "SELECT password_hash FROM users WHERE name='sameG'"
-        ).fetchone()
+        disabled = db.execute("SELECT password_hash FROM users WHERE name='sameG'").fetchone()
     assert disabled is not None
     assert disabled["password_hash"] is None
 
@@ -203,9 +201,7 @@ def test_owner_can_transfer_ownership_before_leaving(isolated_identity_db) -> No
     assert roles[joined["username"]] == "owner"
 
 
-def test_backfill_runs_only_for_unapplied_schema_version(
-    isolated_identity_db, monkeypatch
-) -> None:
+def test_backfill_runs_only_for_unapplied_schema_version(isolated_identity_db, monkeypatch) -> None:
     calls = 0
     original = organization_identity._backfill
 
