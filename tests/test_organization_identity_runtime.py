@@ -189,10 +189,8 @@ def test_owner_can_transfer_ownership_before_leaving(isolated_identity_db) -> No
     with organization_identity._db() as db:
         roles = {
             row["username"]: row["role"]
-            for row in db.execute(
-                """SELECT username,role FROM organization_members
-                   ORDER BY username"""
-            ).fetchall()
+            for row in db.execute("""SELECT username,role FROM organization_members
+                   ORDER BY username""").fetchall()
         }
     assert roles[owner["username"]] == "admin"
     assert roles[joined["username"]] == "owner"
