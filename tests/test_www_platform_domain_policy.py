@@ -7,6 +7,7 @@ from amoscloud_ai.domain_policy import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_CALLBACK = "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
 
 
 def test_apex_configuration_is_normalised_to_the_www_platform(monkeypatch) -> None:
@@ -24,14 +25,8 @@ def test_apex_configuration_is_normalised_to_the_www_platform(monkeypatch) -> No
     enforce_platform_domain_policy()
 
     assert os.environ["AMOSCLAUD_PUBLIC_URL"] == WWW_PLATFORM_URL
-    assert (
-        os.environ["GITHUB_ADMIN_CALLBACK_URL"]
-        == "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
-    )
-    assert (
-        os.environ["GITHUB_REPOSITORY_CALLBACK_URL"]
-        == "https://www.amosclaud.com/api/v1/github/callback"
-    )
+    assert os.environ["GITHUB_ADMIN_CALLBACK_URL"] == CANONICAL_CALLBACK
+    assert os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] == CANONICAL_CALLBACK
     assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
@@ -44,7 +39,7 @@ def test_www_configuration_uses_host_only_session_cookies(monkeypatch) -> None:
     assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
-def test_custom_self_hosted_domain_is_preserved(monkeypatch) -> None:
+def test_custom_self_hosted_domain_uses_one_callback(monkeypatch) -> None:
     monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://amos.example.net")
     monkeypatch.setenv("AUTH_COOKIE_DOMAIN", ".example.net")
     monkeypatch.delenv("GITHUB_ADMIN_CALLBACK_URL", raising=False)
@@ -52,16 +47,11 @@ def test_custom_self_hosted_domain_is_preserved(monkeypatch) -> None:
 
     enforce_platform_domain_policy()
 
+    expected = "https://amos.example.net/api/v1/auth/github/admin-callback"
     assert os.environ["AMOSCLAUD_PUBLIC_URL"] == "https://amos.example.net"
     assert os.environ["AUTH_COOKIE_DOMAIN"] == ".example.net"
-    assert (
-        os.environ["GITHUB_ADMIN_CALLBACK_URL"]
-        == "https://amos.example.net/api/v1/auth/github/admin-callback"
-    )
-    assert (
-        os.environ["GITHUB_REPOSITORY_CALLBACK_URL"]
-        == "https://amos.example.net/api/v1/github/callback"
-    )
+    assert os.environ["GITHUB_ADMIN_CALLBACK_URL"] == expected
+    assert os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] == expected
 
 
 def test_startup_applies_domain_policy_after_loading_dotenv() -> None:
@@ -79,6 +69,5 @@ def test_production_example_keeps_the_apex_platform_separate() -> None:
     assert "APEX_DOMAIN=\n" in production
     assert "AMOSCLAUD_PUBLIC_URL=https://www.amosclaud.com" in production
     assert "AUTH_COOKIE_DOMAIN=\n" in production
-    assert (
-        "GITHUB_REPOSITORY_CALLBACK_URL=" "https://www.amosclaud.com/api/v1/github/callback"
-    ) in production
+    assert f"GITHUB_ADMIN_CALLBACK_URL={CANONICAL_CALLBACK}" in production
+    assert f"GITHUB_REPOSITORY_CALLBACK_URL={CANONICAL_CALLBACK}" in production
