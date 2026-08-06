@@ -15,13 +15,13 @@ from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
 
 SENSITIVE_OBJECTIVE_HINTS = (
     ".env",
-    "environment variable",
-    "secret",
-    "credential",
-    "password",
+    "environment file",
+    "environment secret",
+    "leaked secret",
+    "exposed secret",
+    "actual api key",
+    "rotate api key",
     "private key",
-    "access token",
-    "api key",
     "personal information",
     "personally identifiable",
     "pii",
@@ -66,9 +66,16 @@ STRONG_PERSONAL_DATA_PATTERNS = (
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 )
 
-SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|"
-    r"credential)\b\s*[:=]\s*['\"]?([^'\"\s#]+)"
+LIVE_SECRET_PATTERNS = (
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bamos_(?:svc|agent|auto)_[A-Za-z0-9_-]{16,}\b"),
+)
+
+QUOTED_SECRET_ASSIGNMENT = re.compile(
+    r'''(?ix)["']?(?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|'''
+    r'''credential)["']?\s*[:=]\s*(["'])([^"'\n]{8,})\1'''
 )
 
 SAFE_PLACEHOLDER_VALUES = (
@@ -81,10 +88,17 @@ SAFE_PLACEHOLDER_VALUES = (
     "test",
     "none",
     "null",
+    "your-",
+    "replace-",
     "${{",
     "${",
     "os.getenv",
     "process.env",
+    "request.",
+    "settings.",
+    "config.",
+    "secret_ref",
+    "vault",
 )
 
 
@@ -130,8 +144,10 @@ def _patch_contains_sensitive_information(patch: str) -> bool:
         return False
     if any(pattern.search(added) for pattern in STRONG_PERSONAL_DATA_PATTERNS):
         return True
-    for match in SECRET_ASSIGNMENT.finditer(added):
-        value = match.group(1).strip().lower()
+    if any(pattern.search(added) for pattern in LIVE_SECRET_PATTERNS):
+        return True
+    for match in QUOTED_SECRET_ASSIGNMENT.finditer(added):
+        value = match.group(2).strip().lower()
         if value and not any(marker in value for marker in SAFE_PLACEHOLDER_VALUES):
             return True
     return False
@@ -169,11 +185,11 @@ def _pull_request_files(bot: AmosclaudBot, number: int) -> list[dict[str, Any]]:
             f"/repos/{bot.repository}/pulls/{number}/files?per_page=100&page={page}",
         )
         if not isinstance(result, list):
-            return []
+            raise RuntimeError("GitHub did not return the pull request file list")
         files.extend(item for item in result if isinstance(item, dict))
         if len(result) < 100:
             return files
-    return files
+    raise RuntimeError("Pull request file pagination exceeded the safety limit")
 
 
 def handle_approval_event(
@@ -249,7 +265,16 @@ def handle_approval_event(
         number = pull_request.get("number") or payload.get("number")
         if not isinstance(number, int):
             return None
-        files = _pull_request_files(bot, number)
+        try:
+            files = _pull_request_files(bot, number)
+        except RuntimeError as error:
+            bot.post_comment(
+                number,
+                "### Amosclaud Bot — Safety scan unavailable\n"
+                f"Amosclaud-Fixer could not inspect every changed file: {error}. "
+                "Automatic repair was not authorized for this event.",
+            )
+            return 0
         sensitive = _high_risk_files(files)
         if not sensitive:
             return None
