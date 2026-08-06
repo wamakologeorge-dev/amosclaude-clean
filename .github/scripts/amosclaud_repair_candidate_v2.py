@@ -21,6 +21,7 @@ from amosclaud_bot.approval_gate_v2 import (
     _path_requires_human_approval,
 )
 
+_ORIGINAL_PROTECTED_NAME = legacy.protected_name
 _ORIGINAL_VALIDATE_PATCH = legacy.validate_patch
 
 
@@ -30,6 +31,15 @@ def sensitive_approved() -> bool:
         "true",
         "yes",
     }
+
+
+def protected_name(path: str, names: list[str]) -> bool:
+    """Keep legacy secret-path blocking unless trusted approval was recorded."""
+
+    if sensitive_approved():
+        name = Path(path).name.lower()
+        return name in {item.lower() for item in names}
+    return _ORIGINAL_PROTECTED_NAME(path, names)
 
 
 def validate_patch(
@@ -96,6 +106,7 @@ def system_prompt(mode: str) -> str:
     return common + scope + sensitive
 
 
+legacy.protected_name = protected_name
 legacy.validate_patch = validate_patch
 legacy.system_prompt = system_prompt
 
