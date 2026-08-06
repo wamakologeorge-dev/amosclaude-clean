@@ -79,8 +79,8 @@ def test_first_github_authorization_creates_account_and_returning_user_signs_in(
         profile,
         emails,
     )
-    second_user_id, created_again, second_token = (
-        github_access_gateway._find_or_create_github_user(profile, emails)
+    second_user_id, created_again, second_token = github_access_gateway._find_or_create_github_user(
+        profile, emails
     )
 
     assert created is True
@@ -120,11 +120,9 @@ def test_unverified_profile_email_cannot_take_over_existing_account(
 ) -> None:
     monkeypatch.setattr(auth, "DB_PATH", tmp_path / "unverified-email.db")
     with auth._connect() as db:
-        cursor = db.execute(
-            """INSERT INTO users(
+        cursor = db.execute("""INSERT INTO users(
                    name,email,password_hash,provider,is_admin,created_at
-               ) VALUES ('Existing','victim@example.com',NULL,'password',0,'now')"""
-        )
+               ) VALUES ('Existing','victim@example.com',NULL,'password',0,'now')""")
         existing_id = int(cursor.lastrowid)
         db.commit()
 
@@ -151,11 +149,9 @@ def test_unverified_profile_email_cannot_take_over_existing_account(
 def test_verified_github_email_can_link_matching_legacy_account(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(auth, "DB_PATH", tmp_path / "verified-link.db")
     with auth._connect() as db:
-        cursor = db.execute(
-            """INSERT INTO users(
+        cursor = db.execute("""INSERT INTO users(
                    name,email,password_hash,provider,is_admin,created_at
-               ) VALUES ('Existing','verified@example.com',NULL,'password',0,'now')"""
-        )
+               ) VALUES ('Existing','verified@example.com',NULL,'password',0,'now')""")
         existing_id = int(cursor.lastrowid)
         db.commit()
 
