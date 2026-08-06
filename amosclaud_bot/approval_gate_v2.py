@@ -74,8 +74,8 @@ LIVE_SECRET_PATTERNS = (
 )
 
 QUOTED_SECRET_ASSIGNMENT = re.compile(
-    r'''(?ix)["']?(?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|'''
-    r'''credential)["']?\s*[:=]\s*(["'])([^"'\n]{8,})\1'''
+    r"""(?ix)["']?(?:api[_-]?key|access[_-]?token|secret|password|private[_-]?key|"""
+    r"""credential)["']?\s*[:=]\s*(["'])([^"'\n]{8,})\1"""
 )
 
 SAFE_PLACEHOLDER_VALUES = (
