@@ -20,6 +20,7 @@ from amoscloud_ai.api.routes import (
     public_developer_tools,
     vscode_terminal,
 )
+from amoscloud_ai.api.routes.auth import _connect
 from amoscloud_ai.auth_mail_bridge import install_auth_mail_delivery
 from amoscloud_ai.main import app as platform_app
 from amoscloud_ai.organization_support import (
@@ -29,9 +30,9 @@ from amoscloud_ai.organization_support import (
     page_router as support_page_router,
     payment_required_detail,
     session_identity,
+    support_wallet,
     tool_seconds_per_operation,
 )
-from amoscloud_ai.api.routes.auth import _connect
 
 ASGIApp = Callable[
     [dict[str, Any], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]], Awaitable[None]
@@ -156,20 +157,29 @@ class HostedToolSupportASGI:
             )
             return
 
+        required_seconds = tool_seconds_per_operation()
         remaining: int | None = None
         if not bool(identity["is_admin"]):
             with _connect() as db:
-                charged, remaining = debit_support_time(
-                    db,
-                    int(identity["user_id"]),
-                    tool_seconds_per_operation(),
-                )
-            if not charged:
+                remaining = support_wallet(db, int(identity["user_id"]))["remaining_seconds"]
+            if remaining < required_seconds:
                 await self._json_response(send, 402, {"detail": payment_required_detail()})
                 return
 
+        charged = False
+
         async def send_with_support_header(message: dict[str, Any]) -> None:
+            nonlocal charged, remaining
             if message.get("type") == "http.response.start" and remaining is not None:
+                status = int(message.get("status") or 500)
+                if not charged and status < 400:
+                    with _connect() as db:
+                        did_charge, remaining = debit_support_time(
+                            db,
+                            int(identity["user_id"]),
+                            required_seconds,
+                        )
+                    charged = did_charge
                 response_headers = list(message.get("headers") or [])
                 response_headers.append(
                     (b"x-amosclaud-support-seconds-remaining", str(remaining).encode("ascii"))
