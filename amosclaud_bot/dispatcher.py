@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from .approval_gate import (
+from .approval_gate_v2 import (
     _find_approved_request,
     _is_sensitive_objective,
     handle_approval_event,
