@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "name": "Amosclaud main ecosystem",
+  "root": ".Amosclaud/main",
+  "canonical_runtime": "amoscloud_ai.main:app",
+  "canonical_cli_package": "amoscloud_ai",
+  "completion_comment": ".Amosclaud/main clean_100%",
+  "required_paths": [
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+    "main.py",
+    "amoscloud_ai",
+    "amosclaud_mcp",
+    "amosclaud_bot",
+    "amosclaud_os",
+    "amosclaud_platform",
+    "amosclaud_metrics",
+    "api-gateway",
+    "api_key_manager",
+    "database",
+    "services/control_plane",
+    "clients",
+    "preview_service",
+    "web",
+    "docs",
+    "scripts",
+    "tests",
+    ".github/workflows",
+    ".github/workflows/fast-pr-gate.yml"
+  ],
+  "subsystems": {
+    "platform_runtime": {
+      "path": "amoscloud_ai",
+      "purpose": "FastAPI services, accounts, agents, repositories, execution and platform APIs"
+    },
+    "api_gateway": {
+      "path": "api-gateway",
+      "purpose": "Single authenticated ingress joining repository, autonomous and CI services"
+    },
+    "database_layer": {
+      "path": "database",
+      "purpose": "Shared synchronous and asynchronous persistence adapters"
+    },
+    "control_plane": {
+      "path": "services/control_plane",
+      "purpose": "Node.js, BullMQ and Redis asynchronous task orchestration"
+    },
+    "model_context_protocol": {
+      "path": "amosclaud_mcp",
+      "purpose": "Standalone MCP server and open tool protocol integration"
+    },
+    "github_automation": {
+      "path": "amosclaud_bot",
+      "purpose": "GitHub events, repair callbacks and repository automation"
+    },
+    "api_key_service": {
+      "path": "api_key_manager",
+      "purpose": "Developer API-key identity, authorization and usage access"
+    },
+    "developer_clients": {
+      "path": "clients",
+      "purpose": "VS Code, Xcode and portable IDE integrations"
+    },
+    "developer_web": {
+      "path": "web",
+      "purpose": "Account, dashboard, terminal and developer-facing web experience"
+    },
+    "preview_service": {
+      "path": "preview_service",
+      "purpose": "Isolated publishing and preview delivery for generated projects"
+    },
+    "metrics": {
+      "path": "amosclaud_metrics",
+      "purpose": "Repository, build and platform health evidence"
+    },
+    "platform_package": {
+      "path": "amosclaud_platform",
+      "purpose": "Installable platform controls and local service management"
+    },
+    "operating_layer": {
+      "path": "amosclaud_os",
+      "purpose": "Repository, agent and local autonomous operating abstractions"
+    },
+    "verification": {
+      "path": "tests",
+      "purpose": "Deterministic regression and ecosystem contract tests"
+    },
+    "delivery": {
+      "path": ".github/workflows",
+      "purpose": "Pinned CI, repair, security and deployment automation"
+    },
+    "documentation": {
+      "path": "docs",
+      "purpose": "Architecture, APIs, deployment and developer guidance"
+    }
+  },
+  "external_services": {
+    "github": {
+      "purpose": "Developer identity, repositories, webhooks, issues, commits and pull requests",
+      "required_environment": [
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "GITHUB_TOKEN_ENCRYPTION_KEY"
+      ]
+    },
+    "railway": {
+      "purpose": "Production application hosting and persistent /data volume",
+      "required_environment": [
+        "AMOSCLAUD_PUBLIC_URL",
+        "AUTH_DB_PATH",
+        "REPOSITORY_STORAGE_PATH"
+      ]
+    },
+    "redis": {
+      "purpose": "Durable queues, throttling, locks and short-lived task state",
+      "required_environment": [
+        "REDIS_URL"
+      ]
+    },
+    "mysql": {
+      "purpose": "Structured platform metadata, API-key usage and future lakehouse records",
+      "required_environment": [
+        "MYSQL_URL"
+      ]
+    }
+  },
+  "connections": [
+    {
+      "from": "developer_web",
+      "to": "api_gateway",
+      "protocol": "HTTPS/REST"
+    },
+    {
+      "from": "developer_clients",
+      "to": "api_gateway",
+      "protocol": "HTTPS/REST"
+    },
+    {
+      "from": "model_context_protocol",
+      "to": "platform_runtime",
+      "protocol": "stdio/MCP"
+    },
+    {
+      "from": "api_gateway",
+      "to": "platform_runtime",
+      "protocol": "internal ASGI/HTTP"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "database_layer",
+      "protocol": "SQL adapter"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "control_plane",
+      "protocol": "authenticated task API"
+    },
+    {
+      "from": "control_plane",
+      "to": "redis",
+      "protocol": "Redis/BullMQ"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "mysql",
+      "protocol": "MySQL"
+    },
+    {
+      "from": "github_automation",
+      "to": "github",
+      "protocol": "GitHub App/REST/webhook"
+    },
+    {
+      "from": "github_automation",
+      "to": "platform_runtime",
+      "protocol": "signed callback/internal API"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "railway",
+      "protocol": "deployment runtime"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "preview_service",
+      "protocol": "artifact/preview API"
+    },
+    {
+      "from": "platform_runtime",
+      "to": "metrics",
+      "protocol": "structured evidence"
+    }
+  ],
+  "forbidden_root_files": [
+    ".DS_Store",
+    "Thumbs.db",
+    ".coverage",
+    "coverage.xml"
+  ],
+  "forbidden_root_globs": [
+    "*.tmp",
+    "*.temp",
+    "*.bak",
+    "*.orig",
+    "*.rej",
+    "*.swp",
+    "*.swo",
+    "*.pyc",
+    "*.pyo",
+    "*.log",
+    "*.zip",
+    "*.tar",
+    "*.tgz"
+  ],
+  "forbidden_root_directories": [
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "htmlcov",
+    "test-results",
+    "artifacts"
+  ]
+}
