@@ -1,4 +1,4 @@
-"""Combined Amosclaud platform, paid hosted-tool gateway, and remote MCP app."""
+"""Combined Amosclaud platform, GitHub access, paid tools, and remote MCP."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from amosclaud_mcp.server import mcp as amosclaud_mcp
 from amoscloud_ai.api.routes import (
     auth,
+    github_access_gateway,
     owner_access_gateway,
     public_developer_tools,
     vscode_terminal,
 )
 from amoscloud_ai.api.routes.auth import _connect
-from amoscloud_ai.auth_mail_bridge import install_auth_mail_delivery
 from amoscloud_ai.main import app as platform_app
 from amoscloud_ai.organization_support import (
     api_router as support_api_router,
@@ -44,8 +44,8 @@ EDITOR_ORIGINS = (
     "https://github.dev",
 )
 
-# Account, payment, support-status, and public integration routes must remain
-# reachable before hosted tool time exists. Every other official API route is
+# GitHub account access, payments, support status, and public source must remain
+# reachable before hosted working time exists. Every other official API route is
 # treated as a working tool and is charged through the central support wallet.
 SUPPORT_EXEMPT_API_PREFIXES = (
     "/api/v1/auth",
@@ -60,12 +60,6 @@ SUPPORT_EXEMPT_API_PREFIXES = (
     "/api/v1/webhooks",
     "/api/v1/service-keys/verify",
 )
-
-# The production application historically used an older SMTP-only sender inside
-# the account router. Replace that private hook before the first request so
-# registration, email-code login, and password recovery all use the central
-# HTTPS-or-SMTP mail transport.
-install_auth_mail_delivery(auth)
 
 
 def expected_mcp_access_key() -> str | None:
@@ -152,7 +146,7 @@ class HostedToolSupportASGI:
             await self._json_response(
                 send,
                 401,
-                {"detail": "Sign in or provide a valid Amosclaud API key"},
+                {"detail": "Sign in with GitHub or provide a valid Amosclaud API key"},
                 extra_headers=[(b"www-authenticate", b"Bearer")],
             )
             return
@@ -243,13 +237,16 @@ app.add_middleware(
     expose_headers=["Mcp-Session-Id", "X-Amosclaud-Support-Seconds-Remaining"],
 )
 
-# Source and documentation stay public. Official hosted execution is enforced by
-# HostedToolSupportASGI and cannot run for customer accounts with no paid time.
+# Public source and organization support pages remain reachable without a
+# session. The old password page is replaced by the GitHub OAuth redirect.
 app.include_router(public_developer_tools.router)
 app.include_router(support_page_router)
 app.include_router(support_api_router, prefix="/api/v1")
+app.include_router(github_access_gateway.router)
+app.include_router(github_access_gateway.router, prefix="/api/v1")
 
-# These owner routes must be registered before the catch-all platform mount.
+# Keep the separate owner-recovery callback, but register it after GitHub-only
+# access so its legacy email registration endpoint cannot become public again.
 app.include_router(owner_access_gateway.router)
 
 amosclaud_mcp.settings.streamable_http_path = "/"
