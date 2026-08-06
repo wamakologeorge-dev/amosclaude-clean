@@ -7,6 +7,8 @@ import secrets
 import sqlite3
 from datetime import datetime, timezone
 
+VERIFIED_PAYMENT_REASONS = ("cash_app_payment", "bitcoin_payment")
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -53,6 +55,30 @@ def ensure_agent_schema(db: sqlite3.Connection) -> None:
         );
         """)
     db.commit()
+
+
+def has_verified_api_payment(db: sqlite3.Connection, user_id: int) -> bool:
+    """Return whether Cash App or Bitcoin payment activated this account's API."""
+
+    ensure_agent_schema(db)
+    placeholders = ",".join("?" for _ in VERIFIED_PAYMENT_REASONS)
+    row = db.execute(
+        f"""SELECT 1 FROM agent_token_ledger
+            WHERE user_id=? AND reason IN ({placeholders}) LIMIT 1""",
+        (user_id, *VERIFIED_PAYMENT_REASONS),
+    ).fetchone()
+    return bool(row)
+
+
+def api_access_is_activated(
+    db: sqlite3.Connection,
+    user_id: int,
+    *,
+    is_admin: bool = False,
+) -> bool:
+    """Allow the platform owner or an account with a verified paid activation."""
+
+    return bool(is_admin) or has_verified_api_payment(db, user_id)
 
 
 def issue_api_key(db: sqlite3.Connection, user_id: int, label: str) -> tuple[int, str, str]:
