@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
+from amoscloud_ai.api.routes.auth import DB_PATH
+from amoscloud_ai.api.routes.auth import _connect as _auth_connect
 from amoscloud_ai.api.routes.auth import (
-    DB_PATH,
-    _connect as _auth_connect,
     _create_session,
     _hash_password,
     _set_session_cookie,
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/organization-access", tags=["organization-access"])
 _ORG_ID_RE = re.compile(r"^[0-9]{5}$")
 _USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{2,31}$")
 _MEMBER_RE = re.compile(r"^[0-9]{4}$")
+_SCHEMA_VERSION = 1
 
 
 class OrganizationRegistration(BaseModel):
@@ -63,6 +64,10 @@ class OrganizationIdentifierChange(BaseModel):
     organization_id: str = Field(..., min_length=5, max_length=5)
 
 
+class OwnershipTransfer(BaseModel):
+    member_number: str = Field(..., min_length=4, max_length=4)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -95,6 +100,16 @@ def _validate_username(value: str) -> str:
                 "Username must start with a letter and use 3-32 letters, "
                 "numbers, dots, underscores, or hyphens"
             ),
+        )
+    return normalized
+
+
+def _validate_organization_name(value: str) -> str:
+    normalized = value.strip()
+    if len(normalized) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="Organization name must contain at least two visible characters",
         )
     return normalized
 
@@ -132,7 +147,11 @@ def _safe_existing_username(name: str, user_id: int) -> str:
 
 def _backfill(db: sqlite3.Connection) -> None:
     now = _now()
-    for row in db.execute("SELECT id,public_id,status,updated_at FROM organizations").fetchall():
+    organizations = db.execute(
+        """SELECT id,public_id,status,updated_at FROM organizations
+           WHERE public_id IS NULL OR public_id='' OR updated_at IS NULL"""
+    ).fetchall()
+    for row in organizations:
         db.execute(
             "UPDATE organizations SET public_id=?,status=?,updated_at=? WHERE id=?",
             (
@@ -142,11 +161,18 @@ def _backfill(db: sqlite3.Connection) -> None:
                 row["id"],
             ),
         )
-    rows = db.execute("""SELECT m.organization_id,m.user_id,m.username,m.member_number,
+
+    rows = db.execute(
+        """SELECT m.organization_id,m.user_id,m.username,m.member_number,
                   m.status,m.updated_at,u.name
-           FROM organization_members m JOIN users u ON u.id=m.user_id""").fetchall()
+           FROM organization_members m JOIN users u ON u.id=m.user_id
+           WHERE m.username IS NULL OR m.username='' OR m.member_number IS NULL
+              OR m.member_number='' OR m.updated_at IS NULL"""
+    ).fetchall()
     for row in rows:
-        username = row["username"] or _safe_existing_username(str(row["name"]), int(row["user_id"]))
+        username = row["username"] or _safe_existing_username(
+            str(row["name"]), int(row["user_id"])
+        )
         candidate = username
         suffix = 1
         while db.execute(
@@ -163,13 +189,30 @@ def _backfill(db: sqlite3.Connection) -> None:
                WHERE organization_id=? AND user_id=?""",
             (
                 candidate,
-                row["member_number"] or _next_member_number(db, int(row["organization_id"])),
+                row["member_number"]
+                or _next_member_number(db, int(row["organization_id"])),
                 row["status"] or "active",
                 row["updated_at"] or now,
                 row["organization_id"],
                 row["user_id"],
             ),
         )
+
+
+def _migrate_once(db: sqlite3.Connection) -> None:
+    row = db.execute(
+        "SELECT value FROM organization_schema_meta WHERE key='identity_version'"
+    ).fetchone()
+    version = int(row["value"]) if row else 0
+    if version >= _SCHEMA_VERSION:
+        return
+    _backfill(db)
+    db.execute(
+        """INSERT INTO organization_schema_meta(key,value)
+           VALUES ('identity_version',?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+        (str(_SCHEMA_VERSION),),
+    )
 
 
 def _db() -> sqlite3.Connection:
@@ -228,6 +271,10 @@ def _db() -> sqlite3.Connection:
             created_at TEXT NOT NULL,
             FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS organization_schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         """)
     _ensure_column(db, "organizations", "public_id TEXT")
     _ensure_column(db, "organizations", "status TEXT NOT NULL DEFAULT 'active'")
@@ -241,7 +288,7 @@ def _db() -> sqlite3.Connection:
     )
     _ensure_column(db, "organization_members", "removed_at TEXT")
     _ensure_column(db, "organization_members", "updated_at TEXT")
-    _backfill(db)
+    _migrate_once(db)
     db.executescript("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_public_id
         ON organizations(public_id);
@@ -372,14 +419,12 @@ def _create_recovery_codes(
     return codes
 
 
-def _native_email(public_id: str, member_number: str) -> str:
-    return f"org-{public_id}-{member_number}@accounts.amosclaud.invalid"
+def _native_email() -> str:
+    return f"org-{secrets.token_hex(16)}@accounts.amosclaud.invalid"
 
 
 def _create_native_user(
     db: sqlite3.Connection,
-    public_id: str,
-    member_number: str,
     username: str,
     password: str,
 ) -> int:
@@ -387,12 +432,7 @@ def _create_native_user(
         """INSERT INTO users(
                name,email,password_hash,provider,is_admin,created_at
            ) VALUES (?,?,?,'organization',0,?)""",
-        (
-            username,
-            _native_email(public_id, member_number),
-            _hash_password(password),
-            _now(),
-        ),
+        (username, _native_email(), _hash_password(password), _now()),
     )
     return int(cursor.lastrowid)
 
@@ -400,6 +440,7 @@ def _create_native_user(
 @router.post("/register", status_code=201)
 def register(body: OrganizationRegistration, response: Response) -> dict:
     public_id = _validate_org_id(body.organization_id)
+    organization_name = _validate_organization_name(body.organization_name)
     username = _validate_username(body.username)
     now = _now()
     with _db() as db:
@@ -407,13 +448,13 @@ def register(body: OrganizationRegistration, response: Response) -> dict:
             raise HTTPException(status_code=409, detail="Organization ID is in use")
         member_number = f"{secrets.randbelow(9000) + 1000:04d}"
         try:
-            user_id = _create_native_user(db, public_id, member_number, username, body.password)
+            user_id = _create_native_user(db, username, body.password)
             cursor = db.execute(
                 """INSERT INTO organizations(
                        name,slug,owner_id,created_at,public_id,status,updated_at
                    ) VALUES (?,?,?,?,?,'active',?)""",
                 (
-                    body.organization_name.strip(),
+                    organization_name,
                     f"org-{public_id}",
                     user_id,
                     now,
@@ -550,7 +591,7 @@ def join(body: OrganizationJoin, response: Response) -> dict:
         if not organization:
             raise HTTPException(status_code=400, detail="Invalid organization access")
         secret = db.execute(
-            """SELECT id,remaining_uses FROM organization_join_secrets
+            """SELECT id FROM organization_join_secrets
                WHERE organization_id=? AND secret_hash=? AND revoked_at IS NULL
                  AND expires_at>? AND remaining_uses>0
                ORDER BY id DESC LIMIT 1""",
@@ -570,7 +611,17 @@ def join(body: OrganizationJoin, response: Response) -> dict:
             raise HTTPException(status_code=409, detail="Username is in use")
         member_number = _next_member_number(db, int(organization["id"]))
         try:
-            user_id = _create_native_user(db, public_id, member_number, username, body.password)
+            cursor = db.execute(
+                """UPDATE organization_join_secrets
+                   SET remaining_uses=remaining_uses-1,
+                       revoked_at=CASE WHEN remaining_uses=1 THEN ? ELSE revoked_at END
+                   WHERE id=? AND revoked_at IS NULL
+                     AND expires_at>? AND remaining_uses>0""",
+                (now, secret["id"], now),
+            )
+            if cursor.rowcount != 1:
+                raise HTTPException(status_code=400, detail="Invalid organization access")
+            user_id = _create_native_user(db, username, body.password)
             db.execute(
                 """INSERT INTO organization_members(
                        organization_id,user_id,role,created_at,username,
@@ -585,16 +636,6 @@ def join(body: OrganizationJoin, response: Response) -> dict:
                     now,
                 ),
             )
-            cursor = db.execute(
-                """UPDATE organization_join_secrets
-                   SET remaining_uses=remaining_uses-1,
-                       revoked_at=CASE WHEN remaining_uses=1 THEN ? ELSE revoked_at END
-                   WHERE id=? AND revoked_at IS NULL
-                     AND expires_at>? AND remaining_uses>0""",
-                (now, secret["id"], now),
-            )
-            if cursor.rowcount != 1:
-                raise HTTPException(status_code=400, detail="Invalid organization access")
             recovery_codes = _create_recovery_codes(db, int(organization["id"]), user_id, 3)
             _audit(
                 db,
@@ -765,6 +806,60 @@ def remove_member(
         db.commit()
     response.status_code = 204
     return response
+
+
+@router.post("/{public_id}/transfer-ownership")
+def transfer_ownership(
+    public_id: str,
+    body: OwnershipTransfer,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
+    public_id = _validate_org_id(public_id)
+    if not _MEMBER_RE.fullmatch(body.member_number):
+        raise HTTPException(status_code=422, detail="Member number must be four digits")
+    with _db() as db:
+        actor = _membership(db, public_id, int(user["id"]))
+        if actor["role"] != "owner":
+            raise HTTPException(status_code=403, detail="Owner access required")
+        target = db.execute(
+            """SELECT user_id,username,member_number FROM organization_members
+               WHERE organization_id=? AND member_number=? AND status='active'""",
+            (actor["organization_id"], body.member_number),
+        ).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="Active member not found")
+        if int(target["user_id"]) == int(user["id"]):
+            raise HTTPException(status_code=409, detail="Choose another active member")
+        now = _now()
+        db.execute(
+            """UPDATE organization_members SET role='admin',updated_at=?
+               WHERE organization_id=? AND user_id=?""",
+            (now, actor["organization_id"], user["id"]),
+        )
+        db.execute(
+            """UPDATE organization_members SET role='owner',updated_at=?
+               WHERE organization_id=? AND user_id=?""",
+            (now, actor["organization_id"], target["user_id"]),
+        )
+        db.execute(
+            "UPDATE organizations SET owner_id=?,updated_at=? WHERE id=?",
+            (target["user_id"], now, actor["organization_id"]),
+        )
+        _audit(
+            db,
+            int(actor["organization_id"]),
+            "organization.ownership_transferred",
+            int(user["id"]),
+            int(target["user_id"]),
+            f"member={body.member_number};username={target['username']}",
+        )
+        db.commit()
+    return {
+        "organization_id": public_id,
+        "owner_member_id": _member_id(public_id, target["member_number"]),
+        "owner_username": target["username"],
+        "previous_owner_role": "admin",
+    }
 
 
 @router.patch("/{public_id}/identifier")
