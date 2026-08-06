@@ -52,10 +52,14 @@ def configured_admin_github_repository() -> str:
 
 
 def configured_admin_github_email() -> str:
-    return os.getenv(
-        "AMOSCLAUD_ADMIN_GITHUB_EMAIL",
-        DEFAULT_ADMIN_GITHUB_EMAIL,
-    ).strip().lower()
+    return (
+        os.getenv(
+            "AMOSCLAUD_ADMIN_GITHUB_EMAIL",
+            DEFAULT_ADMIN_GITHUB_EMAIL,
+        )
+        .strip()
+        .lower()
+    )
 
 
 def is_configured_github_admin(github_id: str, login: str) -> bool:
