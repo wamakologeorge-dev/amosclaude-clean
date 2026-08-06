@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expose prior sensitive approval without pre-blocking an entire pull request."""
+"""Expose prior approval while the candidate validator checks the proposed repair."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ for value in (str(SCRIPT_DIR), str(ROOT)):
         sys.path.insert(0, value)
 
 from amosclaud_fork_pr_route import sensitive_approval_state
+
+CANDIDATE_VALIDATOR = "amosclaud_repair_candidate_v2.py"
 
 
 def write_outputs(values: dict[str, str | bool]) -> None:
@@ -48,6 +50,7 @@ def main() -> int:
                 "approved": False,
                 "approval_issue_number": "",
                 "sensitive_files": "",
+                "candidate_validator": CANDIDATE_VALIDATOR,
             }
         )
         return 0
@@ -62,12 +65,13 @@ def main() -> int:
         {
             # Never block candidate generation because the original PR contains
             # an environment example, authentication code, or other sensitive
-            # context. amosclaud_repair_candidate_v2 validates the proposed
-            # repair patch itself and refuses unapproved sensitive changes.
+            # context. The candidate validator inspects the proposed repair patch
+            # itself and refuses unapproved sensitive changes.
             "sensitive_detected": False,
             "approved": approved,
             "approval_issue_number": approval_number,
             "sensitive_files": "",
+            "candidate_validator": CANDIDATE_VALIDATOR,
         }
     )
     return 0
