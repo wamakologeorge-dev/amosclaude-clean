@@ -1,4 +1,4 @@
-"""Secure platform-owner bootstrap and GitHub-only root access."""
+"""Secure platform-owner bootstrap with standard email access and optional GitHub proof."""
 
 from __future__ import annotations
 
@@ -59,32 +59,16 @@ def _github_admin_email(
     return profile_email or configured_admin_github_email()
 
 
-def _reject_github_only_email_access(email: str) -> None:
-    with auth._connect() as db:
-        user = db.execute(
-            "SELECT provider FROM users WHERE email=?",
-            (email,),
-        ).fetchone()
-    if user and user["provider"] == "github-admin":
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "This platform-owner account is GitHub-only. "
-                "Use Continue with GitHub on the Amosclaud sign-in page."
-            ),
-        )
-
-
 @router.post("/register/request-code", status_code=202)
 def request_registration_or_bootstrap(
     body: auth.RegisterCodeRequest,
     response: Response,
 ) -> dict[str, object]:
-    """Send a verification code, or securely create the first configured owner.
+    """Send a verification code, or create the first configured owner safely.
 
-    Normal public registration still requires email verification. The fallback is
-    available only when SMTP is absent, the user database is empty, and the email
-    is explicitly listed in AMOSCLAUD_ADMIN_EMAILS.
+    Public registration requires configured email delivery. The fallback is
+    available only when email delivery is absent, the database is empty, and the
+    submitted address is explicitly listed in ``AMOSCLAUD_ADMIN_EMAILS``.
     """
     if os.getenv("SMTP_HOST", "").strip():
         return auth.request_registration_code(body)
@@ -128,70 +112,49 @@ def request_registration_or_bootstrap(
 
 
 @router.post("/login", response_model=auth.UserResponse)
-def protected_password_login(
+def password_login(
     body: auth.LoginRequest,
     response: Response,
 ) -> auth.UserResponse:
-    email = auth._normalise_email(body.email)
-    _reject_github_only_email_access(email)
+    """Use the same password login for owners and ordinary accounts."""
     return auth.login(body, response)
 
 
 @router.post("/login/request-code", status_code=202)
-def protected_login_code_request(body: auth.EmailRequest) -> dict[str, str]:
-    email = auth._normalise_email(body.email)
-    with auth._connect() as db:
-        user = db.execute(
-            "SELECT provider FROM users WHERE email=?",
-            (email,),
-        ).fetchone()
-    if user and user["provider"] == "github-admin":
-        return {"message": "If the account exists, Amosclaud sent a sign-in code"}
+def login_code_request(body: auth.EmailRequest) -> dict[str, str]:
+    """Send a short-lived sign-in code to any existing account, including the owner."""
     return auth.request_login_code(body)
 
 
 @router.post("/login/verify-code", response_model=auth.UserResponse)
-def protected_login_code_verify(
+def login_code_verify(
     body: auth.EmailCodeLoginRequest,
     response: Response,
 ) -> auth.UserResponse:
-    email = auth._normalise_email(body.email)
-    _reject_github_only_email_access(email)
+    """Create a normal session after email-code verification."""
     return auth.verify_login_code(body, response)
 
 
 @router.post("/password/forgot", status_code=202)
-def protected_password_forgot(body: auth.EmailRequest) -> dict[str, str]:
-    email = auth._normalise_email(body.email)
-    with auth._connect() as db:
-        user = db.execute(
-            "SELECT provider FROM users WHERE email=?",
-            (email,),
-        ).fetchone()
-    if user and user["provider"] == "github-admin":
-        return {"message": "If the account exists, Amosclaud sent a reset code"}
+def password_forgot(body: auth.EmailRequest) -> dict[str, str]:
+    """Send password recovery to the account's primary email."""
     return auth.forgot_password(body)
 
 
 @router.post("/password/reset", status_code=204, response_class=Response)
-def protected_password_reset(body: auth.PasswordResetRequest) -> Response:
-    email = auth._normalise_email(body.email)
-    _reject_github_only_email_access(email)
+def password_reset(body: auth.PasswordResetRequest) -> Response:
+    """Reset the password for any email account, including the platform owner."""
     return auth.reset_password(body)
 
 
 @router.get("/github/admin-login", name="github_admin_login")
 def github_admin_login(request: Request) -> RedirectResponse:
-    """Start GitHub OAuth for the configured platform owner.
-
-    Amosclaud never receives or stores the GitHub password. GitHub authenticates
-    the owner and returns a short-lived authorization code.
-    """
+    """Start optional GitHub verification for the configured platform owner."""
     client_id = os.getenv("GITHUB_CLIENT_ID")
     if not client_id:
         raise HTTPException(
             status_code=503,
-            detail="GitHub owner sign-in is not configured",
+            detail="GitHub owner verification is not configured",
         )
     state = secrets.token_urlsafe(32)
     callback = _github_admin_callback_url(request)
@@ -225,7 +188,7 @@ async def github_admin_callback(
     request: Request,
     amos_github_admin_state: str | None = Cookie(default=None),
 ) -> RedirectResponse:
-    """Create a passwordless root session for the verified GitHub owner."""
+    """Verify the configured owner without making GitHub the only login method."""
     if not amos_github_admin_state or not hmac.compare_digest(
         state,
         amos_github_admin_state,
@@ -237,7 +200,7 @@ async def github_admin_callback(
     if not client_id or not client_secret:
         raise HTTPException(
             status_code=503,
-            detail="GitHub owner sign-in is not configured",
+            detail="GitHub owner verification is not configured",
         )
 
     callback = _github_admin_callback_url(request)
@@ -280,11 +243,9 @@ async def github_admin_callback(
                 detail="This GitHub account is not the configured Amosclaud owner",
             )
 
-        # GitHub App authorization and GitHub App installation are separate.
-        # Root sign-in proves identity with the immutable configured GitHub user
-        # ID and exact login above. Requiring repository installation here made
-        # the real owner unable to sign in before the App was installed. Repository
-        # permissions are checked later when repository operations are requested.
+        # GitHub App authorization and installation are separate. Identity is
+        # proven by the immutable configured GitHub user ID and exact login.
+        # Repository permissions are checked only when repository operations run.
         emails_response = await client.get(
             "https://api.github.com/user/emails",
             headers=headers,
@@ -314,12 +275,12 @@ async def github_admin_callback(
         user = by_github or by_email
         if user:
             user_id = int(user["id"])
+            provider = "password+github-admin" if user["password_hash"] else "github-admin"
             db.execute(
                 """UPDATE users
-                   SET name=?,email=?,password_hash=NULL,github_id=?,
-                       provider='github-admin',is_admin=1
+                   SET name=?,email=?,github_id=?,provider=?,is_admin=1
                    WHERE id=?""",
-                (login, email, github_id, user_id),
+                (login, email, github_id, provider, user_id),
             )
         else:
             cursor = db.execute(
@@ -330,8 +291,8 @@ async def github_admin_callback(
             )
             user_id = int(cursor.lastrowid)
 
-        # Root access is GitHub-only. End any older password or email-code
-        # sessions before issuing the newly verified owner session.
+        # End older sessions before issuing the newly verified owner session, but
+        # preserve any existing password so email access continues to work.
         db.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
         token = auth._create_session(db, user_id)
 
