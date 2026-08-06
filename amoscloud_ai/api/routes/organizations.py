@@ -31,6 +31,15 @@ class RepositoryAttach(BaseModel):
     repository_id: int
 
 
+def _columns(db: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row["name"]) for row in db.execute(f"PRAGMA table_info({table})")}
+
+
+def _ensure_column(db: sqlite3.Connection, table: str, definition: str) -> None:
+    if definition.split()[0] not in _columns(db, table):
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+
+
 def _db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
@@ -63,6 +72,15 @@ def _db() -> sqlite3.Connection:
             FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
         );
         """)
+    _ensure_column(db, "organizations", "status TEXT NOT NULL DEFAULT 'active'")
+    _ensure_column(db, "organizations", "updated_at TEXT")
+    _ensure_column(
+        db,
+        "organization_members",
+        "status TEXT NOT NULL DEFAULT 'active'",
+    )
+    _ensure_column(db, "organization_members", "removed_at TEXT")
+    _ensure_column(db, "organization_members", "updated_at TEXT")
     db.commit()
     return db
 
@@ -78,7 +96,8 @@ def _membership(db: sqlite3.Connection, organization_id: int, user_id: int) -> s
     row = db.execute(
         """SELECT o.*, m.role FROM organizations o
            JOIN organization_members m ON m.organization_id=o.id
-           WHERE o.id=? AND m.user_id=?""",
+           WHERE o.id=? AND m.user_id=?
+             AND o.status='active' AND m.status='active'""",
         (organization_id, user_id),
     ).fetchone()
     if not row:
@@ -99,6 +118,12 @@ def create_organization(
     body: OrganizationCreate, user: sqlite3.Row = Depends(_current_user)
 ) -> dict:
     slug = body.slug.strip().lower()
+    name = body.name.strip()
+    if len(name) < 2:
+        raise HTTPException(
+            status_code=422,
+            detail="Organization name must contain at least two visible characters",
+        )
     if not _SLUG_RE.fullmatch(slug):
         raise HTTPException(
             status_code=422,
@@ -108,13 +133,17 @@ def create_organization(
     with _db() as db:
         try:
             cursor = db.execute(
-                "INSERT INTO organizations(name,slug,owner_id,created_at) VALUES (?,?,?,?)",
-                (body.name.strip(), slug, user["id"], now),
+                """INSERT INTO organizations(
+                       name,slug,owner_id,created_at,status,updated_at
+                   ) VALUES (?,?,?,?,'active',?)""",
+                (name, slug, user["id"], now, now),
             )
             organization_id = cursor.lastrowid
             db.execute(
-                "INSERT INTO organization_members(organization_id,user_id,role,created_at) VALUES (?,?, 'owner', ?)",
-                (organization_id, user["id"], now),
+                """INSERT INTO organization_members(
+                       organization_id,user_id,role,created_at,status,updated_at
+                   ) VALUES (?,?,'owner',?,'active',?)""",
+                (organization_id, user["id"], now, now),
             )
             db.commit()
         except sqlite3.IntegrityError as exc:
@@ -123,7 +152,7 @@ def create_organization(
             ) from exc
     return {
         "id": organization_id,
-        "name": body.name.strip(),
+        "name": name,
         "slug": slug,
         "role": "owner",
         "path": f"/organizations/{slug}",
@@ -136,7 +165,8 @@ def list_organizations(user: sqlite3.Row = Depends(_current_user)) -> list[dict]
         rows = db.execute(
             """SELECT o.id,o.name,o.slug,m.role,o.created_at
                FROM organizations o JOIN organization_members m ON m.organization_id=o.id
-               WHERE m.user_id=? ORDER BY o.name""",
+               WHERE m.user_id=? AND o.status='active' AND m.status='active'
+               ORDER BY o.name""",
             (user["id"],),
         ).fetchall()
     return [{**dict(row), "path": f"/organizations/{row['slug']}"} for row in rows]
@@ -148,6 +178,7 @@ def add_member(
     body: OrganizationMemberAdd,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
     with _db() as db:
         membership = _membership(db, organization_id, user["id"])
         _require_admin(membership)
@@ -158,14 +189,13 @@ def add_member(
         if not member:
             raise HTTPException(status_code=404, detail="User not found")
         db.execute(
-            """INSERT INTO organization_members(organization_id,user_id,role,created_at)
-               VALUES (?,?,?,?) ON CONFLICT(organization_id,user_id) DO UPDATE SET role=excluded.role""",
-            (
-                organization_id,
-                member["id"],
-                body.role,
-                datetime.now(timezone.utc).isoformat(),
-            ),
+            """INSERT INTO organization_members(
+                   organization_id,user_id,role,created_at,status,updated_at
+               ) VALUES (?,?,?,?,'active',?)
+               ON CONFLICT(organization_id,user_id) DO UPDATE SET
+                   role=excluded.role,status='active',removed_at=NULL,
+                   updated_at=excluded.updated_at""",
+            (organization_id, member["id"], body.role, now, now),
         )
         db.commit()
     return {
