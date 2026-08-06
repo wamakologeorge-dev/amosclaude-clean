@@ -1,4 +1,4 @@
-"""Amosclaud API credentials and prepaid agent-credit accounting."""
+"""Amosclaud API credentials, agent credits, and paid working-time accounting."""
 
 from __future__ import annotations
 
@@ -7,7 +7,15 @@ import secrets
 import sqlite3
 from datetime import datetime, timezone
 
-VERIFIED_PAYMENT_REASONS = ("cash_app_payment", "bitcoin_payment")
+from amoscloud_ai.organization_support import (
+    VERIFIED_SUPPORT_REASONS,
+    add_verified_support_time,
+    ensure_support_schema,
+    support_seconds_for_credit_amount,
+    support_time_is_active,
+)
+
+VERIFIED_PAYMENT_REASONS = VERIFIED_SUPPORT_REASONS
 
 
 def now() -> str:
@@ -19,7 +27,8 @@ def key_hash(value: str) -> str:
 
 
 def ensure_agent_schema(db: sqlite3.Connection) -> None:
-    db.executescript("""
+    db.executescript(
+        """
         CREATE TABLE IF NOT EXISTS agent_api_keys (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -53,12 +62,13 @@ def ensure_agent_schema(db: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """)
+        """
+    )
     db.commit()
 
 
 def has_verified_api_payment(db: sqlite3.Connection, user_id: int) -> bool:
-    """Return whether Cash App or Bitcoin payment activated this account's API."""
+    """Return whether Cash App or Bitcoin has ever activated this account."""
 
     ensure_agent_schema(db)
     placeholders = ",".join("?" for _ in VERIFIED_PAYMENT_REASONS)
@@ -76,9 +86,9 @@ def api_access_is_activated(
     *,
     is_admin: bool = False,
 ) -> bool:
-    """Allow the platform owner or an account with a verified paid activation."""
+    """Require remaining organization-support time for customer API access."""
 
-    return bool(is_admin) or has_verified_api_payment(db, user_id)
+    return support_time_is_active(db, user_id, is_admin=is_admin)
 
 
 def issue_api_key(db: sqlite3.Connection, user_id: int, label: str) -> tuple[int, str, str]:
@@ -101,22 +111,36 @@ def credit_tokens(
     reason: str,
     reference: str,
 ) -> bool:
+    """Credit agent tokens and, for verified support, hosted working time exactly once."""
+
     if amount <= 0:
         raise ValueError("Token credit amount must be positive")
     ensure_agent_schema(db)
+    ensure_support_schema(db)
     try:
         db.execute(
             "INSERT INTO agent_token_ledger(user_id,delta,reason,reference,created_at) VALUES (?,?,?,?,?)",
             (user_id, amount, reason, reference, now()),
         )
+        if reason in VERIFIED_PAYMENT_REASONS:
+            add_verified_support_time(
+                db,
+                user_id,
+                support_seconds_for_credit_amount(amount),
+                reason=reason,
+                reference=reference,
+            )
+        db.execute(
+            """INSERT INTO agent_token_wallets(user_id,balance,updated_at) VALUES (?,?,?)
+               ON CONFLICT(user_id) DO UPDATE SET
+                 balance=balance+excluded.balance,
+                 updated_at=excluded.updated_at""",
+            (user_id, amount, now()),
+        )
+        db.commit()
     except sqlite3.IntegrityError:
+        db.rollback()
         return False
-    db.execute(
-        """INSERT INTO agent_token_wallets(user_id,balance,updated_at) VALUES (?,?,?)
-           ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance,updated_at=excluded.updated_at""",
-        (user_id, amount, now()),
-    )
-    db.commit()
     return True
 
 
