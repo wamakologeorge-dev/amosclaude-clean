@@ -116,6 +116,10 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             "/auth/login",
             "/auth/register/request-code",
             "/auth/register/verify",
+            "/api/v1/organization-access/register",
+            "/api/v1/organization-access/login",
+            "/api/v1/organization-access/join",
+            "/api/v1/organization-access/recover",
         }
         if request.method != "POST" or request.url.path not in sensitive:
             return False
