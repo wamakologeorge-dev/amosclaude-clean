@@ -143,10 +143,7 @@ def test_consumed_marker_on_later_page_wins() -> None:
             "body": f"{APPROVAL_RECORD_MARKER}\n**Decision:** **APPROVED**",
             "user": {"login": "github-actions[bot]", "type": "Bot"},
         }
-    ] + [
-        {"body": "noise", "user": {"login": "someone", "type": "User"}}
-        for _ in range(99)
-    ]
+    ] + [{"body": "noise", "user": {"login": "someone", "type": "User"}} for _ in range(99)]
     bot = ApprovalBot(
         {
             1: first_page,
