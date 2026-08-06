@@ -32,8 +32,7 @@ def _db() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS workspaces (
             id TEXT PRIMARY KEY,
             repository_id INTEGER NOT NULL,
@@ -55,11 +54,8 @@ def _db() -> sqlite3.Connection:
             FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """
-    )
-    columns = {
-        row[1] for row in db.execute("PRAGMA table_info(workspaces)").fetchall()
-    }
+        """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(workspaces)").fetchall()}
     additions = {
         "pids": "INTEGER NOT NULL DEFAULT 256",
         "provider_detail": "TEXT",
@@ -69,13 +65,11 @@ def _db() -> sqlite3.Connection:
         if name not in columns:
             db.execute(f"ALTER TABLE workspaces ADD COLUMN {name} {sql_type}")
     member_columns = {
-        row[1]
-        for row in db.execute("PRAGMA table_info(organization_members)").fetchall()
+        row[1] for row in db.execute("PRAGMA table_info(organization_members)").fetchall()
     }
     if member_columns and "status" not in member_columns:
         db.execute(
-            "ALTER TABLE organization_members "
-            "ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+            "ALTER TABLE organization_members " "ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
         )
     db.commit()
     return db
