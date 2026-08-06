@@ -608,14 +608,15 @@ def join(body: OrganizationJoin, response: Response) -> dict:
                     now,
                 ),
             )
-            remaining = int(secret["remaining_uses"]) - 1
-            db.execute(
-                """UPDATE organization_join_secrets
-                   SET remaining_uses=?,
-                       revoked_at=CASE WHEN ?=0 THEN ? ELSE revoked_at END
-                   WHERE id=?""",
-                (remaining, remaining, now, secret["id"]),
-            )
+        cursor = db.execute(
+            """UPDATE organization_join_secrets
+               SET remaining_uses=remaining_uses-1,
+                   revoked_at=CASE WHEN remaining_uses=1 THEN ? ELSE revoked_at END
+               WHERE id=? AND revoked_at IS NULL AND expires_at>? AND remaining_uses>0""",
+            (now, secret["id"], now),
+        )
+        if cursor.rowcount != 1:
+            raise HTTPException(status_code=400, detail="Invalid organization access")
             recovery_codes = _create_recovery_codes(
                 db, int(organization["id"]), user_id, 3
             )
