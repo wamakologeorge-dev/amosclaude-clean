@@ -330,12 +330,14 @@ def verify_authorized_job(
             _canonical_json(signed_payload),
             _decode(signature),
         )
-    except (BadSignatureError, ValueError) as exc:
+    except (BadSignatureError, TypeError, ValueError) as exc:
         raise SignatureVerificationError("job signature is invalid") from exc
 
     issued_at = _parse_time(authorization.get("issued_at"), "issued_at")
     expires_at = _parse_time(authorization.get("expires_at"), "expires_at")
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if expires_at <= issued_at:
+        raise JobExpiredError("job authorization expires before it becomes valid")
     if issued_at - current > timedelta(seconds=MAX_CLOCK_SKEW_SECONDS):
         raise JobExpiredError("job authorization was issued too far in the future")
     if current >= expires_at:
