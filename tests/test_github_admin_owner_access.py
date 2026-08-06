@@ -40,7 +40,7 @@ def test_unknown_github_identity_never_receives_root_access() -> None:
     )
 
 
-def test_owner_login_requires_github_oauth_and_exact_configured_identity() -> None:
+def test_optional_owner_github_route_requires_exact_configured_identity() -> None:
     owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
 
     assert '@router.get("/github/admin-login"' in owner_auth
@@ -50,14 +50,14 @@ def test_owner_login_requires_github_oauth_and_exact_configured_identity() -> No
     assert "https://api.github.com/user" in owner_auth
     assert "is_configured_github_admin" in owner_auth
 
-    # Authorizing a GitHub App is separate from installing it on repositories.
-    # Owner sign-in must not be blocked by repository-installation permissions.
+    # GitHub authorization remains an optional recovery path. It must not require
+    # the App installation before the configured owner can prove identity.
     assert 'f"https://api.github.com/repos/{repository_name}"' not in owner_auth
     assert 'permissions.get("admin") is True' not in owner_auth
     assert "GitHub App authorization and GitHub App installation are separate" in owner_auth
 
 
-def test_verified_owner_becomes_passwordless_root_and_old_sessions_end() -> None:
+def test_verified_github_owner_still_becomes_root_and_old_sessions_end() -> None:
     owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
 
     assert "password_hash=NULL" in owner_auth
@@ -67,23 +67,38 @@ def test_verified_owner_becomes_passwordless_root_and_old_sessions_end() -> None
     assert "auth._set_session_cookie(response, token)" in owner_auth
 
 
-def test_github_owner_cannot_use_password_email_code_or_reset_paths() -> None:
-    owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
+def test_primary_account_page_uses_standard_email_routes() -> None:
+    main = _read("amoscloud_ai/main.py")
+    script = _read("web/account-access.js")
 
-    assert 'user["provider"] == "github-admin"' in owner_auth
-    assert "This platform-owner account is GitHub-only" in owner_auth
-    assert '@router.post("/login", response_model=auth.UserResponse)' in owner_auth
-    assert '@router.post("/login/verify-code"' in owner_auth
-    assert '@router.post("/password/reset"' in owner_auth
+    assert "app.include_router(auth.router, include_in_schema=False)" in main
+    for route in (
+        "/auth/login",
+        "/auth/login/request-code",
+        "/auth/login/verify-code",
+        "/auth/register/request-code",
+        "/auth/register/verify",
+        "/auth/password/forgot",
+        "/auth/password/reset",
+    ):
+        assert route in script
+    assert "/api/v1/auth/login/request-code" not in script
+    assert "/api/v1/auth/password/forgot" not in script
 
 
-def test_login_page_exposes_one_clear_github_owner_action() -> None:
+def test_login_page_exposes_one_professional_account_flow() -> None:
     login = _read("web/login.html")
 
-    assert "GitHub-verified root access" in login
-    assert "Continue with GitHub as wamakologeorge-dev" in login
-    assert 'href="/api/v1/auth/github/admin-login"' in login
-    assert "No Amosclaud username, email code, or platform password" in login
+    assert "Welcome to Amosclaud" in login
+    assert "Create account" in login
+    assert "Email me a sign-in code" in login
+    assert "Forgot password?" in login
+    assert "secure code on any device" in login
+    assert "Organization ID" not in login
+    assert "GitHub-verified root access" not in login
+    assert "Continue with GitHub" not in login
+    assert "/static/unified-login.js" not in login
+    assert "/static/account-access.js" in login
 
 
 def test_production_example_documents_exact_oauth_callback() -> None:
