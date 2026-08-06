@@ -103,17 +103,22 @@ def github_account_access(
     return response
 
 
-def _verified_email(profile: dict[str, Any], emails: list[dict[str, Any]]) -> str | None:
+def _verified_email(emails: list[dict[str, Any]]) -> str | None:
     verified = [item for item in emails if item.get("verified") and item.get("email")]
     primary = next((item for item in verified if item.get("primary")), None)
     selected = primary or (verified[0] if verified else None)
-    if selected:
-        return auth._normalise_email(str(selected["email"]))
+    if not selected:
+        return None
+    return auth._normalise_email(str(selected["email"]))
 
+
+def _display_email(profile: dict[str, Any], verified_email: str | None, github_id: str) -> str:
+    if verified_email:
+        return verified_email
     profile_email = str(profile.get("email") or "").strip()
     if profile_email:
         return auth._normalise_email(profile_email)
-    return None
+    return f"github-{github_id}@users.noreply.amosclaud.local"
 
 
 async def _github_identity(code: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -154,20 +159,23 @@ async def _github_identity(code: str) -> tuple[dict[str, Any], list[dict[str, An
 def _find_or_create_github_user(
     profile: dict[str, Any],
     emails: list[dict[str, Any]],
-) -> tuple[int, bool]:
+) -> tuple[int, bool, str]:
     github_id = str(profile.get("id") or "").strip()
     github_login = str(profile.get("login") or "").strip()
     if not github_id or not github_login:
         raise HTTPException(status_code=400, detail="GitHub account identity is incomplete")
 
-    verified_email = _verified_email(profile, emails)
-    account_email = verified_email or f"github-{github_id}@users.noreply.amosclaud.local"
+    verified_email = _verified_email(emails)
+    account_email = _display_email(profile, verified_email, github_id)
     display_name = str(profile.get("name") or github_login).strip() or github_login
 
     with auth._connect() as db:
         user = db.execute("SELECT * FROM users WHERE github_id=?", (github_id,)).fetchone()
         created = False
 
+        # Linking by email is allowed only when GitHub's /user/emails endpoint
+        # marks the address verified. A public profile address alone cannot take
+        # over an existing Amosclaud account.
         if not user and verified_email:
             user = db.execute("SELECT * FROM users WHERE email=?", (verified_email,)).fetchone()
             if user:
