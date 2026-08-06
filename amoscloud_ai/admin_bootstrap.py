@@ -1,9 +1,9 @@
 """Administrator bootstrap policy for Amosclaud.
 
 Password and email bootstrap remain available for normal administrators. The
-platform-owner path is intentionally different: it trusts only a verified GitHub
-OAuth identity that matches the configured account and still controls the
-configured source repository.
+platform-owner path is intentionally different: it trusts only configured owner
+identities and limits email fallback to creation of the first account in an
+empty database.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import os
 DEFAULT_ADMIN_EMAILS = (
     "georgemakulu@amosclaud.com",
     "wamakologeorge@gmail.com",
+    "gmmakulu@gmail.com",
 )
 DEFAULT_ADMIN_GITHUB_IDS = ("271083488",)
 DEFAULT_ADMIN_GITHUB_LOGINS = ("wamakologeorge-dev",)
