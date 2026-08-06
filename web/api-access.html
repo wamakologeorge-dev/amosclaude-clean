@@ -19,6 +19,7 @@
       --green: #57d7a5;
       --danger: #ff9da8;
       --warning: #ffd479;
+      --bitcoin: #f7931a;
     }
     * { box-sizing: border-box; }
     html { background: var(--bg); }
@@ -52,18 +53,18 @@
     section { margin-top: 34px; }
     section h2 { margin: 0 0 18px; font-size: clamp(28px, 4vw, 38px); }
     .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-    .pack { min-height: 270px; display: flex; flex-direction: column; gap: 10px; }
+    .pack { min-height: 330px; display: flex; flex-direction: column; gap: 10px; }
     .pack h3 { margin: 0; font-size: 26px; }
     .credits { margin: 0; color: var(--muted); font-size: 19px; }
     .price { min-height: 30px; margin: 2px 0 10px; color: var(--text); font-weight: 750; }
     .pack-message { min-height: 64px; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+    .payment-actions { display: grid; gap: 9px; margin-top: auto; }
     .button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       width: 100%;
       min-height: 54px;
-      margin-top: auto;
       padding: 13px 18px;
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -80,6 +81,8 @@
     .button:focus-visible { outline: 3px solid rgb(117 134 255 / 45%); outline-offset: 3px; }
     .button.primary { background: var(--brand); border-color: var(--brand); }
     .button.primary:hover { background: var(--brand-hover); }
+    .button.bitcoin { background: var(--bitcoin); border-color: var(--bitcoin); color: #12100b; }
+    .button.bitcoin:hover { background: #ffab3d; }
     .keybox { display: flex; gap: 12px; align-items: stretch; }
     .keybox input {
       flex: 1;
@@ -107,6 +110,7 @@
     .notice[data-kind="warning"] { color: var(--warning); border-color: rgb(255 212 121 / 35%); }
     .checkout-note { margin: 14px 0 0; color: var(--muted); }
     .cash-handle { color: var(--green); font-weight: 850; }
+    .bitcoin-label { color: var(--bitcoin); font-weight: 850; }
     code { overflow-wrap: anywhere; }
     @media (max-width: 760px) {
       .shell { padding: 20px 18px 44px; }
@@ -140,34 +144,43 @@
       <div class="muted">Credits are charged by Amosclaud agent request. Failed runtime requests are automatically refunded.</div>
     </section>
 
-    <p id="status" class="notice" role="status" aria-live="polite">Loading your account and Cash App access…</p>
+    <p id="status" class="notice" role="status" aria-live="polite">Loading your account and Cash App payment access…</p>
 
     <section>
-      <h2>Add agent credits with Cash App</h2>
+      <h2>Add agent credits</h2>
       <div class="grid">
         <article class="card pack">
           <h3>Starter</h3>
           <p class="credits">1,000 credits</p>
-          <p class="price">Cash App only</p>
-          <p class="pack-message">Include “Amosclaud Starter” and your Amosclaud account email or GitHub username in the Cash App note.</p>
-          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Starter">Pay with Cash App</a>
+          <p class="price">Cash App or Bitcoin</p>
+          <p class="pack-message">Include “Amosclaud Starter” and your Amosclaud account email or GitHub username in the payment note.</p>
+          <div class="payment-actions">
+            <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Starter" data-payment-method="Cash App">Pay with Cash App</a>
+            <a class="button bitcoin" href="https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" target="_blank" rel="noopener noreferrer" data-cash-pack="Starter" data-payment-method="Cash App Bitcoin">Pay with Bitcoin</a>
+          </div>
         </article>
         <article class="card pack">
           <h3>Builder</h3>
           <p class="credits">5,000 credits</p>
-          <p class="price">Cash App only</p>
-          <p class="pack-message">Include “Amosclaud Builder” and your Amosclaud account email or GitHub username in the Cash App note.</p>
-          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Builder">Pay with Cash App</a>
+          <p class="price">Cash App or Bitcoin</p>
+          <p class="pack-message">Include “Amosclaud Builder” and your Amosclaud account email or GitHub username in the payment note.</p>
+          <div class="payment-actions">
+            <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Builder" data-payment-method="Cash App">Pay with Cash App</a>
+            <a class="button bitcoin" href="https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" target="_blank" rel="noopener noreferrer" data-cash-pack="Builder" data-payment-method="Cash App Bitcoin">Pay with Bitcoin</a>
+          </div>
         </article>
         <article class="card pack">
           <h3>Studio</h3>
           <p class="credits">15,000 credits</p>
-          <p class="price">Cash App only</p>
-          <p class="pack-message">Include “Amosclaud Studio” and your Amosclaud account email or GitHub username in the Cash App note.</p>
-          <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Studio">Pay with Cash App</a>
+          <p class="price">Cash App or Bitcoin</p>
+          <p class="pack-message">Include “Amosclaud Studio” and your Amosclaud account email or GitHub username in the payment note.</p>
+          <div class="payment-actions">
+            <a class="button primary" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" data-cash-pack="Studio" data-payment-method="Cash App">Pay with Cash App</a>
+            <a class="button bitcoin" href="https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" target="_blank" rel="noopener noreferrer" data-cash-pack="Studio" data-payment-method="Cash App Bitcoin">Pay with Bitcoin</a>
+          </div>
         </article>
       </div>
-      <p id="checkout-note" class="checkout-note">Official Cash App: <span class="cash-handle">$kenjamakulu</span>. Credits are added only after Amosclaud verifies the payment. Never include passwords, API keys, recovery codes, or private keys in the payment note. Review the <a href="/support">contribution and verification policy</a>.</p>
+      <p id="checkout-note" class="checkout-note">Official Cash App: <span class="cash-handle">$kenjamakulu</span>. Official alternate method: <span class="bitcoin-label">Bitcoin through Cash App</span>. Credits are added only after Amosclaud verifies the payment. Never include passwords, API keys, recovery codes, or private keys in the payment note. Review the <a href="/support">contribution and verification policy</a>.</p>
     </section>
 
     <section class="card">
@@ -215,12 +228,13 @@
     async function refresh() {
       const payload = await api("/api/v1/provider/tokens");
       document.querySelector("#balance").textContent = Number(payload.balance || 0).toLocaleString("en-US");
-      say("Cash App is the only payment option currently enabled. Payments require manual verification before credits are added.", "success");
+      say("Cash App and Cash App Bitcoin are the only payment options currently enabled. Payments require manual verification before credits are added.", "success");
     }
     document.querySelectorAll("[data-cash-pack]").forEach(link => {
       link.addEventListener("click", () => {
         const pack = link.dataset.cashPack;
-        say(`Cash App opened for the ${pack} pack. Include “Amosclaud ${pack}” and your account email or GitHub username in the payment note.`, "warning");
+        const method = link.dataset.paymentMethod;
+        say(`${method} opened for the ${pack} pack. Include “Amosclaud ${pack}” and your account email or GitHub username in the payment note.`, "warning");
       });
     });
     document.querySelector("#create-key").addEventListener("click", async event => {
