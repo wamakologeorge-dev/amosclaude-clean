@@ -1,4 +1,4 @@
-"""Customer Amosclaud API keys, agent credits, and provider endpoint."""
+"""Customer Amosclaud API keys, paid activation, credits, and provider endpoint."""
 
 from __future__ import annotations
 
@@ -15,11 +15,10 @@ from amoscloud_ai.agent_credit_billing import (
     checkout_line_item,
     checkout_metadata,
     get_pack,
-    public_packs,
     settle_paid_checkout,
-    stripe_configured,
 )
 from amoscloud_ai.agent_tokens import (
+    api_access_is_activated,
     credit_tokens,
     debit_tokens,
     ensure_agent_schema,
@@ -30,6 +29,16 @@ from amoscloud_ai.agent_tokens import (
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
 
 router = APIRouter(prefix="/provider", tags=["amosclaud-provider"])
+
+PAYMENT_LINKS = {
+    "cash_app": "https://cash.app/$kenjamakulu",
+    "bitcoin": "https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA",
+}
+PAYMENT_REASON = {
+    "cash_app": "cash_app_payment",
+    "bitcoin": "bitcoin_payment",
+}
+PACK_IDS = ("starter", "builder", "studio")
 
 
 class KeyCreate(BaseModel):
@@ -42,6 +51,13 @@ class KeyCreate(BaseModel):
 
 class TokenCheckout(BaseModel):
     pack: Literal["starter", "builder", "studio"]
+
+
+class PaymentActivation(BaseModel):
+    user_email: str = Field(min_length=5, max_length=254)
+    pack: Literal["starter", "builder", "studio"]
+    method: Literal["cash_app", "bitcoin"]
+    payment_reference: str = Field(min_length=4, max_length=200)
 
 
 class ChatMessage(BaseModel):
@@ -61,6 +77,13 @@ def _user(token: str | None):
             status_code=401,
             detail="Sign in to manage Amosclaud API access",
         )
+    return user
+
+
+def _admin(token: str | None):
+    user = _user(token)
+    if not bool(user["is_admin"]):
+        raise HTTPException(status_code=403, detail="Administrator access required")
     return user
 
 
@@ -137,6 +160,33 @@ def _wallet_balance(user_id: int) -> int:
     return int(wallet["balance"]) if wallet else 0
 
 
+def _manual_packs() -> list[dict[str, object]]:
+    return [
+        {
+            "id": pack.id,
+            "name": pack.name,
+            "credits": pack.credits,
+            "available": True,
+            "payment_methods": ["cash_app", "bitcoin"],
+            "payment_note": (
+                f'Include "Amosclaud {pack.name}" and the account email or GitHub '
+                "username in the payment note."
+            ),
+        }
+        for pack in (get_pack(pack_id) for pack_id in PACK_IDS)
+    ]
+
+
+def _payment_required() -> HTTPException:
+    return HTTPException(
+        status_code=402,
+        detail=(
+            "Pay with Cash App or Bitcoin and wait for Amosclaud to verify the "
+            "payment before creating or using an Amosclaud API key."
+        ),
+    )
+
+
 @router.get("/tokens")
 def token_status(amos_session: str | None = Cookie(default=None)) -> dict:
     user = _user(amos_session)
@@ -151,17 +201,26 @@ def token_status(amos_session: str | None = Cookie(default=None)) -> dict:
                WHERE user_id=? ORDER BY id DESC LIMIT 50""",
             (user["id"],),
         ).fetchall()
-    packs = public_packs()
+        activated = api_access_is_activated(
+            db,
+            int(user["id"]),
+            is_admin=bool(user["is_admin"]),
+        )
     return {
         "balance": int(wallet["balance"]) if wallet else 0,
         "updated_at": wallet["updated_at"] if wallet else None,
-        "checkout_available": any(pack["available"] for pack in packs),
-        "checkout_provider": "stripe" if stripe_configured() else None,
+        "api_activated": activated,
+        "payment_required": not activated,
+        "checkout_available": True,
+        "checkout_provider": "cash_app_or_bitcoin_manual_verification",
+        "payment_methods": [
+            {"id": method, "url": url} for method, url in PAYMENT_LINKS.items()
+        ],
         "payment_method_note": (
-            "Stripe Checkout accepts cards and debit cards. Bank-account options "
-            "appear when they are enabled and eligible in the Stripe Dashboard."
+            "Cash App and Bitcoin are the only enabled payment methods. Amosclaud "
+            "activates API access only after an administrator verifies the payment."
         ),
-        "packs": packs,
+        "packs": _manual_packs(),
         "history": [dict(row) for row in history],
     }
 
@@ -171,55 +230,15 @@ def token_checkout(
     body: TokenCheckout,
     amos_session: str | None = Cookie(default=None),
 ) -> dict[str, str]:
-    user = _user(amos_session)
-    secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    pack = get_pack(body.pack)
-    if not stripe_configured():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Stripe credit checkout is not fully configured. Add "
-                "STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET on the server."
-            ),
-        )
-    try:
-        line_item = checkout_line_item(pack)
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    stripe.api_key = secret
-    customer_id = _stripe_customer_id(user)
-    metadata = checkout_metadata(int(user["id"]), pack)
-    try:
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[line_item],
-            customer=customer_id,
-            client_reference_id=str(user["id"]),
-            metadata=metadata,
-            payment_intent_data={
-                "metadata": metadata,
-                "receipt_email": user["email"],
-            },
-            success_url=(
-                f"{_public_url()}/api-access?checkout=success" "&session_id={CHECKOUT_SESSION_ID}"
-            ),
-            cancel_url=f"{_public_url()}/api-access?checkout=cancelled",
-            submit_type="pay",
-            locale="auto",
-        )
-    except stripe.error.StripeError as exc:
-        raise _stripe_error("Stripe could not start checkout", exc) from exc
-
-    if not session.url:
-        raise HTTPException(
-            status_code=502,
-            detail="Stripe did not return a checkout URL",
-        )
-    return {
-        "url": str(session.url),
-        "session_id": str(session.id),
-    }
+    _user(amos_session)
+    get_pack(body.pack)
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Stripe checkout is disabled. Pay with Cash App or Bitcoin from "
+            "/api-access and wait for manual verification."
+        ),
+    )
 
 
 @router.get("/tokens/checkout/{session_id}")
@@ -227,63 +246,62 @@ def token_checkout_status(
     session_id: str,
     amos_session: str | None = Cookie(default=None),
 ) -> dict[str, object]:
-    user = _user(amos_session)
-    if not session_id.startswith("cs_") or len(session_id) > 255:
-        raise HTTPException(
-            status_code=400,
-            detail="Stripe Checkout session is invalid",
-        )
+    _user(amos_session)
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Stripe checkout is disabled. Cash App and Bitcoin payments are "
+            "activated only after manual verification."
+        ),
+    )
 
-    secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    if not secret:
-        raise HTTPException(
-            status_code=503,
-            detail="Stripe checkout is not configured",
-        )
-    stripe.api_key = secret
-    try:
-        session = stripe.checkout.Session.retrieve(session_id)
-    except stripe.error.StripeError as exc:
-        raise _stripe_error(
-            "Stripe could not confirm this checkout",
-            exc,
-        ) from exc
 
-    user_id = int(user["id"])
-    if _session_owner(session) != user_id:
-        raise HTTPException(
-            status_code=404,
-            detail="Checkout session was not found",
-        )
+@router.post("/payments/activate")
+def activate_paid_api_access(
+    body: PaymentActivation,
+    amos_session: str | None = Cookie(default=None),
+) -> dict[str, object]:
+    """Credit and activate one externally verified Cash App or Bitcoin payment."""
 
-    try:
-        with _connect() as db:
-            credited, balance = settle_paid_checkout(
-                db,
-                session,
-                expected_user_id=user_id,
+    reviewer = _admin(amos_session)
+    email = body.user_email.strip().lower()
+    payment_reference = body.payment_reference.strip()
+    pack = get_pack(body.pack)
+    with _connect() as db:
+        ensure_agent_schema(db)
+        account = db.execute(
+            "SELECT id,email FROM users WHERE email=? COLLATE NOCASE",
+            (email,),
+        ).fetchone()
+        if not account:
+            raise HTTPException(status_code=404, detail="Amosclaud account not found")
+        reason = PAYMENT_REASON[body.method]
+        credited = credit_tokens(
+            db,
+            int(account["id"]),
+            pack.credits,
+            reason=reason,
+            reference=payment_reference,
+        )
+        if not credited:
+            raise HTTPException(
+                status_code=409,
+                detail="This payment reference was already verified",
             )
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    payment_status = str(getattr(session, "payment_status", "unpaid"))
-    status = str(getattr(session, "status", "open"))
-    if payment_status != "paid":
-        balance = _wallet_balance(user_id)
-
-    if payment_status == "paid":
-        message = "Payment confirmed and agent credits are available."
-    elif status == "complete":
-        message = "Stripe accepted the payment details. Bank payments can take time " "to settle."
-    else:
-        message = "Checkout has not been completed."
+        wallet = db.execute(
+            "SELECT balance FROM agent_token_wallets WHERE user_id=?",
+            (account["id"],),
+        ).fetchone()
     return {
-        "session_id": session_id,
-        "status": status,
-        "payment_status": payment_status,
-        "credited_now": credited,
-        "balance": balance,
-        "message": message,
+        "activated": True,
+        "user_id": int(account["id"]),
+        "user_email": account["email"],
+        "pack": pack.id,
+        "credits_added": pack.credits,
+        "balance": int(wallet["balance"]) if wallet else pack.credits,
+        "payment_method": body.method,
+        "payment_reference": payment_reference,
+        "verified_by": int(reviewer["id"]),
     }
 
 
@@ -307,6 +325,12 @@ def create_key(
 ) -> dict:
     user = _user(amos_session)
     with _connect() as db:
+        if not api_access_is_activated(
+            db,
+            int(user["id"]),
+            is_admin=bool(user["is_admin"]),
+        ):
+            raise _payment_required()
         key_id, raw, prefix = issue_api_key(
             db,
             int(user["id"]),
@@ -316,6 +340,7 @@ def create_key(
         "id": key_id,
         "api_key": raw,
         "prefix": prefix,
+        "activated": True,
         "warning": "Copy this key now. Amosclaud stores only its secure hash.",
     }
 
@@ -348,7 +373,9 @@ def _authenticate(authorization: str | None):
     with _connect() as db:
         ensure_agent_schema(db)
         row = db.execute(
-            """SELECT k.id,k.user_id,w.balance FROM agent_api_keys k
+            """SELECT k.id,k.user_id,w.balance,u.is_admin
+               FROM agent_api_keys k
+               JOIN users u ON u.id=k.user_id
                LEFT JOIN agent_token_wallets w ON w.user_id=k.user_id
                WHERE k.key_hash=? AND k.revoked_at IS NULL""",
             (key_hash(raw),),
@@ -358,6 +385,12 @@ def _authenticate(authorization: str | None):
                 status_code=401,
                 detail="Amosclaud API key is invalid or revoked",
             )
+        if not api_access_is_activated(
+            db,
+            int(row["user_id"]),
+            is_admin=bool(row["is_admin"]),
+        ):
+            raise _payment_required()
         db.execute(
             "UPDATE agent_api_keys SET last_used_at=? WHERE id=?",
             (now(), row["id"]),
@@ -433,3 +466,13 @@ def chat_completions(
         ],
         "usage": {"amosclaud_credits": cost},
     }
+
+
+__all__ = [
+    "PAYMENT_LINKS",
+    "PaymentActivation",
+    "activate_paid_api_access",
+    "checkout_line_item",
+    "checkout_metadata",
+    "settle_paid_checkout",
+]
