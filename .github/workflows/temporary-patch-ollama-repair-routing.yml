@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - fix/automatic-ollama-repair-routing
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write
