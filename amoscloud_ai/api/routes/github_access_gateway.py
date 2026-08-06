@@ -33,10 +33,16 @@ def _callback_url() -> str:
 
 
 def _safe_return_to(value: str | None) -> str:
+    allowed_return_paths = {
+        "/cloud/agent",
+        "/cloud",
+        "/settings",
+        "/billing",
+    }
     candidate = (value or "/cloud/agent").strip()
-    if not candidate.startswith("/") or candidate.startswith("//"):
-        return "/cloud/agent"
-    return candidate
+    if candidate in allowed_return_paths:
+        return candidate
+    return "/cloud/agent"
 
 
 def _set_oauth_cookie(response: Response, name: str, value: str) -> None:
