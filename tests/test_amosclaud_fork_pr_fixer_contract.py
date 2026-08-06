@@ -17,7 +17,7 @@ def test_fork_workflow_repairs_without_pushing_to_the_fork() -> None:
     assert "gh pr create" in workflow
     assert "gh pr comment" in workflow
     assert "git -C target push origin" not in workflow
-    assert "force push" not in workflow.lower()
+    assert "--force" not in workflow
 
 
 def test_fork_route_blocks_only_sensitive_unapproved_content() -> None:
