@@ -40,7 +40,7 @@ def test_unknown_github_identity_never_receives_root_access() -> None:
     )
 
 
-def test_owner_login_requires_github_oauth_and_repository_control() -> None:
+def test_owner_login_requires_github_oauth_and_exact_configured_identity() -> None:
     owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
 
     assert '@router.get("/github/admin-login"' in owner_auth
@@ -48,10 +48,13 @@ def test_owner_login_requires_github_oauth_and_repository_control() -> None:
     assert "https://github.com/login/oauth/authorize" in owner_auth
     assert "https://github.com/login/oauth/access_token" in owner_auth
     assert "https://api.github.com/user" in owner_auth
-    assert 'f"https://api.github.com/repos/{repository_name}"' in owner_auth
-    assert 'permissions.get("admin") is True' in owner_auth
-    assert 'str(owner.get("login") or "").lower() == login.lower()' in owner_auth
     assert "is_configured_github_admin" in owner_auth
+
+    # Authorizing a GitHub App is separate from installing it on repositories.
+    # Owner sign-in must not be blocked by repository-installation permissions.
+    assert 'f"https://api.github.com/repos/{repository_name}"' not in owner_auth
+    assert 'permissions.get("admin") is True' not in owner_auth
+    assert "GitHub App authorization and GitHub App installation are separate" in owner_auth
 
 
 def test_verified_owner_becomes_passwordless_root_and_old_sessions_end() -> None:
