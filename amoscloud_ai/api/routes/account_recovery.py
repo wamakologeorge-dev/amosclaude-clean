@@ -46,8 +46,7 @@ class PasswordRecoveryRequest(UsernameVerifyRequest):
 
 
 def _prepare(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS account_recovery_emails (
             user_id INTEGER PRIMARY KEY,
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -66,8 +65,7 @@ def _prepare(db: sqlite3.Connection) -> None:
             PRIMARY KEY(email, purpose),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     db.commit()
 
 
@@ -189,9 +187,7 @@ def request_recovery_email(
             purpose="recovery-email",
             user_id=user["id"],
         )
-    return {
-        "message": "Amosclaud sent a verification code from no-reply@amosclaud.com"
-    }
+    return {"message": "Amosclaud sent a verification code from no-reply@amosclaud.com"}
 
 
 @router.post("/email/verify")
@@ -239,8 +235,7 @@ def request_username_recovery(body: RecoveryCodeRequest) -> dict:
             )
     return {
         "message": (
-            "If that recovery email is verified, Amosclaud sent a "
-            "username-recovery code"
+            "If that recovery email is verified, Amosclaud sent a " "username-recovery code"
         )
     }
 
@@ -283,10 +278,7 @@ def request_password_recovery(body: RecoveryCodeRequest) -> dict:
                 user_id=user["id"],
             )
     return {
-        "message": (
-            "If that recovery email is verified, Amosclaud sent a "
-            "password-reset code"
-        )
+        "message": ("If that recovery email is verified, Amosclaud sent a " "password-reset code")
     }
 
 
