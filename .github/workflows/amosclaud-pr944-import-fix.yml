@@ -1,0 +1,39 @@
+name: Amosclaud PR 944 Import Repair
+
+on:
+  push:
+    branches:
+      - fix/owner-login-private-data-approval
+
+permissions:
+  contents: write
+
+jobs:
+  repair-imports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/owner-login-private-data-approval
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Repair import ordering and remove this one-time workflow
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check isort
+          isort amosclaud_bot/approval_gate.py amoscloud_ai/api/routes/auth.py
+          rm .github/workflows/amosclaud-pr944-import-fix.yml
+          git config user.name "Amosclaud Autonomous Repair"
+          git config user.email "repair@amosclaud.internal"
+          git add amosclaud_bot/approval_gate.py amoscloud_ai/api/routes/auth.py .github/workflows/amosclaud-pr944-import-fix.yml
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m "style: sort PR 944 imports"
+          git push origin HEAD:fix/owner-login-private-data-approval
