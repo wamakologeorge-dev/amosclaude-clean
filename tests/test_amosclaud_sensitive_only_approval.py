@@ -52,12 +52,8 @@ def test_safe_placeholders_and_credential_code_do_not_trigger_approval() -> None
 
 
 def test_literal_secret_and_personal_values_trigger_approval() -> None:
-    assert _patch_contains_sensitive_information(
-        '+password = "A-real-password-123"'
-    )
-    assert _patch_contains_sensitive_information(
-        "+home address: 123 Private Street"
-    )
+    assert _patch_contains_sensitive_information('+password = "A-real-password-123"')
+    assert _patch_contains_sensitive_information("+home address: 123 Private Street")
 
 
 def test_fork_origin_is_not_an_approval_boundary() -> None:
