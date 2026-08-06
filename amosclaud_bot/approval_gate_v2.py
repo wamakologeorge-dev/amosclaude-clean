@@ -19,6 +19,7 @@ SENSITIVE_OBJECTIVE_HINTS = (
     "environment secret",
     "leaked secret",
     "exposed secret",
+    "leaked api key",
     "actual api key",
     "rotate api key",
     "private key",
