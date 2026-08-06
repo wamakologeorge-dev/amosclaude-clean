@@ -53,35 +53,42 @@ def test_owner_recovery_route_requires_exact_configured_identity() -> None:
     assert "GitHub App authorization and installation are separate" in owner_auth
 
 
-def test_public_github_signup_accepts_any_identity_but_does_not_grant_admin() -> None:
+def test_public_github_signup_accepts_any_identity_but_never_grants_admin() -> None:
     public_auth = _read("amoscloud_ai/api/routes/github_access_gateway.py")
 
     assert '"allow_signup": "true"' in public_auth
     assert "_find_or_create_github_user" in public_auth
-    assert "should_grant_admin(account_email" in public_auth
+    assert "VALUES (?,?,NULL,?,'github',0,?)" in public_auth
+    assert "should_grant_admin" not in public_auth
     assert "is_configured_github_admin" not in public_auth
-    assert "VALUES (?,?,NULL,?,'github',?,?)" in public_auth
 
 
-def test_password_and_email_access_are_removed_from_public_gateway() -> None:
+def test_email_password_and_code_access_remain_primary() -> None:
+    auth = _read("amoscloud_ai/api/routes/auth.py")
     public_auth = _read("amoscloud_ai/api/routes/github_access_gateway.py")
     login = _read("web/login.html")
 
     for route in (
-        "/auth/login",
-        "/auth/login/request-code",
-        "/auth/login/verify-code",
-        "/auth/register/request-code",
-        "/auth/register/verify",
-        "/auth/password/forgot",
-        "/auth/password/reset",
+        '@router.post("/login"',
+        '@router.post("/login/request-code"',
+        '@router.post("/login/verify-code"',
+        '@router.post("/register/request-code"',
+        '@router.post("/register/verify"',
+        '@router.post("/password/forgot"',
+        '@router.post("/password/reset"',
     ):
-        assert route in public_auth
-    assert "status_code=410" in public_auth
-    assert "github_account_required" in public_auth
-    assert "location.replace('/auth/github')" in login
-    assert "<form" not in login
-    assert "/static/account-access.js" not in login
+        assert route in auth
+
+    assert '"optional": True' in public_auth
+    assert "status_code=410" not in public_auth
+    assert "github_account_required" not in public_auth
+    assert "location.replace('/auth/github')" not in login
+    assert "<form" in login
+    assert 'type="password"' in login
+    assert "/static/account-access.js" in login
+    assert "Create account" in login
+    assert "Email me a sign-in code" in login
+    assert "Forgot password?" in login
 
 
 def test_owner_callback_still_issues_an_admin_session() -> None:
@@ -92,13 +99,13 @@ def test_owner_callback_still_issues_an_admin_session() -> None:
     assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in owner_auth
 
 
-def test_production_example_documents_public_and_owner_callbacks() -> None:
+def test_production_example_documents_public_and_unified_callbacks() -> None:
     example = _read(".env.production.example")
+    canonical = "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
 
     assert "GITHUB_CALLBACK_URL=https://www.amosclaud.com/auth/github/callback" in example
-    assert (
-        "GITHUB_ADMIN_CALLBACK_URL=https://www.amosclaud.com/" "api/v1/auth/github/admin-callback"
-    ) in example
+    assert f"GITHUB_ADMIN_CALLBACK_URL={canonical}" in example
+    assert f"GITHUB_REPOSITORY_CALLBACK_URL={canonical}" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_IDS=271083488" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_LOGINS=wamakologeorge-dev" in example
     assert ("AMOSCLAUD_ADMIN_GITHUB_REPOSITORY=" "wamakologeorge-dev/amosclaude-clean") in example
