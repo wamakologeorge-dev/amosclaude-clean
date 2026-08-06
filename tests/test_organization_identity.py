@@ -81,6 +81,7 @@ def test_login_page_is_the_primary_organization_access_portal() -> None:
     script = _read("web/unified-login.js")
 
     assert '@router.get("/organization-access", include_in_schema=False)' in health
+    assert 'RedirectResponse("/login?method=organization", status_code=302)' in health
     assert 'id="organization-access-panel"' in login
     assert 'id="email-access-panel"' in login
     assert 'src="/static/unified-login.js"' in login
