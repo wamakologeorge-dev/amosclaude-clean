@@ -68,8 +68,7 @@ def validate_patch(
     contains_sensitive_content = _patch_contains_sensitive_information(patch)
     if (contains_sensitive_path or contains_sensitive_content) and not approved:
         raise ValueError(
-            "repair touches environment secrets or personal information and requires "
-            "a recorded human approval"
+            "repair touches environment secrets or personal information and requires a recorded human approval"
         )
     return paths
 
