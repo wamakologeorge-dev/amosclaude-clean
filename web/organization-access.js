@@ -207,20 +207,27 @@
 
   const ownerAction = document.getElementById('owner-action');
   const memberNumberField = document.getElementById('member-number-field');
+  const memberNumberInput = document.getElementById('member-number');
   const newOrganizationIdField = document.getElementById('new-organization-id-field');
+  const newOrganizationIdInput = document.getElementById('new-organization-id');
   const joinCodeOptions = document.getElementById('join-code-options');
   const ownerSubmit = document.getElementById('owner-submit');
 
   function updateOwnerAction() {
     const action = ownerAction.value;
-    memberNumberField.hidden = action !== 'remove-member';
+    const usesMemberNumber = action === 'remove-member' || action === 'transfer-ownership';
+    memberNumberField.hidden = !usesMemberNumber;
     newOrganizationIdField.hidden = action !== 'change-id';
     joinCodeOptions.hidden = action !== 'join-code';
+    memberNumberInput.required = usesMemberNumber;
+    newOrganizationIdInput.required = action === 'change-id';
     ownerSubmit.textContent = action === 'join-code'
       ? 'Create access code'
       : action === 'remove-member'
         ? 'Remove member'
-        : 'Change organization ID';
+        : action === 'transfer-ownership'
+          ? 'Transfer ownership'
+          : 'Change organization ID';
   }
 
   ownerAction.addEventListener('change', updateOwnerAction);
@@ -244,13 +251,19 @@
           }),
         });
       } else if (ownerAction.value === 'remove-member') {
-        const memberNumber = document.getElementById('member-number').value.trim();
+        const memberNumber = memberNumberInput.value.trim();
         await request(`/api/v1/organization-access/${organizationId}/members/${memberNumber}`, {
           method: 'DELETE',
         });
         data = { result: `Membership ${organizationId}-${memberNumber} was revoked.` };
+      } else if (ownerAction.value === 'transfer-ownership') {
+        const memberNumber = memberNumberInput.value.trim();
+        data = await request(`/api/v1/organization-access/${organizationId}/transfer-ownership`, {
+          method: 'POST',
+          body: JSON.stringify({ member_number: memberNumber }),
+        });
       } else {
-        const newId = document.getElementById('new-organization-id').value.trim();
+        const newId = newOrganizationIdInput.value.trim();
         data = await request(`/api/v1/organization-access/${organizationId}/identifier`, {
           method: 'PATCH',
           body: JSON.stringify({ organization_id: newId }),
