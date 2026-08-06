@@ -170,14 +170,14 @@ def test_google_oauth_requires_verified_email(monkeypatch, tmp_path):
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
 
 
-def test_login_page_exposes_google_control_and_production_callback():
+def test_google_oauth_remains_available_without_cluttering_primary_login():
     login = open("web/login.html", encoding="utf-8").read()
-    script = open("web/account-access.js", encoding="utf-8").read()
+    routes = open("amoscloud_ai/api/routes/google_auth.py", encoding="utf-8").read()
     environment = open(".env.production.example", encoding="utf-8").read()
 
-    assert 'id="google-login-button"' in login
-    assert "/api/v1/auth/google/status" in script
-    assert "window.location.assign('/api/v1/auth/google')" in script
+    assert 'id="google-login-button"' not in login
+    assert '@router.get("/google/status")' in routes
+    assert '@router.get("/google")' in routes
     assert (
         "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback" in environment
     )
