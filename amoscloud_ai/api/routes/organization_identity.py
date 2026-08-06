@@ -106,9 +106,7 @@ def _canonical_secret(value: str) -> str:
 def _next_org_id(db: sqlite3.Connection) -> str:
     for _ in range(1000):
         value = f"{secrets.randbelow(90_000) + 10_000:05d}"
-        if not db.execute(
-            "SELECT 1 FROM organizations WHERE public_id=?", (value,)
-        ).fetchone():
+        if not db.execute("SELECT 1 FROM organizations WHERE public_id=?", (value,)).fetchone():
             return value
     raise HTTPException(status_code=503, detail="Organization ID allocation is busy")
 
@@ -134,9 +132,7 @@ def _safe_existing_username(name: str, user_id: int) -> str:
 
 def _backfill(db: sqlite3.Connection) -> None:
     now = _now()
-    for row in db.execute(
-        "SELECT id,public_id,status,updated_at FROM organizations"
-    ).fetchall():
+    for row in db.execute("SELECT id,public_id,status,updated_at FROM organizations").fetchall():
         db.execute(
             "UPDATE organizations SET public_id=?,status=?,updated_at=? WHERE id=?",
             (
@@ -146,15 +142,11 @@ def _backfill(db: sqlite3.Connection) -> None:
                 row["id"],
             ),
         )
-    rows = db.execute(
-        """SELECT m.organization_id,m.user_id,m.username,m.member_number,
+    rows = db.execute("""SELECT m.organization_id,m.user_id,m.username,m.member_number,
                   m.status,m.updated_at,u.name
-           FROM organization_members m JOIN users u ON u.id=m.user_id"""
-    ).fetchall()
+           FROM organization_members m JOIN users u ON u.id=m.user_id""").fetchall()
     for row in rows:
-        username = row["username"] or _safe_existing_username(
-            str(row["name"]), int(row["user_id"])
-        )
+        username = row["username"] or _safe_existing_username(str(row["name"]), int(row["user_id"]))
         candidate = username
         suffix = 1
         while db.execute(
@@ -171,8 +163,7 @@ def _backfill(db: sqlite3.Connection) -> None:
                WHERE organization_id=? AND user_id=?""",
             (
                 candidate,
-                row["member_number"]
-                or _next_member_number(db, int(row["organization_id"])),
+                row["member_number"] or _next_member_number(db, int(row["organization_id"])),
                 row["status"] or "active",
                 row["updated_at"] or now,
                 row["organization_id"],
@@ -188,8 +179,7 @@ def _db() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS organizations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -238,8 +228,7 @@ def _db() -> sqlite3.Connection:
             created_at TEXT NOT NULL,
             FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     _ensure_column(db, "organizations", "public_id TEXT")
     _ensure_column(db, "organizations", "status TEXT NOT NULL DEFAULT 'active'")
     _ensure_column(db, "organizations", "updated_at TEXT")
@@ -253,8 +242,7 @@ def _db() -> sqlite3.Connection:
     _ensure_column(db, "organization_members", "removed_at TEXT")
     _ensure_column(db, "organization_members", "updated_at TEXT")
     _backfill(db)
-    db.executescript(
-        """
+    db.executescript("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_public_id
         ON organizations(public_id);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_organization_member_username
@@ -265,8 +253,7 @@ def _db() -> sqlite3.Connection:
         ON organization_join_secrets(organization_id,secret_hash);
         CREATE INDEX IF NOT EXISTS idx_organization_recovery
         ON organization_recovery_codes(organization_id,user_id,code_hash);
-        """
-    )
+        """)
     db.commit()
     return db
 
@@ -416,15 +403,11 @@ def register(body: OrganizationRegistration, response: Response) -> dict:
     username = _validate_username(body.username)
     now = _now()
     with _db() as db:
-        if db.execute(
-            "SELECT 1 FROM organizations WHERE public_id=?", (public_id,)
-        ).fetchone():
+        if db.execute("SELECT 1 FROM organizations WHERE public_id=?", (public_id,)).fetchone():
             raise HTTPException(status_code=409, detail="Organization ID is in use")
         member_number = f"{secrets.randbelow(9000) + 1000:04d}"
         try:
-            user_id = _create_native_user(
-                db, public_id, member_number, username, body.password
-            )
+            user_id = _create_native_user(db, public_id, member_number, username, body.password)
             cursor = db.execute(
                 """INSERT INTO organizations(
                        name,slug,owner_id,created_at,public_id,status,updated_at
@@ -453,9 +436,7 @@ def register(body: OrganizationRegistration, response: Response) -> dict:
                     now,
                 ),
             )
-            recovery_codes = _create_recovery_codes(
-                db, organization_id, user_id, 3
-            )
+            recovery_codes = _create_recovery_codes(db, organization_id, user_id, 3)
             _audit(
                 db,
                 organization_id,
@@ -491,9 +472,7 @@ def login(body: OrganizationLogin, response: Response) -> dict:
     public_id = _validate_org_id(body.organization_id)
     with _db() as db:
         identity = _identity(db, public_id, body.username_or_member_id)
-        if not identity or not _verify_password(
-            body.password, identity["password_hash"]
-        ):
+        if not identity or not _verify_password(body.password, identity["password_hash"]):
             raise HTTPException(
                 status_code=401,
                 detail="Invalid organization ID, username, member ID, or password",
@@ -591,9 +570,7 @@ def join(body: OrganizationJoin, response: Response) -> dict:
             raise HTTPException(status_code=409, detail="Username is in use")
         member_number = _next_member_number(db, int(organization["id"]))
         try:
-            user_id = _create_native_user(
-                db, public_id, member_number, username, body.password
-            )
+            user_id = _create_native_user(db, public_id, member_number, username, body.password)
             db.execute(
                 """INSERT INTO organization_members(
                        organization_id,user_id,role,created_at,username,
@@ -608,18 +585,17 @@ def join(body: OrganizationJoin, response: Response) -> dict:
                     now,
                 ),
             )
-        cursor = db.execute(
-            """UPDATE organization_join_secrets
-               SET remaining_uses=remaining_uses-1,
-                   revoked_at=CASE WHEN remaining_uses=1 THEN ? ELSE revoked_at END
-               WHERE id=? AND revoked_at IS NULL AND expires_at>? AND remaining_uses>0""",
-            (now, secret["id"], now),
-        )
-        if cursor.rowcount != 1:
-            raise HTTPException(status_code=400, detail="Invalid organization access")
-            recovery_codes = _create_recovery_codes(
-                db, int(organization["id"]), user_id, 3
+            cursor = db.execute(
+                """UPDATE organization_join_secrets
+                   SET remaining_uses=remaining_uses-1,
+                       revoked_at=CASE WHEN remaining_uses=1 THEN ? ELSE revoked_at END
+                   WHERE id=? AND revoked_at IS NULL
+                     AND expires_at>? AND remaining_uses>0""",
+                (now, secret["id"], now),
             )
+            if cursor.rowcount != 1:
+                raise HTTPException(status_code=400, detail="Invalid organization access")
+            recovery_codes = _create_recovery_codes(db, int(organization["id"]), user_id, 3)
             _audit(
                 db,
                 int(organization["id"]),
@@ -631,6 +607,9 @@ def join(body: OrganizationJoin, response: Response) -> dict:
         except sqlite3.IntegrityError as exc:
             db.rollback()
             raise HTTPException(status_code=409, detail="Member identity is in use") from exc
+        except HTTPException:
+            db.rollback()
+            raise
         token = _create_session(db, user_id)
     _set_session_cookie(response, token)
     return {
@@ -712,9 +691,7 @@ def current(user: sqlite3.Row = Depends(_current_user)) -> list[dict]:
 
 
 @router.get("/{public_id}/members")
-def members(
-    public_id: str, user: sqlite3.Row = Depends(_current_user)
-) -> list[dict]:
+def members(public_id: str, user: sqlite3.Row = Depends(_current_user)) -> list[dict]:
     public_id = _validate_org_id(public_id)
     with _db() as db:
         actor = _membership(db, public_id, int(user["id"]))
