@@ -9,10 +9,9 @@ from collections import defaultdict, deque
 from threading import Lock
 
 import redis
-from redis.exceptions import RedisError
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from amoscloud_ai.core.access import AccessMode, AccessPolicy
