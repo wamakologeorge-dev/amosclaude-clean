@@ -20,8 +20,8 @@ def test_ollama_secret_is_the_primary_repair_model_route() -> None:
     assert "OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}" in workflow
     assert 'if [ -n "$OLLAMA_API_KEY" ]; then' in workflow
     assert 'export AMOSCLAUD_API_KEY="$OLLAMA_API_KEY"' in workflow
-    assert '${OLLAMA_URL:-https://ollama.com}' in workflow
-    assert '${OLLAMA_MODEL:-${AMOSCLAUD_MODEL:-gpt-oss:120b}}' in workflow
+    assert "${OLLAMA_URL:-https://ollama.com}" in workflow
+    assert "${OLLAMA_MODEL:-${AMOSCLAUD_MODEL:-gpt-oss:120b}}" in workflow
     assert 'AMOSCLAUD_REPAIR_PROVIDER="ollama-cloud"' in workflow
 
 
@@ -29,8 +29,8 @@ def test_gateway_remains_a_safe_fallback_when_ollama_is_unavailable() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
     assert "AMOSCLAUD_GATEWAY_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}" in workflow
-    assert '${AMOSCLAUD_GATEWAY_API_URL:-https://www.amosclaud.com}' in workflow
-    assert '${AMOSCLAUD_GATEWAY_FIXER_MODEL:-amosclaud-agent}' in workflow
+    assert "${AMOSCLAUD_GATEWAY_API_URL:-https://www.amosclaud.com}" in workflow
+    assert "${AMOSCLAUD_GATEWAY_FIXER_MODEL:-amosclaud-agent}" in workflow
     assert 'AMOSCLAUD_REPAIR_PROVIDER="amosclaud-gateway"' in workflow
 
 
