@@ -180,9 +180,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(self.auth_window_seconds)},
             )
 
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get(
-            "amos_session"
-        ):
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get("amos_session"):
             origin = request.headers.get("origin")
             allowed_origins = self._trusted_request_origins(request.url.path)
             if origin and origin.rstrip("/") not in allowed_origins:

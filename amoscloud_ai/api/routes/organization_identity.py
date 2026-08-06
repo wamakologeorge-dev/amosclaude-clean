@@ -147,10 +147,8 @@ def _safe_existing_username(name: str, user_id: int) -> str:
 
 def _backfill(db: sqlite3.Connection) -> None:
     now = _now()
-    organizations = db.execute(
-        """SELECT id,public_id,status,updated_at FROM organizations
-           WHERE public_id IS NULL OR public_id='' OR updated_at IS NULL"""
-    ).fetchall()
+    organizations = db.execute("""SELECT id,public_id,status,updated_at FROM organizations
+           WHERE public_id IS NULL OR public_id='' OR updated_at IS NULL""").fetchall()
     for row in organizations:
         db.execute(
             "UPDATE organizations SET public_id=?,status=?,updated_at=? WHERE id=?",
@@ -162,17 +160,13 @@ def _backfill(db: sqlite3.Connection) -> None:
             ),
         )
 
-    rows = db.execute(
-        """SELECT m.organization_id,m.user_id,m.username,m.member_number,
+    rows = db.execute("""SELECT m.organization_id,m.user_id,m.username,m.member_number,
                   m.status,m.updated_at,u.name
            FROM organization_members m JOIN users u ON u.id=m.user_id
            WHERE m.username IS NULL OR m.username='' OR m.member_number IS NULL
-              OR m.member_number='' OR m.updated_at IS NULL"""
-    ).fetchall()
+              OR m.member_number='' OR m.updated_at IS NULL""").fetchall()
     for row in rows:
-        username = row["username"] or _safe_existing_username(
-            str(row["name"]), int(row["user_id"])
-        )
+        username = row["username"] or _safe_existing_username(str(row["name"]), int(row["user_id"]))
         candidate = username
         suffix = 1
         while db.execute(
@@ -189,8 +183,7 @@ def _backfill(db: sqlite3.Connection) -> None:
                WHERE organization_id=? AND user_id=?""",
             (
                 candidate,
-                row["member_number"]
-                or _next_member_number(db, int(row["organization_id"])),
+                row["member_number"] or _next_member_number(db, int(row["organization_id"])),
                 row["status"] or "active",
                 row["updated_at"] or now,
                 row["organization_id"],
