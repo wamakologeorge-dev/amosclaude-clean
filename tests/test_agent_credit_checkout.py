@@ -199,15 +199,18 @@ def test_checkout_redirects_to_hosted_stripe_and_returns_to_api_access(monkeypat
     assert "payment_method_types" not in captured
 
 
-def test_mobile_page_explains_disabled_checkout_and_redirects_to_stripe():
+def test_mobile_page_uses_cash_app_and_bitcoin_for_agent_credit_payments():
     page = (ROOT / "web" / "api-access.html").read_text(encoding="utf-8")
 
-    assert ".button:disabled" in page
-    assert "Checkout setup incomplete" not in page
-    assert "configuration_message" in page
-    assert "location.assign(payload.url)" in page
-    assert "/api/v1/provider/tokens/checkout/" in page
-    assert "Bank payments can take time to settle" in page
+    assert "https://cash.app/$kenjamakulu" in page
+    assert "https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" in page
+    assert "Cash App and Cash App Bitcoin are the only payment options currently enabled" in page
+    assert "Credits are added only after Amosclaud verifies the payment" in page
+    assert "Never include passwords, API keys, recovery codes, or private keys" in page
+    assert "Pay with Cash App" in page
+    assert "Pay with Bitcoin" in page
+    assert "Stripe" not in page
+    assert "/api/v1/provider/tokens/checkout" not in page
 
 
 def test_billing_webhook_handles_delayed_bank_payment_success():

@@ -7,13 +7,16 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_public_support_route_and_official_cash_app_link() -> None:
+def test_public_support_route_and_official_payment_links() -> None:
     health = _read("amoscloud_ai/api/routes/health.py")
     page = _read("web/support.html")
 
     assert '@router.get("/support", include_in_schema=False)' in health
     assert 'FileResponse(WEB_DIR / "support.html")' in health
     assert "https://cash.app/$kenjamakulu" in page
+    assert "https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" in page
+    assert "Contribute with Cash App" in page
+    assert "Contribute with Bitcoin" in page
     assert 'target="_blank"' in page
     assert 'rel="noopener noreferrer"' in page
 
@@ -22,7 +25,7 @@ def test_support_page_is_transparent_about_verification_and_service_limits() -> 
     page = _read("web/support.html")
     policy = _read("docs/community-support-policy.md")
 
-    assert "does not automatically notify or activate Amosclaud" in page
+    assert "Neither payment link automatically activates Amosclaud" in page
     assert "must be verified before service capacity is assigned" in page
     assert "Service pauses when the verified allocation is exhausted" in page
     assert (
