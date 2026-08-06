@@ -10,7 +10,9 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from amoscloud_ai.api.routes.auth import DB_PATH
+from amoscloud_ai.api.routes.auth import (
+    DB_PATH,
+)
 from amoscloud_ai.api.routes.auth import _connect as _auth_connect
 from amoscloud_ai.api.routes.auth import (
     _create_session,
@@ -761,8 +763,9 @@ def remove_member(
         if actor["role"] not in {"owner", "admin"}:
             raise HTTPException(status_code=403, detail="Administrator access required")
         target = db.execute(
-            """SELECT user_id,role,status,username FROM organization_members
-               WHERE organization_id=? AND member_number=?""",
+            """SELECT m.user_id,m.role,m.status,m.username,u.provider
+               FROM organization_members m JOIN users u ON u.id=m.user_id
+               WHERE m.organization_id=? AND m.member_number=?""",
             (actor["organization_id"], member_number),
         ).fetchone()
         if not target or target["status"] != "active":
@@ -788,6 +791,11 @@ def remove_member(
             (now, now, actor["organization_id"], target["user_id"]),
         )
         db.execute("DELETE FROM sessions WHERE user_id=?", (target["user_id"],))
+        if target["provider"] == "organization":
+            db.execute(
+                "UPDATE users SET password_hash=NULL WHERE id=?",
+                (target["user_id"],),
+            )
         _audit(
             db,
             int(actor["organization_id"]),
