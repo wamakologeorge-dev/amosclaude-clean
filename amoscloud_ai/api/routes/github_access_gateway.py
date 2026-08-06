@@ -76,6 +76,23 @@ def github_only_entry(request: Request) -> RedirectResponse:
     return RedirectResponse("/auth/github", status_code=302)
 
 
+@router.get("/auth/google", include_in_schema=False)
+@router.get("/auth/google/callback", include_in_schema=False)
+def redirect_alternate_oauth_to_github() -> RedirectResponse:
+    """Keep old Google bookmarks from becoming a second account system."""
+
+    return RedirectResponse("/auth/github", status_code=302)
+
+
+@router.get("/auth/google/status", include_in_schema=False)
+def disabled_google_status() -> dict[str, object]:
+    return {
+        "enabled": False,
+        "provider": "github",
+        "authorization_url": "/auth/github",
+    }
+
+
 @router.get("/auth/github", name="github_account_access")
 def github_account_access(
     request: Request,
@@ -240,7 +257,7 @@ def _github_required() -> None:
         status_code=410,
         detail={
             "code": "github_account_required",
-            "message": "Email and password access has been removed. Continue with GitHub.",
+            "message": "Email, password, passkey, and alternate OAuth access have been removed. Continue with GitHub.",
             "authorization_url": "/auth/github",
         },
     )
@@ -253,15 +270,24 @@ def _github_required() -> None:
 @router.post("/auth/login/verify-code")
 @router.post("/auth/password/forgot")
 @router.post("/auth/password/reset")
-def disabled_email_account_access() -> None:
-    """Prevent old clients from silently restoring password or email-code access."""
+@router.post("/auth/register/passkey/start")
+@router.post("/auth/register/passkey/finish")
+@router.post("/auth/login/passkey/start")
+@router.post("/auth/login/passkey/finish")
+def disabled_non_github_account_access() -> None:
+    """Prevent hidden endpoints from restoring another public account system."""
 
     _github_required()
+
+
+# Compatibility alias retained for tests and callers that referenced the first
+# implementation name while the route contract became GitHub-only.
+disabled_email_account_access = disabled_non_github_account_access
 
 
 __all__ = [
     "router",
     "github_account_access",
     "github_account_callback",
-    "disabled_email_account_access",
+    "disabled_non_github_account_access",
 ]
