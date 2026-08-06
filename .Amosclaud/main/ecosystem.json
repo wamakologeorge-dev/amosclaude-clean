@@ -97,6 +97,7 @@
   },
   "external_services": {
     "github": {
+      "status": "configured",
       "purpose": "Developer identity, repositories, webhooks, issues, commits and pull requests",
       "required_environment": [
         "GITHUB_CLIENT_ID",
@@ -105,6 +106,7 @@
       ]
     },
     "railway": {
+      "status": "active",
       "purpose": "Production application hosting and persistent /data volume",
       "required_environment": [
         "AMOSCLAUD_PUBLIC_URL",
@@ -113,12 +115,14 @@
       ]
     },
     "redis": {
+      "status": "provisioned",
       "purpose": "Durable queues, throttling, locks and short-lived task state",
       "required_environment": [
         "REDIS_URL"
       ]
     },
     "mysql": {
+      "status": "provisioned",
       "purpose": "Structured platform metadata, API-key usage and future lakehouse records",
       "required_environment": [
         "MYSQL_URL"
@@ -129,67 +133,122 @@
     {
       "from": "developer_web",
       "to": "api_gateway",
-      "protocol": "HTTPS/REST"
+      "protocol": "HTTPS/REST",
+      "status": "active"
     },
     {
       "from": "developer_clients",
       "to": "api_gateway",
-      "protocol": "HTTPS/REST"
+      "protocol": "HTTPS/REST",
+      "status": "configured"
+    },
+    {
+      "from": "developer_clients",
+      "to": "api_key_service",
+      "protocol": "Bearer/API key",
+      "status": "planned"
     },
     {
       "from": "model_context_protocol",
       "to": "platform_runtime",
-      "protocol": "stdio/MCP"
+      "protocol": "stdio/MCP",
+      "status": "active"
     },
     {
       "from": "api_gateway",
       "to": "platform_runtime",
-      "protocol": "internal ASGI/HTTP"
+      "protocol": "internal ASGI/HTTP",
+      "status": "active"
+    },
+    {
+      "from": "api_key_service",
+      "to": "api_gateway",
+      "protocol": "FastAPI authentication dependency",
+      "status": "planned"
     },
     {
       "from": "platform_runtime",
       "to": "database_layer",
-      "protocol": "SQL adapter"
+      "protocol": "SQL adapter",
+      "status": "active"
     },
     {
       "from": "platform_runtime",
       "to": "control_plane",
-      "protocol": "authenticated task API"
+      "protocol": "authenticated task API",
+      "status": "configured"
     },
     {
       "from": "control_plane",
       "to": "redis",
-      "protocol": "Redis/BullMQ"
+      "protocol": "Redis/BullMQ",
+      "status": "configured"
     },
     {
       "from": "platform_runtime",
       "to": "mysql",
-      "protocol": "MySQL"
+      "protocol": "MySQL",
+      "status": "planned"
     },
     {
       "from": "github_automation",
       "to": "github",
-      "protocol": "GitHub App/REST/webhook"
+      "protocol": "GitHub App/REST/webhook",
+      "status": "configured"
     },
     {
       "from": "github_automation",
       "to": "platform_runtime",
-      "protocol": "signed callback/internal API"
+      "protocol": "signed callback/internal API",
+      "status": "active"
     },
     {
       "from": "platform_runtime",
       "to": "railway",
-      "protocol": "deployment runtime"
+      "protocol": "deployment runtime",
+      "status": "active"
     },
     {
       "from": "platform_runtime",
       "to": "preview_service",
-      "protocol": "artifact/preview API"
+      "protocol": "artifact/preview API",
+      "status": "active"
     },
     {
       "from": "platform_runtime",
       "to": "metrics",
-      "protocol": "structured evidence"
+      "protocol": "structured evidence",
+      "status": "active"
+    },
+    {
+      "from": "platform_package",
+      "to": "platform_runtime",
+      "protocol": "local service lifecycle",
+      "status": "configured"
+    },
+    {
+      "from": "operating_layer",
+      "to": "platform_runtime",
+      "protocol": "local execution adapter",
+      "status": "configured"
+    },
+    {
+      "from": "verification",
+      "to": "delivery",
+      "protocol": "test and verification evidence",
+      "status": "active"
+    },
+    {
+      "from": "delivery",
+      "to": "github",
+      "protocol": "GitHub Actions/check runs",
+      "status": "active"
+    },
+    {
+      "from": "documentation",
+      "to": "developer_web",
+      "protocol": "linked developer guidance",
+      "status": "configured"
     }
   ],
   "forbidden_root_files": [
