@@ -54,24 +54,35 @@ def test_optional_owner_github_route_requires_exact_configured_identity() -> Non
     # the App installation before the configured owner can prove identity.
     assert 'f"https://api.github.com/repos/{repository_name}"' not in owner_auth
     assert 'permissions.get("admin") is True' not in owner_auth
-    assert "GitHub App authorization and GitHub App installation are separate" in owner_auth
+    assert "GitHub App authorization and installation are separate" in owner_auth
 
 
-def test_verified_github_owner_still_becomes_root_and_old_sessions_end() -> None:
+def test_optional_github_verification_preserves_email_access() -> None:
     owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
 
-    assert "password_hash=NULL" in owner_auth
-    assert "provider='github-admin',is_admin=1" in owner_auth
+    assert "password_hash=NULL" not in owner_auth
+    assert (
+        'provider = "password+github-admin" if user["password_hash"] else "github-admin"'
+        in owner_auth
+    )
+    assert "preserve any existing password so email access continues to work" in owner_auth
     assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in owner_auth
     assert 'RedirectResponse("/admin?github=owner"' in owner_auth
     assert "auth._set_session_cookie(response, token)" in owner_auth
 
 
-def test_primary_account_page_uses_standard_email_routes() -> None:
+def test_primary_account_routes_use_one_standard_authentication_system() -> None:
     main = _read("amoscloud_ai/main.py")
+    owner_auth = _read("amoscloud_ai/api/routes/owner_bootstrap.py")
     script = _read("web/account-access.js")
 
     assert "app.include_router(auth.router, include_in_schema=False)" in main
+    assert "return auth.login(body, response)" in owner_auth
+    assert "return auth.request_login_code(body)" in owner_auth
+    assert "return auth.verify_login_code(body, response)" in owner_auth
+    assert "return auth.forgot_password(body)" in owner_auth
+    assert "return auth.reset_password(body)" in owner_auth
+
     for route in (
         "/auth/login",
         "/auth/login/request-code",
