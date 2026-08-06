@@ -1,4 +1,5 @@
 """Verified account recovery for Amosclaud usernames and passwords."""
+
 from __future__ import annotations
 
 import hashlib
@@ -74,7 +75,13 @@ def _hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _create_code(db: sqlite3.Connection, *, email: str, purpose: str, user_id: int) -> None:
+def _create_code(
+    db: sqlite3.Connection,
+    *,
+    email: str,
+    purpose: str,
+    user_id: int,
+) -> None:
     code = f"{secrets.randbelow(1_000_000):06d}"
     now = datetime.now(timezone.utc)
     db.execute(
@@ -83,18 +90,34 @@ def _create_code(db: sqlite3.Connection, *, email: str, purpose: str, user_id: i
            ON CONFLICT(email,purpose) DO UPDATE SET user_id=excluded.user_id,
            code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,
            created_at=excluded.created_at""",
-        (email, purpose, user_id, _hash(code), (now + timedelta(minutes=CODE_MINUTES)).isoformat(), now.isoformat()),
+        (
+            email,
+            purpose,
+            user_id,
+            _hash(code),
+            (now + timedelta(minutes=CODE_MINUTES)).isoformat(),
+            now.isoformat(),
+        ),
     )
     db.commit()
     try:
         deliver_security_code(email, code, purpose, minutes=CODE_MINUTES)
     except MailDeliveryError as exc:
-        db.execute("DELETE FROM account_recovery_codes WHERE email=? AND purpose=?", (email, purpose))
+        db.execute(
+            "DELETE FROM account_recovery_codes WHERE email=? AND purpose=?",
+            (email, purpose),
+        )
         db.commit()
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-def _consume_code(db: sqlite3.Connection, *, email: str, purpose: str, code: str) -> sqlite3.Row:
+def _consume_code(
+    db: sqlite3.Connection,
+    *,
+    email: str,
+    purpose: str,
+    code: str,
+) -> sqlite3.Row:
     row = db.execute(
         "SELECT * FROM account_recovery_codes WHERE email=? AND purpose=?",
         (email, purpose),
@@ -114,14 +137,20 @@ def _consume_code(db: sqlite3.Connection, *, email: str, purpose: str, code: str
             )
             db.commit()
         raise HTTPException(status_code=400, detail="Invalid or expired verification code")
-    db.execute("DELETE FROM account_recovery_codes WHERE email=? AND purpose=?", (email, purpose))
+    db.execute(
+        "DELETE FROM account_recovery_codes WHERE email=? AND purpose=?",
+        (email, purpose),
+    )
     db.commit()
     return row
 
 
-def _user_for_recovery_email(db: sqlite3.Connection, email: str) -> sqlite3.Row | None:
+def _user_for_recovery_email(
+    db: sqlite3.Connection,
+    email: str,
+) -> sqlite3.Row | None:
     return db.execute(
-        """SELECT users.id,users.email,users.name
+        """SELECT users.id,users.email,users.name,users.provider
            FROM account_recovery_emails
            JOIN users ON users.id=account_recovery_emails.user_id
            WHERE account_recovery_emails.email=?""",
@@ -130,13 +159,19 @@ def _user_for_recovery_email(db: sqlite3.Connection, email: str) -> sqlite3.Row 
 
 
 @router.post("/email/request", status_code=202)
-def request_recovery_email(body: RecoveryEmailRequest, amos_session: str | None = Cookie(default=None)) -> dict:
+def request_recovery_email(
+    body: RecoveryEmailRequest,
+    amos_session: str | None = Cookie(default=None),
+) -> dict:
     user = get_user_from_session(amos_session)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in before adding a recovery email")
     email = _normalise_email(body.email)
     if email.endswith("@amosclaud.com"):
-        raise HTTPException(status_code=422, detail="Use a separate personal or business email for account recovery")
+        raise HTTPException(
+            status_code=422,
+            detail="Use a separate personal or business email for account recovery",
+        )
     with _connect() as db:
         _prepare(db)
         conflict = db.execute(
@@ -144,20 +179,38 @@ def request_recovery_email(body: RecoveryEmailRequest, amos_session: str | None 
             (email, user["id"]),
         ).fetchone()
         if conflict:
-            raise HTTPException(status_code=409, detail="That recovery email is already linked to another account")
-        _create_code(db, email=email, purpose="recovery-email", user_id=user["id"])
-    return {"message": "Amosclaud sent a verification code from no-reply@amosclaud.com"}
+            raise HTTPException(
+                status_code=409,
+                detail="That recovery email is already linked to another account",
+            )
+        _create_code(
+            db,
+            email=email,
+            purpose="recovery-email",
+            user_id=user["id"],
+        )
+    return {
+        "message": "Amosclaud sent a verification code from no-reply@amosclaud.com"
+    }
 
 
 @router.post("/email/verify")
-def verify_recovery_email(body: RecoveryEmailVerify, amos_session: str | None = Cookie(default=None)) -> dict:
+def verify_recovery_email(
+    body: RecoveryEmailVerify,
+    amos_session: str | None = Cookie(default=None),
+) -> dict:
     user = get_user_from_session(amos_session)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in before verifying a recovery email")
     email = _normalise_email(body.email)
     with _connect() as db:
         _prepare(db)
-        row = _consume_code(db, email=email, purpose="recovery-email", code=body.code)
+        row = _consume_code(
+            db,
+            email=email,
+            purpose="recovery-email",
+            code=body.code,
+        )
         if int(row["user_id"]) != int(user["id"]):
             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
         now = datetime.now(timezone.utc).isoformat()
@@ -178,8 +231,18 @@ def request_username_recovery(body: RecoveryCodeRequest) -> dict:
         _prepare(db)
         user = _user_for_recovery_email(db, email)
         if user:
-            _create_code(db, email=email, purpose="username", user_id=user["id"])
-    return {"message": "If that recovery email is verified, Amosclaud sent a username-recovery code"}
+            _create_code(
+                db,
+                email=email,
+                purpose="username",
+                user_id=user["id"],
+            )
+    return {
+        "message": (
+            "If that recovery email is verified, Amosclaud sent a "
+            "username-recovery code"
+        )
+    }
 
 
 @router.post("/username/verify")
@@ -187,11 +250,23 @@ def verify_username_recovery(body: UsernameVerifyRequest) -> dict:
     email = _normalise_email(body.recovery_email)
     with _connect() as db:
         _prepare(db)
-        row = _consume_code(db, email=email, purpose="username", code=body.code)
-        user = db.execute("SELECT email,name FROM users WHERE id=?", (row["user_id"],)).fetchone()
+        row = _consume_code(
+            db,
+            email=email,
+            purpose="username",
+            code=body.code,
+        )
+        user = db.execute(
+            "SELECT email,name FROM users WHERE id=?",
+            (row["user_id"],),
+        ).fetchone()
         if not user:
             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
-    return {"address": user["email"], "username": user["email"].split("@", 1)[0], "name": user["name"]}
+    return {
+        "address": user["email"],
+        "username": user["email"].split("@", 1)[0],
+        "name": user["name"],
+    }
 
 
 @router.post("/password/request", status_code=202)
@@ -200,9 +275,19 @@ def request_password_recovery(body: RecoveryCodeRequest) -> dict:
     with _connect() as db:
         _prepare(db)
         user = _user_for_recovery_email(db, email)
-        if user:
-            _create_code(db, email=email, purpose="password", user_id=user["id"])
-    return {"message": "If that recovery email is verified, Amosclaud sent a password-reset code"}
+        if user and user["provider"] != "github-admin":
+            _create_code(
+                db,
+                email=email,
+                purpose="password",
+                user_id=user["id"],
+            )
+    return {
+        "message": (
+            "If that recovery email is verified, Amosclaud sent a "
+            "password-reset code"
+        )
+    }
 
 
 @router.post("/password/reset", status_code=204, response_class=Response)
@@ -210,7 +295,24 @@ def reset_password(body: PasswordRecoveryRequest) -> Response:
     email = _normalise_email(body.recovery_email)
     with _connect() as db:
         _prepare(db)
-        row = _consume_code(db, email=email, purpose="password", code=body.code)
+        row = _consume_code(
+            db,
+            email=email,
+            purpose="password",
+            code=body.code,
+        )
+        user = db.execute(
+            "SELECT provider FROM users WHERE id=?",
+            (row["user_id"],),
+        ).fetchone()
+        if not user or user["provider"] == "github-admin":
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "This platform-owner account is GitHub-only. "
+                    "Use Continue with GitHub on the Amosclaud sign-in page."
+                ),
+            )
         db.execute(
             "UPDATE users SET password_hash=?,provider='password' WHERE id=?",
             (_hash_password(body.password), row["user_id"]),
