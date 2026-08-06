@@ -1,6 +1,9 @@
 from pathlib import Path
 
+from fastapi import Response
+
 from amoscloud_ai import admin_bootstrap
+from amoscloud_ai.api.routes import auth
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -69,6 +72,71 @@ def test_optional_github_verification_preserves_email_access() -> None:
     assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in owner_auth
     assert 'RedirectResponse("/admin?github=owner"' in owner_auth
     assert "auth._set_session_cookie(response, token)" in owner_auth
+
+
+def test_existing_github_owner_can_use_email_code_and_password_reset(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    auth.DB_PATH = tmp_path / "owner-email-access.db"
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+    delivered: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        auth,
+        "_send_code",
+        lambda email, code, purpose: delivered.append((email, code, purpose)),
+    )
+
+    owner_email = "wamakologeorge@gmail.com"
+    with auth._connect() as db:
+        db.execute(
+            """INSERT INTO users(
+                   name,email,password_hash,github_id,provider,is_admin,created_at
+               ) VALUES (?,?,NULL,?,'github-admin',1,?)""",
+            (
+                "wamakologeorge-dev",
+                owner_email,
+                "271083488",
+                "2026-08-06T00:00:00+00:00",
+            ),
+        )
+        db.commit()
+
+    auth.request_login_code(auth.EmailRequest(email=owner_email))
+    login_code = delivered[-1]
+    assert login_code[0] == owner_email
+    assert login_code[2] == "login"
+
+    code_response = Response()
+    code_user = auth.verify_login_code(
+        auth.EmailCodeLoginRequest(email=owner_email, code=login_code[1]),
+        code_response,
+    )
+    assert code_user.is_admin is True
+    assert "amos_session=" in code_response.headers["set-cookie"]
+
+    auth.forgot_password(auth.EmailRequest(email=owner_email))
+    reset_code = delivered[-1]
+    assert reset_code[2] == "reset"
+    auth.reset_password(
+        auth.PasswordResetRequest(
+            email=owner_email,
+            password="new-owner-password-123",
+            code=reset_code[1],
+        )
+    )
+
+    password_response = Response()
+    password_user = auth.login(
+        auth.LoginRequest(
+            email=owner_email,
+            password="new-owner-password-123",
+        ),
+        password_response,
+    )
+    assert password_user.is_admin is True
+    assert password_user.provider == "password"
+    assert "amos_session=" in password_response.headers["set-cookie"]
 
 
 def test_primary_account_routes_use_one_standard_authentication_system() -> None:
