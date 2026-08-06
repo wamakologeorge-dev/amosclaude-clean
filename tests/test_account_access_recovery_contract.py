@@ -197,7 +197,7 @@ def test_registration_uses_the_visible_email_field() -> None:
 def test_security_mail_sender_is_amosclaud_owned() -> None:
     source = (ROOT / "amoscloud_ai" / "mail_delivery.py").read_text(encoding="utf-8")
     assert "no-reply@amosclaud.com" in source
-    assert "amosclaud.com" in source
+    assert 'MAIL_FROM = "no-reply@amosclaud.com"' in source
     assert "smtp.login" in source
     assert "print(" not in source
 
