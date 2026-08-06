@@ -1,0 +1,257 @@
+name: Amosclaud Scan Bug
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Optional branch, tag, or commit to inspect
+        required: false
+        type: string
+      pull_request_number:
+        description: Optional open pull request receiving the repair
+        required: false
+        type: string
+
+# The Scan Bug is an observer, never a repository test gate. It may dispatch the
+# fixer, but this workflow always completes without cancelling or replacing tests.
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: amosclaud-scan-bug-${{ github.event.pull_request.number || inputs.pull_request_number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Read-only line coverage observer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      SCAN_DIR: ${{ runner.temp }}/amosclaud-scan-bug
+
+    steps:
+      - name: Resolve target revision
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_REF: ${{ inputs.target_ref }}
+          INPUT_PR: ${{ inputs.pull_request_number }}
+        run: |
+          set -euo pipefail
+          target_ref="$EVENT_SHA"
+          pull_request_number="$PR_NUMBER"
+
+          if [ -n "$INPUT_REF" ]; then
+            target_ref="$INPUT_REF"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" != "closed" ]; then
+            target_ref="$PR_HEAD_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" = "closed" ]; then
+            target_ref="$DEFAULT_BRANCH"
+          fi
+
+          if [ -n "$INPUT_PR" ]; then
+            pull_request_number="$INPUT_PR"
+          fi
+
+          echo "target_ref=$target_ref" >> "$GITHUB_OUTPUT"
+          echo "pull_request_number=$pull_request_number" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact scan target
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.target.outputs.target_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up scanner runtime
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install parser used by the read-only scanner
+        run: python -m pip install --disable-pip-version-check PyYAML>=6.0,<7
+
+      - name: Crawl tracked source lines and stop at first catch
+        id: bug
+        run: |
+          set -euo pipefail
+          mkdir -p "$SCAN_DIR"
+          set +e
+          python -m amoscloud_ai.scan_bug . \
+            --json "$SCAN_DIR/report.json" \
+            --markdown "$SCAN_DIR/report.md" \
+            --snapshot "$SCAN_DIR/snapshot.svg" \
+            2>&1 | tee "$SCAN_DIR/scan.log"
+          scanner_status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$scanner_status" -eq 10 ]; then
+            echo "caught=true" >> "$GITHUB_OUTPUT"
+          elif [ "$scanner_status" -eq 0 ]; then
+            echo "caught=false" >> "$GITHUB_OUTPUT"
+          else
+            # Internal scanner failure is evidence, not permission to hide a gap.
+            echo "caught=true" >> "$GITHUB_OUTPUT"
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["SCAN_DIR"])
+          report = directory / "report.json"
+          if not report.exists():
+              report.write_text(
+                  json.dumps(
+                      {
+                          "status": "caught",
+                          "finding": {
+                              "code": "scanner-internal-failure",
+                              "message": "The observer could not prove complete source-line coverage.",
+                              "path": ".github/workflows/amosclaud-scan-bug.yml",
+                              "line": 1,
+                              "column": 1,
+                          },
+                      },
+                      indent=2,
+                  )
+                  + "\n",
+                  encoding="utf-8",
+              )
+          PY
+          fi
+
+          # Intentionally return success: this observer must not stop repository tests.
+          exit 0
+
+      - name: Build fixer handoff
+        if: steps.bug.outputs.caught == 'true'
+        id: handoff
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.target_ref }}
+          PR_NUMBER: ${{ steps.target.outputs.pull_request_number }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["SCAN_DIR"])
+          payload = json.loads((directory / "report.json").read_text(encoding="utf-8"))
+          finding = payload.get("finding") or {}
+          summary = "\n".join(
+              [
+                  "Amosclaud Scan Bug caught a reproducible source finding.",
+                  f"code={finding.get('code', 'unknown')}",
+                  f"path={finding.get('path', 'unknown')}",
+                  f"line={finding.get('line', 1)}",
+                  f"column={finding.get('column', 1)}",
+                  f"message={finding.get('message', 'Coverage failure')}",
+                  f"scan_files={payload.get('files_scanned', 0)}",
+                  f"scan_lines={payload.get('lines_scanned', 0)}",
+                  f"snapshot_sha256={payload.get('snapshot_sha256', '')}",
+                  "The scanner is read-only. Apply the smallest safe repair in the open PR, "
+                  "verify it, then let the next PR synchronization restart the scan.",
+              ]
+          )
+          (directory / "fixer-summary.txt").write_text(summary + "\n", encoding="utf-8")
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"finding_code={finding.get('code', 'unknown')}\n")
+              handle.write(f"finding_path={finding.get('path', 'unknown')}\n")
+              handle.write(f"finding_line={finding.get('line', 1)}\n")
+          PY
+
+      - name: Upload screenshot and complete coverage evidence
+        if: always()
+        id: evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-scan-bug-${{ github.run_id }}
+          path: ${{ runner.temp }}/amosclaud-scan-bug
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Post or update the Scan Bug catch on the open PR
+        if: steps.bug.outputs.caught == 'true' && steps.target.outputs.pull_request_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.target.outputs.pull_request_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          marker='<!-- amosclaud-scan-bug -->'
+          body_file="$SCAN_DIR/pr-comment.md"
+          {
+            echo "$marker"
+            echo '## 🐛 Scan Bug paused after a catch'
+            echo
+            cat "$SCAN_DIR/fixer-summary.txt"
+            echo
+            echo "[Open the redacted code screenshot and full coverage artifact]($RUN_URL)"
+            echo
+            echo 'Repository tests continue independently. This observer did not cancel or replace them.'
+          } > "$body_file"
+
+          comment_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- amosclaud-scan-bug -->")) | .id' \
+            | tail -n 1)
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --raw-field body="$(cat "$body_file")" >/dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file "$body_file"
+          fi
+
+      - name: Dispatch the existing autonomous fixer
+        if: steps.bug.outputs.caught == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.target.outputs.pull_request_number }}
+          TARGET_SHA: ${{ steps.target.outputs.target_ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          scope=default
+          if [ -n "$PR_NUMBER" ]; then
+            scope=pull_request
+          fi
+          gh workflow run amosclaud-repair-control-plane.yml \
+            --ref "$DEFAULT_BRANCH" \
+            -f scope="$scope" \
+            -f pull_request_number="$PR_NUMBER" \
+            -f target_sha="$TARGET_SHA" \
+            -f source_run_id="${{ github.run_id }}" \
+            -f source_name='Amosclaud Scan Bug' \
+            -f provider=github_actions \
+            -f status_url="$RUN_URL" \
+            -f failure_summary="$(cat "$SCAN_DIR/fixer-summary.txt")"
+
+      - name: Publish observer summary without becoming a test gate
+        if: always()
+        run: |
+          if [ -f "$SCAN_DIR/report.md" ]; then
+            cat "$SCAN_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## 🐛 Scan Bug' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Coverage could not be proven; evidence was handed to the fixer.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '**Repository tests were not stopped by this workflow.**' >> "$GITHUB_STEP_SUMMARY"
