@@ -4,7 +4,6 @@
   const fields = {
     name: byId('name-field'),
     identifier: byId('identifier-field'),
-    recovery: byId('recovery-email-field'),
     password: byId('password-field'),
     nextPassword: byId('new-password-field'),
     code: byId('email-code-field'),
@@ -13,7 +12,6 @@
   const inputs = {
     name: byId('name'),
     identifier: byId('identifier'),
-    recovery: byId('recovery-email'),
     password: byId('password'),
     nextPassword: byId('new-password'),
     code: byId('email-code'),
@@ -21,90 +19,26 @@
   const loginTab = byId('login-tab');
   const registerTab = byId('register-tab');
   const forgotPassword = byId('forgot-password-button');
-  const forgotUsername = byId('forgot-username-button');
-  const submit = byId('submit-button');
   const emailCode = byId('email-code-button');
-  const passkeyButton = byId('passkey-login-button');
-  const googleButton = byId('google-login-button');
+  const submit = byId('submit-button');
   const title = byId('auth-title');
   const subtitle = byId('auth-subtitle');
   const message = byId('message');
 
-  if (!form || !submit || !message) return;
+  if (!form || !submit || !message || !loginTab || !registerTab) return;
 
   let mode = 'login';
-  let loginCodeMode = false;
+  let loginCodeRequested = false;
   let signupCodeRequested = false;
-  // Recovery email enrollment uses /api/v1/auth/account-recovery/email/request and /api/v1/auth/account-recovery/email/verify.
-  const passkeysAvailable = Boolean(window.isSecureContext && window.PublicKeyCredential && navigator.credentials);
+  let resetCodeRequested = false;
 
-  function show(text, success = false) {
+  function show(text, kind = '') {
     message.textContent = text || '';
-    message.className = success ? 'message success' : 'message';
+    message.className = `message ${kind}`.trim();
   }
 
   function email(value) {
     return String(value || '').trim().toLowerCase();
-  }
-
-  async function request(url, options = {}) {
-    let response;
-    try {
-      response = await fetch(url, {
-        credentials: 'same-origin',
-        cache: 'no-store',
-        ...options,
-        headers: {'Content-Type': 'application/json', ...(options.headers || {})},
-      });
-    } catch (_) {
-      throw new Error('The Amosclaud server is unavailable. Open this page from the live Amosclaud platform.');
-    }
-    const text = await response.text();
-    let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {detail: text}; }
-    if (!response.ok) {
-      const detail = Array.isArray(data.detail)
-        ? data.detail.map(item => item.msg || item.message).join(' ')
-        : data.detail;
-      throw new Error(detail || `Account request failed (${response.status})`);
-    }
-    return data;
-  }
-
-  function bytes(value) {
-    const padding = '='.repeat((4 - value.length % 4) % 4);
-    const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'));
-    return Uint8Array.from(raw, char => char.charCodeAt(0));
-  }
-
-  function b64(value) {
-    let raw = '';
-    new Uint8Array(value).forEach(byte => { raw += String.fromCharCode(byte); });
-    return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-  }
-
-  function authenticationOptions(options) {
-    return {
-      ...options,
-      challenge: bytes(options.challenge),
-      allowCredentials: (options.allowCredentials || []).map(item => ({...item, id: bytes(item.id)})),
-    };
-  }
-
-  function authenticationCredential(credential) {
-    return {
-      id: credential.id,
-      rawId: b64(credential.rawId),
-      type: credential.type,
-      authenticatorAttachment: credential.authenticatorAttachment,
-      clientExtensionResults: credential.getClientExtensionResults(),
-      response: {
-        clientDataJSON: b64(credential.response.clientDataJSON),
-        authenticatorData: b64(credential.response.authenticatorData),
-        signature: b64(credential.response.signature),
-        userHandle: credential.response.userHandle ? b64(credential.response.userHandle) : null,
-      },
-    };
   }
 
   function hidden(element, value) {
@@ -119,135 +53,141 @@
     Object.values(inputs).forEach(input => required(input, false));
   }
 
+  async function request(url, options = {}) {
+    let response;
+    try {
+      response = await fetch(url, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        ...options,
+        headers: {'Content-Type': 'application/json', ...(options.headers || {})},
+      });
+    } catch (_) {
+      throw new Error('The Amosclaud server is unavailable. Try again in a moment.');
+    }
+
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (_) {
+      data = {detail: text};
+    }
+
+    if (!response.ok) {
+      const detail = Array.isArray(data.detail)
+        ? data.detail.map(item => item.msg || item.message).join(' ')
+        : data.detail;
+      throw new Error(detail || `Account request failed (${response.status})`);
+    }
+    return data;
+  }
+
   function setMode(next) {
     mode = next;
-    loginCodeMode = false;
+    loginCodeRequested = false;
     signupCodeRequested = false;
+    resetCodeRequested = false;
     form.reset();
     resetRequirements();
-    [fields.name, fields.identifier, fields.recovery, fields.password, fields.nextPassword, fields.code, fields.hint]
+
+    [fields.name, fields.identifier, fields.password, fields.nextPassword, fields.code, fields.hint]
       .forEach(item => hidden(item, true));
 
     loginTab.classList.toggle('active', next === 'login');
     registerTab.classList.toggle('active', next === 'register');
+    loginTab.setAttribute('aria-selected', String(next === 'login'));
+    registerTab.setAttribute('aria-selected', String(next === 'register'));
+
+    hidden(fields.identifier, false);
+    required(inputs.identifier, true);
+    inputs.identifier.autocomplete = 'email';
 
     if (next === 'login') {
       title.textContent = 'Welcome back';
-      subtitle.textContent = 'Use Google, your email address, or your password.';
-      hidden(fields.identifier, false);
+      subtitle.textContent = 'Use your email address and password.';
       hidden(fields.password, false);
-      required(inputs.identifier, true);
       required(inputs.password, true);
       inputs.password.autocomplete = 'current-password';
       submit.textContent = 'Sign in';
-      submit.disabled = false;
-      hidden(emailCode, false);
+      emailCode.hidden = false;
+      forgotPassword.hidden = false;
     } else if (next === 'register') {
       title.textContent = 'Create your account';
-      subtitle.textContent = 'Continue with Google or start with your name, email, and password.';
+      subtitle.textContent = 'Enter your name, email address, and a secure password.';
       hidden(fields.name, false);
-      hidden(fields.identifier, false);
       hidden(fields.nextPassword, false);
       hidden(fields.hint, false);
       required(inputs.name, true);
-      required(inputs.identifier, true);
       required(inputs.nextPassword, true);
-      inputs.identifier.autocomplete = 'email';
+      inputs.nextPassword.autocomplete = 'new-password';
       submit.textContent = 'Create account';
-      submit.disabled = false;
-      hidden(emailCode, true);
-    } else if (next === 'forgot-password') {
-      title.textContent = 'Reset password';
-      subtitle.textContent = 'Enter your recovery email and choose a new password.';
-      hidden(fields.recovery, false);
-      hidden(fields.nextPassword, false);
-      required(inputs.recovery, true);
-      required(inputs.nextPassword, true);
-      submit.textContent = 'Send recovery code';
+      emailCode.hidden = true;
+      forgotPassword.hidden = false;
     } else {
-      title.textContent = 'Find your account';
-      subtitle.textContent = 'Enter your recovery email and we will send a verification code.';
-      hidden(fields.recovery, false);
-      required(inputs.recovery, true);
-      submit.textContent = 'Send account code';
+      title.textContent = 'Reset your password';
+      subtitle.textContent = 'We will send a security code to your account email.';
+      hidden(fields.nextPassword, false);
+      hidden(fields.hint, false);
+      required(inputs.nextPassword, true);
+      inputs.nextPassword.autocomplete = 'new-password';
+      submit.textContent = 'Send reset code';
+      emailCode.hidden = true;
+      forgotPassword.hidden = true;
     }
-    inputs.code.value = '';
+
     show('');
   }
 
   loginTab.addEventListener('click', () => setMode('login'));
   registerTab.addEventListener('click', () => setMode('register'));
-  forgotPassword.addEventListener('click', () => setMode('forgot-password'));
-  forgotUsername.addEventListener('click', () => setMode('forgot-username'));
+  forgotPassword?.addEventListener('click', () => setMode('forgot-password'));
 
-  if (googleButton) {
-    googleButton.addEventListener('click', () => {
-      googleButton.disabled = true;
-      show('Opening Google sign-in…', true);
-      window.location.assign('/api/v1/auth/google');
-    });
-  }
-
-  emailCode.addEventListener('click', async () => {
+  emailCode?.addEventListener('click', async () => {
     const address = email(inputs.identifier.value);
-    if (!address) return show('Enter your email address first.');
+    if (!address) {
+      show('Enter your email address first.', 'error');
+      inputs.identifier.focus();
+      return;
+    }
+
     emailCode.disabled = true;
+    show('Sending your security code…');
     try {
-      const result = await request('/api/v1/auth/login/request-code', {
+      const result = await request('/auth/login/request-code', {
         method: 'POST',
         body: JSON.stringify({email: address}),
       });
-      loginCodeMode = true;
+      loginCodeRequested = true;
       hidden(fields.password, true);
       hidden(fields.code, false);
       required(inputs.password, false);
       required(inputs.code, true);
       submit.textContent = 'Sign in with code';
-      show(result.message || 'A sign-in code was sent.', true);
+      show(result.message || 'A sign-in code was sent.', 'success');
+      inputs.code.focus();
     } catch (error) {
-      show(error.message);
+      show(error.message, 'error');
     } finally {
       emailCode.disabled = false;
     }
   });
-
-  if (!passkeysAvailable) {
-    passkeyButton.hidden = true;
-  } else {
-    passkeyButton.addEventListener('click', async () => {
-      passkeyButton.disabled = true;
-      try {
-        const start = await request('/api/v1/auth/login/passkey/start', {method: 'POST', body: '{}'});
-        const credential = await navigator.credentials.get({publicKey: authenticationOptions(start.public_key)});
-        if (!credential) throw new Error('Device confirmation was cancelled.');
-        await request('/api/v1/auth/login/passkey/finish', {
-          method: 'POST',
-          body: JSON.stringify({attempt: start.attempt, credential: authenticationCredential(credential)}),
-        });
-        window.location.replace('/cloud/agent');
-      } catch (error) {
-        show(error.name === 'NotAllowedError' ? 'Device confirmation was cancelled.' : error.message);
-      } finally {
-        passkeyButton.disabled = false;
-      }
-    });
-  }
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!form.reportValidity()) return;
     submit.disabled = true;
 
+    const address = email(inputs.identifier.value);
     try {
       if (mode === 'login') {
-        const address = email(inputs.identifier.value);
-        if (loginCodeMode) {
-          await request('/api/v1/auth/login/verify-code', {
+        if (loginCodeRequested) {
+          await request('/auth/login/verify-code', {
             method: 'POST',
             body: JSON.stringify({email: address, code: inputs.code.value.trim()}),
           });
         } else {
-          await request('/api/v1/auth/login', {
+          await request('/auth/login', {
             method: 'POST',
             body: JSON.stringify({email: address, password: inputs.password.value}),
           });
@@ -257,9 +197,8 @@
       }
 
       if (mode === 'register') {
-        const address = email(inputs.identifier.value);
         if (!signupCodeRequested) {
-          const result = await request('/api/v1/auth/register/request-code', {
+          const result = await request('/auth/register/request-code', {
             method: 'POST',
             body: JSON.stringify({
               name: inputs.name.value.trim(),
@@ -270,17 +209,18 @@
           signupCodeRequested = true;
           hidden(fields.name, true);
           hidden(fields.nextPassword, true);
+          hidden(fields.hint, true);
           hidden(fields.code, false);
           required(inputs.name, false);
           required(inputs.nextPassword, false);
           required(inputs.code, true);
           submit.textContent = 'Verify and open Amosclaud';
-          show(result.message || 'Enter the code sent to your email.', true);
+          show(result.message || 'Enter the code sent to your email.', 'success');
           inputs.code.focus();
           return;
         }
 
-        await request('/api/v1/auth/register/verify', {
+        await request('/auth/register/verify', {
           method: 'POST',
           body: JSON.stringify({
             email: address,
@@ -292,100 +232,39 @@
         return;
       }
 
-      const recoveryEmail = email(inputs.recovery.value);
-      if (mode === 'forgot-username') {
-        if (!inputs.code.value.trim()) {
-          const result = await request('/api/v1/auth/account-recovery/username/request', {
-            method: 'POST',
-            body: JSON.stringify({recovery_email: recoveryEmail}),
-          });
-          hidden(fields.code, false);
-          required(inputs.code, true);
-          submit.textContent = 'Show account';
-          show(result.message, true);
-          inputs.code.focus();
-          return;
-        }
-        const result = await request('/api/v1/auth/account-recovery/username/verify', {
+      if (!resetCodeRequested) {
+        const result = await request('/auth/password/forgot', {
           method: 'POST',
-          body: JSON.stringify({recovery_email: recoveryEmail, code: inputs.code.value.trim()}),
+          body: JSON.stringify({email: address}),
         });
-        show(`Your account is ${result.address}.`, true);
-        return;
-      }
-
-      if (!inputs.code.value.trim()) {
-        const result = await request('/api/v1/auth/account-recovery/password/request', {
-          method: 'POST',
-          body: JSON.stringify({recovery_email: recoveryEmail}),
-        });
+        resetCodeRequested = true;
         hidden(fields.code, false);
         required(inputs.code, true);
         submit.textContent = 'Reset password';
-        show(result.message, true);
+        show(result.message || 'A reset code was sent.', 'success');
         inputs.code.focus();
         return;
       }
 
-      await request('/api/v1/auth/account-recovery/password/reset', {
+      await request('/auth/password/reset', {
         method: 'POST',
         body: JSON.stringify({
-          recovery_email: recoveryEmail,
+          email: address,
           code: inputs.code.value.trim(),
           password: inputs.nextPassword.value,
         }),
       });
-      show('Password changed. You can now sign in.', true);
-      setTimeout(() => setMode('login'), 1200);
+      setMode('login');
+      inputs.identifier.value = address;
+      show('Password changed. Sign in with your new password.', 'success');
     } catch (error) {
-      show(error.message);
+      show(error.message, 'error');
     } finally {
       submit.disabled = false;
     }
   });
 
-  // Account settings can use these helpers to add a verified, separate recovery
-  // address without duplicating authentication transport or error handling.
-  window.AmosclaudAccountAccess = Object.freeze({
-    requestRecoveryEmail: recoveryEmail => request('/api/v1/auth/account-recovery/email/request', {
-      method: 'POST',
-      body: JSON.stringify({email: email(recoveryEmail)}),
-    }),
-    verifyRecoveryEmail: (recoveryEmail, code) => request('/api/v1/auth/account-recovery/email/verify', {
-      method: 'POST',
-      body: JSON.stringify({email: email(recoveryEmail), code: String(code || '').trim()}),
-    }),
-  });
-
-  function showGoogleReturnError() {
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('google_error');
-    if (!code) return;
-    const messages = {
-      access_denied: 'Google sign-in was cancelled.',
-      missing_response: 'Google did not return a complete sign-in response. Try again.',
-      not_configured: 'Google sign-in is not configured on this deployment.',
-      token_exchange_failed: 'Google could not complete sign-in. Try again.',
-      provider_unavailable: 'Google sign-in is temporarily unavailable. Try again shortly.',
-      unverified_email: 'Google did not provide a verified email address for this account.',
-      account_conflict: 'That Google account is already connected to another Amosclaud account.',
-    };
-    show(messages[code] || 'Google sign-in could not be completed.');
-    url.searchParams.delete('google_error');
-    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-  }
-
-  async function configureGoogleButton() {
-    if (!googleButton) return;
-    try {
-      const status = await request('/api/v1/auth/google/status');
-      googleButton.hidden = !status.enabled;
-    } catch (_) {
-      googleButton.hidden = true;
-    }
-  }
-
-  setMode('login');
-  showGoogleReturnError();
-  configureGoogleButton();
+  const params = new URLSearchParams(window.location.search);
+  const requestedMode = params.get('mode');
+  setMode(requestedMode === 'register' ? 'register' : 'login');
 })();

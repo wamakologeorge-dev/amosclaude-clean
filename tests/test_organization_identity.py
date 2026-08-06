@@ -21,13 +21,13 @@ def test_organization_identity_routes_are_mounted() -> None:
 
 def test_identifiers_match_the_approved_structure() -> None:
     identity = _read("amoscloud_ai/api/routes/organization_identity.py")
-    login = _read("web/login.html")
+    page = _read("web/organization-access.html")
 
     assert '_ORG_ID_RE = re.compile(r"^[0-9]{5}$")' in identity
     assert '_MEMBER_RE = re.compile(r"^[0-9]{4}$")' in identity
     assert 'return f"{public_id}-{member_number}"' in identity
-    assert "11111-2131" in login
-    assert "Exactly five numbers" in login
+    assert "11111-2131" in page
+    assert "exactly five numbers" in page.lower()
 
 
 def test_secrets_and_recovery_codes_are_hashed() -> None:
@@ -75,16 +75,17 @@ def test_owner_controls_identifier_and_ownership_transfer() -> None:
     assert "/transfer-ownership" in script
 
 
-def test_login_page_is_the_primary_organization_access_portal() -> None:
+def test_organization_access_uses_a_dedicated_page() -> None:
     health = _read("amoscloud_ai/api/routes/health.py")
     login = _read("web/login.html")
-    script = _read("web/unified-login.js")
+    page = _read("web/organization-access.html")
+    script = _read("web/organization-access.js")
 
     assert '@router.get("/organization-access", include_in_schema=False)' in health
-    assert 'RedirectResponse("/login?method=organization", status_code=302)' in health
-    assert 'id="organization-access-panel"' in login
-    assert 'id="email-access-panel"' in login
-    assert 'src="/static/unified-login.js"' in login
+    assert 'id="organization-access-panel"' not in login
+    assert 'src="/static/unified-login.js"' not in login
+    assert "Organization ID access" in page
+    assert 'src="/static/organization-access.js"' in page
     assert "/api/v1/organization-access/login" in script
     assert "/api/v1/organization-access/register" in script
     assert "/api/v1/organization-access/join" in script
@@ -92,16 +93,18 @@ def test_login_page_is_the_primary_organization_access_portal() -> None:
 
 
 def test_organization_signup_shows_only_the_fields_needed_for_each_mode() -> None:
-    login = _read("web/login.html")
-    script = _read("web/unified-login.js")
+    page = _read("web/organization-access.html")
+    script = _read("web/organization-access.js")
     login_css = _read("web/login.css")
     legacy_css = _read("web/organization-access.css")
 
-    assert 'id="organization-name-field" hidden' in login
-    assert 'id="organization-access-code-field" hidden' in login
-    assert 'id="organization-recovery-code-field" hidden' in login
-    assert "Only four fields. No email code is required." in script
-    assert "Use a short username, not an email" in script
+    assert 'id="organization-name-field" hidden' in page
+    assert 'id="access-code-field" hidden' in page
+    assert 'id="recovery-code-field" hidden' in page
+    assert 'data-mode="register"' in page
+    assert 'data-mode="join"' in page
+    assert 'data-mode="recover"' in page
+    assert "/api/v1/organization-access/register" in script
     assert "[hidden], .hidden { display: none !important; }" in login_css
     assert "[hidden] { display: none !important; }" in legacy_css
 
