@@ -25,9 +25,7 @@ GITHUB_ADMIN_STATE_COOKIE = "amos_github_admin_state"
 
 
 def _github_admin_callback_url(request: Request) -> str:
-    return os.getenv("GITHUB_ADMIN_CALLBACK_URL") or str(
-        request.url_for("github_admin_callback")
-    )
+    return os.getenv("GITHUB_ADMIN_CALLBACK_URL") or str(request.url_for("github_admin_callback"))
 
 
 def _github_headers(access_token: str) -> dict[str, str]:
@@ -254,9 +252,13 @@ async def github_admin_callback(
         profile = profile_response.json()
         github_id = str(profile.get("id") or "")
         login = str(profile.get("login") or "").strip()
-        if not github_id or not login or not is_configured_github_admin(
-            github_id,
-            login,
+        if (
+            not github_id
+            or not login
+            or not is_configured_github_admin(
+                github_id,
+                login,
+            )
         ):
             raise HTTPException(
                 status_code=403,
@@ -273,8 +275,7 @@ async def github_admin_callback(
         owner = repository.get("owner") or {}
         owns_repository = (
             repository_response.status_code == 200
-            and str(repository.get("full_name") or "").lower()
-            == repository_name.lower()
+            and str(repository.get("full_name") or "").lower() == repository_name.lower()
             and str(owner.get("login") or "").lower() == login.lower()
             and permissions.get("admin") is True
         )
@@ -293,8 +294,7 @@ async def github_admin_callback(
         )
         verified_emails = (
             emails_response.json()
-            if emails_response.status_code == 200
-            and isinstance(emails_response.json(), list)
+            if emails_response.status_code == 200 and isinstance(emails_response.json(), list)
             else []
         )
 
