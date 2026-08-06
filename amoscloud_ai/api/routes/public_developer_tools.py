@@ -1,10 +1,9 @@
-"""Public catalog for Amosclaud open-source developer tools.
+"""Public source and documentation catalog for Amosclaud.
 
-This router deliberately has no session, API-key, wallet, or subscription
-dependency. Developers can discover and download the source, local server, VS
-Code client, CLI, and MCP integration even when hosted account access is down.
-Hosted Autonomous execution remains behind the existing account and credit
-boundaries.
+The repository source, license, and documentation remain public under the
+published license. Official hosted tools, packaged downloads, remote MCP,
+editor cloud actions, and managed execution require verified organization
+support time.
 """
 
 from __future__ import annotations
@@ -21,15 +20,15 @@ WEB_ROOT = Path(__file__).resolve().parents[3] / "web"
 
 @router.get("/api/v1/open-source/tools")
 def open_source_tools(request: Request) -> dict:
-    """Return the no-login developer-tool catalog and the paid-service boundary."""
+    """Return the public-source boundary and paid official-tool policy."""
 
     origin = str(request.base_url).rstrip("/")
     return {
-        "access": "public",
+        "access": "public_source_only",
         "account_required": False,
         "license_url": f"{REPOSITORY}/blob/main/LICENSE",
         "source_repository": REPOSITORY,
-        "tools": [
+        "public_resources": [
             {
                 "id": "source",
                 "name": "Amosclaud source code",
@@ -38,69 +37,44 @@ def open_source_tools(request: Request) -> dict:
                 "account_required": False,
             },
             {
-                "id": "linux-server",
-                "name": "Linux local server",
-                "kind": "download",
-                "url": f"{origin}/api/v1/downloads/linux",
+                "id": "documentation",
+                "name": "Amosclaud documentation",
+                "kind": "documentation",
+                "url": f"{REPOSITORY}/tree/main/docs",
                 "account_required": False,
             },
             {
-                "id": "windows-server",
-                "name": "Windows local server",
-                "kind": "download",
-                "url": f"{origin}/api/v1/downloads/windows",
-                "account_required": False,
-            },
-            {
-                "id": "macos-server",
-                "name": "macOS local server",
-                "kind": "download",
-                "url": f"{origin}/api/v1/downloads/macos",
-                "account_required": False,
-            },
-            {
-                "id": "vscode",
-                "name": "Amosclaud VS Code client",
-                "kind": "editor",
-                "url": f"{REPOSITORY}/tree/main/clients/vscode-amosclaud",
-                "documentation_url": (
-                    f"{REPOSITORY}/blob/main/docs/VSCODE_NATIVE_AGENT_AND_REMOTE_MCP.md"
-                ),
-                "account_required": False,
-            },
-            {
-                "id": "ide-cli",
-                "name": "Amosclaud IDE and Linux CLI",
-                "kind": "cli",
-                "url": f"{REPOSITORY}/blob/main/docs/AMOSCLAUD_IDE_COMPANION.md",
-                "account_required": False,
-            },
-            {
-                "id": "mcp",
-                "name": "Amosclaud MCP server",
-                "kind": "integration",
-                "url": f"{REPOSITORY}/tree/main/amosclaud_mcp",
+                "id": "license",
+                "name": "Published software license",
+                "kind": "license",
+                "url": f"{REPOSITORY}/blob/main/LICENSE",
                 "account_required": False,
             },
         ],
-        "paid_amosclaud_features": {
+        "official_tools": {
             "account_required": True,
+            "verified_support_time_required": True,
             "examples": [
+                "official Linux, Windows, and macOS packages",
                 "hosted Autonomous engineering runs",
                 "managed cloud workers and verification",
                 "hosted model and OpenAI-compatible API usage",
                 "managed repositories, operation buckets, and artifacts",
-                "paid agent credits and commercial support",
+                "VS Code cloud actions and remote MCP tools",
             ],
-            "plans_url": f"{origin}/plans",
+            "support_url": f"{origin}/organization-support",
             "login_url": f"{origin}/login",
         },
+        "open_source_boundary": (
+            "Public source can be inspected and modified under the repository license. "
+            "The official Amosclaud hosted control plane enforces verified support time."
+        ),
     }
 
 
 @router.get("/developer-tools", include_in_schema=False)
 def developer_tools_page() -> FileResponse:
-    """Serve the public developer hub without requiring a session."""
+    """Serve the public source and official-tool policy page."""
 
     return FileResponse(WEB_ROOT / "developer-tools.html")
 
