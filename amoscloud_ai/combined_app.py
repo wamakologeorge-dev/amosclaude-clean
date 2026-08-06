@@ -23,11 +23,13 @@ from amoscloud_ai.api.routes import (
 )
 from amoscloud_ai.api.routes.auth import _connect
 from amoscloud_ai.main import app as platform_app
+from amoscloud_ai.organization_support import api_router as support_api_router
 from amoscloud_ai.organization_support import (
-    api_router as support_api_router,
     bearer_identity,
     debit_support_time,
-    page_router as support_page_router,
+)
+from amoscloud_ai.organization_support import page_router as support_page_router
+from amoscloud_ai.organization_support import (
     payment_required_detail,
     session_identity,
     support_wallet,
