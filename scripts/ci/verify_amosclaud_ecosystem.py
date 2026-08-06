@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 EXPECTED_COMMENT = ".Amosclaud/main clean_100%"
+REQUIRED_EXTERNAL_SERVICES = {"github", "railway", "redis", "mysql"}
+ALLOWED_STATUSES = {"active", "configured", "provisioned", "planned"}
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -23,6 +25,53 @@ def load_manifest(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Manifest root must be a JSON object")
     return payload
+
+
+def _validate_status(
+    category: str,
+    name: str,
+    raw_status: object,
+    errors: list[str],
+) -> str:
+    status = str(raw_status or "").strip().lower()
+    if status not in ALLOWED_STATUSES:
+        errors.append(
+            f"{category} {name!r} has invalid status {status or '<empty>'!r}"
+        )
+    return status
+
+
+def _validate_environment_names(
+    service_name: str,
+    raw_names: object,
+    errors: list[str],
+) -> list[str]:
+    if not isinstance(raw_names, list) or not raw_names:
+        errors.append(
+            f"external service {service_name!r} must define required_environment"
+        )
+        return []
+
+    names: list[str] = []
+    for value in raw_names:
+        if not isinstance(value, str) or not value.strip():
+            errors.append(
+                f"external service {service_name!r} has an invalid environment name"
+            )
+            continue
+        name = value.strip()
+        if not name.replace("_", "").isalnum() or name.upper() != name:
+            errors.append(
+                f"external service {service_name!r} has a non-canonical "
+                f"environment name: {name}"
+            )
+        names.append(name)
+
+    if len(names) != len(set(names)):
+        errors.append(
+            f"external service {service_name!r} contains duplicate environment names"
+        )
+    return names
 
 
 def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
@@ -62,6 +111,99 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
         if not str(config.get("purpose", "")).strip():
             errors.append(f"subsystem {name!r} has no purpose")
 
+    external_services = manifest.get("external_services", {})
+    if not isinstance(external_services, dict) or not external_services:
+        errors.append("external_services must be a non-empty object")
+        external_services = {}
+    missing_services = REQUIRED_EXTERNAL_SERVICES.difference(external_services)
+    if missing_services:
+        errors.append(
+            "required external services are missing: "
+            + ", ".join(sorted(missing_services))
+        )
+
+    environment_contract: dict[str, list[str]] = {}
+    external_service_statuses: dict[str, str] = {}
+    for name, config in external_services.items():
+        if not isinstance(config, dict):
+            errors.append(f"external service {name!r} must be an object")
+            continue
+        if not str(config.get("purpose", "")).strip():
+            errors.append(f"external service {name!r} has no purpose")
+        external_service_statuses[name] = _validate_status(
+            "external service",
+            name,
+            config.get("status"),
+            errors,
+        )
+        environment_contract[name] = _validate_environment_names(
+            name,
+            config.get("required_environment"),
+            errors,
+        )
+
+    known_nodes = set(subsystems) | set(external_services)
+    connections = manifest.get("connections", [])
+    if not isinstance(connections, list) or not connections:
+        errors.append("connections must be a non-empty list")
+        connections = []
+
+    connection_keys: set[tuple[str, str, str]] = set()
+    connection_statuses: dict[str, int] = {
+        status: 0 for status in sorted(ALLOWED_STATUSES)
+    }
+    for index, connection in enumerate(connections):
+        if not isinstance(connection, dict):
+            errors.append(f"connection {index} must be an object")
+            continue
+        source = str(connection.get("from", "")).strip()
+        target = str(connection.get("to", "")).strip()
+        protocol = str(connection.get("protocol", "")).strip()
+        status = _validate_status(
+            "connection",
+            str(index),
+            connection.get("status"),
+            errors,
+        )
+        if status in connection_statuses:
+            connection_statuses[status] += 1
+        if source not in known_nodes:
+            errors.append(
+                f"connection {index} has an unknown source: {source or '<empty>'}"
+            )
+        if target not in known_nodes:
+            errors.append(
+                f"connection {index} has an unknown target: {target or '<empty>'}"
+            )
+        if source and target and source == target:
+            errors.append(f"connection {index} cannot connect a node to itself: {source}")
+        if not protocol:
+            errors.append(f"connection {index} has no protocol")
+        key = (source, target, protocol)
+        if key in connection_keys:
+            errors.append(f"connection {index} duplicates an earlier connection: {key}")
+        connection_keys.add(key)
+
+    connected_nodes = {
+        node
+        for source, target, _protocol in connection_keys
+        for node in (source, target)
+        if node
+    }
+    disconnected_nodes = known_nodes.difference(connected_nodes)
+    if disconnected_nodes:
+        errors.append(
+            "ecosystem nodes have no registered connection: "
+            + ", ".join(sorted(disconnected_nodes))
+        )
+
+    planned_connections = connection_statuses.get("planned", 0)
+    if planned_connections:
+        warnings.append(
+            f"{planned_connections} ecosystem connection(s) are registered as planned, "
+            "not live"
+        )
+
     runtime = str(manifest.get("canonical_runtime", "")).strip()
     if ":" not in runtime:
         errors.append("canonical_runtime must use module:object syntax")
@@ -69,7 +211,9 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
         module_name, object_name = runtime.split(":", 1)
         module_path = root / (module_name.replace(".", "/") + ".py")
         if not module_path.is_file():
-            errors.append(f"canonical runtime module is missing: {module_path.relative_to(root)}")
+            errors.append(
+                f"canonical runtime module is missing: {module_path.relative_to(root)}"
+            )
         if not object_name.isidentifier():
             errors.append("canonical runtime object is not a valid identifier")
 
@@ -109,6 +253,11 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
         "manifest": str(manifest_path.relative_to(root)),
         "canonical_runtime": runtime,
         "subsystems_checked": sorted(subsystems),
+        "external_services_checked": sorted(external_services),
+        "external_service_statuses": external_service_statuses,
+        "environment_contract": environment_contract,
+        "connections_checked": len(connections),
+        "connection_statuses": connection_statuses,
         "required_paths_checked": len(required_paths),
         "root_files_observed": len(tracked_root_files),
         "errors": errors,
