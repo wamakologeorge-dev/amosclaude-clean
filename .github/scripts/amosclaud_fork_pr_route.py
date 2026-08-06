@@ -23,10 +23,12 @@ from amosclaud_bot.approval_gate import (
     APPROVAL_MARKER,
     APPROVAL_RECORD_MARKER,
 )
-from amosclaud_bot.approval_gate_v2 import _high_risk_files
 
 FAILURE_CONCLUSIONS = {"failure", "timed_out", "action_required", "startup_failure"}
 TRUSTED_BOT_LOGINS = {"github-actions[bot]"}
+SENSITIVE_APPROVAL_REASON = (
+    "environment, secret-bearing, or personal-information content requires approval"
+)
 
 
 def request_json(
@@ -238,25 +240,15 @@ def resolve(args: argparse.Namespace) -> int:
         )
         return 0
 
-    files = pull_request_files(args.repository, number, args.token)
-    sensitive = _high_risk_files(files)
+    # A fork PR may contain sensitive context while the actual repair is a safe
+    # formatting, test, or source-code change. Never block before a candidate
+    # exists. The candidate validator inspects the proposed patch itself and
+    # rejects sensitive changes unless this one-time approval is present.
     approval_granted, approval_number = sensitive_approval_state(
         args.repository,
         number,
         args.token,
     )
-    if sensitive and not approval_granted:
-        write_outputs(
-            {
-                "should_repair": False,
-                "requires_approval": True,
-                "reason": "environment, secret-bearing, or personal-information content requires approval",
-                "pull_request_number": number,
-                "approval_issue_number": approval_number,
-                "sensitive_files": ",".join(sensitive[:12]),
-            }
-        )
-        return 0
 
     fingerprint = hashlib.sha256(
         f"{args.repository}|{number}|{head_sha}|{source}".encode("utf-8")
@@ -265,8 +257,9 @@ def resolve(args: argparse.Namespace) -> int:
         {
             "should_repair": True,
             "requires_approval": False,
-            "sensitive_approved": bool(sensitive and approval_granted),
+            "sensitive_approved": approval_granted,
             "approval_issue_number": approval_number,
+            "sensitive_approval_reason": SENSITIVE_APPROVAL_REASON,
             "pull_request_number": number,
             "head_repository": head_repository,
             "head_sha": head_sha,
@@ -276,7 +269,7 @@ def resolve(args: argparse.Namespace) -> int:
             "source_name": source,
             "status_url": status_url,
             "fingerprint": fingerprint,
-            "reason": "fork PR failure is eligible for verified repair",
+            "reason": "fork PR failure is eligible for candidate-first verified repair",
         }
     )
     return 0

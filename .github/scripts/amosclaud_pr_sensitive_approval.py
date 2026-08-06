@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Expose the sensitive-data approval state for a pull-request repair."""
+"""Expose prior approval while the candidate validator checks the proposed repair."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ for value in (str(SCRIPT_DIR), str(ROOT)):
     if value not in sys.path:
         sys.path.insert(0, value)
 
-from amosclaud_fork_pr_route import pull_request_files, sensitive_approval_state
+from amosclaud_fork_pr_route import sensitive_approval_state
 
-from amosclaud_bot.approval_gate_v2 import _high_risk_files
+CANDIDATE_VALIDATOR = "amosclaud_repair_candidate_v2.py"
 
 
 def write_outputs(values: dict[str, str | bool]) -> None:
@@ -49,13 +49,13 @@ def main() -> int:
                 "sensitive_detected": False,
                 "approved": False,
                 "approval_issue_number": "",
+                "sensitive_files": "",
+                "candidate_validator": CANDIDATE_VALIDATOR,
             }
         )
         return 0
 
     number = int(args.pull_request_number)
-    files = pull_request_files(args.repository, number, args.token)
-    sensitive = _high_risk_files(files)
     approved, approval_number = sensitive_approval_state(
         args.repository,
         number,
@@ -63,10 +63,15 @@ def main() -> int:
     )
     write_outputs(
         {
-            "sensitive_detected": bool(sensitive),
-            "approved": bool(sensitive and approved),
+            # Never block candidate generation because the original PR contains
+            # an environment example, authentication code, or other sensitive
+            # context. The candidate validator inspects the proposed repair patch
+            # itself and refuses unapproved sensitive changes.
+            "sensitive_detected": False,
+            "approved": approved,
             "approval_issue_number": approval_number,
-            "sensitive_files": ",".join(sensitive[:12]),
+            "sensitive_files": "",
+            "candidate_validator": CANDIDATE_VALIDATOR,
         }
     )
     return 0
