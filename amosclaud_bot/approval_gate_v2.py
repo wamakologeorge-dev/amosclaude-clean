@@ -11,7 +11,7 @@ from .approval_gate import (
     _find_approved_request,
     _record_decision,
 )
-from .bot import AmosclaudBot, WRITE_ASSOCIATIONS, parse_command
+from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 
 SENSITIVE_OBJECTIVE_HINTS = (
     ".env",
