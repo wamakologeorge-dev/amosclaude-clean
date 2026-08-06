@@ -7,9 +7,11 @@ def test_default_administrator_email_allowlist(monkeypatch):
 
     assert configured_admin_emails() == {
         "georgemakulu@amosclaud.com",
+        "gmmakulu@gmail.com",
         "wamakologeorge@gmail.com",
     }
     assert should_grant_admin("georgemakulu@amosclaud.com", is_first_user=False)
+    assert should_grant_admin("GMMAKULU@GMAIL.COM", is_first_user=False)
     assert should_grant_admin("WAMAKOLOGEORGE@GMAIL.COM", is_first_user=False)
 
 
