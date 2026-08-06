@@ -3,6 +3,9 @@ name: Amosclaud Repair Control Plane
 on:
   workflow_run:
     workflows:
+      - Fast PR Gate
+      - Repository Behavior Automation
+      - Amosclaud Bot
       - Amosclaud CI
       - 🚀 Amosclaud AI - CI Pipeline
       - Build and Verify
@@ -233,14 +236,39 @@ jobs:
           steps.reproduce.outputs.reproduced == 'true'
         id: candidate
         env:
-          AMOSCLAUD_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
-          AMOSCLAUD_API_URL: ${{ vars.AMOSCLAUD_API_URL || 'https://www.amosclaud.com' }}
-          AMOSCLAUD_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL || 'amosclaud-agent' }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL }}
+          AMOSCLAUD_GATEWAY_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_GATEWAY_API_URL: ${{ vars.AMOSCLAUD_API_URL }}
+          AMOSCLAUD_GATEWAY_FIXER_MODEL: ${{ vars.AMOSCLAUD_FIXER_MODEL }}
           FAILURE_LOG: ${{ runner.temp }}/amosclaud-repair-failure.log
           PATCH_PATH: ${{ runner.temp }}/amosclaud-repair.patch
           CANDIDATE_REPORT: ${{ runner.temp }}/amosclaud-candidate-report.json
         run: |
           set +e
+          if [ -n "$OLLAMA_API_KEY" ]; then
+            export AMOSCLAUD_API_KEY="$OLLAMA_API_KEY"
+            export AMOSCLAUD_API_URL="${OLLAMA_URL:-https://ollama.com}"
+            export AMOSCLAUD_FIXER_MODEL="${OLLAMA_MODEL:-${AMOSCLAUD_MODEL:-gpt-oss:120b}}"
+            export AMOSCLAUD_REPAIR_PROVIDER="ollama-cloud"
+          else
+            export AMOSCLAUD_API_KEY="$AMOSCLAUD_GATEWAY_API_KEY"
+            export AMOSCLAUD_API_URL="${AMOSCLAUD_GATEWAY_API_URL:-https://www.amosclaud.com}"
+            export AMOSCLAUD_FIXER_MODEL="${AMOSCLAUD_GATEWAY_FIXER_MODEL:-amosclaud-agent}"
+            export AMOSCLAUD_REPAIR_PROVIDER="amosclaud-gateway"
+          fi
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+
+          endpoint = os.environ.get("AMOSCLAUD_API_URL", "")
+          host = urlsplit(endpoint).netloc or "invalid"
+          print(f"Repair provider: {os.environ.get('AMOSCLAUD_REPAIR_PROVIDER', 'unknown')}")
+          print(f"Repair endpoint host: {host}")
+          print(f"Repair model: {os.environ.get('AMOSCLAUD_FIXER_MODEL', 'unknown')}")
+          PY
           mode=regular
           if [ "${{ steps.route.outputs.route }}" = "maintenance" ]; then
             mode=maintenance
