@@ -26,6 +26,18 @@
         <p>Sign in, create an organization, or join your team from this page.</p>
       </header>
 
+      <section class="owner-access" aria-labelledby="owner-access-title">
+        <p class="owner-label">PLATFORM OWNER</p>
+        <h2 id="owner-access-title">GitHub-verified root access</h2>
+        <p><strong>wamakologeorge-dev</strong> signs in through GitHub only. No Amosclaud username, email code, or platform password is accepted for this root account.</p>
+        <a class="github-owner-button" href="/api/v1/auth/github/admin-login">
+          Continue with GitHub as wamakologeorge-dev
+        </a>
+        <small>GitHub verifies the account and confirms current administrator ownership of <strong>wamakologeorge-dev/amosclaude-clean</strong> before Amosclaud opens a root session.</small>
+      </section>
+
+      <div class="account-divider" aria-hidden="true"><span>Other accounts</span></div>
+
       <div class="method-tabs" role="tablist" aria-label="Choose account type">
         <button id="organization-method-tab" class="method-tab active" type="button" role="tab" aria-selected="true">Organization ID</button>
         <button id="email-method-tab" class="method-tab" type="button" role="tab" aria-selected="false">Email account</button>
