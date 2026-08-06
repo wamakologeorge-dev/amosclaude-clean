@@ -14,7 +14,11 @@ from pydantic import BaseModel, Field
 from amoscloud_ai.api.routes.auth import (
     DB_PATH,
     SESSION_COOKIE,
+    SESSION_DAYS,
     _connect,
+    _cookie_secure,
+    _create_session,
+    _token_hash,
     _verify_password,
     get_user_from_session,
 )
@@ -58,6 +62,20 @@ def _is_admin(user) -> bool:
         return False
 
 
+def _cookie_domain() -> str | None:
+    """Return the optional shared cookie domain configured by the operator."""
+    value = os.getenv("AUTH_COOKIE_DOMAIN", "").strip()
+    return value or None
+
+
+def _clear_session_cookie(response: Response) -> None:
+    """Clear current and legacy host-only session cookies."""
+    domain = _cookie_domain()
+    if domain:
+        response.delete_cookie(SESSION_COOKIE, path="/", domain=domain)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+
+
 @router.get("/settings")
 def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
     """Report which account tools are available on this deployment."""
@@ -68,7 +86,10 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
     github_ready = bool(os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET"))
     return {
         "profile": {"available": True},
-        "github_connection": {"available": github_ready, "href": "/api/v1/github/connect"},
+        "github_connection": {
+            "available": github_ready,
+            "href": "/api/v1/github/connect",
+        },
         "api_keys": {
             "available": True,
             "admin_only": True,
@@ -84,7 +105,10 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
 
 
 @router.get("/domains")
-def account_domains(request: Request, amos_session: str | None = Cookie(default=None)) -> dict:
+def account_domains(
+    request: Request,
+    amos_session: str | None = Cookie(default=None),
+) -> dict:
     """Domain verification status for this deployment."""
     user = get_user_from_session(amos_session)
     if not user:
@@ -102,6 +126,60 @@ def account_domains(request: Request, amos_session: str | None = Cookie(default=
     return {"domains": domains, "current_host": current_host}
 
 
+@router.post("/share-session", status_code=204, response_class=Response)
+def share_session_across_domains(
+    response: Response,
+    amos_session: str | None = Cookie(default=None),
+) -> Response:
+    """Rotate and reissue a verified session for the configured parent domain."""
+    user = get_user_from_session(amos_session)
+    if not user or not amos_session:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with _connect() as db:
+        shared_token = _create_session(db, int(user["id"]))
+        db.execute(
+            "DELETE FROM sessions WHERE token_hash=?",
+            (_token_hash(amos_session),),
+        )
+        db.commit()
+
+    domain = _cookie_domain()
+    if domain:
+        response.delete_cookie(SESSION_COOKIE, path="/")
+    response.set_cookie(
+        SESSION_COOKIE,
+        shared_token,
+        max_age=SESSION_DAYS * 86400,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+        path="/",
+        domain=domain,
+    )
+    response.status_code = 204
+    return response
+
+
+@router.post("/logout-all", status_code=204, response_class=Response)
+def logout_all_devices(
+    response: Response,
+    amos_session: str | None = Cookie(default=None),
+) -> Response:
+    """Revoke every active session belonging to the signed-in user."""
+    user = get_user_from_session(amos_session)
+    if not user:
+        _clear_session_cookie(response)
+        response.status_code = 204
+        return response
+    with _connect() as db:
+        db.execute("DELETE FROM sessions WHERE user_id=?", (int(user["id"]),))
+        db.commit()
+    _clear_session_cookie(response)
+    response.status_code = 204
+    return response
+
+
 class AccountDeleteRequest(BaseModel):
     confirmation: str = Field(..., min_length=6, max_length=254)
     password: str | None = Field(default=None, max_length=200)
@@ -113,13 +191,18 @@ def _owned_repository_ids(db: sqlite3.Connection, user_id: int) -> list[int]:
     ).fetchone()
     if not table:
         return []
-    return [int(row[0]) for row in db.execute("SELECT id FROM repositories WHERE owner_id=?", (user_id,)).fetchall()]
+    return [
+        int(row[0])
+        for row in db.execute("SELECT id FROM repositories WHERE owner_id=?", (user_id,)).fetchall()
+    ]
 
 
 def _delete_foreign_key_rows(db: sqlite3.Connection, user_id: int) -> None:
     tables = [
         row[0]
-        for row in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()
+        for row in db.execute(
+            "SELECT name FROM sqlite_master " "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
         if row[0] != "users"
     ]
     for table in tables:
@@ -141,7 +224,10 @@ def delete_account(
 
     expected = user["email"].strip().lower()
     if body.confirmation.strip().lower() != expected:
-        raise HTTPException(status_code=400, detail="Enter your account email exactly to confirm deletion")
+        raise HTTPException(
+            status_code=400,
+            detail="Enter your account email exactly to confirm deletion",
+        )
 
     repository_ids: list[int] = []
     with _connect() as db:
@@ -150,7 +236,10 @@ def delete_account(
             raise HTTPException(status_code=404, detail="Account not found")
         if full_user["password_hash"]:
             if not body.password or not _verify_password(body.password, full_user["password_hash"]):
-                raise HTTPException(status_code=401, detail="Password confirmation is required")
+                raise HTTPException(
+                    status_code=401,
+                    detail="Password confirmation is required",
+                )
 
         repository_ids = _owned_repository_ids(db, int(user["id"]))
         try:
@@ -161,13 +250,16 @@ def delete_account(
             db.commit()
         except sqlite3.DatabaseError as exc:
             db.rollback()
-            raise HTTPException(status_code=409, detail="Account data could not be removed safely") from exc
+            raise HTTPException(
+                status_code=409,
+                detail="Account data could not be removed safely",
+            ) from exc
 
     for repository_id in repository_ids:
         shutil.rmtree(REPOSITORY_ROOT / str(repository_id), ignore_errors=True)
     shutil.rmtree(STORAGE_ROOT / "user" / str(user["id"]), ignore_errors=True)
     shutil.rmtree(STORAGE_ROOT / "admin" / str(user["id"]), ignore_errors=True)
 
-    response.delete_cookie(SESSION_COOKIE, path="/")
+    _clear_session_cookie(response)
     response.status_code = 204
     return response

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Support Amosclaud Open Source</title>
+  <meta name="description" content="Support Amosclaud open-source development through a transparent contribution process.">
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/support.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/support" aria-label="Amosclaud support home">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <span><strong>AMOSCLAUD</strong><small>Open-source community support</small></span>
+    </a>
+    <nav aria-label="Support navigation">
+      <a href="/status">Platform status</a>
+      <a href="https://github.com/wamakologeorge-dev/amosclaude-clean" rel="noopener noreferrer">Source code</a>
+      <a href="/login">Sign in</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="support-title">
+      <p class="eyebrow">Community-funded engineering</p>
+      <h1 id="support-title">Support the Amosclaud open-source mission</h1>
+      <p class="lead">Developer contributions help fund hosting, model infrastructure, testing, security work, documentation, and continued development of Amosclaud.</p>
+      <div class="hero-actions">
+        <a class="cash-button" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer">Contribute with Cash App</a>
+        <a class="secondary-link" href="/status">Review platform progress</a>
+      </div>
+      <p class="payment-handle">Official contribution link: <strong>cash.app/$kenjamakulu</strong></p>
+    </section>
+
+    <section class="steps" aria-labelledby="process-title">
+      <div class="section-heading">
+        <p class="eyebrow">Contribution-based access</p>
+        <h2 id="process-title">How developer service access works</h2>
+      </div>
+      <ol>
+        <li><strong>Contribute first.</strong><span>Open the official Cash App link and send the amount you choose.</span></li>
+        <li><strong>Use a recognizable reference.</strong><span>Include your Amosclaud account email or GitHub username in the Cash App note. Never include passwords, API keys, private keys, or recovery codes.</span></li>
+        <li><strong>Wait for verification.</strong><span>The Cash App link does not automatically notify or activate Amosclaud. A contribution must be verified before service capacity is assigned.</span></li>
+        <li><strong>Receive bounded service capacity.</strong><span>After verification, the account receives the amount, duration, feature limits, and usage allowance shown in its approved service allocation.</span></li>
+        <li><strong>Use only the approved allocation.</strong><span>Service pauses when the verified allocation is exhausted. Additional capacity requires another verified contribution.</span></li>
+      </ol>
+    </section>
+
+    <section class="grid" aria-label="Contribution safeguards">
+      <article class="panel">
+        <p class="eyebrow">Transparent activation</p>
+        <h2>No automatic entitlement</h2>
+        <p>Opening Cash App, sending a screenshot, or entering a transaction reference does not by itself activate service. Amosclaud must verify the contribution and record the approved allocation first.</p>
+      </article>
+      <article class="panel">
+        <p class="eyebrow">Capacity and availability</p>
+        <h2>Service remains bounded</h2>
+        <p>Contribution-based access is subject to platform availability, safety controls, acceptable-use rules, repository authorization, and the specific limits confirmed for the developer account.</p>
+      </article>
+    </section>
+
+    <section class="policy" aria-labelledby="policy-title">
+      <p class="eyebrow">Contribution policy</p>
+      <h2 id="policy-title">Non-refundable policy</h2>
+      <p>Contributions are voluntary and non-refundable after they are sent, except where a refund is required by applicable law. Do not contribute an amount you cannot afford to lose.</p>
+      <ul>
+        <li>Cash App fees, reversals, disputes, account restrictions, and transfer availability are governed by Cash App.</li>
+        <li>Contributions do not guarantee uninterrupted service, a specific result, repository repair, deployment, or model response.</li>
+        <li>Service benefits begin only after Amosclaud verifies the contribution and confirms the developer's bounded allocation.</li>
+        <li>Fraudulent, reversed, disputed, or unverifiable transfers do not qualify for service access.</li>
+        <li>This page does not claim that Amosclaud is a tax-exempt charity. Contributions are not represented as tax-deductible unless an official receipt explicitly states otherwise.</li>
+      </ul>
+      <label class="acknowledgement">
+        <input id="policy-acknowledgement" type="checkbox">
+        <span>I have read the non-refundable contribution and verification policy.</span>
+      </label>
+      <a id="acknowledged-cash-link" class="cash-button disabled" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" aria-disabled="true">Continue to Cash App</a>
+      <noscript><p>JavaScript is required for the policy acknowledgement button. You can still use the official link shown above after reading this policy.</p></noscript>
+    </section>
+
+    <section class="notice" aria-labelledby="legal-title">
+      <h2 id="legal-title">Organization status notice</h2>
+      <p>Amosclaud is presented here as an open-source community initiative. The words “mission,” “community,” or “nonprofit” do not by themselves establish legal nonprofit or tax-exempt status. Any future charitable status must be supported by the appropriate registration and official documentation.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Use only the official Cash App destination shown on this page. Amosclaud will never ask for your Cash App password, PIN, sign-in code, or recovery information.</p>
+  </footer>
+  <script>
+    (() => {
+      const acknowledgement = document.getElementById('policy-acknowledgement');
+      const link = document.getElementById('acknowledged-cash-link');
+      acknowledgement.addEventListener('change', () => {
+        const enabled = acknowledgement.checked;
+        link.classList.toggle('disabled', !enabled);
+        link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+      });
+      link.addEventListener('click', (event) => {
+        if (!acknowledgement.checked) event.preventDefault();
+      });
+    })();
+  </script>
+</body>
+</html>
