@@ -97,12 +97,8 @@ def test_production_example_documents_public_and_owner_callbacks() -> None:
 
     assert "GITHUB_CALLBACK_URL=https://www.amosclaud.com/auth/github/callback" in example
     assert (
-        "GITHUB_ADMIN_CALLBACK_URL=https://www.amosclaud.com/"
-        "api/v1/auth/github/admin-callback"
+        "GITHUB_ADMIN_CALLBACK_URL=https://www.amosclaud.com/" "api/v1/auth/github/admin-callback"
     ) in example
     assert "AMOSCLAUD_ADMIN_GITHUB_IDS=271083488" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_LOGINS=wamakologeorge-dev" in example
-    assert (
-        "AMOSCLAUD_ADMIN_GITHUB_REPOSITORY="
-        "wamakologeorge-dev/amosclaude-clean"
-    ) in example
+    assert ("AMOSCLAUD_ADMIN_GITHUB_REPOSITORY=" "wamakologeorge-dev/amosclaude-clean") in example
