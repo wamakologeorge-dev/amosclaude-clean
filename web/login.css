@@ -59,6 +59,48 @@ a { color: inherit; }
 .portal-heading h1 { margin: 0 0 7px; font-size: clamp(1.7rem, 6vw, 2.15rem); line-height: 1.08; }
 .portal-heading p { margin: 0; color: #69707d; line-height: 1.5; }
 
+.owner-access {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid #20242b;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #111827, #1f2937);
+  color: #ffffff;
+  box-shadow: 0 14px 34px rgba(17, 24, 39, .16);
+}
+.owner-access h2 { color: #ffffff; }
+.owner-access p:not(.owner-label) { margin: 0 0 14px; color: #d7dce4; line-height: 1.5; font-size: .9rem; }
+.owner-access small { display: block; margin-top: 11px; color: #aeb7c6; line-height: 1.45; }
+.owner-label { margin: 0 0 7px; color: #86efac; font-size: .72rem; letter-spacing: .14em; font-weight: 900; }
+.github-owner-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 11px 14px;
+  border: 1px solid #ffffff;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111827;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 900;
+}
+.github-owner-button:hover { background: #f1f5f9; }
+.account-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  color: #7a818c;
+  font-size: .78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.account-divider::before, .account-divider::after { content: ""; height: 1px; background: #dfe3e8; }
+
 .method-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
