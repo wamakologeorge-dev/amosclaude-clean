@@ -26,30 +26,25 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.max_body_bytes = int(
-            os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024))
-        )
+        self.max_body_bytes = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))
         self.auth_window_seconds = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "300"))
         self.auth_max_attempts = int(os.getenv("AUTH_RATE_MAX_ATTEMPTS", "30"))
-        self.signup_max_attempts = int(
-            os.getenv("AUTH_SIGNUP_RATE_MAX_ATTEMPTS", "12")
-        )
-        self.auth_rate_namespace = (
-            os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v3"
-        )
+        self.signup_max_attempts = int(os.getenv("AUTH_SIGNUP_RATE_MAX_ATTEMPTS", "12"))
+        self.auth_rate_namespace = os.getenv("AUTH_RATE_NAMESPACE", "v2").strip() or "v3"
         self.redis_url = os.getenv("REDIS_URL", "").strip()
         self.production = os.getenv("ENVIRONMENT", "development").lower() in {
             "production",
             "prod",
         }
         self.redis = (
-            redis.Redis.from_url(self.redis_url, decode_responses=True)
-            if self.redis_url
-            else None
+            redis.Redis.from_url(self.redis_url, decode_responses=True) if self.redis_url else None
         )
-        self.trust_proxy_headers = os.getenv(
-            "TRUST_PROXY_HEADERS", "false"
-        ).strip().lower() in {"1", "true", "yes", "on"}
+        self.trust_proxy_headers = os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         self.trust_container_gateway = os.getenv(
             "AMOSCLAUD_TRUST_CONTAINER_GATEWAY", "false"
         ).strip().lower() in {"1", "true", "yes", "on"}
@@ -58,27 +53,19 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             "https://amosclaud.com,https://www.amosclaud.com,http://localhost,http://localhost:8000",
         )
         self.trusted_origins = {
-            item.strip().rstrip("/")
-            for item in configured.split(",")
-            if item.strip()
+            item.strip().rstrip("/") for item in configured.split(",") if item.strip()
         }
         approval_origins = os.getenv(
             "AMOSCLAUD_WEBSITE_ORIGINS",
             "https://wamakologeorge-dev.github.io",
         )
         self.approval_origins = {
-            item.strip().rstrip("/")
-            for item in approval_origins.split(",")
-            if item.strip()
+            item.strip().rstrip("/") for item in approval_origins.split(",") if item.strip()
         }
 
     def _client_host(self, request: Request) -> str:
         if self.trust_proxy_headers:
-            forwarded = (
-                request.headers.get("x-forwarded-for", "")
-                .split(",", 1)[0]
-                .strip()
-            )
+            forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
             if forwarded:
                 return forwarded
         return request.client.host if request.client else "unknown"
@@ -100,6 +87,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if path in {
             "/api/v1/auth/register/request-code",
             "/api/v1/auth/register/verify",
+            "/api/v1/organization-access/register",
+            "/api/v1/organization-access/join",
             "/auth/register/request-code",
             "/auth/register/verify",
         }:
@@ -164,8 +153,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 {
                     "detail": (
-                        "This Amosclaud installation does not allow access "
-                        "from this network."
+                        "This Amosclaud installation does not allow access " "from this network."
                     ),
                     "access_mode": policy.mode.value,
                 },
@@ -176,13 +164,9 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         if content_length:
             try:
                 if int(content_length) > self.max_body_bytes:
-                    return JSONResponse(
-                        {"detail": "Request body is too large"}, status_code=413
-                    )
+                    return JSONResponse({"detail": "Request body is too large"}, status_code=413)
             except ValueError:
-                return JSONResponse(
-                    {"detail": "Invalid Content-Length header"}, status_code=400
-                )
+                return JSONResponse({"detail": "Invalid Content-Length header"}, status_code=400)
 
         if self._rate_limited(request):
             return JSONResponse(
@@ -196,23 +180,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(self.auth_window_seconds)},
             )
 
-        if (
-            request.method not in {"GET", "HEAD", "OPTIONS"}
-            and request.cookies.get("amos_session")
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get(
+            "amos_session"
         ):
             origin = request.headers.get("origin")
             allowed_origins = self._trusted_request_origins(request.url.path)
             if origin and origin.rstrip("/") not in allowed_origins:
-                return JSONResponse(
-                    {"detail": "Untrusted request origin"}, status_code=403
-                )
+                return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
 
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault(
-            "Referrer-Policy", "strict-origin-when-cross-origin"
-        )
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
             "Permissions-Policy",
             "camera=(), microphone=(), geolocation=(), payment=()",
@@ -227,10 +206,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
             "form-action 'self'",
         )
-        if (
-            request.url.scheme == "https"
-            or request.headers.get("x-forwarded-proto") == "https"
-        ):
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
             response.headers.setdefault(
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains",
