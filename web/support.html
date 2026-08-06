@@ -29,9 +29,10 @@
       <p class="lead">Developer contributions help fund hosting, model infrastructure, testing, security work, documentation, and continued development of Amosclaud.</p>
       <div class="hero-actions">
         <a class="cash-button" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer">Contribute with Cash App</a>
+        <a class="secondary-link" href="https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" target="_blank" rel="noopener noreferrer">Contribute with Bitcoin</a>
         <a class="secondary-link" href="/status">Review platform progress</a>
       </div>
-      <p class="payment-handle">Official contribution link: <strong>cash.app/$kenjamakulu</strong></p>
+      <p class="payment-handle">Official Cash App: <strong>cash.app/$kenjamakulu</strong><br>Official Bitcoin option: <strong>Cash App Bitcoin link shown above</strong></p>
     </section>
 
     <section class="steps" aria-labelledby="process-title">
@@ -40,9 +41,9 @@
         <h2 id="process-title">How developer service access works</h2>
       </div>
       <ol>
-        <li><strong>Contribute first.</strong><span>Open the official Cash App link and send the amount you choose.</span></li>
-        <li><strong>Use a recognizable reference.</strong><span>Include your Amosclaud account email or GitHub username in the Cash App note. Never include passwords, API keys, private keys, or recovery codes.</span></li>
-        <li><strong>Wait for verification.</strong><span>The Cash App link does not automatically notify or activate Amosclaud. A contribution must be verified before service capacity is assigned.</span></li>
+        <li><strong>Choose a payment method.</strong><span>Use the official Cash App payment link or the official Cash App Bitcoin link on this page.</span></li>
+        <li><strong>Use a recognizable reference.</strong><span>Include your Amosclaud account email or GitHub username in the payment note when the selected payment flow supports a note. Never include passwords, API keys, private keys, or recovery codes.</span></li>
+        <li><strong>Wait for verification.</strong><span>Neither payment link automatically activates Amosclaud. A contribution must be verified before service capacity is assigned.</span></li>
         <li><strong>Receive bounded service capacity.</strong><span>After verification, the account receives the amount, duration, feature limits, and usage allowance shown in its approved service allocation.</span></li>
         <li><strong>Use only the approved allocation.</strong><span>Service pauses when the verified allocation is exhausted. Additional capacity requires another verified contribution.</span></li>
       </ol>
@@ -52,7 +53,7 @@
       <article class="panel">
         <p class="eyebrow">Transparent activation</p>
         <h2>No automatic entitlement</h2>
-        <p>Opening Cash App, sending a screenshot, or entering a transaction reference does not by itself activate service. Amosclaud must verify the contribution and record the approved allocation first.</p>
+        <p>Opening either payment link, sending a screenshot, or entering a transaction reference does not by itself activate service. Amosclaud must verify the contribution and record the approved allocation first.</p>
       </article>
       <article class="panel">
         <p class="eyebrow">Capacity and availability</p>
@@ -66,7 +67,7 @@
       <h2 id="policy-title">Non-refundable policy</h2>
       <p>Contributions are voluntary and non-refundable after they are sent, except where a refund is required by applicable law. Do not contribute an amount you cannot afford to lose.</p>
       <ul>
-        <li>Cash App fees, reversals, disputes, account restrictions, and transfer availability are governed by Cash App.</li>
+        <li>Cash App and Bitcoin fees, reversals, disputes, account restrictions, price changes, and transfer availability are governed by Cash App and the applicable Bitcoin network conditions.</li>
         <li>Contributions do not guarantee uninterrupted service, a specific result, repository repair, deployment, or model response.</li>
         <li>Service benefits begin only after Amosclaud verifies the contribution and confirms the developer's bounded allocation.</li>
         <li>Fraudulent, reversed, disputed, or unverifiable transfers do not qualify for service access.</li>
@@ -76,8 +77,11 @@
         <input id="policy-acknowledgement" type="checkbox">
         <span>I have read the non-refundable contribution and verification policy.</span>
       </label>
-      <a id="acknowledged-cash-link" class="cash-button disabled" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" aria-disabled="true">Continue to Cash App</a>
-      <noscript><p>JavaScript is required for the policy acknowledgement button. You can still use the official link shown above after reading this policy.</p></noscript>
+      <div class="hero-actions">
+        <a class="cash-button disabled" href="https://cash.app/$kenjamakulu" target="_blank" rel="noopener noreferrer" aria-disabled="true" data-policy-payment>Continue to Cash App</a>
+        <a class="secondary-link disabled" href="https://cash.app/launch/bitcoin/$kenjamakulu/pPi5bQWHLA" target="_blank" rel="noopener noreferrer" aria-disabled="true" data-policy-payment>Continue with Bitcoin</a>
+      </div>
+      <noscript><p>JavaScript is required for the policy acknowledgement buttons. You can still use the official links shown above after reading this policy.</p></noscript>
     </section>
 
     <section class="notice" aria-labelledby="legal-title">
@@ -87,19 +91,23 @@
   </main>
 
   <footer>
-    <p>Use only the official Cash App destination shown on this page. Amosclaud will never ask for your Cash App password, PIN, sign-in code, or recovery information.</p>
+    <p>Use only the official Cash App and Cash App Bitcoin destinations shown on this page. Amosclaud will never ask for your Cash App password, PIN, sign-in code, recovery information, wallet recovery phrase, or private key.</p>
   </footer>
   <script>
     (() => {
       const acknowledgement = document.getElementById('policy-acknowledgement');
-      const link = document.getElementById('acknowledged-cash-link');
+      const links = Array.from(document.querySelectorAll('[data-policy-payment]'));
       acknowledgement.addEventListener('change', () => {
         const enabled = acknowledgement.checked;
-        link.classList.toggle('disabled', !enabled);
-        link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        links.forEach(link => {
+          link.classList.toggle('disabled', !enabled);
+          link.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+        });
       });
-      link.addEventListener('click', (event) => {
-        if (!acknowledgement.checked) event.preventDefault();
+      links.forEach(link => {
+        link.addEventListener('click', event => {
+          if (!acknowledgement.checked) event.preventDefault();
+        });
       });
     })();
   </script>
