@@ -10,6 +10,7 @@ def test_ordinary_repairs_do_not_require_approval() -> None:
     assert not _is_sensitive_objective("fix the deployment workflow")
     assert not _is_sensitive_objective("repair authentication tests")
     assert not _is_sensitive_objective("correct Docker infrastructure configuration")
+    assert not _is_sensitive_objective("fix password validation and credential handling")
 
 
 def test_environment_and_personal_data_repairs_require_approval() -> None:
@@ -27,17 +28,35 @@ def test_sensitive_paths_and_content_are_detected() -> None:
             "filename": "data/customer.csv",
             "patch": "+social security: 123-45-6789",
         },
+        {
+            "filename": "src/config.py",
+            "patch": '+API_KEY = "sk-1234567890abcdefghijkl"',
+        },
     ]
 
     assert _high_risk_files(files) == [
         ".env.production",
         "data/customer.csv",
+        "src/config.py",
     ]
 
 
-def test_safe_placeholders_do_not_trigger_secret_approval() -> None:
+def test_safe_placeholders_and_credential_code_do_not_trigger_approval() -> None:
     assert not _patch_contains_sensitive_information(
-        "+API_KEY=example\n+PASSWORD=${PASSWORD}\n+token=os.getenv('TOKEN')"
+        "+API_KEY=example\n"
+        "+PASSWORD=${PASSWORD}\n"
+        "+token=os.getenv('TOKEN')\n"
+        "+password = request.password\n"
+        '+api_key = "settings.api_key"'
+    )
+
+
+def test_literal_secret_and_personal_values_trigger_approval() -> None:
+    assert _patch_contains_sensitive_information(
+        '+password = "A-real-password-123"'
+    )
+    assert _patch_contains_sensitive_information(
+        "+home address: 123 Private Street"
     )
 
 
