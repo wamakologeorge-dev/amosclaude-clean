@@ -15,7 +15,7 @@ from amoscloud_ai.control_plane_bridge import (
     sign_task_record,
 )
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime(2026, 8, 6, 18, 0, tzinfo=timezone.utc)
 
 
 def _identity() -> ControlPlaneIdentity:
@@ -49,6 +49,8 @@ def test_local_runner_task_becomes_signed_local_computer_job() -> None:
         account_id=42,
         workspace_id="workspace_primary",
         runner_kind="local_computer",
+        issued_at=NOW,
+        nonce="fixed-local-runner-nonce",
     )
     authorization = verify_authorized_job(
         envelope,
@@ -56,7 +58,7 @@ def test_local_runner_task_becomes_signed_local_computer_job() -> None:
         expected_target=ExecutionTarget.LOCAL_COMPUTER,
         expected_runner_id="runner_laptop",
         expected_account_id=42,
-        now=NOW,
+        now=NOW + timedelta(seconds=1),
     )
 
     assert authorization["job_id"] == "task_123"
@@ -97,6 +99,7 @@ def test_private_server_deployment_requires_sensitive_approval() -> None:
             account_id=42,
             workspace_id="workspace_primary",
             runner_kind="private_server",
+            issued_at=NOW,
         )
 
     envelope = sign_task_record(
@@ -106,13 +109,15 @@ def test_private_server_deployment_requires_sensitive_approval() -> None:
         workspace_id="workspace_primary",
         runner_kind="private_server",
         sensitive_approved=True,
+        issued_at=NOW,
+        nonce="fixed-private-server-nonce",
     )
     authorization = verify_authorized_job(
         envelope,
         public_key=identity.public_key,
         expected_target=ExecutionTarget.PRIVATE_SERVER,
         expected_runner_id="runner_server",
-        now=datetime.now(timezone.utc) + timedelta(seconds=1),
+        now=NOW + timedelta(seconds=1),
     )
     assert "deployment:execute" in authorization["permissions"]
 
@@ -130,4 +135,41 @@ def test_unapproved_task_cannot_receive_execution_signature() -> None:
             account_id=42,
             workspace_id="workspace_primary",
             runner_kind="local_computer",
+        )
+
+
+def test_runner_task_must_be_claimed_and_bound_to_the_correct_account() -> None:
+    with pytest.raises(ControlPlaneError, match="atomically claimed"):
+        sign_task_record(
+            _task(status="queued"),
+            identity=_identity(),
+            account_id=42,
+            workspace_id="workspace_primary",
+            runner_kind="local_computer",
+        )
+
+    with pytest.raises(ControlPlaneError, match="different developer account"):
+        sign_task_record(
+            _task(account_id="99"),
+            identity=_identity(),
+            account_id=42,
+            workspace_id="workspace_primary",
+            runner_kind="local_computer",
+        )
+
+
+def test_github_job_requires_a_repository_binding() -> None:
+    with pytest.raises(ControlPlaneError, match="bound to a repository"):
+        sign_task_record(
+            _task(
+                execution_target="github",
+                runner_id=None,
+                repository=None,
+                mode="review",
+                delivery="report",
+                status="queued",
+            ),
+            identity=_identity(),
+            account_id=42,
+            workspace_id="workspace_primary",
         )
