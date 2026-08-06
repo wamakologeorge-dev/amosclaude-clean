@@ -1,41 +1,20 @@
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
-from amoscloud_ai.api.routes import github_access_gateway
+from amoscloud_ai.main import create_app
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_public_account_entry_is_github_only() -> None:
-    source = (ROOT / "amoscloud_ai/api/routes/github_access_gateway.py").read_text(encoding="utf-8")
-
-    assert '@router.get("/login"' in source
-    assert '@router.get("/signup"' in source
-    assert '@router.get("/create-account"' in source
-    assert 'RedirectResponse("/auth/github"' in source
-    assert '"allow_signup": "true"' in source
-    assert 'GITHUB_SCOPE = "read:user user:email repo"' in source
+def _paths() -> set[str]:
+    return {getattr(route, "path", "") for route in create_app().routes}
 
 
-def test_login_page_has_no_email_password_or_recovery_form() -> None:
-    html = (ROOT / "web/login.html").read_text(encoding="utf-8")
-
-    assert "location.replace('/auth/github')" in html
-    assert "Continue with GitHub" in html
-    assert "<form" not in html
-    assert 'type="password"' not in html
-    assert "Forgot password" not in html
-    assert "Create account" not in html
-    assert "/static/account-access.js" not in html
-
-
-def test_old_account_endpoints_are_blocked_by_production_gateway() -> None:
-    paths = {
-        route.path
-        for route in github_access_gateway.router.routes
-        if hasattr(route, "path") and "POST" in getattr(route, "methods", set())
-    }
-
-    assert {
+def test_standard_email_auth_routes_are_registered() -> None:
+    paths = _paths()
+    required = {
         "/auth/login",
         "/auth/login/request-code",
         "/auth/login/verify-code",
@@ -43,31 +22,188 @@ def test_old_account_endpoints_are_blocked_by_production_gateway() -> None:
         "/auth/register/verify",
         "/auth/password/forgot",
         "/auth/password/reset",
-    }.issubset(paths)
+    }
+    assert not (required - paths)
 
 
-def test_github_callback_creates_or_signs_in_account() -> None:
-    source = (ROOT / "amoscloud_ai/api/routes/github_access_gateway.py").read_text(encoding="utf-8")
+def test_login_page_exposes_one_complete_account_flow() -> None:
+    html = (ROOT / "web" / "login.html").read_text(encoding="utf-8")
+    for text in (
+        "Sign in",
+        "Create account",
+        "Forgot password?",
+        "Email me a sign-in code",
+        "secure code on any device",
+        "/static/account-access.js",
+    ):
+        assert text in html
+    assert "Organization ID" not in html
+    assert "Continue with GitHub" not in html
+    assert "Forgot username" not in html
+    assert "login-recovery.js" not in html
+    assert "/static/unified-login.js" not in html
 
-    assert '@router.get("/auth/github/callback"' in source
-    assert "_find_or_create_github_user" in source
-    assert "password_hash,github_id,provider" in source
-    assert "VALUES (?,?,NULL,?,'github',?,?)" in source
-    assert "auth._set_session_cookie(response, token)" in source
+
+def test_account_access_uses_primary_email_routes() -> None:
+    script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
+    assert "window.prompt" not in script
+    for route in (
+        "/auth/login/request-code",
+        "/auth/login/verify-code",
+        "/auth/register/request-code",
+        "/auth/register/verify",
+        "/auth/password/forgot",
+        "/auth/password/reset",
+    ):
+        assert route in script
+    assert "/api/v1/auth/account-recovery/password/request" not in script
+    assert "/api/v1/auth/account-recovery/username/request" not in script
 
 
-def test_only_verified_github_email_can_link_existing_account() -> None:
-    source = (ROOT / "amoscloud_ai/api/routes/github_access_gateway.py").read_text(encoding="utf-8")
+def test_password_reset_code_field_only_shows_after_successful_request() -> None:
+    node = shutil.which("node")
+    if not node:  # pragma: no cover - only on hosts without Node.js
+        return
 
-    assert 'item.get("verified")' in source
-    assert "if not user and verified_email" in source
-    assert "users.noreply.amosclaud.local" in source
+    script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+
+function element(id) {
+  const initiallyHidden = new Set(['name-field', 'new-password-field', 'email-code-field', 'password-hint']);
+  const classes = new Set(initiallyHidden.has(id) ? ['hidden'] : []);
+  return {
+    id,
+    value: '',
+    required: false,
+    disabled: false,
+    hidden: false,
+    textContent: '',
+    className: '',
+    autocomplete: '',
+    listeners: {},
+    focus() {},
+    setAttribute() {},
+    classList: {
+      toggle(name, force) {
+        if (force === undefined) {
+          if (classes.has(name)) classes.delete(name); else classes.add(name);
+        } else if (force) classes.add(name); else classes.delete(name);
+      },
+      contains(name) { return classes.has(name); },
+    },
+    addEventListener(type, fn) {
+      this.listeners[type] = this.listeners[type] || [];
+      this.listeners[type].push(fn);
+    },
+  };
+}
+
+async function runScenario(requestOk) {
+  const ids = [
+    'auth-form', 'name-field', 'identifier-field', 'password-field', 'new-password-field',
+    'email-code-field', 'password-hint', 'name', 'identifier', 'password', 'new-password',
+    'email-code', 'login-tab', 'register-tab', 'forgot-password-button',
+    'submit-button', 'email-code-button', 'auth-title', 'auth-subtitle', 'message'
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, element(id)]));
+  elements['auth-form'].reset = () => {
+    for (const id of ['name', 'identifier', 'password', 'new-password', 'email-code']) {
+      elements[id].value = '';
+    }
+  };
+  elements['auth-form'].reportValidity = () => true;
+
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(url);
+    if (url === '/auth/password/forgot') {
+      if (requestOk) {
+        return {ok: true, status: 202, text: async () => JSON.stringify({message: 'Sent'})};
+      }
+      return {ok: false, status: 503, text: async () => JSON.stringify({detail: 'failure'})};
+    }
+    return {ok: true, status: 200, text: async () => '{}'};
+  };
+
+  const window = {
+    location: {search: '', replace() {}},
+  };
+  const context = {
+    window,
+    document: {getElementById: id => elements[id] || null},
+    fetch,
+    URLSearchParams,
+    JSON,
+  };
+  vm.runInNewContext(source, context);
+
+  for (const fn of elements['forgot-password-button'].listeners.click || []) await fn({});
+  const hiddenBefore = elements['email-code-field'].classList.contains('hidden');
+  elements['identifier'].value = 'person@example.com';
+  elements['new-password'].value = 'Secret12345!';
+  for (const fn of elements['auth-form'].listeners.submit || []) {
+    await fn({preventDefault() {}});
+  }
+  return {
+    hiddenBefore,
+    hiddenAfter: elements['email-code-field'].classList.contains('hidden'),
+    requiredAfter: elements['email-code'].required,
+    calls: calls.filter(url => url === '/auth/password/forgot').length,
+  };
+}
+
+(async () => {
+  process.stdout.write(JSON.stringify({
+    success: await runScenario(true),
+    failure: await runScenario(false),
+  }));
+})().catch(error => {
+  process.stderr.write(String(error && error.stack || error));
+  process.exit(1);
+});
+"""
+    completed = subprocess.run(
+        [node, "-e", script, str(ROOT / "web" / "account-access.js")],
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=60,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["success"]["hiddenBefore"] is True
+    assert result["success"]["calls"] == 1
+    assert result["success"]["hiddenAfter"] is False
+    assert result["success"]["requiredAfter"] is True
+
+    assert result["failure"]["hiddenBefore"] is True
+    assert result["failure"]["calls"] == 1
+    assert result["failure"]["hiddenAfter"] is True
+    assert result["failure"]["requiredAfter"] is False
 
 
-def test_combined_production_app_registers_github_gateway_before_platform() -> None:
-    source = (ROOT / "amoscloud_ai/combined_app.py").read_text(encoding="utf-8")
+def test_registration_uses_the_visible_email_field() -> None:
+    script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
 
-    github_route = source.index("app.include_router(github_access_gateway.router)")
-    platform_mount = source.index('app.mount("/", HostedToolSupportASGI(platform_app)')
-    assert github_route < platform_mount
-    assert 'app.include_router(github_access_gateway.router, prefix="/api/v1")' in source
+    assert "name: inputs.name.value.trim()" in script
+    assert "email: address" in script
+    assert "password: inputs.nextPassword.value" in script
+    assert "signupCodeRequested = true" in script
+    assert "Verify and open Amosclaud" in script
+
+
+def test_security_mail_sender_is_amosclaud_owned() -> None:
+    source = (ROOT / "amoscloud_ai" / "mail_delivery.py").read_text(encoding="utf-8")
+    assert "no-reply@amosclaud.com" in source
+    assert "amosclaud.com" in source
+    assert "smtp.login" in source
+    assert "print(" not in source
+
+
+def test_primary_password_reset_revokes_existing_sessions() -> None:
+    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "auth.py").read_text(encoding="utf-8")
+    assert '@router.post("/password/reset"' in source
+    assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in source
+    assert "Invalid or expired verification code" in source
