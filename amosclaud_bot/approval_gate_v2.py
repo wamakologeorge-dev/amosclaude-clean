@@ -192,9 +192,7 @@ def handle_approval_event(
             "@amosclaud-bot approve"
         ):
             return _record_decision(bot, payload, "approve")
-        if normalized.startswith("@amosclaud deny") or normalized.startswith(
-            "@amosclaud-bot deny"
-        ):
+        if normalized.startswith("@amosclaud deny") or normalized.startswith("@amosclaud-bot deny"):
             return _record_decision(bot, payload, "deny")
 
         if command == "fix" and _is_sensitive_objective(objective):
