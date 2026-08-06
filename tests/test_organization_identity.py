@@ -50,6 +50,15 @@ def test_organization_admin_can_revoke_membership_but_not_final_owner() -> None:
     assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in identity
     assert "Transfer ownership before removing the final owner" in identity
     assert "Only an owner can remove an owner" in identity
+    assert 'if target["provider"] == "organization"' in identity
+    assert "UPDATE users SET password_hash=NULL" in identity
+
+
+def test_revoked_members_are_excluded_from_workspace_authorization() -> None:
+    workspaces = _read("amoscloud_ai/api/routes/workspaces.py")
+
+    assert "om.status='active'" in workspaces
+    assert "COALESCE(c.role,om.role)" in workspaces
 
 
 def test_owner_controls_identifier_and_ownership_transfer() -> None:
