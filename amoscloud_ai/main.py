@@ -63,6 +63,7 @@ from amoscloud_ai.api.routes import (
     model_server_folder,
     openai_compat,
     operation_buckets,
+    organization_identity,
     organizations,
     passkey_signup,
     pipelines,
@@ -213,6 +214,7 @@ def create_app() -> FastAPI:
     app.include_router(hub_architecture.router, prefix="/api/v1")
     app.include_router(repository_templates.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
+    app.include_router(organization_identity.router, prefix="/api/v1")
     app.include_router(operation_buckets.router, prefix="/api/v1")
     app.include_router(workspaces.router, prefix="/api/v1")
     app.include_router(local_workspace.router, prefix="/api/v1")
@@ -311,6 +313,10 @@ def create_app() -> FastAPI:
         if get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/cloud/agent", status_code=302)
         return FileResponse(web_dir / "login.html")
+
+    @app.get("/organization-access", include_in_schema=False)
+    async def organization_access_page():
+        return FileResponse(web_dir / "organization-access.html")
 
     @app.get("/repositories", include_in_schema=False)
     async def repositories_page(request: Request):
