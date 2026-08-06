@@ -18,7 +18,6 @@ import httpx
 from fastapi import APIRouter, Cookie, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
-from amoscloud_ai.admin_bootstrap import should_grant_admin
 from amoscloud_ai.api.routes import auth
 
 router = APIRouter(tags=["github-access"])
@@ -192,16 +191,14 @@ def _find_or_create_github_user(
                 )
 
         if not user:
-            is_admin = should_grant_admin(account_email, is_first_user=False)
             cursor = db.execute(
                 """INSERT INTO users(
                        name,email,password_hash,github_id,provider,is_admin,created_at
-                   ) VALUES (?,?,NULL,?,'github',?,?)""",
+                   ) VALUES (?,?,NULL,?,'github',0,?)""",
                 (
                     display_name,
                     account_email,
                     github_id,
-                    int(is_admin),
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
