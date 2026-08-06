@@ -16,7 +16,14 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from amoscloud_ai import provider
-from amoscloud_ai.agent_tokens import credit_tokens, debit_tokens, ensure_agent_schema, key_hash, now
+from amoscloud_ai.agent_tokens import (
+    api_access_is_activated,
+    credit_tokens,
+    debit_tokens,
+    ensure_agent_schema,
+    key_hash,
+    now,
+)
 from amoscloud_ai.api.routes.auth import _connect
 
 router = APIRouter(prefix="/v1", tags=["openai-compatible"])
@@ -48,6 +55,16 @@ def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _payment_required() -> HTTPException:
+    return HTTPException(
+        status_code=402,
+        detail=(
+            "Pay with Cash App or Bitcoin and wait for Amosclaud to verify the "
+            "payment before using the Amosclaud API."
+        ),
+    )
+
+
 def _authenticate(authorization: str | None) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="A valid Amosclaud API key is required")
@@ -58,21 +75,29 @@ def _authenticate(authorization: str | None) -> dict:
     with _connect() as db:
         ensure_agent_schema(db)
         row = db.execute(
-            """SELECT k.id,k.user_id,w.balance,'provider' AS key_type
+            """SELECT k.id,k.user_id,w.balance,u.is_admin,'provider' AS key_type
                FROM agent_api_keys k
+               JOIN users u ON u.id=k.user_id
                LEFT JOIN agent_token_wallets w ON w.user_id=k.user_id
                WHERE k.key_hash=? AND k.revoked_at IS NULL""",
             (key_hash(raw),),
         ).fetchone()
         if row:
+            if not api_access_is_activated(
+                db,
+                int(row["user_id"]),
+                is_admin=bool(row["is_admin"]),
+            ):
+                raise _payment_required()
             db.execute("UPDATE agent_api_keys SET last_used_at=? WHERE id=?", (now(), row["id"]))
             db.commit()
             return dict(row)
 
         try:
             row = db.execute(
-                """SELECT k.id,k.user_id,w.balance,'autonomous' AS key_type
+                """SELECT k.id,k.user_id,w.balance,u.is_admin,'autonomous' AS key_type
                    FROM autonomous_api_keys k
+                   JOIN users u ON u.id=k.user_id
                    LEFT JOIN agent_token_wallets w ON w.user_id=k.user_id
                    WHERE k.key_hash=? AND k.revoked_at IS NULL""",
                 (_sha256(raw),),
@@ -81,6 +106,12 @@ def _authenticate(authorization: str | None) -> dict:
             row = None
         if not row:
             raise HTTPException(status_code=401, detail="Amosclaud API key is invalid or revoked")
+        if not api_access_is_activated(
+            db,
+            int(row["user_id"]),
+            is_admin=bool(row["is_admin"]),
+        ):
+            raise _payment_required()
         used_at = datetime.now(timezone.utc).isoformat()
         db.execute("UPDATE autonomous_api_keys SET last_used_at=? WHERE id=?", (used_at, row["id"]))
         db.commit()
@@ -149,7 +180,7 @@ def _run_credited_request(
         if not debit_tokens(db, int(credential["user_id"]), cost, reference=request_id):
             raise HTTPException(
                 status_code=402,
-                detail={"code": "agent_tokens_required", "purchase_url": "/plans"},
+                detail={"code": "agent_tokens_required", "purchase_url": "/api-access"},
             )
 
     try:
