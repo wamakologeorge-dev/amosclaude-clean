@@ -44,16 +44,18 @@ def test_public_catalog_exposes_source_but_not_free_official_execution() -> None
     assert payload["official_tools"]["support_url"].endswith("/organization-support")
 
 
-def test_public_source_routes_are_mounted_before_the_paid_platform() -> None:
+def test_public_source_and_github_access_routes_precede_paid_platform() -> None:
     combined = (ROOT / "amoscloud_ai/combined_app.py").read_text(encoding="utf-8")
     login = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     public_index = combined.index("app.include_router(public_developer_tools.router)")
+    github_index = combined.index("app.include_router(github_access_gateway.router)")
     platform_index = combined.index('app.mount("/", HostedToolSupportASGI(platform_app)')
     assert public_index < platform_index
-    assert 'href="/developer-tools"' in login
-    assert "View public source and documentation" in login
-    assert 'href="/organization-support"' in login
+    assert github_index < platform_index
+    assert "location.replace('/auth/github')" in login
+    assert "<form" not in login
+    assert "type=\"password\"" not in login
 
 
 def test_configured_owner_can_bootstrap_only_the_first_account_when_mail_is_down(
