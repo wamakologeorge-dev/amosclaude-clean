@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import secrets
 import time
 from collections import defaultdict, deque
 from threading import Lock
@@ -15,6 +16,31 @@ from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from amoscloud_ai.core.access import AccessMode, AccessPolicy
+
+REPOSITORY_OAUTH_STATE_COOKIE = "amos_github_oauth_state"
+OWNER_CALLBACK_PATHS = {
+    "/api/v1/auth/github/admin-callback",
+    "/auth/github/admin-callback",
+}
+REPOSITORY_CALLBACK_PATH = "/api/v1/github/callback"
+
+
+def _route_repository_oauth_callback(request: Request) -> None:
+    """Route a repository OAuth response through the one registered callback.
+
+    Owner sign-in and repository connection intentionally use one GitHub App
+    callback URL. The repository flow is identified by its state cookie, then
+    internally dispatched to the existing repository callback handler.
+    """
+
+    if request.scope.get("path") not in OWNER_CALLBACK_PATHS:
+        return
+    state = request.query_params.get("state")
+    repository_state = request.cookies.get(REPOSITORY_OAUTH_STATE_COOKIE)
+    if not state or not repository_state or not secrets.compare_digest(state, repository_state):
+        return
+    request.scope["path"] = REPOSITORY_CALLBACK_PATH
+    request.scope["raw_path"] = REPOSITORY_CALLBACK_PATH.encode()
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -142,6 +168,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return self.trusted_origins
 
     async def dispatch(self, request: Request, call_next):
+        _route_repository_oauth_callback(request)
+
         try:
             policy = AccessPolicy.from_environment()
         except ValueError as exc:

@@ -1,7 +1,7 @@
 """Canonical public-domain policy for the Amosclaud platform deployment.
 
 The apex ``amosclaud.com`` hostname is hosted by a separate platform. The
-Amosclaud application, its authentication cookies, and its OAuth callbacks must
+Amosclaud application, its authentication cookies, and its OAuth callback must
 stay on ``www.amosclaud.com``. Custom self-hosted domains remain supported.
 """
 
@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 WWW_PLATFORM_URL = "https://www.amosclaud.com"
 AMOSCLAUD_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+GITHUB_CALLBACK_PATH = "/api/v1/auth/github/admin-callback"
 
 
 def _normalise_public_url(value: str) -> str:
@@ -27,33 +28,15 @@ def _normalise_public_url(value: str) -> str:
     return candidate.rstrip("/")
 
 
-def _normalise_callback(value: str, public_url: str, path: str) -> str:
-    candidate = value.strip()
-    if candidate:
-        if "://" not in candidate:
-            candidate = f"https://{candidate}"
-        parsed = urlsplit(candidate)
-        hostname = (parsed.hostname or "").lower()
-        if hostname not in AMOSCLAUD_HOSTS:
-            return candidate
-    return f"{public_url}{path}"
-
-
 def enforce_platform_domain_policy() -> None:
-    """Keep Amosclaud auth and GitHub connections on the www platform host."""
+    """Keep Amosclaud auth and GitHub connections on one public callback."""
 
     public_url = _normalise_public_url(os.getenv("AMOSCLAUD_PUBLIC_URL", ""))
+    callback_url = f"{public_url}{GITHUB_CALLBACK_PATH}"
+
     os.environ["AMOSCLAUD_PUBLIC_URL"] = public_url
-    os.environ["GITHUB_ADMIN_CALLBACK_URL"] = _normalise_callback(
-        os.getenv("GITHUB_ADMIN_CALLBACK_URL", ""),
-        public_url,
-        "/api/v1/auth/github/admin-callback",
-    )
-    os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] = _normalise_callback(
-        os.getenv("GITHUB_REPOSITORY_CALLBACK_URL", ""),
-        public_url,
-        "/api/v1/github/callback",
-    )
+    os.environ["GITHUB_ADMIN_CALLBACK_URL"] = callback_url
+    os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] = callback_url
 
     public_host = (urlsplit(public_url).hostname or "").lower()
     configured_cookie_domain = os.getenv("AUTH_COOKIE_DOMAIN", "").strip()
