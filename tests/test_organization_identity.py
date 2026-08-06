@@ -54,12 +54,16 @@ def test_organization_admin_can_revoke_membership_but_not_final_owner() -> None:
 
 def test_owner_controls_identifier_and_ownership_transfer() -> None:
     identity = _read("amoscloud_ai/api/routes/organization_identity.py")
+    page = _read("web/organization-access.html")
+    script = _read("web/organization-access.js")
 
     assert '@router.patch("/{public_id}/identifier")' in identity
     assert '@router.post("/{public_id}/transfer-ownership")' in identity
     assert 'if actor["role"] != "owner"' in identity
     assert "Owner access required" in identity
     assert "organization.ownership_transferred" in identity
+    assert 'value="transfer-ownership"' in page
+    assert "/transfer-ownership" in script
 
 
 def test_login_page_exposes_public_organization_access() -> None:
