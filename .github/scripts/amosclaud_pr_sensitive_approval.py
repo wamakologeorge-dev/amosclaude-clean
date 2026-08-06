@@ -15,6 +15,7 @@ for value in (str(SCRIPT_DIR), str(ROOT)):
         sys.path.insert(0, value)
 
 from amosclaud_fork_pr_route import pull_request_files, sensitive_approval_state
+
 from amosclaud_bot.approval_gate_v2 import _high_risk_files
 
 
