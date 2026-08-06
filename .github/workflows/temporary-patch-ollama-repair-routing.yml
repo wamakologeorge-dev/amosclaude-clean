@@ -30,6 +30,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install temporary test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+
       - name: Apply bounded routing patch
         run: python .github/scripts/patch_ollama_repair_routing.py
 
