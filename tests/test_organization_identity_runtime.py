@@ -196,9 +196,7 @@ def test_owner_can_transfer_ownership_before_leaving(isolated_identity_db) -> No
     assert roles[joined["username"]] == "owner"
 
 
-def test_backfill_runs_only_for_unapplied_schema_version(
-    isolated_identity_db, monkeypatch
-) -> None:
+def test_backfill_runs_only_for_unapplied_schema_version(isolated_identity_db, monkeypatch) -> None:
     calls = 0
     original = organization_identity._backfill
 
