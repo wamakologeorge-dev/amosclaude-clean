@@ -26,6 +26,8 @@ permissions:
 
 concurrency:
   group: amosclaud-scan-bug-${{ github.event.pull_request.number || inputs.pull_request_number || github.ref }}
+  # This only replaces an older Scan Bug observation for the same ref. It cannot
+  # cancel pytest, build, deployment, CodeQL, or any other repository workflow.
   cancel-in-progress: true
 
 jobs:
@@ -33,6 +35,9 @@ jobs:
     name: Read-only line coverage observer
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Failures in this observer must remain visible in its logs and artifacts but
+    # must never become a repository test gate or stop another workflow.
+    continue-on-error: true
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       SCAN_DIR: ${{ runner.temp }}/amosclaud-scan-bug
@@ -82,7 +87,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install parser used by the read-only scanner
-        run: python -m pip install --disable-pip-version-check PyYAML>=6.0,<7
+        run: python -m pip install --disable-pip-version-check 'PyYAML>=6.0,<7'
 
       - name: Crawl tracked source lines and stop at first catch
         id: bug
