@@ -57,6 +57,4 @@ def test_private_information_changes_still_need_approval() -> None:
     ]
 
     assert len(approval_gate._high_risk_files(files)) == 2
-    assert approval_gate._is_sensitive_objective(
-        "remove a leaked key from repository history"
-    )
+    assert approval_gate._is_sensitive_objective("remove a leaked key from repository history")
