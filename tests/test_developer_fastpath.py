@@ -35,9 +35,7 @@ def test_context_compression_excludes_dependencies_and_sensitive_files(tmp_path:
     assert any(item["path"] == "src/auth.py" for item in result["snippets"])
     assert ".env" in result["sensitive_files_skipped"]
     assert all("node_modules" not in item["path"] for item in result["snippets"])
-    rendered = "\n".join(
-        line["text"] for item in result["snippets"] for line in item["lines"]
-    )
+    rendered = "\n".join(line["text"] for item in result["snippets"] for line in item["lines"])
     assert "do-not-read" not in rendered
 
 
