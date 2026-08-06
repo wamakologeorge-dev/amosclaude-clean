@@ -1,4 +1,9 @@
-"""GitHub-only public account access for the Amosclaud production gateway."""
+"""Optional GitHub sign-in for the Amosclaud account system.
+
+Email/password signup, email codes, and password recovery remain the primary
+public account flow. GitHub is an optional identity provider and never shadows
+or disables those routes.
+"""
 
 from __future__ import annotations
 
@@ -20,7 +25,7 @@ router = APIRouter(tags=["github-access"])
 
 GITHUB_STATE_COOKIE = "amos_github_oauth_state"
 GITHUB_RETURN_COOKIE = "amos_github_return_to"
-GITHUB_SCOPE = "read:user user:email repo"
+GITHUB_SCOPE = "read:user user:email"
 
 
 def _public_url() -> str:
@@ -38,6 +43,7 @@ def _safe_return_to(value: str | None) -> str:
         "/cloud",
         "/settings",
         "/billing",
+        "/account",
     }
     candidate = (value or "/cloud/agent").strip()
     if candidate in allowed_return_paths:
@@ -67,35 +73,19 @@ def _github_configuration() -> tuple[str, str]:
     client_id = os.getenv("GITHUB_CLIENT_ID", "").strip()
     client_secret = os.getenv("GITHUB_CLIENT_SECRET", "").strip()
     if not client_id or not client_secret:
-        raise HTTPException(status_code=503, detail="GitHub account access is not configured")
+        raise HTTPException(status_code=503, detail="GitHub sign-in is not configured")
     return client_id, client_secret
 
 
-@router.get("/login", include_in_schema=False)
-@router.get("/signup", include_in_schema=False)
-@router.get("/create-account", include_in_schema=False)
-def github_only_entry(request: Request) -> RedirectResponse:
-    """Remove the password page and send every public account entry to GitHub."""
-
-    if auth.get_user_from_session(request.cookies.get(auth.SESSION_COOKIE)):
-        return RedirectResponse("/cloud/agent", status_code=302)
-    return RedirectResponse("/auth/github", status_code=302)
-
-
-@router.get("/auth/google", include_in_schema=False)
-@router.get("/auth/google/callback", include_in_schema=False)
-def redirect_alternate_oauth_to_github() -> RedirectResponse:
-    """Keep old Google bookmarks from becoming a second account system."""
-
-    return RedirectResponse("/auth/github", status_code=302)
-
-
-@router.get("/auth/google/status", include_in_schema=False)
-def disabled_google_status() -> dict[str, object]:
+@router.get("/auth/github/status", include_in_schema=False)
+def github_sign_in_status() -> dict[str, object]:
     return {
-        "enabled": False,
-        "provider": "github",
+        "enabled": bool(
+            os.getenv("GITHUB_CLIENT_ID", "").strip()
+            and os.getenv("GITHUB_CLIENT_SECRET", "").strip()
+        ),
         "authorization_url": "/auth/github",
+        "optional": True,
     }
 
 
@@ -104,7 +94,7 @@ def github_account_access(
     request: Request,
     return_to: str | None = None,
 ) -> RedirectResponse:
-    """Start GitHub OAuth for both first-time signup and returning-user login."""
+    """Start optional GitHub OAuth without replacing normal account access."""
 
     if auth.get_user_from_session(request.cookies.get(auth.SESSION_COOKIE)):
         return RedirectResponse(_safe_return_to(return_to), status_code=302)
@@ -193,20 +183,16 @@ def _find_or_create_github_user(
         user = db.execute("SELECT * FROM users WHERE github_id=?", (github_id,)).fetchone()
         created = False
 
-        # Linking by email is allowed only when GitHub's /user/emails endpoint
-        # marks the address verified. A public profile address alone cannot take
-        # over an existing Amosclaud account.
         if not user and verified_email:
             user = db.execute("SELECT * FROM users WHERE email=?", (verified_email,)).fetchone()
             if user:
                 db.execute(
-                    "UPDATE users SET github_id=?,provider='github' WHERE id=?",
+                    "UPDATE users SET github_id=? WHERE id=?",
                     (github_id, user["id"]),
                 )
 
         if not user:
-            is_first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-            is_admin = should_grant_admin(account_email, is_first_user=is_first_user)
+            is_admin = should_grant_admin(account_email, is_first_user=False)
             cursor = db.execute(
                 """INSERT INTO users(
                        name,email,password_hash,github_id,provider,is_admin,created_at
@@ -226,7 +212,7 @@ def _find_or_create_github_user(
             db.execute(
                 """UPDATE users SET
                        name=CASE WHEN name='' THEN ? ELSE name END,
-                       github_id=?,provider='github'
+                       github_id=?
                    WHERE id=?""",
                 (display_name, github_id, user_id),
             )
@@ -242,7 +228,7 @@ async def github_account_callback(
     amos_github_oauth_state: str | None = Cookie(default=None),
     amos_github_return_to: str | None = Cookie(default=None),
 ) -> RedirectResponse:
-    """Create or sign in any verified GitHub user and issue an Amosclaud session."""
+    """Create or sign in a GitHub-linked account and issue an Amosclaud session."""
 
     if not amos_github_oauth_state or not hmac.compare_digest(state, amos_github_oauth_state):
         raise HTTPException(status_code=400, detail="Invalid GitHub OAuth state")
@@ -260,42 +246,8 @@ async def github_account_callback(
     return response
 
 
-def _github_required() -> None:
-    raise HTTPException(
-        status_code=410,
-        detail={
-            "code": "github_account_required",
-            "message": "Email, password, passkey, and alternate OAuth access have been removed. Continue with GitHub.",
-            "authorization_url": "/auth/github",
-        },
-    )
-
-
-@router.post("/auth/register/request-code")
-@router.post("/auth/register/verify")
-@router.post("/auth/login")
-@router.post("/auth/login/request-code")
-@router.post("/auth/login/verify-code")
-@router.post("/auth/password/forgot")
-@router.post("/auth/password/reset")
-@router.post("/auth/register/passkey/start")
-@router.post("/auth/register/passkey/finish")
-@router.post("/auth/login/passkey/start")
-@router.post("/auth/login/passkey/finish")
-def disabled_non_github_account_access() -> None:
-    """Prevent hidden endpoints from restoring another public account system."""
-
-    _github_required()
-
-
-# Compatibility alias retained for tests and callers that referenced the first
-# implementation name while the route contract became GitHub-only.
-disabled_email_account_access = disabled_non_github_account_access
-
-
 __all__ = [
     "router",
     "github_account_access",
     "github_account_callback",
-    "disabled_non_github_account_access",
 ]
