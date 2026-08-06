@@ -28,6 +28,19 @@ def _github_admin_callback_url(request: Request) -> str:
     return os.getenv("GITHUB_ADMIN_CALLBACK_URL") or str(request.url_for("github_admin_callback"))
 
 
+def _send_github_redirect_uri() -> bool:
+    return os.getenv("GITHUB_ADMIN_SEND_REDIRECT_URI", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _shared_cookie_domain() -> str | None:
+    return os.getenv("AUTH_COOKIE_DOMAIN", "").strip() or None
+
+
 def _github_headers(access_token: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {access_token}",
@@ -183,15 +196,15 @@ def github_admin_login(request: Request) -> RedirectResponse:
         )
     state = secrets.token_urlsafe(32)
     callback = _github_admin_callback_url(request)
-    authorize_url = "https://github.com/login/oauth/authorize?" + urlencode(
-        {
-            "client_id": client_id,
-            "redirect_uri": callback,
-            "scope": "read:user user:email repo",
-            "state": state,
-            "allow_signup": "false",
-        }
-    )
+    authorize_parameters = {
+        "client_id": client_id,
+        "scope": "read:user user:email repo",
+        "state": state,
+        "allow_signup": "false",
+    }
+    if _send_github_redirect_uri():
+        authorize_parameters["redirect_uri"] = callback
+    authorize_url = "https://github.com/login/oauth/authorize?" + urlencode(authorize_parameters)
     response = RedirectResponse(authorize_url)
     response.set_cookie(
         GITHUB_ADMIN_STATE_COOKIE,
@@ -201,6 +214,7 @@ def github_admin_login(request: Request) -> RedirectResponse:
         secure=auth._cookie_secure(),
         samesite="lax",
         path="/",
+        domain=_shared_cookie_domain(),
     )
     return response
 
@@ -228,16 +242,18 @@ async def github_admin_callback(
         )
 
     callback = _github_admin_callback_url(request)
+    token_parameters = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+    }
+    if _send_github_redirect_uri():
+        token_parameters["redirect_uri"] = callback
     async with httpx.AsyncClient(timeout=20) as client:
         token_response = await client.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": callback,
-            },
+            data=token_parameters,
         )
         token_payload = token_response.json()
         access_token = token_payload.get("access_token")
@@ -340,5 +356,5 @@ async def github_admin_callback(
 
     response = RedirectResponse("/admin?github=owner", status_code=302)
     auth._set_session_cookie(response, token)
-    response.delete_cookie(GITHUB_ADMIN_STATE_COOKIE, path="/")
+    response.delete_cookie(GITHUB_ADMIN_STATE_COOKIE, path="/", domain=_shared_cookie_domain())
     return response

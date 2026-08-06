@@ -7,8 +7,6 @@ import hmac
 import os
 import secrets
 import smtplib
-
-from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -21,6 +19,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.admin_bootstrap import should_grant_admin
+from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -77,8 +76,7 @@ def _connect() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -106,14 +104,12 @@ def _connect() -> sqlite3.Connection:
             created_at TEXT NOT NULL,
             PRIMARY KEY(email, purpose)
         );
-        """
-    )
+        """)
     auth_codes_schema = db.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='auth_codes'"
     ).fetchone()
     if auth_codes_schema and "'login'" not in str(auth_codes_schema["sql"] or ""):
-        db.executescript(
-            """
+        db.executescript("""
             ALTER TABLE auth_codes RENAME TO auth_codes_legacy;
             CREATE TABLE auth_codes (
                 email TEXT NOT NULL,
@@ -129,8 +125,7 @@ def _connect() -> sqlite3.Connection:
             SELECT email,purpose,code_hash,name,password_hash,expires_at,created_at
             FROM auth_codes_legacy;
             DROP TABLE auth_codes_legacy;
-            """
-        )
+            """)
     db.commit()
     return db
 
@@ -155,7 +150,9 @@ def _verify_password(password: str, encoded: str | None) -> bool:
         algorithm, rounds, salt_hex, expected_hex = encoded.split("$", 3)
         if algorithm != "pbkdf2_sha256":
             return False
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt_hex), int(rounds))
+        actual = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), bytes.fromhex(salt_hex), int(rounds)
+        )
         return hmac.compare_digest(actual, bytes.fromhex(expected_hex))
     except (ValueError, TypeError):
         return False
@@ -180,6 +177,10 @@ def _cookie_secure() -> bool:
     return public_url.strip().lower().startswith("https://")
 
 
+def _cookie_domain() -> str | None:
+    return os.getenv("AUTH_COOKIE_DOMAIN", "").strip() or None
+
+
 def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE,
@@ -189,6 +190,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         secure=_cookie_secure(),
         samesite="lax",
         path="/",
+        domain=_cookie_domain(),
     )
 
 
@@ -197,7 +199,12 @@ def _create_session(db: sqlite3.Connection, user_id: int) -> str:
     now = datetime.now(timezone.utc)
     db.execute(
         "INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES (?,?,?,?)",
-        (_token_hash(token), user_id, (now + timedelta(days=SESSION_DAYS)).isoformat(), now.isoformat()),
+        (
+            _token_hash(token),
+            user_id,
+            (now + timedelta(days=SESSION_DAYS)).isoformat(),
+            now.isoformat(),
+        ),
     )
     db.commit()
     return token
@@ -220,7 +227,13 @@ def get_user_from_session(token: str | None) -> sqlite3.Row | None:
 
 
 def _user_response(row: sqlite3.Row) -> UserResponse:
-    return UserResponse(id=row["id"], name=row["name"], email=row["email"], is_admin=bool(row["is_admin"]), provider=row["provider"])
+    return UserResponse(
+        id=row["id"],
+        name=row["name"],
+        email=row["email"],
+        is_admin=bool(row["is_admin"]),
+        provider=row["provider"],
+    )
 
 
 def _send_code(email: str, code: str, purpose: str) -> None:
@@ -238,12 +251,16 @@ def _send_code(email: str, code: str, purpose: str) -> None:
         "login": ("Your Amosclaud sign-in code", "sign in to Amosclaud"),
         "reset": ("Reset your Amosclaud password", "reset your Amosclaud password"),
     }
-    subject, action = messages.get(purpose, ("Your Amosclaud verification code", "continue in Amosclaud"))
+    subject, action = messages.get(
+        purpose, ("Your Amosclaud verification code", "continue in Amosclaud")
+    )
     message = EmailMessage()
     message["From"] = sender
     message["To"] = email
     message["Subject"] = subject
-    message.set_content(f"Your Amosclaud code is {code}. Use it within {CODE_MINUTES} minutes to {action}. If you did not request this, ignore this email.")
+    message.set_content(
+        f"Your Amosclaud code is {code}. Use it within {CODE_MINUTES} minutes to {action}. If you did not request this, ignore this email."
+    )
 
     if http_mail_configured():
         try:
@@ -270,7 +287,13 @@ def _send_code(email: str, code: str, purpose: str) -> None:
         ) from exc
 
 
-def _create_code(db: sqlite3.Connection, email: str, purpose: str, name: str | None = None, password_hash: str | None = None) -> None:
+def _create_code(
+    db: sqlite3.Connection,
+    email: str,
+    purpose: str,
+    name: str | None = None,
+    password_hash: str | None = None,
+) -> None:
     code = f"{secrets.randbelow(1_000_000):06d}"
     now = datetime.now(timezone.utc)
     db.execute(
@@ -278,7 +301,15 @@ def _create_code(db: sqlite3.Connection, email: str, purpose: str, name: str | N
            VALUES (?,?,?,?,?,?,?)
            ON CONFLICT(email,purpose) DO UPDATE SET code_hash=excluded.code_hash,name=excluded.name,
            password_hash=excluded.password_hash,expires_at=excluded.expires_at,created_at=excluded.created_at""",
-        (email, purpose, _token_hash(code), name, password_hash, (now + timedelta(minutes=CODE_MINUTES)).isoformat(), now.isoformat()),
+        (
+            email,
+            purpose,
+            _token_hash(code),
+            name,
+            password_hash,
+            (now + timedelta(minutes=CODE_MINUTES)).isoformat(),
+            now.isoformat(),
+        ),
     )
     db.commit()
     try:
@@ -290,9 +321,15 @@ def _create_code(db: sqlite3.Connection, email: str, purpose: str, name: str | N
 
 
 def _consume_code(db: sqlite3.Connection, email: str, purpose: str, code: str) -> sqlite3.Row:
-    row = db.execute("SELECT * FROM auth_codes WHERE email=? AND purpose=?", (email, purpose)).fetchone()
+    row = db.execute(
+        "SELECT * FROM auth_codes WHERE email=? AND purpose=?", (email, purpose)
+    ).fetchone()
     now = datetime.now(timezone.utc).isoformat()
-    if not row or row["expires_at"] <= now or not hmac.compare_digest(row["code_hash"], _token_hash(code)):
+    if (
+        not row
+        or row["expires_at"] <= now
+        or not hmac.compare_digest(row["code_hash"], _token_hash(code))
+    ):
         raise HTTPException(status_code=400, detail="Invalid or expired verification code")
     db.execute("DELETE FROM auth_codes WHERE email=? AND purpose=?", (email, purpose))
     return row
@@ -316,15 +353,25 @@ def verify_registration(body: RegisterVerifyRequest, response: Response) -> User
             raise HTTPException(status_code=409, detail="An account with this email already exists")
         pending = _consume_code(db, email, "register", body.code)
         if not _verify_password(body.password, pending["password_hash"]):
-            raise HTTPException(status_code=400, detail="Password does not match the signup request")
+            raise HTTPException(
+                status_code=400, detail="Password does not match the signup request"
+            )
         is_first_user = db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         is_admin = should_grant_admin(email, is_first_user=is_first_user)
         cursor = db.execute(
             "INSERT INTO users(name,email,password_hash,provider,is_admin,created_at) VALUES (?,?,?,'password',?,?)",
-            (pending["name"], email, pending["password_hash"], int(is_admin), datetime.now(timezone.utc).isoformat()),
+            (
+                pending["name"],
+                email,
+                pending["password_hash"],
+                int(is_admin),
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
         token = _create_session(db, cursor.lastrowid)
-        user = db.execute("SELECT id,name,email,is_admin,provider FROM users WHERE id=?", (cursor.lastrowid,)).fetchone()
+        user = db.execute(
+            "SELECT id,name,email,is_admin,provider FROM users WHERE id=?", (cursor.lastrowid,)
+        ).fetchone()
     _set_session_cookie(response, token)
     return _user_response(user)
 
@@ -361,7 +408,9 @@ def verify_login_code(body: EmailCodeLoginRequest, response: Response) -> UserRe
         try:
             _consume_code(db, email, "login", body.code)
         except HTTPException as error:
-            raise HTTPException(status_code=400, detail="Invalid or expired sign-in code") from error
+            raise HTTPException(
+                status_code=400, detail="Invalid or expired sign-in code"
+            ) from error
         token = _create_session(db, user["id"])
     _set_session_cookie(response, token)
     return _user_response(user)
@@ -385,7 +434,10 @@ def reset_password(body: PasswordResetRequest) -> Response:
         if not user:
             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
         _consume_code(db, email, "reset", body.code)
-        db.execute("UPDATE users SET password_hash=?,provider='password' WHERE id=?", (_hash_password(body.password), user["id"]))
+        db.execute(
+            "UPDATE users SET password_hash=?,provider='password' WHERE id=?",
+            (_hash_password(body.password), user["id"]),
+        )
         db.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
         db.commit()
     return Response(status_code=204)
@@ -411,7 +463,9 @@ def logout(response: Response, amos_session: str | None = Cookie(default=None)) 
 
 
 @router.get("/github/link")
-def github_link(request: Request, amos_session: str | None = Cookie(default=None)) -> RedirectResponse:
+def github_link(
+    request: Request, amos_session: str | None = Cookie(default=None)
+) -> RedirectResponse:
     user = get_user_from_session(amos_session)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in to Amosclaud before connecting GitHub")
@@ -420,14 +474,34 @@ def github_link(request: Request, amos_session: str | None = Cookie(default=None
         raise HTTPException(status_code=503, detail="GitHub integration is not configured")
     state = secrets.token_urlsafe(32)
     callback = os.getenv("GITHUB_CALLBACK_URL") or str(request.url_for("github_link_callback"))
-    url = "https://github.com/login/oauth/authorize?" + urlencode({"client_id": client_id, "redirect_uri": callback, "scope": "read:user user:email repo", "state": state})
+    url = "https://github.com/login/oauth/authorize?" + urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": callback,
+            "scope": "read:user user:email repo",
+            "state": state,
+        }
+    )
     response = RedirectResponse(url)
-    response.set_cookie(OAUTH_STATE_COOKIE, state, max_age=600, httponly=True, secure=_cookie_secure(), samesite="lax")
+    response.set_cookie(
+        OAUTH_STATE_COOKIE,
+        state,
+        max_age=600,
+        httponly=True,
+        secure=_cookie_secure(),
+        samesite="lax",
+    )
     return response
 
 
 @router.get("/github/callback", name="github_link_callback")
-async def github_link_callback(code: str, state: str, request: Request, amos_oauth_state: str | None = Cookie(default=None), amos_session: str | None = Cookie(default=None)) -> RedirectResponse:
+async def github_link_callback(
+    code: str,
+    state: str,
+    request: Request,
+    amos_oauth_state: str | None = Cookie(default=None),
+    amos_session: str | None = Cookie(default=None),
+) -> RedirectResponse:
     user = get_user_from_session(amos_session)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in to Amosclaud before connecting GitHub")
@@ -439,19 +513,44 @@ async def github_link_callback(code: str, state: str, request: Request, amos_oau
         raise HTTPException(status_code=503, detail="GitHub integration is not configured")
     callback = os.getenv("GITHUB_CALLBACK_URL") or str(request.url_for("github_link_callback"))
     async with httpx.AsyncClient(timeout=15) as client:
-        token_response = await client.post("https://github.com/login/oauth/access_token", headers={"Accept": "application/json"}, data={"client_id": client_id, "client_secret": client_secret, "code": code, "redirect_uri": callback})
+        token_response = await client.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": callback,
+            },
+        )
         access_token = token_response.json().get("access_token")
         if not access_token:
             raise HTTPException(status_code=401, detail="GitHub connection failed")
-        profile = (await client.get("https://api.github.com/user", headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"})).json()
+        profile = (
+            await client.get(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+        ).json()
     github_id = str(profile.get("id", ""))
     if not github_id:
         raise HTTPException(status_code=400, detail="GitHub account identifier is missing")
     with _connect() as db:
-        conflict = db.execute("SELECT id FROM users WHERE github_id=? AND id!=?", (github_id, user["id"])).fetchone()
+        conflict = db.execute(
+            "SELECT id FROM users WHERE github_id=? AND id!=?", (github_id, user["id"])
+        ).fetchone()
         if conflict:
-            raise HTTPException(status_code=409, detail="This GitHub account is already linked to another Amosclaud user")
-        db.execute("UPDATE users SET github_id=?,provider='password+github' WHERE id=?", (github_id, user["id"]))
+            raise HTTPException(
+                status_code=409,
+                detail="This GitHub account is already linked to another Amosclaud user",
+            )
+        db.execute(
+            "UPDATE users SET github_id=?,provider='password+github' WHERE id=?",
+            (github_id, user["id"]),
+        )
         db.commit()
     response = RedirectResponse("/repositories?github=connected")
     response.delete_cookie(OAUTH_STATE_COOKIE)
@@ -460,4 +559,7 @@ async def github_link_callback(code: str, state: str, request: Request, amos_oau
 
 @router.get("/github")
 def github_login_disabled() -> None:
-    raise HTTPException(status_code=410, detail="Sign in to Amosclaud first, then connect GitHub from repository settings")
+    raise HTTPException(
+        status_code=410,
+        detail="Sign in to Amosclaud first, then connect GitHub from repository settings",
+    )
