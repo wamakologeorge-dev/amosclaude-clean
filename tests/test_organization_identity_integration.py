@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 from fastapi import Response
 
-from amoscloud_ai.api.routes import auth, organization_identity as oi
+from amoscloud_ai.api.routes import auth
+from amoscloud_ai.api.routes import organization_identity as oi
 
 _PWD = "test-password-123"
 _PWD2 = "other-password-456"
