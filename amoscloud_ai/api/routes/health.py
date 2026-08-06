@@ -68,6 +68,12 @@ async def public_support_page() -> FileResponse:
     return FileResponse(WEB_DIR / "support.html")
 
 
+@router.get("/organization-access", include_in_schema=False)
+async def public_organization_access_page() -> FileResponse:
+    """Serve organization-ID registration, sign-in, join, and recovery controls."""
+    return FileResponse(WEB_DIR / "organization-access.html")
+
+
 @router.get("/account", include_in_schema=False)
 async def account_page(request: Request):
     """Serve self-service account controls to an authenticated user."""

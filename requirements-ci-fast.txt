@@ -4,3 +4,4 @@ black>=24.4,<27
 isort>=8.0.1,<9
 pytest>=9.1.1,<10
 PyYAML>=6.0,<7
+websockets>=12,<16

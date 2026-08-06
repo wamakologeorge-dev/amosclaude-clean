@@ -32,8 +32,7 @@ def _db() -> sqlite3.Connection:
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS workspaces (
             id TEXT PRIMARY KEY,
             repository_id INTEGER NOT NULL,
@@ -55,11 +54,8 @@ def _db() -> sqlite3.Connection:
             FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """
-    )
-    columns = {
-        row[1] for row in db.execute("PRAGMA table_info(workspaces)").fetchall()
-    }
+        """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(workspaces)").fetchall()}
     additions = {
         "pids": "INTEGER NOT NULL DEFAULT 256",
         "provider_detail": "TEXT",
@@ -68,6 +64,13 @@ def _db() -> sqlite3.Connection:
     for name, sql_type in additions.items():
         if name not in columns:
             db.execute(f"ALTER TABLE workspaces ADD COLUMN {name} {sql_type}")
+    member_columns = {
+        row[1] for row in db.execute("PRAGMA table_info(organization_members)").fetchall()
+    }
+    if member_columns and "status" not in member_columns:
+        db.execute(
+            "ALTER TABLE organization_members " "ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
+        )
     db.commit()
     return db
 
@@ -86,11 +89,12 @@ def _repository_access(
 ) -> sqlite3.Row:
     row = db.execute(
         """SELECT r.id,r.name,r.default_branch,
-                  CASE WHEN r.owner_id=? THEN 'owner' ELSE c.role END AS role
+                  CASE WHEN r.owner_id=? THEN 'owner' ELSE COALESCE(c.role,om.role) END AS role
            FROM repositories r
            LEFT JOIN repository_collaborators c ON c.repository_id=r.id AND c.user_id=?
            LEFT JOIN organization_repositories ores ON ores.repository_id=r.id
-           LEFT JOIN organization_members om ON om.organization_id=ores.organization_id AND om.user_id=?
+           LEFT JOIN organization_members om ON om.organization_id=ores.organization_id
+                AND om.user_id=? AND om.status='active'
            WHERE r.id=? AND (r.owner_id=? OR c.user_id=? OR om.user_id=?)""",
         (user_id, user_id, user_id, repository_id, user_id, user_id, user_id),
     ).fetchone()
