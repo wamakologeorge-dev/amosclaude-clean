@@ -206,6 +206,11 @@
               password: inputs.nextPassword.value,
             }),
           });
+          if (result.account_created) {
+            show(result.message || 'Owner account created. Opening Amosclaud…', 'success');
+            window.location.replace('/admin');
+            return;
+          }
           signupCodeRequested = true;
           hidden(fields.name, true);
           hidden(fields.nextPassword, true);
