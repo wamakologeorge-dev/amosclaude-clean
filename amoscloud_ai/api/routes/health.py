@@ -69,9 +69,9 @@ async def public_support_page() -> FileResponse:
 
 
 @router.get("/organization-access", include_in_schema=False)
-async def public_organization_access_page() -> FileResponse:
-    """Serve organization-ID registration, sign-in, join, and recovery controls."""
-    return FileResponse(WEB_DIR / "organization-access.html")
+async def public_organization_access_page() -> RedirectResponse:
+    """Keep the legacy URL while using the single account portal."""
+    return RedirectResponse("/login?method=organization", status_code=302)
 
 
 @router.get("/account", include_in_schema=False)
