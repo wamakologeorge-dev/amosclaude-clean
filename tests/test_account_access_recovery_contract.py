@@ -1,10 +1,9 @@
-from pathlib import Path
 import json
 import shutil
 import subprocess
+from pathlib import Path
 
 from amoscloud_ai.main import create_app
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -13,58 +12,67 @@ def _paths() -> set[str]:
     return {getattr(route, "path", "") for route in create_app().routes}
 
 
-def test_account_recovery_routes_are_registered() -> None:
+def test_standard_email_auth_routes_are_registered() -> None:
     paths = _paths()
     required = {
-        "/api/v1/auth/account-recovery/email/request",
-        "/api/v1/auth/account-recovery/email/verify",
-        "/api/v1/auth/account-recovery/username/request",
-        "/api/v1/auth/account-recovery/username/verify",
-        "/api/v1/auth/account-recovery/password/request",
-        "/api/v1/auth/account-recovery/password/reset",
+        "/auth/login",
+        "/auth/login/request-code",
+        "/auth/login/verify-code",
+        "/auth/register/request-code",
+        "/auth/register/verify",
+        "/auth/password/forgot",
+        "/auth/password/reset",
     }
     assert not (required - paths)
 
 
-def test_login_page_exposes_complete_account_access() -> None:
+def test_login_page_exposes_one_complete_account_flow() -> None:
     html = (ROOT / "web" / "login.html").read_text(encoding="utf-8")
     for text in (
+        "Sign in",
         "Create account",
-        "Forgot password",
-        "Forgot username",
-        "Recovery email",
-        "no-reply@amosclaud.com",
+        "Forgot password?",
+        "Email me a sign-in code",
+        "secure code on any device",
         "/static/account-access.js",
     ):
         assert text in html
+    assert "Organization ID" not in html
+    assert "Continue with GitHub" not in html
+    assert "Forgot username" not in html
     assert "login-recovery.js" not in html
-    assert "/static/login.js" not in html
+    assert "/static/unified-login.js" not in html
 
 
-def test_account_access_uses_visible_recovery_flows() -> None:
+def test_account_access_uses_primary_email_routes() -> None:
     script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
     assert "window.prompt" not in script
-    assert "/api/v1/auth/account-recovery/username/request" in script
-    assert "/api/v1/auth/account-recovery/username/verify" in script
-    assert "/api/v1/auth/account-recovery/password/request" in script
-    assert "/api/v1/auth/account-recovery/password/reset" in script
-    assert "/api/v1/auth/account-recovery/email/request" in script
-    assert "/api/v1/auth/account-recovery/email/verify" in script
+    for route in (
+        "/auth/login/request-code",
+        "/auth/login/verify-code",
+        "/auth/register/request-code",
+        "/auth/register/verify",
+        "/auth/password/forgot",
+        "/auth/password/reset",
+    ):
+        assert route in script
+    assert "/api/v1/auth/account-recovery/password/request" not in script
+    assert "/api/v1/auth/account-recovery/username/request" not in script
 
 
-def test_password_recovery_code_field_only_shows_after_successful_request() -> None:
+def test_password_reset_code_field_only_shows_after_successful_request() -> None:
     node = shutil.which("node")
     if not node:  # pragma: no cover - only on hosts without Node.js
         return
 
-    script = """
+    script = r"""
 const fs = require('fs');
 const vm = require('vm');
-
 const source = fs.readFileSync(process.argv[1], 'utf8');
 
 function element(id) {
-  const classes = new Set(id === 'email-code-field' || id === 'recovery-email-field' ? ['hidden'] : []);
+  const initiallyHidden = new Set(['name-field', 'new-password-field', 'email-code-field', 'password-hint']);
+  const classes = new Set(initiallyHidden.has(id) ? ['hidden'] : []);
   return {
     id,
     value: '',
@@ -74,167 +82,14 @@ function element(id) {
     textContent: '',
     className: '',
     autocomplete: '',
-    focus() {},
     listeners: {},
+    focus() {},
+    setAttribute() {},
     classList: {
       toggle(name, force) {
         if (force === undefined) {
           if (classes.has(name)) classes.delete(name); else classes.add(name);
-        } else if (force) {
-          classes.add(name);
-        } else {
-          classes.delete(name);
-        }
-      },
-      contains(name) {
-        return classes.has(name);
-      }
-    },
-    addEventListener(type, fn) {
-      this.listeners[type] = this.listeners[type] || [];
-      this.listeners[type].push(fn);
-    },
-  };
-}
-
-async function runScenario(passwordRequestOk) {
-  const ids = [
-    'auth-form', 'name-field', 'identifier-field', 'recovery-email-field', 'password-field',
-    'new-password-field', 'email-code-field', 'password-hint', 'name', 'identifier',
-    'recovery-email', 'password', 'new-password', 'email-code', 'login-tab', 'register-tab',
-    'forgot-password-button', 'forgot-username-button', 'submit-button', 'email-code-button',
-    'passkey-login-button', 'google-login-button', 'auth-title', 'auth-subtitle', 'message'
-  ];
-  const elements = Object.fromEntries(ids.map((id) => [id, element(id)]));
-  elements['auth-form'].reset = () => {
-    for (const id of ['name', 'identifier', 'recovery-email', 'password', 'new-password', 'email-code']) {
-      elements[id].value = '';
-    }
-  };
-  elements['auth-form'].reportValidity = () => true;
-
-  const fetchCalls = [];
-  const fetch = async (url) => {
-    fetchCalls.push(url);
-    if (url === '/api/v1/auth/google/status') {
-      return {ok: true, status: 200, text: async () => JSON.stringify({enabled: false})};
-    }
-    if (url === '/api/v1/auth/account-recovery/password/request') {
-      if (passwordRequestOk) {
-        return {ok: true, status: 200, text: async () => JSON.stringify({message: 'Sent'})};
-      }
-      return {ok: false, status: 500, text: async () => JSON.stringify({detail: 'failure'})};
-    }
-    return {ok: true, status: 200, text: async () => '{}'};
-  };
-
-  const window = {
-    location: {href: 'https://example.test/login', assign() {}, replace() {}},
-    history: {replaceState() {}},
-    isSecureContext: false,
-  };
-
-  const context = {
-    window,
-    navigator: {},
-    document: {getElementById: (id) => elements[id] || null},
-    fetch,
-    URL,
-    setTimeout: (fn) => fn(),
-    clearTimeout: () => {},
-    atob: (value) => Buffer.from(value, 'base64').toString('binary'),
-    btoa: (value) => Buffer.from(value, 'binary').toString('base64'),
-  };
-  context.window.PublicKeyCredential = undefined;
-  vm.runInNewContext(source, context);
-
-  const click = async (id) => {
-    for (const fn of elements[id].listeners.click || []) await fn({});
-  };
-  const submit = async () => {
-    for (const fn of elements['auth-form'].listeners.submit || []) {
-      await fn({preventDefault() {}});
-    }
-  };
-
-  await click('forgot-password-button');
-  const hiddenBeforeSubmit = elements['email-code-field'].classList.contains('hidden');
-  elements['recovery-email'].value = 'person@example.com';
-  await submit();
-  return {
-    hiddenBeforeSubmit,
-    hiddenAfterSubmit: elements['email-code-field'].classList.contains('hidden'),
-    codeRequiredAfterSubmit: elements['email-code'].required,
-    requestCalls: fetchCalls.filter((url) => url === '/api/v1/auth/account-recovery/password/request').length,
-  };
-}
-
-(async () => {
-  const success = await runScenario(true);
-  const failure = await runScenario(false);
-  process.stdout.write(JSON.stringify({success, failure}));
-})().catch((error) => {
-  process.stderr.write(String(error && error.stack || error));
-  process.exit(1);
-});
-"""
-    completed = subprocess.run(
-        [node, "-e", script, str(ROOT / "web" / "account-access.js")],
-        capture_output=True,
-        check=True,
-        text=True,
-        timeout=60,
-    )
-    result = json.loads(completed.stdout)
-
-    assert result["success"]["hiddenBeforeSubmit"] is True
-    assert result["success"]["requestCalls"] == 1
-    assert result["success"]["hiddenAfterSubmit"] is False
-    assert result["success"]["codeRequiredAfterSubmit"] is True
-
-    assert result["failure"]["hiddenBeforeSubmit"] is True
-    assert result["failure"]["requestCalls"] == 1
-    assert result["failure"]["hiddenAfterSubmit"] is True
-    assert result["failure"]["codeRequiredAfterSubmit"] is False
-
-
-def test_registration_mode_uses_identifier_field() -> None:
-    node = shutil.which("node")
-    if not node:  # pragma: no cover - only on hosts without Node.js
-        return
-
-    script = """
-const fs = require('fs');
-const vm = require('vm');
-
-const source = fs.readFileSync(process.argv[1], 'utf8');
-
-function element(id) {
-  const startHidden = new Set([
-    'name-field', 'recovery-email-field', 'password-field', 'new-password-field',
-    'email-code-field', 'password-hint',
-  ]);
-  const classes = new Set(startHidden.has(id) ? ['hidden'] : []);
-  return {
-    id,
-    value: '',
-    required: false,
-    disabled: false,
-    hidden: false,
-    textContent: '',
-    className: '',
-    autocomplete: '',
-    focus() {},
-    listeners: {},
-    classList: {
-      toggle(name, force) {
-        if (force === undefined) {
-          if (classes.has(name)) classes.delete(name); else classes.add(name);
-        } else if (force) {
-          classes.add(name);
-        } else {
-          classes.delete(name);
-        }
+        } else if (force) classes.add(name); else classes.delete(name);
       },
       contains(name) { return classes.has(name); },
     },
@@ -245,82 +100,66 @@ function element(id) {
   };
 }
 
-(async () => {
+async function runScenario(requestOk) {
   const ids = [
-    'auth-form', 'name-field', 'identifier-field', 'recovery-email-field', 'password-field',
-    'new-password-field', 'email-code-field', 'password-hint', 'name', 'identifier',
-    'recovery-email', 'password', 'new-password', 'email-code', 'login-tab', 'register-tab',
-    'forgot-password-button', 'forgot-username-button', 'submit-button', 'email-code-button',
-    'passkey-login-button', 'google-login-button', 'auth-title', 'auth-subtitle', 'message'
+    'auth-form', 'name-field', 'identifier-field', 'password-field', 'new-password-field',
+    'email-code-field', 'password-hint', 'name', 'identifier', 'password', 'new-password',
+    'email-code', 'login-tab', 'register-tab', 'forgot-password-button',
+    'submit-button', 'email-code-button', 'auth-title', 'auth-subtitle', 'message'
   ];
-  const elements = Object.fromEntries(ids.map((id) => [id, element(id)]));
+  const elements = Object.fromEntries(ids.map(id => [id, element(id)]));
   elements['auth-form'].reset = () => {
-    for (const id of ['name', 'identifier', 'recovery-email', 'password', 'new-password', 'email-code']) {
+    for (const id of ['name', 'identifier', 'password', 'new-password', 'email-code']) {
       elements[id].value = '';
     }
   };
   elements['auth-form'].reportValidity = () => true;
 
-  const requestBodies = [];
-  const fetch = async (url, opts) => {
-    requestBodies.push({url, body: opts && opts.body ? JSON.parse(opts.body) : null});
-    if (url === '/api/v1/auth/google/status') {
-      return {ok: true, status: 200, text: async () => JSON.stringify({enabled: false})};
+  const calls = [];
+  const fetch = async (url) => {
+    calls.push(url);
+    if (url === '/auth/password/forgot') {
+      if (requestOk) {
+        return {ok: true, status: 202, text: async () => JSON.stringify({message: 'Sent'})};
+      }
+      return {ok: false, status: 503, text: async () => JSON.stringify({detail: 'failure'})};
     }
-    return {ok: true, status: 200, text: async () => JSON.stringify({message: 'Code sent'})};
+    return {ok: true, status: 200, text: async () => '{}'};
   };
 
   const window = {
-    location: {href: 'https://example.test/login', assign() {}, replace() {}},
-    history: {replaceState() {}},
-    isSecureContext: false,
+    location: {search: '', replace() {}},
   };
-
   const context = {
     window,
-    navigator: {},
-    document: {getElementById: (id) => elements[id] || null},
+    document: {getElementById: id => elements[id] || null},
     fetch,
-    URL,
-    setTimeout: (fn) => fn(),
-    clearTimeout: () => {},
-    atob: (value) => Buffer.from(value, 'base64').toString('binary'),
-    btoa: (value) => Buffer.from(value, 'binary').toString('base64'),
+    URLSearchParams,
+    JSON,
   };
-  context.window.PublicKeyCredential = undefined;
   vm.runInNewContext(source, context);
 
-  const click = async (id) => {
-    for (const fn of elements[id].listeners.click || []) await fn({});
+  for (const fn of elements['forgot-password-button'].listeners.click || []) await fn({});
+  const hiddenBefore = elements['email-code-field'].classList.contains('hidden');
+  elements['identifier'].value = 'person@example.com';
+  elements['new-password'].value = 'Secret12345!';
+  for (const fn of elements['auth-form'].listeners.submit || []) {
+    await fn({preventDefault() {}});
+  }
+  return {
+    hiddenBefore,
+    hiddenAfter: elements['email-code-field'].classList.contains('hidden'),
+    requiredAfter: elements['email-code'].required,
+    calls: calls.filter(url => url === '/auth/password/forgot').length,
   };
-  const submit = async () => {
-    for (const fn of elements['auth-form'].listeners.submit || []) {
-      await fn({preventDefault() {}});
-    }
-  };
+}
 
-  // Enter registration mode
-  await click('register-tab');
-
-  const identifierVisible = !elements['identifier-field'].classList.contains('hidden');
-  const recoveryHidden = elements['recovery-email-field'].classList.contains('hidden');
-  const identifierRequired = elements['identifier'].required;
-
-  // Submit with a known email address in the identifier field
-  elements['identifier'].value = 'signup@example.com';
-  elements['name'].value = 'Test User';
-  elements['new-password'].value = 'Secret123!';
-  await submit();
-
-  const registerRequest = requestBodies.find((r) => r.url === '/api/v1/auth/register/request-code');
-
+(async () => {
   process.stdout.write(JSON.stringify({
-    identifierVisible,
-    recoveryHidden,
-    identifierRequired,
-    registerEmailField: registerRequest ? registerRequest.body.email : null,
+    success: await runScenario(true),
+    failure: await runScenario(false),
   }));
-})().catch((error) => {
+})().catch(error => {
   process.stderr.write(String(error && error.stack || error));
   process.exit(1);
 });
@@ -334,13 +173,25 @@ function element(id) {
     )
     result = json.loads(completed.stdout)
 
-    # identifier-field is visible; recovery-email-field stays hidden
-    assert result["identifierVisible"] is True
-    assert result["recoveryHidden"] is True
-    # identifier input must be required in registration mode
-    assert result["identifierRequired"] is True
-    # registration request payload must use the identifier value, not recovery email
-    assert result["registerEmailField"] == "signup@example.com"
+    assert result["success"]["hiddenBefore"] is True
+    assert result["success"]["calls"] == 1
+    assert result["success"]["hiddenAfter"] is False
+    assert result["success"]["requiredAfter"] is True
+
+    assert result["failure"]["hiddenBefore"] is True
+    assert result["failure"]["calls"] == 1
+    assert result["failure"]["hiddenAfter"] is True
+    assert result["failure"]["requiredAfter"] is False
+
+
+def test_registration_uses_the_visible_email_field() -> None:
+    script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
+
+    assert "name: inputs.name.value.trim()" in script
+    assert "email: address" in script
+    assert "password: inputs.nextPassword.value" in script
+    assert "signupCodeRequested = true" in script
+    assert "Verify and open Amosclaud" in script
 
 
 def test_security_mail_sender_is_amosclaud_owned() -> None:
@@ -351,8 +202,10 @@ def test_security_mail_sender_is_amosclaud_owned() -> None:
     assert "print(" not in source
 
 
-def test_password_recovery_revokes_existing_sessions() -> None:
-    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "account_recovery.py").read_text(encoding="utf-8")
-    assert "DELETE FROM sessions WHERE user_id=?" in source
-    assert "MAX_ATTEMPTS" in source
+def test_primary_password_reset_revokes_existing_sessions() -> None:
+    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "auth.py").read_text(
+        encoding="utf-8"
+    )
+    assert '@router.post("/password/reset"' in source
+    assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in source
     assert "Invalid or expired verification code" in source
