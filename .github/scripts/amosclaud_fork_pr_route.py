@@ -26,6 +26,9 @@ from amosclaud_bot.approval_gate import (
 
 FAILURE_CONCLUSIONS = {"failure", "timed_out", "action_required", "startup_failure"}
 TRUSTED_BOT_LOGINS = {"github-actions[bot]"}
+SENSITIVE_APPROVAL_REASON = (
+    "environment, secret-bearing, or personal-information content requires approval"
+)
 
 
 def request_json(
@@ -256,6 +259,7 @@ def resolve(args: argparse.Namespace) -> int:
             "requires_approval": False,
             "sensitive_approved": approval_granted,
             "approval_issue_number": approval_number,
+            "sensitive_approval_reason": SENSITIVE_APPROVAL_REASON,
             "pull_request_number": number,
             "head_repository": head_repository,
             "head_sha": head_sha,
