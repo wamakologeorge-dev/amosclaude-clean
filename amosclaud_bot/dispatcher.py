@@ -15,6 +15,7 @@ from .comment_style import compact_public_comment
 from .intelligence_router import handle_intelligence_request
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
+from .repository_doctor import handle_repository_doctor_command
 from .security_context import record_human_approval
 from .status_board import handle_status_request
 
@@ -135,6 +136,12 @@ def run_dispatcher_from_environment() -> int:
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
 
     if event_name == "issue_comment":
+        if PRIVATE_ROUTE_MARKER.exists():
+            return 0
+        doctor_result = handle_repository_doctor_command(bot, payload)
+        if doctor_result is not None:
+            PRIVATE_ROUTE_MARKER.write_text("repository-doctor\n", encoding="utf-8")
+            return doctor_result
         if resolve_continuation(bot, payload):
             return 0
         # The workflow intentionally runs a privacy-only preflight before the

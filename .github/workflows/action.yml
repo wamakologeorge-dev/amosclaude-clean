@@ -1,6 +1,8 @@
 name: Amosclaud Action Control
 
 on:
+  repository_dispatch:
+    types: [amosclaud-repository-doctor]
   workflow_dispatch:
     inputs:
       operation:
@@ -28,25 +30,44 @@ jobs:
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
-      OPERATION: ${{ inputs.operation }}
-      PR_NUMBER: ${{ inputs.pull_request_number }}
-      TARGET_REF: ${{ inputs.target_ref }}
+      OPERATION: ${{ github.event.client_payload.operation || inputs.operation }}
+      PR_NUMBER: ${{ github.event.client_payload.pull_request_number || inputs.pull_request_number }}
+      TARGET_REF: ${{ github.event.client_payload.target_ref || inputs.target_ref }}
 
     steps:
+      - name: Validate Repository Doctor request
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            explain|fix|scan) ;;
+            *)
+              echo "Unsupported Amosclaud operation: $OPERATION" >&2
+              exit 1
+              ;;
+          esac
+          if [ "$OPERATION" != 'explain' ] && [ -z "$PR_NUMBER" ]; then
+            echo 'A pull request number is required for fix and scan.' >&2
+            exit 1
+          fi
+
       - name: Dispatch the selected Amosclaud workflow
         run: |
           set -euo pipefail
           case "$OPERATION" in
             explain)
               test -n "$PR_NUMBER"
-              gh workflow run plan.yml -f pull_request_number="$PR_NUMBER"
+              gh workflow run plan.yml \
+                --ref "${{ github.event.repository.default_branch }}" \
+                -f pull_request_number="$PR_NUMBER"
               ;;
             fix)
-              test -n "$PR_NUMBER"
-              gh workflow run fixer.yml -f pull_request_number="$PR_NUMBER"
+              gh workflow run fixer.yml \
+                --ref "${{ github.event.repository.default_branch }}" \
+                -f pull_request_number="$PR_NUMBER"
               ;;
             scan)
               gh workflow run scan.yml \
+                --ref "${{ github.event.repository.default_branch }}" \
                 -f pull_request_number="$PR_NUMBER" \
                 -f target_ref="$TARGET_REF" \
                 -f dispatch_fixer=true
