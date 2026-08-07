@@ -1,1 +1,0 @@
-"""Amosclaud core component namespace."""

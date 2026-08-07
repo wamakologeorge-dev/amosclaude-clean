@@ -1,1 +1,0 @@
-"""Amos API gateway package."""
