@@ -46,7 +46,8 @@ jobs:
         run: |
           set -euo pipefail
           package_root="$RUNNER_TEMP/$PRODUCT"
-          mkdir -p "$package_root/amoscloud_ai"
+          sample_root="$RUNNER_TEMP/amosclaud-quick-smoke"
+          mkdir -p "$package_root/amoscloud_ai" "$sample_root"
 
           cp amoscloud_ai/__init__.py "$package_root/amoscloud_ai/__init__.py"
           cp amoscloud_ai/developer_fastpath.py "$package_root/amoscloud_ai/developer_fastpath.py"
@@ -57,11 +58,13 @@ jobs:
 
           printf '%s\n' 'PyYAML>=6,<7' > "$package_root/requirements.txt"
           printf '%s\n' '1.0.0' > "$package_root/VERSION"
+          git rev-parse HEAD > "$package_root/SOURCE_COMMIT"
 
           cat > "$package_root/run-amosclaud-quick.sh" <<'SH'
           #!/usr/bin/env sh
           set -eu
           SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          cd "$SCRIPT_DIR"
           PYTHON_BIN=${PYTHON_BIN:-python3}
           exec "$PYTHON_BIN" -m amoscloud_ai.quickcheck_cli "$@"
           SH
@@ -99,13 +102,32 @@ jobs:
           language model, or network connection. It does not read protected secret files.
           TXT
 
+          printf '%s\n' 'def health():' '    return True' > "$sample_root/app.py"
+          printf '%s\n' '{"service":"ready","enabled":true}' > "$sample_root/config.json"
+          printf '%s\n' 'SECRET=must-not-be-read' > "$sample_root/.env"
+
           (
             cd "$package_root"
-            python -m amoscloud_ai.quickcheck_cli "$GITHUB_WORKSPACE" \
-              --objective 'Verify the Amosclaud Quick portable release' \
+            python -m amoscloud_ai.quickcheck_cli "$sample_root" \
+              --objective 'Verify service health and configuration' \
               --max-lines 12 \
               --max-files 3 \
               --json > smoke-test.json
+          )
+
+          grep -q '"status": "passed"' "$package_root/smoke-test.json"
+          grep -q '".env"' "$package_root/smoke-test.json"
+          if grep -q 'must-not-be-read' "$package_root/smoke-test.json"; then
+            echo 'Sensitive file content leaked into the smoke-test result.' >&2
+            exit 1
+          fi
+
+          (
+            cd "$package_root"
+            sha256sum \
+              amoscloud_ai/developer_fastpath.py \
+              amoscloud_ai/quickcheck_cli.py \
+              > SOURCE-SHA256SUMS.txt
           )
 
           cd "$RUNNER_TEMP"
@@ -132,6 +154,7 @@ jobs:
           - Human-readable and JSON output.
           - Linux/macOS and Windows launchers.
           - ZIP and `tar.gz` packages with SHA-256 checksums.
+          - Embedded smoke-test evidence and source commit metadata.
 
           ### Trust boundary
 
