@@ -73,7 +73,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "click>=8.1,<9" \
         "requests>=2.31,<3" \
         "httpx>=0.27,<1" \
-        "mcp>=1.27,<2" \
+        "mcp>=1.27.2,<2" \
         "stripe>=11,<16" \
         "aiofiles>=23.2,<25" \
         "python-dotenv>=1.0,<2" \
@@ -91,4 +91,4 @@ RUN test -f /app/amoscloud_ai/main.py || (echo "Amosclaud source is missing from
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn amoscloud_ai.combined_app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn amoscloud_ai.connected_app:app --host 0.0.0.0 --port ${PORT:-8000}"]

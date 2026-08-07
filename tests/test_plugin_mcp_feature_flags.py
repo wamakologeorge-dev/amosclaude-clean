@@ -8,7 +8,6 @@ from amoscloud_ai.api.routes import auth
 from amoscloud_ai.extensions.runtime import get_registry
 from amoscloud_ai.main import create_app
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -226,8 +225,8 @@ def test_drop_in_loader_sdk_pin_dashboard_and_storage_flag_contracts() -> None:
     assert "streamable_http_client" in manager
     assert "ClientSession" in manager
     assert "follow_redirects=False" in manager
-    assert "mcp>=1.27,<2" in requirements
-    assert '"mcp>=1.27,<2"' in dockerfile
+    assert "mcp>=1.27.2,<2" in requirements
+    assert '"mcp>=1.27.2,<2"' in dockerfile
     assert "Plugins, MCP, and feature flags" in dashboard
     assert "/api/v1/plugins/control-plane" in dashboard_js
     assert '"storage.high_capacity"' in storage
