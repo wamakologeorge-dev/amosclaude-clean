@@ -89,18 +89,14 @@ def test_explain_is_read_only_and_fix_uses_repository_dispatch(monkeypatch):
     monkeypatch.setattr(repository_doctor, "_load_agent_chat", lambda: controller)
 
     bot = FakeBot()
-    assert repository_doctor.handle_repository_doctor_command(
-        bot, payload("/amos explain")
-    ) == 0
+    assert repository_doctor.handle_repository_doctor_command(bot, payload("/amos explain")) == 0
     explain = [item for item in calls if item[0] == "doctor"][-1][1]
     assert explain["dispatch"] is False
     assert explain["comment"] is True
     assert bot.requests == []
 
     calls.clear()
-    assert repository_doctor.handle_repository_doctor_command(
-        bot, payload("/amos fix")
-    ) == 0
+    assert repository_doctor.handle_repository_doctor_command(bot, payload("/amos fix")) == 0
     repair = [item for item in calls if item[0] == "doctor"][-1][1]
     assert repair["dispatch"] is False
     assert repair["comment"] is False
@@ -118,9 +114,7 @@ def test_explain_is_read_only_and_fix_uses_repository_dispatch(monkeypatch):
 
 def test_scan_uses_repository_dispatch_for_isolated_action_control():
     bot = FakeBot()
-    assert repository_doctor.handle_repository_doctor_command(
-        bot, payload("/amos scan")
-    ) == 0
+    assert repository_doctor.handle_repository_doctor_command(bot, payload("/amos scan")) == 0
 
     dispatch = [request for request in bot.requests if request[0] == "POST"]
     assert len(dispatch) == 1
@@ -136,9 +130,7 @@ def test_scan_uses_repository_dispatch_for_isolated_action_control():
 
 def test_action_control_owns_workflow_dispatch_permission():
     root = repository_doctor.Path(repository_doctor.__file__).resolve().parents[1]
-    action_workflow = (root / ".github" / "workflows" / "action.yml").read_text(
-        encoding="utf-8"
-    )
+    action_workflow = (root / ".github" / "workflows" / "action.yml").read_text(encoding="utf-8")
     bot_workflow = (root / ".github" / "workflows" / "amosclaud-bot.yml").read_text(
         encoding="utf-8"
     )
