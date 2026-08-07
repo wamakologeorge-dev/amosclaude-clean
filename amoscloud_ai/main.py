@@ -55,6 +55,7 @@ from amoscloud_ai.api.routes import (
     github_repositories,
     github_travel,
     health,
+    instant_payments,
     hub_architecture,
     hub_reports,
     local_workspace,
@@ -185,6 +186,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, include_in_schema=False)
     app.include_router(account_recovery.router, prefix="/api/v1/auth")
     app.include_router(billing.router, prefix="/api/v1")
+    app.include_router(instant_payments.router, prefix="/api/v1")
     app.include_router(bundles_api_host.router, prefix="/api/v1")
     app.include_router(provider_api.router, prefix="/api/v1")
     app.include_router(account.router, prefix="/api/v1")

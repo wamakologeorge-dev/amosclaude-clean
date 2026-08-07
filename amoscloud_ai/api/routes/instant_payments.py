@@ -32,7 +32,7 @@ from amoscloud_ai.payment_entitlements import (
 )
 
 router = APIRouter(prefix="/billing", tags=["billing"])
-SQUARE_API_VERSION_DEFAULT = "2026-07-15"
+SQUARE_API_VERSION_DEFAULT = "2026-05-20"
 
 
 class CashAppPaymentRequest(BaseModel):
@@ -308,10 +308,6 @@ def complete_cash_app_payment(
         "reference_id": body.order_id,
         "note": f"Amosclaud Full Package access for {instant_access_days()} days",
         "autocomplete": True,
-        "customer_details": {
-            "customer_initiated": True,
-            "seller_keyed_in": False,
-        },
     }
     try:
         response = httpx.post(

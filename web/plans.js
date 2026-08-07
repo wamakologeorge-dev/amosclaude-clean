@@ -82,6 +82,7 @@
     window.localStorage.setItem('amosclaud_payment_order', orderId);
     if (paymentPoll) window.clearInterval(paymentPoll);
 
+    let finished = false;
     const check = async () => {
       try {
         const result = await request(
@@ -91,6 +92,7 @@
           window.clearInterval(paymentPoll);
           paymentPoll = null;
           window.localStorage.removeItem('amosclaud_payment_order');
+          finished = true;
           openWorkspace(result);
           return;
         }
@@ -100,6 +102,7 @@
           window.clearInterval(paymentPoll);
           paymentPoll = null;
           window.localStorage.removeItem('amosclaud_payment_order');
+          finished = true;
           say('The payment was not completed. Start a new checkout.', true);
         } else {
           say('Waiting for the payment provider to confirm your payment…');
@@ -114,7 +117,7 @@
     };
 
     await check();
-    if (!paymentPoll) paymentPoll = window.setInterval(check, 3000);
+    if (!finished && !paymentPoll) paymentPoll = window.setInterval(check, 3000);
   }
 
   function loadScript(url) {
