@@ -1,0 +1,40 @@
+name: Amosclaud Agent Main
+
+on:
+  workflow_run:
+    workflows:
+      - Fast PR Gate
+      - Repository Behavior Automation
+      - Amosclaud CI
+      - Python package
+      - Amosclaud Main Clean
+      - Build and Verify
+      - CI/CD — Test & Deploy
+      - Docker Image CI
+      - Platform Build Check
+      - CodeQL
+      - CircleCI Pipeline
+    types: [completed]
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: amosclaud-agent-main-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  explain:
+    if: >-
+      github.event.workflow_run.conclusion != 'success' &&
+      github.event.workflow_run.conclusion != 'neutral' &&
+      github.event.workflow_run.conclusion != 'skipped'
+    uses: ./.github/workflows/agent-chat.yml
+    with:
+      mode: run
+      run_id: ${{ github.event.workflow_run.id }}
+      dispatch_fixer: false
