@@ -17,6 +17,12 @@ concurrency:
 jobs:
   autonomous-validation:
     runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: development
+      AUTH_DB_PATH: ./data/ci-auth.db
+      REPOSITORY_STORAGE_PATH: ./data/repositories
+      SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
+      AUTH_COOKIE_SECURE: "false"
 
     steps:
       - name: Checkout Repository Code
@@ -50,7 +56,7 @@ jobs:
       - name: Verify Amosclaud Platform Handoff
         if: steps.run_guardrails.outcome == 'success'
         run: |
-          echo "Deployment safety threshold cleared. Verifying Amosclaud platform readiness..."
+          echo "Deployment safety threshold cleared. Verifying Amosclaud platform readiness in CI development mode..."
           python -m amosclaud_platform doctor
 
       - name: Report Success to Repository
