@@ -73,10 +73,14 @@ def test_login_page_uses_username_password_and_trusted_qr_only() -> None:
         assert removed not in html
 
 
-def test_login_script_binds_qr_and_password_to_the_username() -> None:
+def test_login_script_binds_qr_to_username_and_password_to_account_address() -> None:
     script = (ROOT / "web/login.js").read_text(encoding="utf-8")
 
-    assert "`${username(value)}@amosclaud.com`" in script
+    assert "function accountAddress(value)" in script
+    assert "normalized.includes('@') ? normalized" in script
+    assert "email: accountAddress(loginUsername.value)" in script
+    assert "function qrUsername(value)" in script
+    assert "username: requestedUsername" in script
     assert "/api/v1/auth/login/qr/start" in script
     assert "/api/v1/auth/login/qr/verify" in script
     assert "/api/v1/auth/login" in script
