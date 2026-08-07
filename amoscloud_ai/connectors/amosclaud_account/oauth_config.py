@@ -91,9 +91,7 @@ def valid_redirect_uri(value: str) -> str:
         )
     host = (parsed.hostname or "").lower()
     if not host or parsed.username or parsed.password:
-        raise HTTPException(
-            status_code=400, detail="OAuth redirect URI has an invalid authority"
-        )
+        raise HTTPException(status_code=400, detail="OAuth redirect URI has an invalid authority")
     scheme = parsed.scheme.lower()
     secure = scheme == "https"
     local = scheme == "http" and host in {"localhost", "127.0.0.1", "::1"}
@@ -133,8 +131,6 @@ def requested_scopes(raw: str | None, *, is_admin: bool) -> list[str]:
             detail=f"Unsupported OAuth scopes: {', '.join(sorted(unknown))}",
         )
     if ADMIN_SCOPE in requested and not is_admin:
-        raise HTTPException(
-            status_code=403, detail="Administrator scope requires an administrator"
-        )
+        raise HTTPException(status_code=403, detail="Administrator scope requires an administrator")
     requested.add("account:read")
     return sorted(requested)
