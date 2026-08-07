@@ -1,0 +1,56 @@
+name: PR 995 Autoformat
+
+on:
+  push:
+    branches:
+      - feat/cash-app-bitcoin-timed-access
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: feat/cash-app-bitcoin-timed-access
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: "0.11.16"
+          enable-cache: true
+          cache-dependency-glob: requirements-ci-fast.txt
+
+      - name: Format CI-reported files
+        run: |
+          uv run --no-project --with-requirements requirements-ci-fast.txt black \
+            amoscloud_ai/api/routes/instant_payments.py \
+            amoscloud_ai/payment_entitlements.py \
+            tests/test_instant_payment_entitlements.py
+          git diff --check
+
+      - name: Commit formatting changes
+        shell: bash
+        run: |
+          git add \
+            amoscloud_ai/api/routes/instant_payments.py \
+            amoscloud_ai/payment_entitlements.py \
+            tests/test_instant_payment_entitlements.py
+          if git diff --cached --quiet; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "style: format instant payment files"
+          git push origin HEAD:feat/cash-app-bitcoin-timed-access
