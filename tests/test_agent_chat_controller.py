@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -43,17 +42,13 @@ def test_redaction_removes_credentials(agent_chat):
     ],
 )
 def test_deterministic_failure_classification(agent_chat, log_text, category):
-    diagnosis = agent_chat.diagnose(
-        conclusion="failure", failed_jobs=["verify"], log_text=log_text
-    )
+    diagnosis = agent_chat.diagnose(conclusion="failure", failed_jobs=["verify"], log_text=log_text)
     assert diagnosis.category == category
     assert diagnosis.repairable is True
 
 
 def test_startup_failure_is_not_sent_to_code_fixer(agent_chat):
-    diagnosis = agent_chat.diagnose(
-        conclusion="startup_failure", failed_jobs=[], log_text=""
-    )
+    diagnosis = agent_chat.diagnose(conclusion="startup_failure", failed_jobs=[], log_text="")
     assert diagnosis.category == "workflow-startup"
     assert diagnosis.repairable is False
 
@@ -99,18 +94,16 @@ def test_green_result_requires_all_checks_complete(agent_chat, monkeypatch):
             ]
         },
     )
-    all_green, failing, pending = agent_chat.summarize_sha(
-        "token", "owner/repo", "abc"
-    )
+    all_green, failing, pending = agent_chat.summarize_sha("token", "owner/repo", "abc")
     assert all_green is True
     assert failing == []
     assert pending == []
 
 
 def test_pull_request_chat_uses_exclusive_slash_commands():
-    workflow = (
-        ROOT / ".github" / "workflows" / "pull-request-chat-group.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "pull-request-chat-group.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "/amos explain" in workflow
     assert "/amos scan" in workflow
