@@ -75,14 +75,13 @@ jobs:
 
       - name: Publish immutable GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
-        with:
-          name: Amosclaud Agent Server ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
-            release/*.zip
-            release/*.tar.gz
-            release/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release/*.zip release/*.tar.gz release/SHA256SUMS.txt \
+            --title "Amosclaud Agent Server ${{ github.ref_name }}" \
+            --generate-notes
 
       - name: Install build dependencies
         run: python -m pip install -r requirements.txt
@@ -162,11 +161,13 @@ jobs:
             dist/Amosclaud-Server.tar.gz
             dist/SHA256SUMS.txt
 
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+      - name: Attach app-style archives to release
         if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            dist/Amosclaud-Server.zip
-            dist/Amosclaud-Server.tar.gz
-            dist/SHA256SUMS.txt
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/Amosclaud-Server.zip \
+            dist/Amosclaud-Server.tar.gz \
+            dist/SHA256SUMS.txt \
+            --clobber
