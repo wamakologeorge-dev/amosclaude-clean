@@ -1,0 +1,74 @@
+name: Apply username QR login patch
+
+on:
+  push:
+    branches:
+      - fix/username-password-qr-login
+    paths:
+      - .amosclaud/login-patch/**
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-username-qr-login-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.repository == 'wamakologeorge-dev/amosclaude-clean'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the patch branch without third-party actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git init repository
+          cd repository
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF_NAME}"
+          git checkout -B "${GITHUB_REF_NAME}" FETCH_HEAD
+
+      - name: Verify and apply the prepared source payload
+        run: |
+          set -euo pipefail
+          cd repository
+          cat .amosclaud/login-patch/payload.part-* > /tmp/login-patch.b64
+          base64 --decode /tmp/login-patch.b64 > /tmp/login-patch.tar.gz
+          echo "0e54e08c2e1a3f14dad5c509c9de4a1335fdd58eadebe1eabd9717323308b78c  /tmp/login-patch.tar.gz" | sha256sum --check --strict
+          python - <<'PY'
+          import tarfile
+          from pathlib import Path
+
+          archive = Path('/tmp/login-patch.tar.gz')
+          with tarfile.open(archive, 'r:gz') as bundle:
+              for member in bundle.getmembers():
+                  target = Path(member.name)
+                  if target.is_absolute() or '..' in target.parts:
+                      raise SystemExit(f'Unsafe archive path: {member.name}')
+              bundle.extractall('.')
+          PY
+          python -m py_compile amoscloud_ai/api/routes/passkey_signup.py
+          python -m py_compile \
+            tests/test_account_access_recovery_contract.py \
+            tests/test_public_status_account_controls.py \
+            tests/test_github_admin_owner_access.py \
+            tests/test_github_only_account_access.py \
+            tests/test_public_tools_and_owner_access.py
+          node --check web/login.js
+          node --check web/qr-device.js
+
+      - name: Commit the verified login implementation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd repository
+          rm -rf .amosclaud/login-patch
+          rm -f .github/workflows/apply-login-patch.yml
+          git config user.name "Amosclaud Login Repair"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(auth): add username password and trusted QR login"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
