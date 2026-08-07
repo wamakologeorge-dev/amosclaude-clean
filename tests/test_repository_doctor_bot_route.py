@@ -128,6 +128,35 @@ def test_scan_uses_repository_dispatch_for_isolated_action_control():
     assert "read-only line scanner" in bot.comments[-1][1]
 
 
+def test_executed_failure_is_preferred_over_startup_failure():
+    startup = {
+        "id": 1,
+        "name": "Build and Verify",
+        "status": "completed",
+        "conclusion": "startup_failure",
+    }
+    executed = {
+        "id": 2,
+        "name": "Fast PR Gate",
+        "status": "completed",
+        "conclusion": "failure",
+    }
+
+    def api_json(_token, path):
+        if "/pulls/" in path:
+            return {"head": {"sha": "abc123"}}
+        return {"workflow_runs": [startup, executed]}
+
+    controller = SimpleNamespace(
+        SKIP_WORKFLOWS=set(),
+        latest_run_for_pull_request=lambda *_args: startup,
+        api_json=api_json,
+    )
+    selected = repository_doctor._latest_actionable_run(controller, FakeBot(), 973)
+    assert selected["id"] == 2
+    assert selected["conclusion"] == "failure"
+
+
 def test_action_control_owns_workflow_dispatch_permission():
     root = repository_doctor.Path(repository_doctor.__file__).resolve().parents[1]
     action_workflow = (root / ".github" / "workflows" / "action.yml").read_text(encoding="utf-8")
