@@ -219,15 +219,26 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
             "Permissions-Policy",
-            "camera=(), microphone=(), geolocation=(), payment=()",
+            "camera=(), microphone=(), geolocation=(), "
+            'payment=(self "https://web.squarecdn.com" '
+            '"https://sandbox.web.squarecdn.com")',
         )
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; "
             "img-src 'self' data: https:; "
-            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
-            "connect-src 'self' https: wss:; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net "
+            "https://web.squarecdn.com https://sandbox.web.squarecdn.com; "
+            "script-src 'self' https://cdn.jsdelivr.net "
+            "https://web.squarecdn.com https://sandbox.web.squarecdn.com; "
+            "frame-src 'self' https://web.squarecdn.com "
+            "https://sandbox.web.squarecdn.com; "
+            "font-src 'self' data: "
+            "https://square-fonts-production-f.squarecdn.com "
+            "https://d1g145x70srn7h.cloudfront.net; "
+            "connect-src 'self' https: wss: "
+            "https://pci-connect.squareup.com "
+            "https://pci-connect.squareupsandbox.com; "
             "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; "
             "form-action 'self'",
         )

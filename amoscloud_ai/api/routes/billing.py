@@ -15,6 +15,10 @@ from pydantic import BaseModel, Field
 
 from amoscloud_ai.agent_credit_billing import settle_paid_checkout
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
+from amoscloud_ai.payment_entitlements import (
+    active_time_entitlement,
+    ensure_payment_schema,
+)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -98,6 +102,7 @@ def _ensure_schema(db: sqlite3.Connection) -> None:
             processed_at TEXT NOT NULL
         );
         """)
+    ensure_payment_schema(db)
     db.commit()
 
 
@@ -160,6 +165,19 @@ def _entitlement(db: sqlite3.Connection, user_id: int) -> dict[str, object]:
             "status": "active",
             "billing_interval": None,
             "renews_at": license_row["expires_at"],
+            "features": PLAN_FEATURES["full"],
+        }
+
+    timed = active_time_entitlement(db, user_id)
+    if timed:
+        return {
+            "plan": "full",
+            "active": True,
+            "source": timed["provider"],
+            "status": timed["status"],
+            "billing_interval": "one_time",
+            "renews_at": timed["expires_at"],
+            "remaining_seconds": timed["remaining_seconds"],
             "features": PLAN_FEATURES["full"],
         }
 
