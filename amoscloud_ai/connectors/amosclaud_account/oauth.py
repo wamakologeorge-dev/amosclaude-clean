@@ -54,9 +54,7 @@ _requested_scopes = requested_scopes
 class ClientRegistrationRequest(BaseModel):
     redirect_uris: list[str] = Field(min_length=1, max_length=20)
     client_name: str = Field(default="MCP client", min_length=1, max_length=120)
-    grant_types: list[str] = Field(
-        default_factory=lambda: ["authorization_code", "refresh_token"]
-    )
+    grant_types: list[str] = Field(default_factory=lambda: ["authorization_code", "refresh_token"])
     response_types: list[str] = Field(default_factory=lambda: ["code"])
     token_endpoint_auth_method: str = "none"
 
@@ -227,7 +225,9 @@ async def authorize_decision(
             (token_hash(request_id),),
         ).fetchone()
         if not consent or int(consent["user_id"]) != int(user["id"]):
-            raise HTTPException(status_code=400, detail="OAuth consent request is invalid or expired")
+            raise HTTPException(
+                status_code=400, detail="OAuth consent request is invalid or expired"
+            )
         consumed = db.execute(
             "DELETE FROM connector_oauth_consents WHERE request_id_hash=? AND user_id=?",
             (token_hash(request_id), int(user["id"])),
@@ -285,12 +285,16 @@ async def exchange_token(request: Request) -> JSONResponse:
             if not row:
                 return _oauth_error("invalid_grant", "Authorization code is invalid or expired")
             if redirect_uri != str(row["redirect_uri"]):
-                return _oauth_error("invalid_grant", "redirect_uri does not match the authorization")
+                return _oauth_error(
+                    "invalid_grant", "redirect_uri does not match the authorization"
+                )
             if not code_verifier or not _pkce_matches(code_verifier, str(row["code_challenge"])):
                 return _oauth_error("invalid_grant", "PKCE verification failed")
             requested_resource = str(form.get("resource") or "").rstrip("/")
             if requested_resource and requested_resource != str(row["resource"]).rstrip("/"):
-                return _oauth_error("invalid_target", "OAuth resource does not match the authorization")
+                return _oauth_error(
+                    "invalid_target", "OAuth resource does not match the authorization"
+                )
             consumed = db.execute(
                 "DELETE FROM connector_oauth_codes WHERE code_hash=? AND client_id=?",
                 (token_hash(code), client_id),
@@ -323,7 +327,9 @@ async def exchange_token(request: Request) -> JSONResponse:
                 return _oauth_error("invalid_grant", "Refresh token is invalid or expired")
             requested_resource = str(form.get("resource") or "").rstrip("/")
             if requested_resource and requested_resource != str(row["resource"]).rstrip("/"):
-                return _oauth_error("invalid_target", "OAuth resource does not match the refresh token")
+                return _oauth_error(
+                    "invalid_target", "OAuth resource does not match the refresh token"
+                )
             requested = str(form.get("scope") or "").strip()
             current_scopes = set(str(row["scope"]).split())
             if requested:
