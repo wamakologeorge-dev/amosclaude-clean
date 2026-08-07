@@ -135,9 +135,7 @@ def build_plan(
     ]
 
     js_files = [
-        target / item
-        for item in changed_files
-        if item.lower().endswith((".js", ".mjs", ".cjs"))
+        target / item for item in changed_files if item.lower().endswith((".js", ".mjs", ".cjs"))
     ]
     if js_files and shutil.which("node"):
         for path in js_files:
