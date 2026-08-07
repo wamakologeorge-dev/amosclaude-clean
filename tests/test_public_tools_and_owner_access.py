@@ -56,9 +56,11 @@ def test_public_account_and_github_routes_precede_paid_platform() -> None:
     assert "location.replace('/auth/github')" not in login
     assert "<form" in login
     assert 'type="password"' in login
-    assert "/static/account-access.js" in login
-    assert 'href="/auth/github/admin-login"' in login
-    assert "Sign in directly as platform owner" in login
+    assert "/static/login.js" in login
+    assert "Username" in login
+    assert "Scan secure QR code" in login
+    assert 'href="/auth/github/admin-login"' not in login
+    assert "Sign in directly as platform owner" not in login
 
 
 def test_mail_failure_never_creates_an_unverified_account(monkeypatch, tmp_path) -> None:

@@ -47,17 +47,20 @@ def test_account_page_requires_session_and_exposes_self_service_controls() -> No
     assert "method: 'DELETE'" in script
 
 
-def test_login_exposes_accounts_and_github_remains_optional() -> None:
+def test_login_exposes_username_password_and_trusted_qr() -> None:
     login = _read("web/login.html")
     github_access = _read("amoscloud_ai/api/routes/github_access_gateway.py")
 
     assert "<form" in login
     assert 'type="password"' in login
-    assert "/static/account-access.js" in login
-    assert "location.replace('/auth/github')" not in login
+    assert "/static/login.js" in login
+    assert "Username" in login
+    assert "Sign in with password" in login
+    assert "Scan secure QR code" in login
     assert "Create account" in login
-    assert "Email me a sign-in code" in login
-    assert "Forgot password?" in login
+    assert "Email me a sign-in code" not in login
+    assert "Continue with Google" not in login
+    assert "location.replace('/auth/github')" not in login
     assert '@router.get("/auth/github"' in github_access
     assert '@router.get("/auth/github/callback"' in github_access
     assert '"optional": True' in github_access

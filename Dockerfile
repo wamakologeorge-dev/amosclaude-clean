@@ -59,6 +59,7 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "markdown-it-py>=3,<5" \
         "mdit-py-plugins>=0.4,<1" \
         "webauthn>=2.2,<4" \
+        "qrcode>=8,<9" \
         "anthropic>=0.25,<1" \
         "celery>=5.3,<6" \
         "redis>=5,<9" \

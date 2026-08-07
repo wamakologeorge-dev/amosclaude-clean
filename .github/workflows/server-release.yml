@@ -24,8 +24,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
           cache: pip
@@ -64,7 +64,7 @@ jobs:
           )
 
       - name: Upload build evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: amosclaud-agent-server-${{ github.run_id }}
           path: |
@@ -75,14 +75,13 @@ jobs:
 
       - name: Publish immutable GitHub release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v3
-        with:
-          name: Amosclaud Agent Server ${{ github.ref_name }}
-          generate_release_notes: true
-          files: |
-            release/*.zip
-            release/*.tar.gz
-            release/SHA256SUMS.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release/*.zip release/*.tar.gz release/SHA256SUMS.txt \
+            --title "Amosclaud Agent Server ${{ github.ref_name }}" \
+            --generate-notes
 
       - name: Install build dependencies
         run: python -m pip install -r requirements.txt
@@ -154,7 +153,7 @@ jobs:
           tar -C dist -czf dist/Amosclaud-Server.tar.gz Amosclaud
           (cd dist && sha256sum Amosclaud-Server.zip Amosclaud-Server.tar.gz > SHA256SUMS.txt)
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: amosclaud-server-package
           path: |
@@ -162,11 +161,13 @@ jobs:
             dist/Amosclaud-Server.tar.gz
             dist/SHA256SUMS.txt
 
-      - uses: softprops/action-gh-release@v3
+      - name: Attach app-style archives to release
         if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            dist/Amosclaud-Server.zip
-            dist/Amosclaud-Server.tar.gz
-            dist/SHA256SUMS.txt
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/Amosclaud-Server.zip \
+            dist/Amosclaud-Server.tar.gz \
+            dist/SHA256SUMS.txt \
+            --clobber
