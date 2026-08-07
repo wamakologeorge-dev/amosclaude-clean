@@ -167,7 +167,7 @@ def authorize(
 
     user = auth.get_user_from_session(amos_session)
     if not user:
-        return HTMLResponse(login_html(), status_code=401)
+        return HTMLResponse(login_html())
 
     scopes = requested_scopes(scope, is_admin=bool(user["is_admin"]))
     request_id = secrets.token_urlsafe(32)
@@ -228,10 +228,13 @@ async def authorize_decision(
         ).fetchone()
         if not consent or int(consent["user_id"]) != int(user["id"]):
             raise HTTPException(status_code=400, detail="OAuth consent request is invalid or expired")
-        db.execute(
-            "DELETE FROM connector_oauth_consents WHERE request_id_hash=?",
-            (token_hash(request_id),),
+        consumed = db.execute(
+            "DELETE FROM connector_oauth_consents WHERE request_id_hash=? AND user_id=?",
+            (token_hash(request_id), int(user["id"])),
         )
+        if consumed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="OAuth consent request was already used")
         if decision != "approve":
             db.commit()
             return RedirectResponse(
@@ -285,10 +288,16 @@ async def exchange_token(request: Request) -> JSONResponse:
                 return _oauth_error("invalid_grant", "redirect_uri does not match the authorization")
             if not code_verifier or not _pkce_matches(code_verifier, str(row["code_challenge"])):
                 return _oauth_error("invalid_grant", "PKCE verification failed")
-            db.execute(
-                "DELETE FROM connector_oauth_codes WHERE code_hash=?",
-                (token_hash(code),),
+            requested_resource = str(form.get("resource") or "").rstrip("/")
+            if requested_resource and requested_resource != str(row["resource"]).rstrip("/"):
+                return _oauth_error("invalid_target", "OAuth resource does not match the authorization")
+            consumed = db.execute(
+                "DELETE FROM connector_oauth_codes WHERE code_hash=? AND client_id=?",
+                (token_hash(code), client_id),
             )
+            if consumed.rowcount != 1:
+                db.rollback()
+                return _oauth_error("invalid_grant", "Authorization code was already used")
             result = issue_tokens(
                 db,
                 client_id=client_id,
@@ -312,6 +321,9 @@ async def exchange_token(request: Request) -> JSONResponse:
             ).fetchone()
             if not row:
                 return _oauth_error("invalid_grant", "Refresh token is invalid or expired")
+            requested_resource = str(form.get("resource") or "").rstrip("/")
+            if requested_resource and requested_resource != str(row["resource"]).rstrip("/"):
+                return _oauth_error("invalid_target", "OAuth resource does not match the refresh token")
             requested = str(form.get("scope") or "").strip()
             current_scopes = set(str(row["scope"]).split())
             if requested:
@@ -321,10 +333,14 @@ async def exchange_token(request: Request) -> JSONResponse:
                 scope = " ".join(sorted(narrowed))
             else:
                 scope = str(row["scope"])
-            db.execute(
-                "UPDATE connector_oauth_tokens SET revoked_at=? WHERE access_token_hash=?",
+            rotated = db.execute(
+                """UPDATE connector_oauth_tokens SET revoked_at=?
+                   WHERE access_token_hash=? AND revoked_at IS NULL""",
                 (now(), row["access_token_hash"]),
             )
+            if rotated.rowcount != 1:
+                db.rollback()
+                return _oauth_error("invalid_grant", "Refresh token was already used")
             result = issue_tokens(
                 db,
                 client_id=client_id,
