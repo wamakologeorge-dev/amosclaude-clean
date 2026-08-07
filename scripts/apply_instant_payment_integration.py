@@ -27,8 +27,8 @@ def main() -> None:
     )
     replace_once(
         "amoscloud_ai/api/routes/billing.py",
-        '        """\n    )\n    db.commit()\n\n\ndef _stripe_ready',
-        '        """\n    )\n    ensure_payment_schema(db)\n    db.commit()\n\n\ndef _stripe_ready',
+        '        """)\n    db.commit()\n\n\ndef _stripe_ready',
+        '        """)\n    ensure_payment_schema(db)\n    db.commit()\n\n\ndef _stripe_ready',
     )
     replace_once(
         "amoscloud_ai/api/routes/billing.py",
