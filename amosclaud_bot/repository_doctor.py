@@ -200,8 +200,7 @@ def handle_repository_doctor_command(
             comment=False,
         )
         repairable = (
-            result.conclusion in controller.REPAIRABLE_CONCLUSIONS
-            and result.diagnosis.repairable
+            result.conclusion in controller.REPAIRABLE_CONCLUSIONS and result.diagnosis.repairable
         )
         if repairable:
             _dispatch_action_control(bot, "fix", pull_request_number)
