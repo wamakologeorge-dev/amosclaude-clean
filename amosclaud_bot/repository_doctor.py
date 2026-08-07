@@ -167,9 +167,7 @@ def _latest_actionable_run(
     head_sha = str((pull_request.get("head") or {}).get("sha") or "")
     if not head_sha:
         return first
-    query = urllib.parse.urlencode(
-        {"head_sha": head_sha, "event": "pull_request", "per_page": 100}
-    )
+    query = urllib.parse.urlencode({"head_sha": head_sha, "event": "pull_request", "per_page": 100})
     payload = controller.api_json(
         bot.token,
         f"/repos/{bot.repository}/actions/runs?{query}",
@@ -177,8 +175,7 @@ def _latest_actionable_run(
     runs = [
         item
         for item in payload.get("workflow_runs", [])
-        if item.get("name") not in controller.SKIP_WORKFLOWS
-        and item.get("status") == "completed"
+        if item.get("name") not in controller.SKIP_WORKFLOWS and item.get("status") == "completed"
     ]
     failed = [item for item in runs if item.get("conclusion") != "success"]
     candidates = failed or runs
