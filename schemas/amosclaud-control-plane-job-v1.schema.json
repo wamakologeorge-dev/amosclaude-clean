@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.amosclaud.com/schemas/amosclaud-control-plane-job-v1.schema.json",
+  "title": "Amosclaud Control Plane Authorized Job v1",
+  "description": "A short-lived Ed25519-signed authorization for one bounded developer job.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "algorithm",
+    "key_id",
+    "authorization",
+    "signature"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "amosclaud.control-plane.job.v1"
+    },
+    "algorithm": {
+      "const": "Ed25519"
+    },
+    "key_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 80,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "account_id",
+        "workspace_id",
+        "target",
+        "objective",
+        "permissions",
+        "repository",
+        "runner_id",
+        "issued_at",
+        "expires_at",
+        "nonce",
+        "idempotency_key",
+        "request_sha256",
+        "request",
+        "sensitive_approved"
+      ],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "workspace_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "target": {
+          "enum": [
+            "local_computer",
+            "private_server",
+            "github_repository"
+          ]
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 30,
+          "items": {
+            "enum": [
+              "repository:read",
+              "workspace:read",
+              "workspace:write",
+              "tests:run",
+              "patch:create",
+              "logs:write",
+              "artifacts:write",
+              "github:issue:create",
+              "github:pull_request:create",
+              "deployment:prepare",
+              "monitoring:read",
+              "secrets:read",
+              "credentials:rotate",
+              "account:admin",
+              "billing:write",
+              "deployment:execute",
+              "repository:delete"
+            ]
+          }
+        },
+        "repository": {
+          "type": ["string", "null"],
+          "maxLength": 500
+        },
+        "runner_id": {
+          "type": ["string", "null"],
+          "maxLength": 160
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 160
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "request": {
+          "type": "object"
+        },
+        "sensitive_approved": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
