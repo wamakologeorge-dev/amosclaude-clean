@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def load_agent_chat():
-    path = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "agent_chat.py"
+    path = ROOT / ".github" / "scripts" / "agent_chat.py"
     spec = importlib.util.spec_from_file_location("amosclaud_agent_chat", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -96,3 +98,18 @@ def test_green_result_requires_all_checks_complete(agent_chat, monkeypatch):
     assert all_green is True
     assert failing == []
     assert pending == []
+
+
+def test_pull_request_chat_uses_exclusive_slash_commands():
+    workflow = (ROOT / ".github" / "workflows" / "pull-request-chat-group.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "/amos explain" in workflow
+    assert "/amos scan" in workflow
+    assert "/amos fix" in workflow
+    assert "@amosclaud explain" not in workflow
+    assert "@amosclaud scan" not in workflow
+    assert "@amosclaud fix" not in workflow
+    assert "trusted/.github/scripts/agent_chat.py pr" in workflow
+    assert "persist-credentials: false" in workflow
