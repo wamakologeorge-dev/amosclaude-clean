@@ -1,6 +1,6 @@
 name: Amosclaud Pull Request Chat Group
 
-# Slash commands are reserved for the evidence-backed Repository Doctor lane.
+# Commands are authorized and routed inside the job so failures remain visible.
 on:
   issue_comment:
     types: [created]
@@ -12,26 +12,103 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: amosclaud-pr-chat-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  cancel-in-progress: false
+
 jobs:
-  doctor:
-    if: >-
-      github.event.issue.pull_request &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER' ||
-       github.event.comment.author_association == 'COLLABORATOR') &&
-      (contains(github.event.comment.body, '/amos explain') ||
-       contains(github.event.comment.body, '/amos fix'))
+  command:
+    if: github.event.issue.pull_request != null
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PYTHONDONTWRITEBYTECODE: '1'
+      GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.issue.number }}
       REPORT_PATH: ${{ runner.temp }}/amosclaud-agent-chat/report.json
-      DISPATCH_FIXER: ${{ contains(github.event.comment.body, '/amos fix') }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
+      - name: Route trusted slash command
+        id: route
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(
+              Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8")
+          )
+          comment = payload.get("comment") or {}
+          association = str(comment.get("author_association") or "").upper()
+          body = str(comment.get("body") or "")
+          first_line = next(
+              (line.strip().lower() for line in body.splitlines() if line.strip()),
+              "",
+          )
+          operations = {
+              "/amos explain": "explain",
+              "/amos fix": "fix",
+              "/amos scan": "scan",
+          }
+          operation = operations.get(first_line, "")
+          authorized = association in {"OWNER", "MEMBER", "COLLABORATOR"}
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"authorized={'true' if authorized else 'false'}\n")
+              output.write(f"operation={operation}\n")
+          PY
+
+      - name: Stop unknown or unauthorized comments
+        if: steps.route.outputs.authorized != 'true' || steps.route.outputs.operation == ''
+        run: echo 'No trusted Amosclaud slash command was found.'
+
+      - name: Acknowledge Repository Doctor command
+        if: >-
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
+        env:
+          OPERATION: ${{ steps.route.outputs.operation }}
+        run: |
+          set -euo pipefail
+          marker='<!-- amosclaud-agent-chat -->'
+          body_file="$RUNNER_TEMP/amosclaud-doctor-running.md"
+          {
+            echo "$marker"
+            echo '## Amosclaud Repository Doctor'
+            echo
+            echo '**Status:** `inspecting`'
+            echo "**Command:** \`/amos $OPERATION\`"
+            echo
+            echo 'Reading the latest GitHub Actions evidence for this pull request.'
+            echo
+            echo "[Open the Repository Doctor run]($RUN_URL)"
+            echo
+            echo 'Repository tests continue independently.'
+          } > "$body_file"
+
+          comment_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- amosclaud-agent-chat -->")) | .id' \
+            | tail -n 1)
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --raw-field body="$(cat "$body_file")" >/dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file "$body_file"
+          fi
+
       - name: Check out trusted Repository Doctor
+        if: >-
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -39,11 +116,21 @@ jobs:
           persist-credentials: false
 
       - name: Set up trusted Python
+        if: >-
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.12'
 
-      - name: Explain the latest pull-request failure
+      - name: Explain and optionally route the repair
+        if: >-
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
+        env:
+          OPERATION: ${{ steps.route.outputs.operation }}
         run: |
           set -euo pipefail
           mkdir -p "$(dirname "$REPORT_PATH")"
@@ -53,37 +140,69 @@ jobs:
             --pull-request "$PR_NUMBER"
             --output "$REPORT_PATH"
           )
-          if [ "$DISPATCH_FIXER" = 'true' ]; then
+          if [ "$OPERATION" = 'fix' ]; then
             command+=(--dispatch)
           fi
           "${command[@]}"
           cat "$REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Dispatch the read-only Scan Bug
+        if: >-
+          steps.route.outputs.authorized == 'true' &&
+          steps.route.outputs.operation == 'scan'
+        run: |
+          set -euo pipefail
+          gh workflow run scan.yml \
+            --ref "${{ github.event.repository.default_branch }}" \
+            -f pull_request_number="$PR_NUMBER" \
+            -f dispatch_fixer=true
+          gh pr comment "$PR_NUMBER" --body "## 🐛 Amosclaud Scan Bug\n\nThe read-only line scanner was dispatched. Repository tests continue independently.\n\n[Open the command run]($RUN_URL)"
+
+      - name: Report Repository Doctor workflow failure
+        if: >-
+          failure() &&
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
+        run: |
+          set -euo pipefail
+          marker='<!-- amosclaud-agent-chat -->'
+          body_file="$RUNNER_TEMP/amosclaud-doctor-failed.md"
+          {
+            echo "$marker"
+            echo '## Amosclaud Repository Doctor'
+            echo
+            echo '**Status:** `workflow failed`'
+            echo
+            echo 'The Repository Doctor could not finish reading or posting the failure evidence. No repair success is claimed.'
+            echo
+            echo "[Open the failed Repository Doctor run]($RUN_URL)"
+            echo
+            echo 'Repository tests were not cancelled or replaced.'
+          } > "$body_file"
+
+          comment_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- amosclaud-agent-chat -->")) | .id' \
+            | tail -n 1)
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --raw-field body="$(cat "$body_file")" >/dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file "$body_file"
+          fi
+
       - name: Upload redacted Repository Doctor evidence
-        if: always()
+        if: >-
+          always() &&
+          steps.route.outputs.authorized == 'true' &&
+          (steps.route.outputs.operation == 'explain' ||
+           steps.route.outputs.operation == 'fix')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: amosclaud-pr-doctor-${{ github.run_id }}
           path: ${{ runner.temp }}/amosclaud-agent-chat
           if-no-files-found: warn
           retention-days: 14
-
-  scan:
-    if: >-
-      github.event.issue.pull_request &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'MEMBER' ||
-       github.event.comment.author_association == 'COLLABORATOR') &&
-      contains(github.event.comment.body, '/amos scan')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      GH_TOKEN: ${{ github.token }}
-      PR_NUMBER: ${{ github.event.issue.number }}
-
-    steps:
-      - name: Dispatch the read-only Scan Bug
-        run: |
-          gh workflow run scan.yml \
-            -f pull_request_number="$PR_NUMBER" \
-            -f dispatch_fixer=true
