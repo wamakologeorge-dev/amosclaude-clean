@@ -25,8 +25,7 @@ from .oauth_config import (
 
 def connect() -> sqlite3.Connection:
     db = auth._connect()
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS connector_oauth_clients (
             client_id TEXT PRIMARY KEY,
             client_name TEXT NOT NULL,
@@ -76,8 +75,7 @@ def connect() -> sqlite3.Connection:
           ON connector_oauth_tokens(user_id, revoked_at, access_expires_at);
         CREATE INDEX IF NOT EXISTS idx_connector_oauth_refresh
           ON connector_oauth_tokens(refresh_token_hash, revoked_at, refresh_expires_at);
-        """
-    )
+        """)
     db.commit()
     return db
 
