@@ -30,16 +30,12 @@ class FakeBot:
 
     def _request(self, method: str, path: str, body=None):
         self.requests.append((method, path, body))
-        if method == "GET":
-            return {"default_branch": "main"}
         return {}
 
 
 def test_parse_trusted_pull_request_slash_commands():
     for command, expected in repository_doctor.SLASH_COMMANDS.items():
-        operation, number, trusted = repository_doctor.parse_slash_command(
-            payload(command)
-        )
+        operation, number, trusted = repository_doctor.parse_slash_command(payload(command))
         assert operation == expected
         assert number == 973
         assert trusted is True
@@ -61,7 +57,7 @@ def test_untrusted_or_non_pr_slash_command_is_ignored():
     assert trusted is True
 
 
-def test_explain_and_fix_use_trusted_agent_chat_controller(monkeypatch):
+def test_explain_is_read_only_and_fix_uses_repository_dispatch(monkeypatch):
     calls = []
 
     def post_or_update_comment(*args):
@@ -73,12 +69,22 @@ def test_explain_and_fix_use_trusted_agent_chat_controller(monkeypatch):
 
     def run_doctor(**kwargs):
         calls.append(("doctor", kwargs))
-        return SimpleNamespace()
+        return SimpleNamespace(
+            conclusion="failure",
+            diagnosis=SimpleNamespace(repairable=True),
+            repair_requested=False,
+        )
+
+    def render_comment(result):
+        calls.append(("render", result))
+        return f"repair_requested={result.repair_requested}"
 
     controller = SimpleNamespace(
+        REPAIRABLE_CONCLUSIONS={"failure", "timed_out", "action_required"},
         post_or_update_comment=post_or_update_comment,
         latest_run_for_pull_request=latest_run_for_pull_request,
         run_doctor=run_doctor,
+        render_comment=render_comment,
     )
     monkeypatch.setattr(repository_doctor, "_load_agent_chat", lambda: controller)
 
@@ -89,16 +95,28 @@ def test_explain_and_fix_use_trusted_agent_chat_controller(monkeypatch):
     explain = [item for item in calls if item[0] == "doctor"][-1][1]
     assert explain["dispatch"] is False
     assert explain["comment"] is True
+    assert bot.requests == []
 
+    calls.clear()
     assert repository_doctor.handle_repository_doctor_command(
         bot, payload("/amos fix")
     ) == 0
     repair = [item for item in calls if item[0] == "doctor"][-1][1]
-    assert repair["dispatch"] is True
-    assert repair["comment"] is True
+    assert repair["dispatch"] is False
+    assert repair["comment"] is False
+
+    dispatch = [request for request in bot.requests if request[0] == "POST"]
+    assert len(dispatch) == 1
+    method, path, body = dispatch[0]
+    assert method == "POST"
+    assert path == "/repos/owner/repository/dispatches"
+    assert body["event_type"] == repository_doctor.DISPATCH_EVENT
+    assert body["client_payload"]["operation"] == "fix"
+    assert body["client_payload"]["pull_request_number"] == "973"
+    assert any(item[0] == "render" and item[1].repair_requested for item in calls)
 
 
-def test_scan_dispatches_existing_read_only_workflow():
+def test_scan_uses_repository_dispatch_for_isolated_action_control():
     bot = FakeBot()
     assert repository_doctor.handle_repository_doctor_command(
         bot, payload("/amos scan")
@@ -108,17 +126,36 @@ def test_scan_dispatches_existing_read_only_workflow():
     assert len(dispatch) == 1
     method, path, body = dispatch[0]
     assert method == "POST"
-    assert path.endswith("/actions/workflows/scan.yml/dispatches")
-    assert body["ref"] == "main"
-    assert body["inputs"]["pull_request_number"] == "973"
+    assert path == "/repos/owner/repository/dispatches"
+    assert body["event_type"] == repository_doctor.DISPATCH_EVENT
+    assert body["client_payload"]["operation"] == "scan"
+    assert body["client_payload"]["pull_request_number"] == "973"
     assert bot.comments
     assert "read-only line scanner" in bot.comments[-1][1]
 
 
+def test_action_control_owns_workflow_dispatch_permission():
+    root = repository_doctor.Path(repository_doctor.__file__).resolve().parents[1]
+    action_workflow = (root / ".github" / "workflows" / "action.yml").read_text(
+        encoding="utf-8"
+    )
+    bot_workflow = (root / ".github" / "workflows" / "amosclaud-bot.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "repository_dispatch:" in action_workflow
+    assert "types: [amosclaud-repository-doctor]" in action_workflow
+    assert "github.event.client_payload.operation" in action_workflow
+    assert "actions: write" in action_workflow
+    assert "actions: read" in bot_workflow
+
+
 def test_dispatcher_handles_doctor_before_professional_execution():
-    source = repository_doctor.Path(
-        repository_doctor.__file__
-    ).with_name("dispatcher.py").read_text(encoding="utf-8")
+    source = (
+        repository_doctor.Path(repository_doctor.__file__)
+        .with_name("dispatcher.py")
+        .read_text(encoding="utf-8")
+    )
     doctor_position = source.index("handle_repository_doctor_command(bot, payload)")
     professional_position = source.index("return run_professional_from_environment()")
     assert doctor_position < professional_position
