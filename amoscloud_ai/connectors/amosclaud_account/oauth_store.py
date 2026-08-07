@@ -203,6 +203,6 @@ class AmosclaudConnectorTokenVerifier(TokenVerifier):
             claims={
                 "is_admin": bool(row["is_admin"]),
                 "email": str(row["email"]),
-                "issuer": oauth_issuer_url(),
+                "iss": oauth_issuer_url(),
             },
         )
