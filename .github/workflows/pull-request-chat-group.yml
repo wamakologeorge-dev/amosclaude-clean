@@ -1,0 +1,47 @@
+name: Amosclaud Pull Request Chat Group
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  checks: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  chat:
+    if: >-
+      github.event.issue.pull_request &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
+      (contains(github.event.comment.body, '@amosclaud explain') ||
+       contains(github.event.comment.body, '@amosclaud fix'))
+    uses: ./.github/workflows/agent-chat.yml
+    with:
+      mode: pr
+      pull_request_number: ${{ github.event.issue.number }}
+      dispatch_fixer: ${{ contains(github.event.comment.body, '@amosclaud fix') }}
+
+  scan:
+    if: >-
+      github.event.issue.pull_request &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
+      contains(github.event.comment.body, '@amosclaud scan')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - name: Dispatch the read-only Scan Bug
+        run: |
+          gh workflow run scan.yml \
+            -f pull_request_number="$PR_NUMBER" \
+            -f dispatch_fixer=true
