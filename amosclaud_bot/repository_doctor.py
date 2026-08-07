@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Mapping
@@ -144,6 +145,60 @@ def _dispatch_action_control(
     )
 
 
+def _latest_actionable_run(
+    controller: ModuleType,
+    bot: AmosclaudBot,
+    pull_request_number: int,
+) -> Mapping[str, Any]:
+    """Prefer an executed test failure over a no-job startup failure."""
+
+    first = controller.latest_run_for_pull_request(
+        bot.token,
+        bot.repository,
+        pull_request_number,
+    )
+    if str(first.get("conclusion") or "") != "startup_failure":
+        return first
+
+    pull_request = controller.api_json(
+        bot.token,
+        f"/repos/{bot.repository}/pulls/{pull_request_number}",
+    )
+    head_sha = str((pull_request.get("head") or {}).get("sha") or "")
+    if not head_sha:
+        return first
+    query = urllib.parse.urlencode(
+        {"head_sha": head_sha, "event": "pull_request", "per_page": 100}
+    )
+    payload = controller.api_json(
+        bot.token,
+        f"/repos/{bot.repository}/actions/runs?{query}",
+    )
+    runs = [
+        item
+        for item in payload.get("workflow_runs", [])
+        if item.get("name") not in controller.SKIP_WORKFLOWS
+        and item.get("status") == "completed"
+    ]
+    failed = [item for item in runs if item.get("conclusion") != "success"]
+    candidates = failed or runs
+    if not candidates:
+        return first
+
+    priority = {
+        "failure": 0,
+        "timed_out": 1,
+        "action_required": 2,
+        "cancelled": 3,
+        "startup_failure": 4,
+    }
+    _, selected = min(
+        enumerate(candidates),
+        key=lambda pair: (priority.get(str(pair[1].get("conclusion") or ""), 5), pair[0]),
+    )
+    return selected
+
+
 def handle_repository_doctor_command(
     bot: AmosclaudBot,
     payload: Mapping[str, Any],
@@ -176,9 +231,9 @@ def handle_repository_doctor_command(
             pull_request_number,
             _inspecting_comment(operation, run_url),
         )
-        run = controller.latest_run_for_pull_request(
-            bot.token,
-            bot.repository,
+        run = _latest_actionable_run(
+            controller,
+            bot,
             pull_request_number,
         )
 
