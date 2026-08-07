@@ -83,8 +83,7 @@ def _username(value: str) -> str:
 
 
 def _prepare(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS passkey_signups (
             username TEXT PRIMARY KEY COLLATE NOCASE,
             name TEXT NOT NULL,
@@ -116,18 +115,23 @@ def _prepare(db: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     db.commit()
 
 
 def _request_origin(request: Request) -> str | None:
-    forwarded_proto = request.headers.get(
-        "x-forwarded-proto", request.url.scheme
-    ).split(",", 1)[0].strip().lower()
-    forwarded_host = request.headers.get(
-        "x-forwarded-host", request.headers.get("host", request.url.netloc)
-    ).split(",", 1)[0].strip().lower()
+    forwarded_proto = (
+        request.headers.get("x-forwarded-proto", request.url.scheme)
+        .split(",", 1)[0]
+        .strip()
+        .lower()
+    )
+    forwarded_host = (
+        request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+        .split(",", 1)[0]
+        .strip()
+        .lower()
+    )
     hostname = forwarded_host.split(":", 1)[0]
     allowed_host = hostname == RP_ID or hostname.endswith(f".{RP_ID}")
     local_development = RP_ID in {"localhost", "127.0.0.1"} and hostname in {
@@ -443,8 +447,7 @@ class QRLoginVerifyRequest(BaseModel):
 
 def _prepare_qr(db: sqlite3.Connection) -> None:
     _prepare(db)
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS qr_login_challenges (
             challenge_hash TEXT PRIMARY KEY,
             username TEXT NOT NULL COLLATE NOCASE,
@@ -463,8 +466,7 @@ def _prepare_qr(db: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_qr_login_username_created
         ON qr_login_challenges(username, created_at);
-        """
-    )
+        """)
     db.commit()
 
 
@@ -473,9 +475,9 @@ def _public_origin(request: Request) -> str:
     if configured:
         return configured.rstrip("/")
     forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0]
-    forwarded_host = request.headers.get(
-        "x-forwarded-host", request.headers.get("host", "")
-    ).split(",", 1)[0]
+    forwarded_host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).split(
+        ",", 1
+    )[0]
     if forwarded_proto.strip().lower() != "https" or not forwarded_host.strip():
         raise HTTPException(status_code=503, detail="Secure QR login requires HTTPS")
     return f"https://{forwarded_host.strip()}"
@@ -738,8 +740,7 @@ def verify_qr_login(body: QRLoginVerifyRequest, response: Response) -> dict[str,
             and int(row["failed_attempts"]) < QR_MAX_ATTEMPTS
         )
         code_matches = bool(
-            valid_request
-            and secrets.compare_digest(str(row["code_hash"]), _token_hash(body.code))
+            valid_request and secrets.compare_digest(str(row["code_hash"]), _token_hash(body.code))
         )
         if not code_matches:
             if row:
