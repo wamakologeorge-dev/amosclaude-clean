@@ -1,0 +1,15 @@
+{
+  "product": "Amosclaud Quick",
+  "version": "1.0.0",
+  "release_type": "portable-local-tool",
+  "source_repository": "wamakologeorge-dev/amosclaude-clean",
+  "source_commit": "f1d401fe70437386fdf3a7b30d29f7eaee0d437a",
+  "source_blobs": {
+    "amoscloud_ai/developer_fastpath.py": "777d30f3d917bdc55625fa31414613d0087c2663",
+    "amoscloud_ai/quickcheck_cli.py": "a25341e1fc5ff15c737aee020c3838c60dc82f2c"
+  },
+  "network_required": false,
+  "account_required": false,
+  "api_key_required": false,
+  "license": "MIT"
+}
