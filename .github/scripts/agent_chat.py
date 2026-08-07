@@ -43,8 +43,7 @@ MAX_EVIDENCE_LINES = 18
 MAX_FAILURE_SUMMARY = 5_000
 
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(api[_-]?key|token|secret|password|passwd|private[_-]?key)"
-    r"(\s*[:=]\s*)([^\s,;]+)"
+    r"(?i)\b(api[_-]?key|token|secret|password|passwd|private[_-]?key)" r"(\s*[:=]\s*)([^\s,;]+)"
 )
 AUTHORIZATION_HEADER = re.compile(r"(?i)(authorization\s*:\s*)([^\r\n]+)")
 BEARER_VALUE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
@@ -244,9 +243,7 @@ def evidence_lines(log_text: str) -> list[str]:
     return selected
 
 
-def diagnose(
-    *, conclusion: str, failed_jobs: Sequence[str], log_text: str
-) -> Diagnosis:
+def diagnose(*, conclusion: str, failed_jobs: Sequence[str], log_text: str) -> Diagnosis:
     lower = log_text.lower()
     evidence = evidence_lines(log_text)
 
@@ -284,10 +281,7 @@ def diagnose(
             "formatting",
             "Python formatting does not match the repository standard",
             "Black found deterministic formatting differences.",
-            (
-                "Run Black on the exact files named in the log and commit only "
-                "that formatting."
-            ),
+            ("Run Black on the exact files named in the log and commit only " "that formatting."),
             evidence,
             list(failed_jobs),
             True,
@@ -310,10 +304,7 @@ def diagnose(
             "syntax",
             "Source code cannot be parsed",
             "A parser stopped before the test suite could complete.",
-            (
-                "Repair the first reported file and line, then rerun compilation "
-                "and tests."
-            ),
+            ("Repair the first reported file and line, then rerun compilation " "and tests."),
             evidence,
             list(failed_jobs),
             True,
@@ -322,10 +313,7 @@ def diagnose(
         return Diagnosis(
             "dependency-or-import",
             "A required module cannot be imported",
-            (
-                "The clean environment cannot resolve a required dependency or "
-                "package path."
-            ),
+            ("The clean environment cannot resolve a required dependency or " "package path."),
             (
                 "Correct the dependency declaration or import path and verify in "
                 "a clean environment."
@@ -384,28 +372,21 @@ def latest_run_for_pull_request(
     head_sha = str((pull_request.get("head") or {}).get("sha") or "")
     if not head_sha:
         raise GitHubAPIError("Pull request does not expose a head revision")
-    query = urllib.parse.urlencode(
-        {"head_sha": head_sha, "event": "pull_request", "per_page": 100}
-    )
+    query = urllib.parse.urlencode({"head_sha": head_sha, "event": "pull_request", "per_page": 100})
     payload = api_json(token, f"/repos/{repository}/actions/runs?{query}")
     runs = [
         item
         for item in payload.get("workflow_runs", [])
-        if item.get("name") not in SKIP_WORKFLOWS
-        and item.get("status") == "completed"
+        if item.get("name") not in SKIP_WORKFLOWS and item.get("status") == "completed"
     ]
     failed = [item for item in runs if item.get("conclusion") != "success"]
     candidates = failed or runs
     if not candidates:
-        raise GitHubAPIError(
-            "No completed workflow run exists for the pull-request head"
-        )
+        raise GitHubAPIError("No completed workflow run exists for the pull-request head")
     return candidates[0]
 
 
-def comments_for_issue(
-    token: str, repository: str, issue_number: int
-) -> list[Mapping[str, Any]]:
+def comments_for_issue(token: str, repository: str, issue_number: int) -> list[Mapping[str, Any]]:
     return list(
         api_json(
             token,
@@ -414,9 +395,7 @@ def comments_for_issue(
     )
 
 
-def post_or_update_comment(
-    token: str, repository: str, pull_request_number: int, body: str
-) -> str:
+def post_or_update_comment(token: str, repository: str, pull_request_number: int, body: str) -> str:
     comments = comments_for_issue(token, repository, pull_request_number)
     existing = next(
         (item for item in comments if COMMENT_MARKER in str(item.get("body") or "")),
@@ -473,10 +452,7 @@ def dispatch_repair(
     }
     api_json(
         token,
-        (
-            f"/repos/{repository}/actions/workflows/"
-            "amosclaud-repair-control-plane.yml/dispatches"
-        ),
+        (f"/repos/{repository}/actions/workflows/" "amosclaud-repair-control-plane.yml/dispatches"),
         method="POST",
         payload={"ref": default_branch, "inputs": inputs},
     )
@@ -504,8 +480,7 @@ def render_comment(result: DoctorResult) -> str:
         lines.extend(
             [
                 "",
-                "**Failed jobs:** "
-                + ", ".join(f"`{item}`" for item in diagnosis.failed_jobs),
+                "**Failed jobs:** " + ", ".join(f"`{item}`" for item in diagnosis.failed_jobs),
             ]
         )
     if diagnosis.evidence:
@@ -526,13 +501,9 @@ def render_comment(result: DoctorResult) -> str:
     elif result.conclusion == "success":
         lines.append("The watched revision is green. No fixer run was requested.")
     elif not diagnosis.repairable:
-        lines.append(
-            "No automatic code repair was requested for this failure category."
-        )
+        lines.append("No automatic code repair was requested for this failure category.")
     else:
-        lines.append(
-            "Explanation only. Comment `@amosclaud fix` for a bounded repair retry."
-        )
+        lines.append("Explanation only. Comment `@amosclaud fix` for a bounded repair retry.")
     lines.extend(
         [
             "",
@@ -602,8 +573,7 @@ def run_doctor(
                 run=run,
                 failure_summary=(
                     f"{diagnosis.title}\n{diagnosis.explanation}\n"
-                    f"Proposed fix: {diagnosis.proposed_fix}\n"
-                    + "\n".join(diagnosis.evidence)
+                    f"Proposed fix: {diagnosis.proposed_fix}\n" + "\n".join(diagnosis.evidence)
                 ),
             )
             result.repair_requested = True
@@ -616,21 +586,14 @@ def run_doctor(
     return result
 
 
-def summarize_sha(
-    token: str, repository: str, sha: str
-) -> tuple[bool, list[str], list[str]]:
+def summarize_sha(token: str, repository: str, sha: str) -> tuple[bool, list[str], list[str]]:
     checks = api_json(
         token,
-        (
-            f"/repos/{repository}/commits/{urllib.parse.quote(sha)}"
-            "/check-runs?per_page=100"
-        ),
+        (f"/repos/{repository}/commits/{urllib.parse.quote(sha)}" "/check-runs?per_page=100"),
     ).get("check_runs", [])
     relevant = [item for item in checks if item.get("name") not in SKIP_WORKFLOWS]
     pending = [
-        str(item.get("name") or "unknown")
-        for item in relevant
-        if item.get("status") != "completed"
+        str(item.get("name") or "unknown") for item in relevant if item.get("status") != "completed"
     ]
     failing = [
         str(item.get("name") or "unknown")
@@ -642,22 +605,25 @@ def summarize_sha(
 
 
 def green_comment(sha: str) -> str:
-    return "\n".join(
-        [
-            COMMENT_MARKER,
-            "## Amosclaud Repository Doctor",
-            "",
-            "**Status:** `green`",
-            f"**Revision:** `{sha}`",
-            "",
-            (
-                "All currently reported GitHub check runs for this revision "
-                "completed without a failing conclusion."
-            ),
-            "",
-            "No fixer run is required. Repository tests remain the source of truth.",
-        ]
-    ) + "\n"
+    return (
+        "\n".join(
+            [
+                COMMENT_MARKER,
+                "## Amosclaud Repository Doctor",
+                "",
+                "**Status:** `green`",
+                f"**Revision:** `{sha}`",
+                "",
+                (
+                    "All currently reported GitHub check runs for this revision "
+                    "completed without a failing conclusion."
+                ),
+                "",
+                "No fixer run is required. Repository tests remain the source of truth.",
+            ]
+        )
+        + "\n"
+    )
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -698,9 +664,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             payload["comment_url"] = post_or_update_comment(
                 token, args.repository, pull_request_number, green_comment(sha)
             )
-        output_path.write_text(
-            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
-        )
+        output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         write_outputs(
             {
                 "all_green": all_green,
@@ -725,9 +689,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dispatch=args.dispatch,
         comment=not args.no_comment,
     )
-    output_path.write_text(
-        json.dumps(asdict(result), indent=2) + "\n", encoding="utf-8"
-    )
+    output_path.write_text(json.dumps(asdict(result), indent=2) + "\n", encoding="utf-8")
     write_outputs(
         {
             "pull_request_number": result.pull_request_number or "",
