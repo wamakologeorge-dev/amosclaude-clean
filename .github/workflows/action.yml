@@ -1,0 +1,54 @@
+name: Amosclaud Action Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Amosclaud operation
+        required: true
+        default: explain
+        type: choice
+        options: [explain, fix, scan]
+      pull_request_number:
+        description: Pull request number
+        required: false
+        type: string
+      target_ref:
+        description: Optional scan branch, tag, or commit
+        required: false
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OPERATION: ${{ inputs.operation }}
+      PR_NUMBER: ${{ inputs.pull_request_number }}
+      TARGET_REF: ${{ inputs.target_ref }}
+
+    steps:
+      - name: Dispatch the selected Amosclaud workflow
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            explain)
+              test -n "$PR_NUMBER"
+              gh workflow run plan.yml -f pull_request_number="$PR_NUMBER"
+              ;;
+            fix)
+              test -n "$PR_NUMBER"
+              gh workflow run fixer.yml -f pull_request_number="$PR_NUMBER"
+              ;;
+            scan)
+              gh workflow run scan.yml \
+                -f pull_request_number="$PR_NUMBER" \
+                -f target_ref="$TARGET_REF" \
+                -f dispatch_fixer=true
+              ;;
+          esac
