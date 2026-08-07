@@ -22,9 +22,9 @@ jobs:
     name: Start & verify Amosclaud AI server
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
