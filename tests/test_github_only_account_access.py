@@ -29,21 +29,24 @@ def _request(path: str = "/auth/github") -> Request:
     )
 
 
-def test_email_account_portal_remains_the_primary_entry() -> None:
+def test_username_password_and_qr_portal_is_the_primary_entry() -> None:
     page = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     assert "Create account" in page
-    assert "Email me a sign-in code" in page
-    assert "Forgot password?" in page
-    assert '<form id="auth-form"' in page
+    assert "Username" in page
+    assert "Sign in with password" in page
+    assert "Scan secure QR code" in page
+    assert '<form id="password-login-form"' in page
+    assert "Email me a sign-in code" not in page
+    assert "Continue with Google" not in page
     assert "location.replace('/auth/github')" not in page
 
     paths = {getattr(route, "path", "") for route in create_app().routes}
-    assert "/auth/register/request-code" in paths
-    assert "/auth/register/verify" in paths
     assert "/auth/login" in paths
-    assert "/auth/password/forgot" in paths
-    assert "/auth/password/reset" in paths
+    assert "/api/v1/auth/register/passkey/start" in paths
+    assert "/api/v1/auth/register/passkey/finish" in paths
+    assert "/api/v1/auth/login/qr/start" in paths
+    assert "/api/v1/auth/login/qr/verify" in paths
 
 
 def test_github_is_optional_and_requests_identity_only(monkeypatch) -> None:
@@ -187,12 +190,12 @@ def test_verified_github_email_links_matching_email_account_without_removing_pas
     assert user["password_hash"] == password_hash
 
 
-def test_github_gateway_does_not_shadow_email_account_routes() -> None:
+def test_github_gateway_does_not_shadow_username_account_routes() -> None:
     gateway_paths = {route.path for route in github_access_gateway.router.routes}
 
     assert "/login" not in gateway_paths
     assert "/signup" not in gateway_paths
     assert "/create-account" not in gateway_paths
     assert "/auth/login" not in gateway_paths
-    assert "/auth/register/request-code" not in gateway_paths
-    assert "/auth/password/reset" not in gateway_paths
+    assert "/api/v1/auth/register/passkey/start" not in gateway_paths
+    assert "/api/v1/auth/login/qr/start" not in gateway_paths

@@ -1,209 +1,258 @@
-import json
-import shutil
-import subprocess
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException, Response
+from starlette.requests import Request
+
+from amoscloud_ai.api.routes import auth, passkey_signup
 from amoscloud_ai.main import create_app
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _request(path: str = "/api/v1/auth/login/qr/start") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "https",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": b"",
+            "headers": [(b"host", b"www.amosclaud.com")],
+            "client": ("127.0.0.1", 1234),
+            "server": ("www.amosclaud.com", 443),
+            "root_path": "",
+        }
+    )
 
 
 def _paths() -> set[str]:
     return {getattr(route, "path", "") for route in create_app().routes}
 
 
-def test_standard_email_auth_routes_are_registered() -> None:
-    paths = _paths()
+def test_username_password_and_qr_routes_are_registered() -> None:
     required = {
         "/auth/login",
-        "/auth/login/request-code",
-        "/auth/login/verify-code",
-        "/auth/register/request-code",
-        "/auth/register/verify",
-        "/auth/password/forgot",
-        "/auth/password/reset",
+        "/api/v1/auth/register/passkey/start",
+        "/api/v1/auth/register/passkey/finish",
+        "/api/v1/auth/login/qr/start",
+        "/api/v1/auth/login/qr/image",
+        "/api/v1/auth/login/qr/device",
+        "/api/v1/auth/login/qr/device/start",
+        "/api/v1/auth/login/qr/device/finish",
+        "/api/v1/auth/login/qr/verify",
     }
-    assert not (required - paths)
+    assert not (required - _paths())
 
 
-def test_login_page_exposes_one_complete_account_flow() -> None:
-    html = (ROOT / "web" / "login.html").read_text(encoding="utf-8")
+def test_login_page_uses_username_password_and_trusted_qr_only() -> None:
+    html = (ROOT / "web/login.html").read_text(encoding="utf-8")
+
     for text in (
-        "Sign in",
+        "Username",
+        "Sign in with password",
+        "Scan secure QR code",
+        "Six-digit code from your trusted device",
         "Create account",
-        "Forgot password?",
-        "Email me a sign-in code",
-        "secure code on any device",
-        "/static/account-access.js",
+        "/static/login.js",
     ):
         assert text in html
-    assert "Organization ID" not in html
-    assert "Continue with GitHub" not in html
-    assert "Forgot username" not in html
-    assert "login-recovery.js" not in html
-    assert "/static/unified-login.js" not in html
 
-
-def test_account_access_uses_primary_email_routes() -> None:
-    script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
-    assert "window.prompt" not in script
-    for route in (
-        "/auth/login/request-code",
-        "/auth/login/verify-code",
-        "/auth/register/request-code",
-        "/auth/register/verify",
-        "/auth/password/forgot",
-        "/auth/password/reset",
+    for removed in (
+        "Continue with Google",
+        "Sign up with Google",
+        "Sign in directly as platform owner",
+        "Email me a sign-in code",
+        "/static/account-access.js",
     ):
-        assert route in script
-    assert "/api/v1/auth/account-recovery/password/request" not in script
-    assert "/api/v1/auth/account-recovery/username/request" not in script
+        assert removed not in html
 
 
-def test_password_reset_code_field_only_shows_after_successful_request() -> None:
-    node = shutil.which("node")
-    if not node:  # pragma: no cover - only on hosts without Node.js
-        return
+def test_login_script_binds_qr_and_password_to_the_username() -> None:
+    script = (ROOT / "web/login.js").read_text(encoding="utf-8")
 
-    script = r"""
-const fs = require('fs');
-const vm = require('vm');
-const source = fs.readFileSync(process.argv[1], 'utf8');
+    assert "`${username(value)}@amosclaud.com`" in script
+    assert "/api/v1/auth/login/qr/start" in script
+    assert "/api/v1/auth/login/qr/verify" in script
+    assert "/api/v1/auth/login" in script
+    assert "browser_token: qrBrowserToken" in script
+    assert "window.isSecureContext" in script
 
-function element(id) {
-  const initiallyHidden = new Set(['name-field', 'new-password-field', 'email-code-field', 'password-hint']);
-  const classes = new Set(initiallyHidden.has(id) ? ['hidden'] : []);
-  return {
-    id,
-    value: '',
-    required: false,
-    disabled: false,
-    hidden: false,
-    textContent: '',
-    className: '',
-    autocomplete: '',
-    listeners: {},
-    focus() {},
-    setAttribute() {},
-    classList: {
-      toggle(name, force) {
-        if (force === undefined) {
-          if (classes.has(name)) classes.delete(name); else classes.add(name);
-        } else if (force) classes.add(name); else classes.delete(name);
-      },
-      contains(name) { return classes.has(name); },
-    },
-    addEventListener(type, fn) {
-      this.listeners[type] = this.listeners[type] || [];
-      this.listeners[type].push(fn);
-    },
-  };
-}
 
-async function runScenario(requestOk) {
-  const ids = [
-    'auth-form', 'name-field', 'identifier-field', 'password-field', 'new-password-field',
-    'email-code-field', 'password-hint', 'name', 'identifier', 'password', 'new-password',
-    'email-code', 'login-tab', 'register-tab', 'forgot-password-button',
-    'submit-button', 'email-code-button', 'auth-title', 'auth-subtitle', 'message'
-  ];
-  const elements = Object.fromEntries(ids.map(id => [id, element(id)]));
-  elements['auth-form'].reset = () => {
-    for (const id of ['name', 'identifier', 'password', 'new-password', 'email-code']) {
-      elements[id].value = '';
-    }
-  };
-  elements['auth-form'].reportValidity = () => true;
+def test_existing_username_is_rejected_before_account_creation(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "duplicate.db")
+    with auth._connect() as db:
+        passkey_signup._prepare(db)
+        cursor = db.execute(
+            """INSERT INTO users(name,email,password_hash,provider,is_admin,created_at)
+               VALUES (?,?,?,?,0,?)""",
+            (
+                "Existing User",
+                "george@amosclaud.com",
+                auth._hash_password("correct-horse-battery-staple"),
+                "passkey",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        db.execute(
+            "INSERT INTO mailboxes(user_id,username,address,created_at) VALUES (?,?,?,?)",
+            (
+                cursor.lastrowid,
+                "george",
+                "george@amosclaud.com",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        db.commit()
 
-  const calls = [];
-  const fetch = async (url) => {
-    calls.push(url);
-    if (url === '/auth/password/forgot') {
-      if (requestOk) {
-        return {ok: true, status: 202, text: async () => JSON.stringify({message: 'Sent'})};
-      }
-      return {ok: false, status: 503, text: async () => JSON.stringify({detail: 'failure'})};
-    }
-    return {ok: true, status: 200, text: async () => '{}'};
-  };
+    with pytest.raises(HTTPException) as error:
+        passkey_signup.start_passkey_signup(
+            passkey_signup.PasskeyStartRequest(
+                name="Another User",
+                username="George",
+                password="another-secure-password",
+            )
+        )
 
-  const window = {
-    location: {search: '', replace() {}},
-  };
-  const context = {
-    window,
-    document: {getElementById: id => elements[id] || null},
-    fetch,
-    URLSearchParams,
-    JSON,
-  };
-  vm.runInNewContext(source, context);
+    assert error.value.status_code == 409
+    assert "already taken" in str(error.value.detail)
 
-  for (const fn of elements['forgot-password-button'].listeners.click || []) await fn({});
-  const hiddenBefore = elements['email-code-field'].classList.contains('hidden');
-  elements['identifier'].value = 'person@example.com';
-  elements['new-password'].value = 'Secret12345!';
-  for (const fn of elements['auth-form'].listeners.submit || []) {
-    await fn({preventDefault() {}});
-  }
-  return {
-    hiddenBefore,
-    hiddenAfter: elements['email-code-field'].classList.contains('hidden'),
-    requiredAfter: elements['email-code'].required,
-    calls: calls.filter(url => url === '/auth/password/forgot').length,
-  };
-}
 
-(async () => {
-  process.stdout.write(JSON.stringify({
-    success: await runScenario(true),
-    failure: await runScenario(false),
-  }));
-})().catch(error => {
-  process.stderr.write(String(error && error.stack || error));
-  process.exit(1);
-});
-"""
-    completed = subprocess.run(
-        [node, "-e", script, str(ROOT / "web" / "account-access.js")],
-        capture_output=True,
-        check=True,
-        text=True,
-        timeout=60,
+def test_pending_username_reservation_prevents_parallel_creation(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "pending.db")
+    now = datetime.now(timezone.utc)
+    with auth._connect() as db:
+        passkey_signup._prepare(db)
+        db.execute(
+            """INSERT INTO passkey_signups(
+                   username,name,address,password_hash,user_handle,challenge,expires_at,created_at
+               ) VALUES (?,?,?,?,?,?,?,?)""",
+            (
+                "reserved",
+                "First Request",
+                "reserved@amosclaud.com",
+                auth._hash_password("first-secure-password"),
+                b"user-handle",
+                b"challenge",
+                (now + timedelta(minutes=10)).isoformat(),
+                now.isoformat(),
+            ),
+        )
+        db.commit()
+
+    with pytest.raises(HTTPException) as error:
+        passkey_signup.start_passkey_signup(
+            passkey_signup.PasskeyStartRequest(
+                name="Second Request",
+                username="reserved",
+                password="second-secure-password",
+            )
+        )
+
+    assert error.value.status_code == 409
+
+
+def test_qr_challenge_is_opaque_and_bound_to_one_username(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "qr.db")
+    monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://www.amosclaud.com")
+    now = datetime.now(timezone.utc).isoformat()
+    with auth._connect() as db:
+        passkey_signup._prepare_qr(db)
+        cursor = db.execute(
+            """INSERT INTO users(name,email,password_hash,provider,is_admin,created_at)
+               VALUES (?,?,?,?,0,?)""",
+            (
+                "QR User",
+                "qruser@amosclaud.com",
+                auth._hash_password("secure-password-123"),
+                "passkey",
+                now,
+            ),
+        )
+        db.execute(
+            "INSERT INTO mailboxes(user_id,username,address,created_at) VALUES (?,?,?,?)",
+            (cursor.lastrowid, "qruser", "qruser@amosclaud.com", now),
+        )
+        db.commit()
+
+    result = passkey_signup.start_qr_login(
+        passkey_signup.QRLoginStartRequest(username="QRUser"),
+        _request(),
     )
-    result = json.loads(completed.stdout)
 
-    assert result["success"]["hiddenBefore"] is True
-    assert result["success"]["calls"] == 1
-    assert result["success"]["hiddenAfter"] is False
-    assert result["success"]["requiredAfter"] is True
-
-    assert result["failure"]["hiddenBefore"] is True
-    assert result["failure"]["calls"] == 1
-    assert result["failure"]["hiddenAfter"] is True
-    assert result["failure"]["requiredAfter"] is False
+    assert "qruser" not in str(result["challenge"]).lower()
+    assert result["challenge"] != result["browser_token"]
+    assert str(result["qr_image_url"]).startswith("/api/v1/auth/login/qr/image")
+    with auth._connect() as db:
+        row = db.execute("SELECT username,user_id FROM qr_login_challenges").fetchone()
+    assert row["username"] == "qruser"
+    assert row["user_id"] is not None
 
 
-def test_registration_uses_the_visible_email_field() -> None:
-    script = (ROOT / "web" / "account-access.js").read_text(encoding="utf-8")
+def test_qr_code_creates_one_session_and_cannot_be_reused(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(auth, "DB_PATH", tmp_path / "qr-once.db")
+    now = datetime.now(timezone.utc)
+    challenge = "challenge-token-that-is-long-enough"
+    browser_token = "browser-token-that-is-long-enough"
+    code = "314159"
+    with auth._connect() as db:
+        passkey_signup._prepare_qr(db)
+        cursor = db.execute(
+            """INSERT INTO users(name,email,password_hash,provider,is_admin,created_at)
+               VALUES (?,?,?,?,0,?)""",
+            (
+                "One Time User",
+                "onetime@amosclaud.com",
+                auth._hash_password("secure-password-123"),
+                "passkey",
+                now.isoformat(),
+            ),
+        )
+        db.execute(
+            """INSERT INTO qr_login_challenges(
+                   challenge_hash,username,user_id,browser_token_hash,code_hash,
+                   code_expires_at,approved_at,expires_at,created_at
+               ) VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                auth._token_hash(challenge),
+                "onetime",
+                cursor.lastrowid,
+                auth._token_hash(browser_token),
+                auth._token_hash(code),
+                (now + timedelta(minutes=5)).isoformat(),
+                now.isoformat(),
+                (now + timedelta(minutes=2)).isoformat(),
+                now.isoformat(),
+            ),
+        )
+        db.commit()
 
-    assert "name: inputs.name.value.trim()" in script
-    assert "email: address" in script
-    assert "password: inputs.nextPassword.value" in script
-    assert "signupCodeRequested = true" in script
-    assert "Verify and open Amosclaud" in script
+    response = Response()
+    result = passkey_signup.verify_qr_login(
+        passkey_signup.QRLoginVerifyRequest(
+            username="onetime",
+            challenge=challenge,
+            browser_token=browser_token,
+            code=code,
+        ),
+        response,
+    )
+    assert result["user"]["email"] == "onetime@amosclaud.com"
+    assert "amos_session=" in response.headers["set-cookie"]
 
-
-def test_security_mail_sender_is_amosclaud_owned() -> None:
-    source = (ROOT / "amoscloud_ai" / "mail_delivery.py").read_text(encoding="utf-8")
-    assert "no-reply@amosclaud.com" in source
-    assert 'MAIL_FROM = "no-reply@amosclaud.com"' in source
-    assert "smtp.login" in source
-    assert "print(" not in source
-
-
-def test_primary_password_reset_revokes_existing_sessions() -> None:
-    source = (ROOT / "amoscloud_ai" / "api" / "routes" / "auth.py").read_text(encoding="utf-8")
-    assert '@router.post("/password/reset"' in source
-    assert 'db.execute("DELETE FROM sessions WHERE user_id=?"' in source
-    assert "Invalid or expired verification code" in source
+    with pytest.raises(HTTPException) as reused:
+        passkey_signup.verify_qr_login(
+            passkey_signup.QRLoginVerifyRequest(
+                username="onetime",
+                challenge=challenge,
+                browser_token=browser_token,
+                code=code,
+            ),
+            Response(),
+        )
+    assert reused.value.status_code == 400

@@ -63,21 +63,22 @@ def test_public_github_signup_accepts_any_identity_but_never_grants_admin() -> N
     assert "is_configured_github_admin" not in public_auth
 
 
-def test_email_password_and_code_access_remain_primary() -> None:
+def test_username_password_and_qr_access_are_primary() -> None:
     auth = _read("amoscloud_ai/api/routes/auth.py")
+    passkey = _read("amoscloud_ai/api/routes/passkey_signup.py")
     public_auth = _read("amoscloud_ai/api/routes/github_access_gateway.py")
     login = _read("web/login.html")
 
+    assert '@router.post("/login"' in auth
     for route in (
-        '@router.post("/login"',
-        '@router.post("/login/request-code"',
-        '@router.post("/login/verify-code"',
-        '@router.post("/register/request-code"',
-        '@router.post("/register/verify"',
-        '@router.post("/password/forgot"',
-        '@router.post("/password/reset"',
+        '@router.post("/register/passkey/start"',
+        '@router.post("/register/passkey/finish"',
+        '@router.post("/login/qr/start"',
+        '@router.post("/login/qr/device/start"',
+        '@router.post("/login/qr/device/finish"',
+        '@router.post("/login/qr/verify"',
     ):
-        assert route in auth
+        assert route in passkey
 
     assert '"optional": True' in public_auth
     assert "status_code=410" not in public_auth
@@ -85,10 +86,10 @@ def test_email_password_and_code_access_remain_primary() -> None:
     assert "location.replace('/auth/github')" not in login
     assert "<form" in login
     assert 'type="password"' in login
-    assert "/static/account-access.js" in login
-    assert "Create account" in login
-    assert "Email me a sign-in code" in login
-    assert "Forgot password?" in login
+    assert "/static/login.js" in login
+    assert "Username" in login
+    assert "Scan secure QR code" in login
+    assert "Continue with Google" not in login
 
 
 def test_owner_callback_still_issues_an_admin_session() -> None:

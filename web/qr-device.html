@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Approve Amosclaud sign in</title>
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/login.css">
+  <link rel="stylesheet" href="/static/qr-login.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card" aria-labelledby="device-title">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">A</div>
+        <div>
+          <p class="eyebrow">AMOSCLAUD</p>
+          <p class="brand-note">Trusted-device approval</p>
+        </div>
+      </div>
+      <header class="portal-heading">
+        <h1 id="device-title">Approve sign in</h1>
+        <p>Only continue when you started this login on <strong>www.amosclaud.com</strong>.</p>
+      </header>
+      <section class="device-approval-card">
+        <p class="muted">Requested username</p>
+        <p id="requested-username" class="requested-username">Checking…</p>
+        <button id="approve-button" class="primary-button" type="button">Verify this trusted device</button>
+      </section>
+      <section id="code-result" class="code-result hidden" aria-live="polite">
+        <p>Enter this one-time code on the browser that displayed the QR code:</p>
+        <output id="trusted-code" class="trusted-code">000000</output>
+        <p class="hint">The code expires quickly and works only for that username and browser request.</p>
+      </section>
+      <p id="message" class="message" role="alert" aria-live="polite"></p>
+    </section>
+  </main>
+  <script src="/static/qr-device.js"></script>
+</body>
+</html>
