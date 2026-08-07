@@ -95,8 +95,7 @@ ALLOW_SKIP_MARKER = "amosclaud: allow-skip"
 CONFLICT_MARKERS = ("<<<<<<<", "=======", ">>>>>>>")
 
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)(api[_-]?key|token|secret|password|passwd|private[_-]?key)"
-    r"(\s*[:=]\s*)([^\s,;]+)"
+    r"(?i)(api[_-]?key|token|secret|password|passwd|private[_-]?key)" r"(\s*[:=]\s*)([^\s,;]+)"
 )
 BEARER_TOKEN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
 GITHUB_TOKEN = re.compile(r"\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{8,}")
@@ -203,7 +202,9 @@ def tracked_files(root: Path) -> Iterable[Path]:
 def _redact(value: str) -> str:
     if PRIVATE_KEY_LINE.search(value):
         return "[REDACTED PRIVATE KEY MATERIAL]"
-    value = SECRET_ASSIGNMENT.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", value)
+    value = SECRET_ASSIGNMENT.sub(
+        lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", value
+    )
     value = BEARER_TOKEN.sub("Bearer [REDACTED]", value)
     return GITHUB_TOKEN.sub("[REDACTED GITHUB TOKEN]", value)
 
@@ -233,7 +234,7 @@ def write_snapshot(path: Path, finding: Finding, text: str) -> str:
         rendered = html.escape(source.expandtabs(4))
         svg_rows.append(
             f'<text x="28" y="{y}" font-family="monospace" font-size="17">'
-            f'{html.escape(marker)} {number:>6} │ {rendered}</text>'
+            f"{html.escape(marker)} {number:>6} │ {rendered}</text>"
         )
     svg = "\n".join(
         [
@@ -247,8 +248,8 @@ def write_snapshot(path: Path, finding: Finding, text: str) -> str:
             f'font-size="16">{escaped_message}</text>',
             '<g fill="#e5e7eb">',
             *svg_rows,
-            '</g>',
-            '</svg>',
+            "</g>",
+            "</svg>",
         ]
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -341,7 +342,10 @@ def _syntax_finding(path: Path, relative: str, text: str) -> tuple[Finding | Non
                 line = int(match.group(1)) if match else 1
                 return Finding("javascript-syntax", message, relative, line), validators
     except SyntaxError as exc:
-        return Finding("python-syntax", exc.msg, relative, exc.lineno or 1, exc.offset or 1), validators
+        return (
+            Finding("python-syntax", exc.msg, relative, exc.lineno or 1, exc.offset or 1),
+            validators,
+        )
     except json.JSONDecodeError as exc:
         return Finding("json-syntax", exc.msg, relative, exc.lineno, exc.colno), validators
     except tomllib.TOMLDecodeError as exc:
@@ -441,9 +445,7 @@ def scan_repository(
         digest = hashlib.sha256(raw).hexdigest()
         report.files_scanned += 1
         report.bytes_scanned += len(raw)
-        report.coverage.append(
-            FileCoverage(relative, scanned_lines, len(raw), digest, validators)
-        )
+        report.coverage.append(FileCoverage(relative, scanned_lines, len(raw), digest, validators))
 
         if caught is None:
             caught, syntax_validators = _syntax_finding(path, relative, text)
