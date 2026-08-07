@@ -17,15 +17,21 @@ concurrency:
 jobs:
   autonomous-validation:
     runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: development
+      AUTH_DB_PATH: ./data/ci-auth.db
+      REPOSITORY_STORAGE_PATH: ./data/repositories
+      SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
+      AUTH_COOKIE_SECURE: "false"
 
     steps:
       - name: Checkout Repository Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -50,7 +56,7 @@ jobs:
       - name: Verify Amosclaud Platform Handoff
         if: steps.run_guardrails.outcome == 'success'
         run: |
-          echo "Deployment safety threshold cleared. Verifying Amosclaud platform readiness..."
+          echo "Deployment safety threshold cleared. Verifying Amosclaud platform readiness in CI development mode..."
           python -m amosclaud_platform doctor
 
       - name: Report Success to Repository

@@ -1,0 +1,83 @@
+name: Debug Repository Doctor State
+
+on:
+  push:
+    branches:
+      - debug/repository-doctor-workflow-state
+    paths:
+      - .github/workflows/debug-repository-doctor-state.yml
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TARGET_PR: '973'
+
+    steps:
+      - name: Query workflow metadata and recent runs
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/repository-doctor-state.md"
+          metadata=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/pull-request-chat-group.yml")
+          runs=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/pull-request-chat-group.yml/runs?per_page=20")
+
+          {
+            echo '<!-- amosclaud-doctor-debug -->'
+            echo '## Repository Doctor workflow diagnostic'
+            echo
+            echo '```json'
+            jq -n \
+              --argjson metadata "$metadata" \
+              --argjson runs "$runs" \
+              '{
+                workflow: {
+                  id: $metadata.id,
+                  name: $metadata.name,
+                  path: $metadata.path,
+                  state: $metadata.state,
+                  created_at: $metadata.created_at,
+                  updated_at: $metadata.updated_at
+                },
+                recent_runs: [
+                  $runs.workflow_runs[]? |
+                  {
+                    id,
+                    event,
+                    status,
+                    conclusion,
+                    head_branch,
+                    head_sha,
+                    created_at,
+                    updated_at,
+                    html_url
+                  }
+                ]
+              }' \
+              | sed -E 's/(gh[pousr]_|github_pat_)[A-Za-z0-9_]+/[REDACTED]/g'
+            echo '```'
+            echo
+            echo "Diagnostic source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$report"
+
+          comment_id=$(gh api \
+            "repos/$GITHUB_REPOSITORY/issues/$TARGET_PR/comments" \
+            --paginate \
+            --jq '.[] | select(.body | contains("<!-- amosclaud-doctor-debug -->")) | .id' \
+            | tail -n 1)
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH \
+              "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --raw-field body="$(cat "$report")" >/dev/null
+          else
+            gh pr comment "$TARGET_PR" --body-file "$report"
+          fi
