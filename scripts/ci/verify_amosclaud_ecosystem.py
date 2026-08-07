@@ -135,9 +135,7 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
         errors.append("forbidden root artifacts: " + ", ".join(forbidden_found))
 
     tracked_root_files = [
-        entry.name
-        for entry in root_entries
-        if entry.is_file() and is_repository_entry(entry)
+        entry.name for entry in root_entries if entry.is_file() and is_repository_entry(entry)
     ]
     if len(tracked_root_files) > 80:
         warnings.append(
