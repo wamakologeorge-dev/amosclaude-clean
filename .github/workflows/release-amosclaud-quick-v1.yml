@@ -3,7 +3,9 @@ name: Release Amosclaud Quick v1.0.0
 on:
   push:
     branches:
-      - release/amosclaud-quick-v1.0.0
+      - main
+    paths:
+      - .github/workflows/release-amosclaud-quick-v1.yml
   workflow_dispatch:
 
 permissions:
