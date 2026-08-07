@@ -1,0 +1,45 @@
+name: Format Command Routing Once
+
+on:
+  push:
+    branches:
+      - fix/repository-doctor-command-routing
+    paths:
+      - .github/workflows/format-command-routing-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the exact repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/repository-doctor-command-routing
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Format and remove this temporary workflow
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check black
+          black tests/test_agent_chat_controller.py
+          git rm .github/workflows/format-command-routing-once.yml
+
+      - name: Commit exact formatter output
+        run: |
+          set -euo pipefail
+          git config user.name 'amosclaud-actions[bot]'
+          git config user.email 'amosclaud-actions[bot]@users.noreply.github.com'
+          git add tests/test_agent_chat_controller.py
+          git diff --cached --check
+          git commit -m 'style: format Repository Doctor routing test'
+          git push origin HEAD:fix/repository-doctor-command-routing
