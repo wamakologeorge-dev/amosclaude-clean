@@ -1,0 +1,39 @@
+name: Amosclaud Autonomous Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Open pull request for autonomous diagnosis and bounded repair
+        required: true
+        type: string
+      scan_first:
+        description: Run the read-only Scan Bug before repair routing
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  autonomous:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ inputs.pull_request_number }}
+      SCAN_FIRST: ${{ inputs.scan_first }}
+
+    steps:
+      - name: Start the governed autonomous flow
+        run: |
+          set -euo pipefail
+          if [ "$SCAN_FIRST" = 'true' ]; then
+            gh workflow run scan.yml \
+              -f pull_request_number="$PR_NUMBER" \
+              -f dispatch_fixer=true
+          else
+            gh workflow run fixer.yml -f pull_request_number="$PR_NUMBER"
+          fi
