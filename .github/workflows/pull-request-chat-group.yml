@@ -1,5 +1,6 @@
 name: Amosclaud Pull Request Chat Group
 
+# Slash commands are reserved for the evidence-backed Repository Doctor lane.
 on:
   issue_comment:
     types: [created]
