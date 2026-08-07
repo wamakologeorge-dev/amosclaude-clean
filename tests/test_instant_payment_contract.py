@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +31,15 @@ def test_square_csp_and_production_configuration_are_documented() -> None:
     example = read(".env.production.example")
     assert "https://web.squarecdn.com" in security
     assert "https://sandbox.web.squarecdn.com" in security
-    assert "https://pci-connect.squareup.com" in security
+    https_urls = [
+        token.strip('\'",()[]{}')
+        for token in security.split()
+        if token.startswith("https://")
+    ]
+    assert any(
+        (urlparse(url).hostname or "") == "pci-connect.squareup.com"
+        for url in https_urls
+    )
     for variable in (
         "AMOSCLAUD_INSTANT_PRICE_CENTS=1500",
         "AMOSCLAUD_INSTANT_ACCESS_DAYS=30",
