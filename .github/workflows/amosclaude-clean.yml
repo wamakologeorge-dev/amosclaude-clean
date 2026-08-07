@@ -52,7 +52,7 @@ jobs:
             'PyYAML>=6,<7' \
             'python-dotenv>=1,<2'
 
-      - name: Verify Doctor, Scan Bug, and ecosystem formatting
+      - name: Verify Repository Doctor, Scan Bug, and ecosystem formatting
         run: |
           black --check \
             .github/scripts/agent_chat.py \
@@ -71,7 +71,7 @@ jobs:
             amoscloud_ai/scan_bug.py \
             scripts/ci/verify_amosclaud_ecosystem.py
 
-      - name: Run focused Doctor, Scan Bug, and ecosystem tests
+      - name: Run focused Repository Doctor, Scan Bug, and ecosystem tests
         run: |
           python -m pytest -q \
             tests/test_agent_chat_controller.py \
