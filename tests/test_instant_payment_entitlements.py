@@ -64,9 +64,7 @@ def test_expired_payment_access_auto_locks(monkeypatch) -> None:
     )
     db.commit()
     assert active_time_entitlement(db, 1) is None
-    row = db.execute(
-        "SELECT status FROM billing_time_entitlements WHERE user_id=1"
-    ).fetchone()
+    row = db.execute("SELECT status FROM billing_time_entitlements WHERE user_id=1").fetchone()
     assert row["status"] == "expired"
 
 
@@ -85,8 +83,6 @@ def test_square_and_btcpay_webhook_signatures(monkeypatch) -> None:
     assert not instant_payments._verify_square_signature(body, "wrong")
 
     monkeypatch.setenv("BTCPAY_WEBHOOK_SECRET", "bitcoin-secret")
-    btcpay_signature = "sha256=" + hmac.new(
-        b"bitcoin-secret", body, hashlib.sha256
-    ).hexdigest()
+    btcpay_signature = "sha256=" + hmac.new(b"bitcoin-secret", body, hashlib.sha256).hexdigest()
     assert instant_payments._verify_btcpay_signature(body, btcpay_signature)
     assert not instant_payments._verify_btcpay_signature(body, "sha256=wrong")

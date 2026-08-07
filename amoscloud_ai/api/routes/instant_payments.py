@@ -178,11 +178,14 @@ def _verify_btcpay_signature(raw_body: bytes, supplied_signature: str | None) ->
     secret = _btcpay_settings()["webhook_secret"]
     if not secret or not supplied_signature:
         return False
-    expected = "sha256=" + hmac.new(
-        secret.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            secret.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+    )
     return hmac.compare_digest(expected, supplied_signature)
 
 
@@ -496,7 +499,7 @@ async def square_payment_webhook(
         if _event_seen(db, "square", event_id):
             return {"received": True}
 
-        obj = ((event.get("data") or {}).get("object") or {})
+        obj = (event.get("data") or {}).get("object") or {}
         if event_type in {"payment.created", "payment.updated"}:
             payment = obj.get("payment") or {}
             order = _square_payment_order(db, payment)

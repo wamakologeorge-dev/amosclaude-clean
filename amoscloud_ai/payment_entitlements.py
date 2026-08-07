@@ -57,8 +57,7 @@ def amount_display() -> str:
 
 
 def ensure_payment_schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS billing_payment_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             public_id TEXT NOT NULL UNIQUE,
@@ -102,8 +101,7 @@ def ensure_payment_schema(db: sqlite3.Connection) -> None:
             processed_at TEXT NOT NULL,
             PRIMARY KEY(provider, event_id)
         );
-        """
-    )
+        """)
     db.commit()
 
 
