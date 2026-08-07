@@ -39,6 +39,9 @@ htmlcov/
 secrets/*
 !secrets/README.md
 
+# Generated release and conversation packages
+/amosclaud_autonomous_conversation_package.zip
+
 # Local databases and runtime data
 *.db
 *.sqlite

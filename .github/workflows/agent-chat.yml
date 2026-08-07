@@ -1,0 +1,128 @@
+name: Amosclaud Agent Chat
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: run, pr, or result
+        required: true
+        type: string
+      run_id:
+        required: false
+        default: ''
+        type: string
+      pull_request_number:
+        required: false
+        default: ''
+        type: string
+      target_sha:
+        required: false
+        default: ''
+        type: string
+      dispatch_fixer:
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      repair_requested:
+        value: ${{ jobs.doctor.outputs.repair_requested }}
+      all_green:
+        value: ${{ jobs.doctor.outputs.all_green }}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Explain a PR, explain a run, or reconcile results
+        required: true
+        default: pr
+        type: choice
+        options: [pr, run, result]
+      pull_request_number:
+        description: Pull request number for PR mode
+        required: false
+        type: string
+      run_id:
+        description: GitHub Actions run ID for run mode
+        required: false
+        type: string
+      target_sha:
+        description: Commit SHA for result mode
+        required: false
+        type: string
+      dispatch_fixer:
+        description: Dispatch the bounded Repair Control Plane
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: write
+  checks: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  doctor:
+    name: Explain and route the repository failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      repair_requested: ${{ steps.doctor.outputs.repair_requested }}
+      all_green: ${{ steps.doctor.outputs.all_green }}
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      REPORT_PATH: ${{ runner.temp }}/amosclaud-agent-chat/report.json
+
+    steps:
+      - name: Check out trusted Agent Chat controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Set up trusted Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Diagnose, explain, and optionally dispatch the fixer
+        id: doctor
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode }}
+          RUN_ID: ${{ inputs.run_id }}
+          PR_NUMBER: ${{ inputs.pull_request_number }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          DISPATCH_FIXER: ${{ inputs.dispatch_fixer }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$REPORT_PATH")"
+          command=(
+            python trusted/.github/scripts/agent_chat.py "$MODE"
+            --repository "$GITHUB_REPOSITORY"
+            --output "$REPORT_PATH"
+          )
+          if [ -n "$RUN_ID" ]; then
+            command+=(--run-id "$RUN_ID")
+          fi
+          if [ -n "$PR_NUMBER" ]; then
+            command+=(--pull-request "$PR_NUMBER")
+          fi
+          if [ -n "$TARGET_SHA" ]; then
+            command+=(--sha "$TARGET_SHA")
+          fi
+          if [ "$DISPATCH_FIXER" = 'true' ]; then
+            command+=(--dispatch)
+          fi
+          "${command[@]}"
+          cat "$REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload redacted Agent Chat evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-agent-chat-${{ github.run_id }}
+          path: ${{ runner.temp }}/amosclaud-agent-chat
+          if-no-files-found: warn
+          retention-days: 14

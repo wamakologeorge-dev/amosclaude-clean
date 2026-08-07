@@ -47,7 +47,13 @@ def sanitized_environment() -> dict[str, str]:
     return clean
 
 
-def run_step(name: str, command: list[str], cwd: Path, env: dict[str, str], timeout: int = 1200) -> Result:
+def run_step(
+    name: str,
+    command: list[str],
+    cwd: Path,
+    env: dict[str, str],
+    timeout: int = 1200,
+) -> Result:
     try:
         process = subprocess.run(
             command,
@@ -79,18 +85,41 @@ def load_changed_files(args: argparse.Namespace) -> list[str]:
     return []
 
 
-def build_plan(target: Path, python: str, source: str, changed_files: list[str]) -> list[tuple[str, list[str], int]]:
+def build_plan(
+    target: Path,
+    python: str,
+    source: str,
+    changed_files: list[str],
+) -> list[tuple[str, list[str], int]]:
     lower_source = source.lower()
     changed_lower = [item.lower() for item in changed_files]
     plan: list[tuple[str, list[str], int]] = [
         (
             "editable_install",
-            [python, "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "-e", "."],
+            [
+                python,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                "-e",
+                ".",
+            ],
             1200,
         ),
         (
             "flake8_critical",
-            [python, "-m", "flake8", ".", "--count", "--select=E9,F63,F7,F82", "--show-source", "--statistics"],
+            [
+                python,
+                "-m",
+                "flake8",
+                ".",
+                "--count",
+                "--select=E9,F63,F7,F82",
+                "--show-source",
+                "--statistics",
+            ],
             900,
         ),
         (
@@ -105,18 +134,34 @@ def build_plan(target: Path, python: str, source: str, changed_files: list[str])
         ),
     ]
 
-    js_files = [target / item for item in changed_files if item.lower().endswith((".js", ".mjs", ".cjs"))]
+    js_files = [
+        target / item for item in changed_files if item.lower().endswith((".js", ".mjs", ".cjs"))
+    ]
     if js_files and shutil.which("node"):
         for path in js_files:
             if path.is_file():
-                plan.append((f"node_check:{path.relative_to(target)}", ["node", "--check", str(path)], 300))
+                plan.append(
+                    (
+                        f"node_check:{path.relative_to(target)}",
+                        ["node", "--check", str(path)],
+                        300,
+                    )
+                )
 
-    workflow_signal = "workflow" in lower_source or any(item.startswith(".github/") for item in changed_lower)
+    workflow_signal = "workflow" in lower_source or any(
+        item.startswith(".github/") for item in changed_lower
+    )
     if workflow_signal:
         workflow_tests = existing(sorted((target / "tests").glob("test_*workflow*contract.py")))
         workflow_tests += existing(sorted((target / "tests").glob("test_*github_actions*.py")))
         if workflow_tests:
-            plan.append(("pytest_workflow_contracts", [python, "-m", "pytest", "-q", *workflow_tests], 1200))
+            plan.append(
+                (
+                    "pytest_workflow_contracts",
+                    [python, "-m", "pytest", "-q", *workflow_tests],
+                    1200,
+                )
+            )
 
     pages_signal = "pages" in lower_source or any("pages" in item for item in changed_lower)
     pages_tests = existing(
@@ -126,9 +171,17 @@ def build_plan(target: Path, python: str, source: str, changed_files: list[str])
         ]
     )
     if pages_signal and pages_tests:
-        plan.append(("pytest_pages_contracts", [python, "-m", "pytest", "-q", *pages_tests], 900))
+        plan.append(
+            (
+                "pytest_pages_contracts",
+                [python, "-m", "pytest", "-q", *pages_tests],
+                900,
+            )
+        )
 
-    api_signal = any(token in lower_source for token in ("live server", "api", "endpoint", "server check"))
+    api_signal = any(
+        token in lower_source for token in ("live server", "api", "endpoint", "server check")
+    )
     api_tests = existing(
         [
             target / "tests" / "test_build_endpoints.py",
@@ -137,11 +190,51 @@ def build_plan(target: Path, python: str, source: str, changed_files: list[str])
         ]
     )
     if api_signal and api_tests:
-        plan.append(("pytest_api_smoke_contracts", [python, "-m", "pytest", "-q", *api_tests], 1200))
+        plan.append(
+            (
+                "pytest_api_smoke_contracts",
+                [python, "-m", "pytest", "-q", *api_tests],
+                1200,
+            )
+        )
 
-    docker_signal = "docker" in lower_source or any(item == "dockerfile" or item.startswith("docker/") for item in changed_lower)
+    docker_signal = "docker" in lower_source or any(
+        item == "dockerfile" or item.startswith("docker/") for item in changed_lower
+    )
     if docker_signal and (target / "Dockerfile").is_file() and shutil.which("docker"):
-        plan.append(("docker_build", ["docker", "build", "--pull=false", "-t", "amosclaud-repair-verify", "."], 1800))
+        plan.append(
+            (
+                "docker_build",
+                ["docker", "build", "--pull=false", "-t", "amosclaud-repair-verify", "."],
+                1800,
+            )
+        )
+
+    # A Scan Bug incident may be invisible to pytest and compilation. Re-run the
+    # same read-only scanner after ordinary repository tests so the fixer must
+    # prove that its line-level repair removed the exact catch. This verifier is
+    # separate from the repository test workflows and never cancels them.
+    if "scan bug" in lower_source:
+        trusted_root = Path(__file__).resolve().parents[2]
+        scan_script = trusted_root / "amoscloud_ai" / "scan_bug.py"
+        scan_output = Path(os.getenv("RUNNER_TEMP", "/tmp")) / "amosclaud-scan-bug-verify"
+        plan.append(
+            (
+                "scan_bug_reproduction",
+                [
+                    python,
+                    str(scan_script),
+                    str(target),
+                    "--json",
+                    str(scan_output / "report.json"),
+                    "--markdown",
+                    str(scan_output / "report.md"),
+                    "--snapshot",
+                    str(scan_output / "snapshot.svg"),
+                ],
+                900,
+            )
+        )
 
     return plan
 

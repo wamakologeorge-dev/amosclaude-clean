@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,37 @@ def load_manifest(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("Manifest root must be a JSON object")
     return payload
+
+
+def tracked_root_entry_names(root: Path) -> set[str] | None:
+    """Return top-level names represented by Git-tracked paths.
+
+    Runtime caches, test reports, and other ignored files may exist while the
+    verifier runs. They are not repository artifacts unless Git tracks a path
+    beneath that top-level entry. When Git metadata is unavailable, return
+    ``None`` so the caller safely falls back to inspecting the filesystem.
+    """
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+
+    names: set[str] = set()
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        relative = Path(raw.decode("utf-8", errors="surrogateescape"))
+        if relative.parts:
+            names.add(relative.parts[0])
+    return names
 
 
 def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
@@ -82,8 +114,15 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
     forbidden_directories = set(manifest.get("forbidden_root_directories", []))
 
     root_entries = sorted(root.iterdir(), key=lambda item: item.name.casefold())
+    tracked_names = tracked_root_entry_names(root)
+
+    def is_repository_entry(entry: Path) -> bool:
+        return tracked_names is None or entry.name in tracked_names
+
     forbidden_found: list[str] = []
     for entry in root_entries:
+        if not is_repository_entry(entry):
+            continue
         if entry.is_file():
             if entry.name in forbidden_names or any(
                 fnmatch.fnmatch(entry.name, pattern) for pattern in forbidden_globs
@@ -95,7 +134,9 @@ def verify(root: Path, manifest_path: Path) -> dict[str, Any]:
     if forbidden_found:
         errors.append("forbidden root artifacts: " + ", ".join(forbidden_found))
 
-    tracked_root_files = [entry.name for entry in root_entries if entry.is_file()]
+    tracked_root_files = [
+        entry.name for entry in root_entries if entry.is_file() and is_repository_entry(entry)
+    ]
     if len(tracked_root_files) > 80:
         warnings.append(
             "repository root remains broad; migrate legacy source and documentation "
