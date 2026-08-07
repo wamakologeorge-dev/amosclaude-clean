@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -16,9 +17,12 @@ SLASH_COMMANDS = {
     "/amos fix": "fix",
 }
 DOCTOR_MARKER = "<!-- amosclaud-agent-chat -->"
+DISPATCH_EVENT = "amosclaud-repository-doctor"
 
 
-def parse_slash_command(payload: Mapping[str, Any]) -> tuple[str | None, int | None, bool]:
+def parse_slash_command(
+    payload: Mapping[str, Any],
+) -> tuple[str | None, int | None, bool]:
     """Return operation, pull-request number, and trusted-author status."""
 
     comment = payload.get("comment") or {}
@@ -49,39 +53,95 @@ def _load_agent_chat() -> ModuleType:
     return module
 
 
+def _run_url(bot: AmosclaudBot) -> str:
+    run_id = os.getenv("GITHUB_RUN_ID", "").strip()
+    if not run_id:
+        return ""
+    server = os.getenv("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+    return f"{server}/{bot.repository}/actions/runs/{run_id}"
+
+
 def _failure_comment(operation: str, run_url: str, error: Exception) -> str:
     detail = str(error).replace("`", "'")[:800]
-    return "\n".join(
-        [
-            DOCTOR_MARKER,
-            "## Amosclaud Repository Doctor",
-            "",
-            "**Status:** `workflow failed`",
-            f"**Command:** `/amos {operation}`",
-            "",
-            "The Repository Doctor could not complete this command. No repair success is claimed.",
-            "",
-            f"**Failure:** `{detail}`",
-            "",
-            f"[Open the GitHub Actions run]({run_url})" if run_url else "",
-            "",
-            "Repository tests were not cancelled or replaced.",
-        ]
-    ).strip() + "\n"
+    return (
+        "\n".join(
+            [
+                DOCTOR_MARKER,
+                "## Amosclaud Repository Doctor",
+                "",
+                "**Status:** `workflow failed`",
+                f"**Command:** `/amos {operation}`",
+                "",
+                "The Repository Doctor could not complete this command. No repair success is claimed.",
+                "",
+                f"**Failure:** `{detail}`",
+                "",
+                f"[Open the GitHub Actions run]({run_url})" if run_url else "",
+                "",
+                "Repository tests were not cancelled or replaced.",
+            ]
+        ).strip()
+        + "\n"
+    )
 
 
 def _scan_comment(run_url: str) -> str:
-    return "\n".join(
-        [
-            "## 🐛 Amosclaud Scan Bug",
-            "",
-            "The read-only line scanner was dispatched for this pull request.",
-            "",
-            "It may capture evidence and stop its own scan, but repository tests continue independently.",
-            "",
-            f"[Open the command run]({run_url})" if run_url else "",
-        ]
-    ).strip() + "\n"
+    return (
+        "\n".join(
+            [
+                "## 🐛 Amosclaud Scan Bug",
+                "",
+                "The read-only line scanner was dispatched for this pull request.",
+                "",
+                "It may capture evidence and stop its own scan, but repository tests continue independently.",
+                "",
+                f"[Open the command run]({run_url})" if run_url else "",
+            ]
+        ).strip()
+        + "\n"
+    )
+
+
+def _inspecting_comment(operation: str, run_url: str) -> str:
+    return (
+        "\n".join(
+            [
+                DOCTOR_MARKER,
+                "## Amosclaud Repository Doctor",
+                "",
+                "**Status:** `inspecting`",
+                f"**Command:** `/amos {operation}`",
+                "",
+                "Reading the latest GitHub Actions evidence for this pull request.",
+                "",
+                f"[Open the Repository Doctor run]({run_url})" if run_url else "",
+                "",
+                "Repository tests continue independently.",
+            ]
+        ).strip()
+        + "\n"
+    )
+
+
+def _dispatch_action_control(
+    bot: AmosclaudBot,
+    operation: str,
+    pull_request_number: int,
+) -> None:
+    """Create a repository event for the isolated Actions dispatcher."""
+
+    bot._request(
+        "POST",
+        f"/repos/{bot.repository}/dispatches",
+        {
+            "event_type": DISPATCH_EVENT,
+            "client_payload": {
+                "operation": operation,
+                "pull_request_number": str(pull_request_number),
+                "target_ref": "",
+            },
+        },
+    )
 
 
 def handle_repository_doctor_command(
@@ -96,28 +156,10 @@ def handle_repository_doctor_command(
     if not trusted or pull_request_number is None:
         return 0
 
-    run_url = ""
-    server_url = str(payload.get("repository", {}).get("html_url") or "")
-    run_id = str(payload.get("workflow_run", {}).get("id") or "")
-    if server_url and run_id:
-        run_url = f"{server_url}/actions/runs/{run_id}"
-
+    run_url = _run_url(bot)
     if operation == "scan":
         try:
-            repository = bot._request("GET", f"/repos/{bot.repository}")
-            default_branch = str(repository.get("default_branch") or "main")
-            bot._request(
-                "POST",
-                f"/repos/{bot.repository}/actions/workflows/scan.yml/dispatches",
-                {
-                    "ref": default_branch,
-                    "inputs": {
-                        "pull_request_number": str(pull_request_number),
-                        "target_ref": "",
-                        "dispatch_fixer": "true",
-                    },
-                },
-            )
+            _dispatch_action_control(bot, operation, pull_request_number)
             bot.post_comment(pull_request_number, _scan_comment(run_url))
         except Exception as exc:
             bot.post_comment(
@@ -132,32 +174,43 @@ def handle_repository_doctor_command(
             bot.token,
             bot.repository,
             pull_request_number,
-            "\n".join(
-                [
-                    DOCTOR_MARKER,
-                    "## Amosclaud Repository Doctor",
-                    "",
-                    "**Status:** `inspecting`",
-                    f"**Command:** `/amos {operation}`",
-                    "",
-                    "Reading the latest GitHub Actions evidence for this pull request.",
-                    "",
-                    "Repository tests continue independently.",
-                ]
-            )
-            + "\n",
+            _inspecting_comment(operation, run_url),
         )
         run = controller.latest_run_for_pull_request(
             bot.token,
             bot.repository,
             pull_request_number,
         )
-        controller.run_doctor(
+
+        if operation == "explain":
+            controller.run_doctor(
+                token=bot.token,
+                repository=bot.repository,
+                run=run,
+                dispatch=False,
+                comment=True,
+            )
+            return 0
+
+        result = controller.run_doctor(
             token=bot.token,
             repository=bot.repository,
             run=run,
-            dispatch=operation == "fix",
-            comment=True,
+            dispatch=False,
+            comment=False,
+        )
+        repairable = (
+            result.conclusion in controller.REPAIRABLE_CONCLUSIONS
+            and result.diagnosis.repairable
+        )
+        if repairable:
+            _dispatch_action_control(bot, "fix", pull_request_number)
+            result.repair_requested = True
+        controller.post_or_update_comment(
+            bot.token,
+            bot.repository,
+            pull_request_number,
+            controller.render_comment(result),
         )
     except Exception as exc:
         try:
