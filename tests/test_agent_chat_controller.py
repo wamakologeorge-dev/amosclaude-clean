@@ -42,13 +42,17 @@ def test_redaction_removes_credentials(agent_chat):
     ],
 )
 def test_deterministic_failure_classification(agent_chat, log_text, category):
-    diagnosis = agent_chat.diagnose(conclusion="failure", failed_jobs=["verify"], log_text=log_text)
+    diagnosis = agent_chat.diagnose(
+        conclusion="failure", failed_jobs=["verify"], log_text=log_text
+    )
     assert diagnosis.category == category
     assert diagnosis.repairable is True
 
 
 def test_startup_failure_is_not_sent_to_code_fixer(agent_chat):
-    diagnosis = agent_chat.diagnose(conclusion="startup_failure", failed_jobs=[], log_text="")
+    diagnosis = agent_chat.diagnose(
+        conclusion="startup_failure", failed_jobs=[], log_text=""
+    )
     assert diagnosis.category == "workflow-startup"
     assert diagnosis.repairable is False
 
@@ -94,22 +98,40 @@ def test_green_result_requires_all_checks_complete(agent_chat, monkeypatch):
             ]
         },
     )
-    all_green, failing, pending = agent_chat.summarize_sha("token", "owner/repo", "abc")
+    all_green, failing, pending = agent_chat.summarize_sha(
+        "token", "owner/repo", "abc"
+    )
     assert all_green is True
     assert failing == []
     assert pending == []
 
 
-def test_pull_request_chat_uses_exclusive_slash_commands():
-    workflow = (ROOT / ".github" / "workflows" / "pull-request-chat-group.yml").read_text(
-        encoding="utf-8"
-    )
+def test_pull_request_chat_routes_commands_inside_the_job():
+    workflow = (
+        ROOT / ".github" / "workflows" / "pull-request-chat-group.yml"
+    ).read_text(encoding="utf-8")
 
-    assert "/amos explain" in workflow
-    assert "/amos scan" in workflow
-    assert "/amos fix" in workflow
+    assert "if: github.event.issue.pull_request != null" in workflow
+    assert "Route trusted slash command" in workflow
+    assert 'association in {"OWNER", "MEMBER", "COLLABORATOR"}' in workflow
+    assert '"/amos explain": "explain"' in workflow
+    assert '"/amos scan": "scan"' in workflow
+    assert '"/amos fix": "fix"' in workflow
     assert "@amosclaud explain" not in workflow
     assert "@amosclaud scan" not in workflow
     assert "@amosclaud fix" not in workflow
+
+
+def test_pull_request_chat_is_visible_and_fail_closed():
+    workflow = (
+        ROOT / ".github" / "workflows" / "pull-request-chat-group.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Acknowledge Repository Doctor command" in workflow
+    assert "Report Repository Doctor workflow failure" in workflow
+    assert "No repair success is claimed" in workflow
+    assert "Repository tests were not cancelled or replaced" in workflow
     assert "trusted/.github/scripts/agent_chat.py pr" in workflow
     assert "persist-credentials: false" in workflow
+    assert "pull_request_target" not in workflow
+    assert "secrets." not in workflow
