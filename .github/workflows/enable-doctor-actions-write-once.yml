@@ -22,7 +22,7 @@ jobs:
           ref: fix/repository-doctor-active-bot-route
           fetch-depth: 0
 
-      - name: Grant the existing bot bounded workflow dispatch permission
+      - name: Grant the active bot bounded workflow dispatch permission
         run: |
           set -euo pipefail
           python - <<'PY'
