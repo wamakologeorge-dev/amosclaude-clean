@@ -8,6 +8,18 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _https_hostnames(source: str) -> set[str]:
+    hostnames: set[str] = set()
+    for token in source.split():
+        candidate = token.strip("'\",()[]{}")
+        if not candidate.startswith("https://"):
+            continue
+        hostname = (urlparse(candidate).hostname or "").lower()
+        if hostname:
+            hostnames.add(hostname)
+    return hostnames
+
+
 def test_runtime_mounts_verified_instant_payment_router() -> None:
     main = read("amoscloud_ai/main.py")
     assert "instant_payments," in main
@@ -29,17 +41,12 @@ def test_plan_page_offers_provider_verified_cash_app_and_bitcoin() -> None:
 def test_square_csp_and_production_configuration_are_documented() -> None:
     security = read("amoscloud_ai/security.py")
     example = read(".env.production.example")
-    assert "https://web.squarecdn.com" in security
-    assert "https://sandbox.web.squarecdn.com" in security
-    https_urls = [
-        token.strip('\'",()[]{}')
-        for token in security.split()
-        if token.startswith("https://")
-    ]
-    assert any(
-        (urlparse(url).hostname or "") == "pci-connect.squareup.com"
-        for url in https_urls
-    )
+    square_hosts = _https_hostnames(security)
+    assert {
+        "web.squarecdn.com",
+        "sandbox.web.squarecdn.com",
+        "pci-connect.squareup.com",
+    } <= square_hosts
     for variable in (
         "AMOSCLAUD_INSTANT_PRICE_CENTS=1500",
         "AMOSCLAUD_INSTANT_ACCESS_DAYS=30",
