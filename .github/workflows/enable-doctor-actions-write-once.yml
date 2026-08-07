@@ -1,0 +1,49 @@
+name: Enable Doctor Actions Write Once
+
+on:
+  push:
+    branches:
+      - fix/repository-doctor-active-bot-route
+    paths:
+      - .github/workflows/enable-doctor-actions-write-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out exact repair branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/repository-doctor-active-bot-route
+          fetch-depth: 0
+
+      - name: Grant the existing bot bounded workflow dispatch permission
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/amosclaud-bot.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '  actions: read\n'
+          new = '  actions: write\n'
+          if old not in text:
+              raise SystemExit('Expected actions: read permission was not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git rm .github/workflows/enable-doctor-actions-write-once.yml
+
+      - name: Commit permission update and remove temporary workflow
+        run: |
+          set -euo pipefail
+          git config user.name 'amosclaud-actions[bot]'
+          git config user.email 'amosclaud-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/amosclaud-bot.yml
+          git diff --cached --check
+          git commit -m 'ci: allow bounded Repository Doctor workflow dispatch'
+          git push origin HEAD:fix/repository-doctor-active-bot-route
