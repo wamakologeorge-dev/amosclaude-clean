@@ -28,6 +28,8 @@
   const passkeysAvailable = Boolean(
     window.isSecureContext && window.PublicKeyCredential && navigator.credentials
   );
+  const passkeyHttpsMessage =
+    'Passkey sign-in requires HTTPS. Password sign-in remains available.';
   let qrChallenge = '';
   let qrBrowserToken = '';
   let qrTimer = null;
@@ -250,7 +252,10 @@
     event.preventDefault();
     if (!registerForm.reportValidity()) return;
     if (!passkeysAvailable) {
-      show('Secure account creation requires HTTPS and device confirmation.', 'error');
+      show(
+        `${passkeyHttpsMessage} Secure account creation also requires HTTPS and device confirmation.`,
+        'error'
+      );
       return;
     }
     registerButton.disabled = true;
