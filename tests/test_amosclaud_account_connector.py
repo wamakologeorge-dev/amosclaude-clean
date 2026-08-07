@@ -65,9 +65,7 @@ def test_default_scopes_are_full_for_admin_and_bounded_for_members():
 
 
 def test_connector_gateway_supports_full_read_and_write_routes():
-    assert normalize_platform_path("/api/v1/repositories", write=False) == (
-        "/api/v1/repositories"
-    )
+    assert normalize_platform_path("/api/v1/repositories", write=False) == ("/api/v1/repositories")
     assert normalize_platform_path("api/v1/tasks", write=True) == "/api/v1/tasks"
     assert required_scope("GET", "/api/v1/repositories") == "repositories:read"
     assert required_scope("POST", "/api/v1/repositories") == "repositories:write"
