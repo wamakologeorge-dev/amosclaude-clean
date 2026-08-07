@@ -44,8 +44,16 @@
     return String(value || '').trim().toLowerCase();
   }
 
-  function address(value) {
-    return `${username(value)}@amosclaud.com`;
+  function accountAddress(value) {
+    const normalized = username(value);
+    return normalized.includes('@') ? normalized : `${normalized}@amosclaud.com`;
+  }
+
+  function qrUsername(value) {
+    const normalized = username(value);
+    if (!normalized.includes('@')) return normalized;
+    const suffix = '@amosclaud.com';
+    return normalized.endsWith(suffix) ? normalized.slice(0, -suffix.length) : '';
   }
 
   async function request(url, options = {}) {
@@ -166,9 +174,9 @@
   }
 
   async function createQrLogin() {
-    const requestedUsername = username(loginUsername.value);
-    if (!requestedUsername || !loginUsername.reportValidity()) {
-      show('Enter your Amosclaud username first.', 'error');
+    const requestedUsername = qrUsername(loginUsername.value);
+    if (!requestedUsername) {
+      show('QR sign-in requires your Amosclaud username, not a Gmail address.', 'error');
       loginUsername.focus();
       return;
     }
@@ -205,19 +213,24 @@
     event.preventDefault();
     if (!passwordForm.reportValidity()) return;
     passwordButton.disabled = true;
-    show('Checking your username and password…');
+    show('Checking your account and password…');
     try {
       await request('/api/v1/auth/login', {
         method: 'POST',
         body: JSON.stringify({
-          email: address(loginUsername.value),
+          email: accountAddress(loginUsername.value),
           password: loginPassword.value,
         }),
       });
       await verifySession();
       openWorkspace();
     } catch (error) {
-      show(error.status === 401 ? 'Invalid username or password' : error.message, 'error');
+      show(
+        error.status === 401
+          ? 'Invalid username, email, or password'
+          : error.message,
+        'error'
+      );
     } finally {
       if (!navigating) passwordButton.disabled = false;
     }
@@ -226,13 +239,18 @@
   qrForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (!qrForm.reportValidity() || !qrChallenge || !qrBrowserToken) return;
+    const requestedUsername = qrUsername(loginUsername.value);
+    if (!requestedUsername) {
+      show('QR sign-in requires your Amosclaud username.', 'error');
+      return;
+    }
     qrVerifyButton.disabled = true;
     show('Verifying the one-time code…');
     try {
       await request('/api/v1/auth/login/qr/verify', {
         method: 'POST',
         body: JSON.stringify({
-          username: username(loginUsername.value),
+          username: requestedUsername,
           challenge: qrChallenge,
           browser_token: qrBrowserToken,
           code: qrCode.value.trim(),

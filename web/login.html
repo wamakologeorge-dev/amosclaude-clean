@@ -18,13 +18,13 @@
         <div class="brand-mark" aria-hidden="true">A</div>
         <div>
           <p class="eyebrow">AMOSCLAUD</p>
-          <p class="brand-note">Secure username access</p>
+          <p class="brand-note">Secure account access</p>
         </div>
       </div>
 
       <header class="portal-heading">
         <h1 id="portal-title">Welcome to Amosclaud</h1>
-        <p>Use your username and password, or scan a one-time QR code with a trusted device.</p>
+        <p>Use your Amosclaud username or an existing owner email and password, or scan a one-time QR code with a trusted device.</p>
       </header>
 
       <div class="tabs" role="tablist" aria-label="Account access">
@@ -34,13 +34,13 @@
 
       <section id="login-panel" aria-labelledby="login-title">
         <h2 id="login-title">Sign in</h2>
-        <p class="muted">Your username identifies the account. Your password or trusted device proves it is you.</p>
+        <p class="muted">Members can use their username. Existing owner and administrator accounts can use their full email address.</p>
 
         <form id="password-login-form" autocomplete="on" novalidate>
-          <label>Username
-            <input id="login-username" name="username" autocomplete="username" inputmode="text"
-                   minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]"
-                   placeholder="yourname" autocapitalize="none" spellcheck="false" required>
+          <label>Username or owner email
+            <input id="login-username" name="account" autocomplete="username" inputmode="email"
+                   maxlength="254" placeholder="yourname or owner@gmail.com"
+                   autocapitalize="none" spellcheck="false" required>
           </label>
           <label>Password
             <input id="login-password" name="password" type="password" autocomplete="current-password" required>
@@ -53,7 +53,7 @@
 
         <section id="qr-login-panel" class="qr-panel hidden" aria-labelledby="qr-title">
           <h3 id="qr-title">Trusted-device sign in</h3>
-          <p>Scan this QR code with a device already connected to this username. The QR contains only a short-lived random challenge—not your username or password.</p>
+          <p>QR sign-in uses an Amosclaud username and a device already connected to that username. The QR contains only a short-lived random challenge—not your username or password.</p>
           <div class="qr-image-wrap">
             <img id="qr-image" class="qr-image" alt="One-time Amosclaud login QR code">
           </div>

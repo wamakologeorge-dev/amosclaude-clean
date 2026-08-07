@@ -7,15 +7,9 @@ import secrets
 import sqlite3
 from datetime import datetime, timezone
 
-from amoscloud_ai.organization_support import (
-    VERIFIED_SUPPORT_REASONS,
-    add_verified_support_time,
-    ensure_support_schema,
-    support_seconds_for_credit_amount,
-    support_time_is_active,
-)
-
-VERIFIED_PAYMENT_REASONS = VERIFIED_SUPPORT_REASONS
+# Keep payment reasons import-safe. organization_support imports the auth route
+# package, whose initializer also imports task_router and this module.
+VERIFIED_PAYMENT_REASONS = ("cash_app_payment", "bitcoin_payment")
 
 
 def now() -> str:
@@ -86,6 +80,8 @@ def api_access_is_activated(
 ) -> bool:
     """Require remaining organization-support time for customer API access."""
 
+    from amoscloud_ai.organization_support import support_time_is_active
+
     return support_time_is_active(db, user_id, is_admin=is_admin)
 
 
@@ -110,6 +106,12 @@ def credit_tokens(
     reference: str,
 ) -> bool:
     """Credit agent tokens and, for verified support, hosted working time exactly once."""
+
+    from amoscloud_ai.organization_support import (
+        add_verified_support_time,
+        ensure_support_schema,
+        support_seconds_for_credit_amount,
+    )
 
     if amount <= 0:
         raise ValueError("Token credit amount must be positive")
