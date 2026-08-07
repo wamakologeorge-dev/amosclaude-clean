@@ -7,7 +7,9 @@ on:
       - .github/scripts/amosclaud_repair_verify.py
       - .github/workflows/**
       - amoscloud_ai/scan_bug.py
+      - scripts/ci/verify_amosclaud_ecosystem.py
       - tests/test_agent_chat_controller.py
+      - tests/test_amosclaud_ecosystem_contract.py
       - tests/test_scan_bug.py
   push:
     branches: [main]
@@ -16,7 +18,9 @@ on:
       - .github/scripts/amosclaud_repair_verify.py
       - .github/workflows/**
       - amoscloud_ai/scan_bug.py
+      - scripts/ci/verify_amosclaud_ecosystem.py
       - tests/test_agent_chat_controller.py
+      - tests/test_amosclaud_ecosystem_contract.py
       - tests/test_scan_bug.py
 
 permissions:
@@ -48,13 +52,15 @@ jobs:
             'PyYAML>=6,<7' \
             'python-dotenv>=1,<2'
 
-      - name: Verify Agent Chat and Scan Bug formatting
+      - name: Verify Doctor, Scan Bug, and ecosystem formatting
         run: |
           black --check \
             .github/scripts/agent_chat.py \
             .github/scripts/amosclaud_repair_verify.py \
             amoscloud_ai/scan_bug.py \
+            scripts/ci/verify_amosclaud_ecosystem.py \
             tests/test_agent_chat_controller.py \
+            tests/test_amosclaud_ecosystem_contract.py \
             tests/test_scan_bug.py
 
       - name: Compile trusted Python controllers
@@ -62,10 +68,12 @@ jobs:
           python -m py_compile \
             .github/scripts/agent_chat.py \
             .github/scripts/amosclaud_repair_verify.py \
-            amoscloud_ai/scan_bug.py
+            amoscloud_ai/scan_bug.py \
+            scripts/ci/verify_amosclaud_ecosystem.py
 
-      - name: Run focused Agent Chat and Scan Bug tests
+      - name: Run focused Doctor, Scan Bug, and ecosystem tests
         run: |
           python -m pytest -q \
             tests/test_agent_chat_controller.py \
+            tests/test_amosclaud_ecosystem_contract.py \
             tests/test_scan_bug.py
