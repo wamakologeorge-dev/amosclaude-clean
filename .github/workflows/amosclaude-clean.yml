@@ -45,7 +45,7 @@ jobs:
 
       - name: Verify Agent Chat and Scan Bug formatting
         run: |
-          black --check \
+          black --check --diff \
             .github/scripts/agent_chat.py \
             .github/scripts/amosclaud_repair_verify.py \
             amoscloud_ai/scan_bug.py \
