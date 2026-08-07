@@ -26,12 +26,16 @@ def normalize_platform_path(path: str, *, write: bool) -> str:
     if any(part == ".." for part in cleaned.split("/")):
         raise ConnectorGatewayError("Parent-path traversal is not allowed")
     if cleaned.startswith("/connectors/amosclaud/"):
-        raise ConnectorGatewayError("The connector cannot recursively call its own OAuth or MCP paths")
+        raise ConnectorGatewayError(
+            "The connector cannot recursively call its own OAuth or MCP paths"
+        )
     if write:
         if not cleaned.startswith("/api/v1/"):
             raise ConnectorGatewayError("Write actions must target an /api/v1/ Amosclaud endpoint")
     elif cleaned not in PUBLIC_READ_PATHS and not cleaned.startswith("/api/v1/"):
-        raise ConnectorGatewayError("Read actions must target /api/v1/, /health, /ready, or OpenAPI")
+        raise ConnectorGatewayError(
+            "Read actions must target /api/v1/, /health, /ready, or OpenAPI"
+        )
     return cleaned
 
 
@@ -69,9 +73,7 @@ async def request_as_user(
 
     normalized_method = method.upper()
     if normalized_method not in ALLOWED_METHODS:
-        raise ConnectorGatewayError(
-            f"method must be one of: {', '.join(sorted(ALLOWED_METHODS))}"
-        )
+        raise ConnectorGatewayError(f"method must be one of: {', '.join(sorted(ALLOWED_METHODS))}")
     normalized_path = normalize_platform_path(
         path,
         write=normalized_method in WRITE_METHODS,
