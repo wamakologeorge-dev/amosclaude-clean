@@ -1,5 +1,6 @@
 name: Amosclaud Pull Request Chat Group
 
+# Commands are authorized and routed inside the job so failures remain visible.
 on:
   issue_comment:
     types: [created]
