@@ -7,19 +7,19 @@
   <title>Plans · Amosclaud</title>
   <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
   <style>
-    :root{color-scheme:dark;--bg:#070b16;--card:#11182b;--line:#27324a;--text:#f7f9ff;--muted:#a9b4cb;--brand:#7c8cff;--good:#55d6a3}
+    :root{color-scheme:dark;--bg:#070b16;--card:#11182b;--line:#27324a;--text:#f7f9ff;--muted:#a9b4cb;--brand:#7c8cff;--good:#55d6a3;--warn:#ffd166}
     *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#273365 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.5 Inter,system-ui,sans-serif}
     a{color:inherit}.shell{max-width:1100px;margin:auto;padding:24px}.nav{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;gap:10px;align-items:center;text-decoration:none;font-weight:800}.mark{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--brand)}
     .hero{text-align:center;padding:74px 10px 42px}.eyebrow{color:#9aa8ff;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.hero h1{font-size:clamp(36px,6vw,64px);line-height:1.05;margin:12px 0}.hero p{max-width:720px;margin:auto;color:var(--muted);font-size:19px}
     .plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.card{background:linear-gradient(160deg,#141d34,#0e1527);border:1px solid var(--line);border-radius:24px;padding:30px;position:relative}.card.full{border-color:#7182ff;box-shadow:0 20px 80px #4050d72b}.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#2a3765;color:#cdd4ff;font-size:13px;font-weight:700}
-    h2{font-size:28px;margin:18px 0 5px}.description{color:var(--muted);min-height:48px}.features{list-style:none;padding:0;margin:24px 0}.features li{padding:8px 0}.features li:before{content:"✓";color:var(--good);font-weight:900;margin-right:10px}.actions{display:grid;gap:10px}.button{border:1px solid var(--line);border-radius:12px;padding:13px 16px;background:#19233c;color:var(--text);font:inherit;font-weight:750;cursor:pointer;text-decoration:none;text-align:center}.button.primary{background:var(--brand);border-color:var(--brand)}.button:disabled{opacity:.5;cursor:not-allowed}
-    .activation{max-width:720px;margin:28px auto;background:#0e1527;border:1px solid var(--line);border-radius:18px;padding:22px}.activation form{display:flex;gap:10px}.activation input{flex:1;min-width:0;background:#080d19;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font:inherit}.status{text-align:center;color:var(--muted);min-height:24px;margin:20px}.security{text-align:center;color:var(--muted);font-size:14px;padding:15px 0 45px}
-    @media(max-width:760px){.plans{grid-template-columns:1fr}.hero{padding-top:50px}.activation form{flex-direction:column}}
+    h2{font-size:28px;margin:18px 0 5px}.description{color:var(--muted);min-height:48px}.features{list-style:none;padding:0;margin:24px 0}.features li{padding:8px 0}.features li:before{content:"✓";color:var(--good);font-weight:900;margin-right:10px}.actions{display:grid;gap:10px}.button{border:1px solid var(--line);border-radius:12px;padding:13px 16px;background:#19233c;color:var(--text);font:inherit;font-weight:750;cursor:pointer;text-decoration:none;text-align:center}.button.primary{background:var(--brand);border-color:var(--brand)}.button.bitcoin{background:#f7931a;border-color:#f7931a;color:#141414}.button:disabled{opacity:.5;cursor:not-allowed}
+    .activation{max-width:900px;margin:28px auto;background:#0e1527;border:1px solid var(--line);border-radius:18px;padding:22px}.activation form{display:flex;gap:10px}.activation input{flex:1;min-width:0;background:#080d19;border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font:inherit}.payment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px}.payment-method{background:#0a1020;border:1px solid var(--line);border-radius:16px;padding:18px}.payment-method h3{margin:0 0 8px;font-size:22px}.payment-method p{color:var(--muted)}#cash-app-pay{min-height:48px}.payment-note{color:var(--muted);font-size:14px}.timer{color:var(--good);font-weight:800;text-align:center;margin-top:18px}.status{text-align:center;color:var(--muted);min-height:24px;margin:20px}.security{text-align:center;color:var(--muted);font-size:14px;padding:15px 0 45px}.hidden{display:none!important}
+    @media(max-width:760px){.plans,.payment-grid{grid-template-columns:1fr}.hero{padding-top:50px}.activation form{flex-direction:column}}
   </style>
 </head>
 <body>
   <div class="shell">
-    <nav class="nav"><a class="brand" href="/"><span class="mark">A</span>Amosclaud</a><a href="/">Return to workspace</a></nav>
+    <nav class="nav"><a class="brand" href="/"><span class="mark">A</span>Amosclaud</a><a href="/cloud/agent">Return to workspace</a></nav>
     <header class="hero">
       <div class="eyebrow">Self-hosted agent provider</div>
       <h1>Start locally. Unlock the full platform.</h1>
@@ -31,7 +31,7 @@
           <span class="badge">Included</span><h2>Community</h2>
           <p class="description">The folder-first foundation for personal self-hosted projects.</p>
           <ul id="community-features" class="features"><li>Self-hosted folder server</li><li>Local repositories and storage</li><li>Bring your own model runtime</li></ul>
-          <a class="button" href="/">Continue with Community</a>
+          <a class="button" href="/cloud/agent">Continue with Community</a>
         </article>
         <article class="card full">
           <span class="badge">Complete platform</span><h2>Full Package</h2>
@@ -44,6 +44,28 @@
           </div>
         </article>
       </section>
+
+      <section class="activation" aria-labelledby="instant-title">
+        <span class="badge">Instant timed access</span>
+        <h2 id="instant-title">Pay $<span id="instant-price">15.00</span> and open Amosclaud automatically</h2>
+        <p class="description">A verified Cash App Pay or Bitcoin payment unlocks the Full Package for <strong id="access-days">30</strong> days. Amosclaud opens the agent workspace after confirmation and locks the package automatically when time expires.</p>
+        <div class="payment-grid">
+          <article id="cash-app-method" class="payment-method">
+            <h3>Cash App Pay</h3>
+            <p>Use the official Cash App Pay checkout. The payment is matched to your signed-in Amosclaud account.</p>
+            <div id="cash-app-pay"></div>
+            <p id="cash-app-note" class="payment-note">Preparing secure Cash App Pay…</p>
+          </article>
+          <article id="bitcoin-method" class="payment-method">
+            <h3>Bitcoin</h3>
+            <p>Open a unique BTCPay invoice. Access activates only after the invoice is settled.</p>
+            <button id="bitcoin-button" class="button bitcoin" type="button">Pay $15.00 in Bitcoin</button>
+            <p id="bitcoin-note" class="payment-note">The invoice amount is locked to USD at checkout.</p>
+          </article>
+        </div>
+        <p id="access-timer" class="timer" aria-live="polite"></p>
+      </section>
+
       <section class="activation">
         <h2>Already have a license?</h2>
         <p class="description">Activate a Full Package key issued directly by Amosclaud.</p>
@@ -51,39 +73,9 @@
       </section>
       <p style="text-align:center"><a class="button" href="/api-access">Manage Amosclaud API keys and agent credits</a></p>
       <p id="status" class="status" role="status" aria-live="polite"></p>
-      <p class="security">Payments are handled by Stripe. Amosclaud never stores card numbers. API keys and local project data remain on your server.</p>
+      <p class="security">Cash App Pay is processed by Square. Bitcoin is confirmed by BTCPay Server. Amosclaud unlocks access only from signed provider responses and verified webhooks; screenshots, transaction text, and static payment links cannot unlock a package.</p>
     </main>
   </div>
-<script>
-const statusNode=document.querySelector("#status");
-const say=(message,error=false)=>{statusNode.textContent=message;statusNode.style.color=error?"#ff9ca8":"#a9b4cb"};
-async function post(path,body){
-  const response=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
-  const payload=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(typeof payload.detail==="string"?payload.detail:"Request could not be completed");
-  return payload;
-}
-document.querySelectorAll("[data-checkout]").forEach(button=>button.addEventListener("click",async()=>{
-  button.disabled=true;say("Opening secure checkout…");
-  try{const result=await post("/api/v1/billing/checkout",{interval:button.dataset.checkout});location.href=result.url}
-  catch(error){say(error.message,true);button.disabled=false}
-}));
-document.querySelector("#manage-button").addEventListener("click",async()=>{
-  try{const result=await post("/api/v1/billing/portal");location.href=result.url}catch(error){say(error.message,true)}
-});
-document.querySelector("#license-form").addEventListener("submit",async event=>{
-  event.preventDefault();say("Activating license…");
-  try{const result=await post("/api/v1/billing/license/activate",{key:document.querySelector("#license-key").value});say("Full Package activated.");showPlan(result)}
-  catch(error){say(error.message,true)}
-});
-function showPlan(plan){
-  if(plan.plan==="full"){say("Full Package is active.");document.querySelector("#manage-button").hidden=plan.source!=="stripe"}
-}
-(async()=>{
-  const query=new URLSearchParams(location.search);
-  if(query.get("checkout")==="success")say("Payment received. Waiting for secure subscription confirmation…");
-  try{const response=await fetch("/api/v1/billing/status");if(response.ok)showPlan(await response.json())}catch(_){}
-})();
-</script>
+  <script src="/static/plans.js"></script>
 </body>
 </html>
