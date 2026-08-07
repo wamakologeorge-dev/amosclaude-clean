@@ -1,0 +1,162 @@
+name: Release Amosclaud Quick v1.0.0
+
+on:
+  push:
+    branches:
+      - release/amosclaud-quick-v1.0.0
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-amosclaud-quick-v1.0.0
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish portable prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TAG: amosclaud-quick-v1.0.0
+      PRODUCT: amosclaud-quick-v1.0.0
+
+    steps:
+      - name: Check out verified main source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install focused release dependencies
+        run: python -m pip install --disable-pip-version-check 'PyYAML>=6,<7' 'pytest>=9,<10'
+
+      - name: Verify Amosclaud Quick
+        run: python -m pytest -q tests/test_developer_fastpath.py
+
+      - name: Build portable folders and launchers
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_root="$RUNNER_TEMP/$PRODUCT"
+          mkdir -p "$package_root/amoscloud_ai"
+
+          cp amoscloud_ai/__init__.py "$package_root/amoscloud_ai/__init__.py"
+          cp amoscloud_ai/developer_fastpath.py "$package_root/amoscloud_ai/developer_fastpath.py"
+          cp amoscloud_ai/quickcheck_cli.py "$package_root/amoscloud_ai/quickcheck_cli.py"
+          cp docs/DEVELOPER_FAST_PATH.md "$package_root/README.md"
+          cp LICENSE "$package_root/LICENSE"
+          cp LICENSE-COMMERCIAL.txt "$package_root/LICENSE-COMMERCIAL.txt"
+
+          printf '%s\n' 'PyYAML>=6,<7' > "$package_root/requirements.txt"
+          printf '%s\n' '1.0.0' > "$package_root/VERSION"
+
+          cat > "$package_root/run-amosclaud-quick.sh" <<'SH'
+          #!/usr/bin/env sh
+          set -eu
+          SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+          PYTHON_BIN=${PYTHON_BIN:-python3}
+          exec "$PYTHON_BIN" -m amoscloud_ai.quickcheck_cli "$@"
+          SH
+          chmod +x "$package_root/run-amosclaud-quick.sh"
+
+          cat > "$package_root/run-amosclaud-quick.bat" <<'BAT'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          if defined PYTHON_BIN (
+            "%PYTHON_BIN%" -m amoscloud_ai.quickcheck_cli %*
+          ) else (
+            py -3 -m amoscloud_ai.quickcheck_cli %*
+          )
+          exit /b %ERRORLEVEL%
+          BAT
+
+          cat > "$package_root/INSTALL.txt" <<'TXT'
+          Amosclaud Quick v1.0.0
+
+          Requirements:
+          - Python 3.11 or newer
+          - PyYAML 6.x
+
+          Install the one dependency:
+            python -m pip install -r requirements.txt
+
+          Linux or macOS:
+            ./run-amosclaud-quick.sh /path/to/repository --objective "Find the login error"
+
+          Windows:
+            run-amosclaud-quick.bat C:\path\to\repository --objective "Find the login error"
+
+          This tool runs locally. It does not require an Amosclaud account, API key,
+          language model, or network connection. It does not read protected secret files.
+          TXT
+
+          (
+            cd "$package_root"
+            python -m amoscloud_ai.quickcheck_cli "$GITHUB_WORKSPACE" \
+              --objective 'Verify the Amosclaud Quick portable release' \
+              --max-lines 12 \
+              --max-files 3 \
+              --json > smoke-test.json
+          )
+
+          cd "$RUNNER_TEMP"
+          zip -qr "$GITHUB_WORKSPACE/$PRODUCT.zip" "$PRODUCT"
+          tar -czf "$GITHUB_WORKSPACE/$PRODUCT.tar.gz" "$PRODUCT"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum "$PRODUCT.zip" "$PRODUCT.tar.gz" > "$PRODUCT-SHA256SUMS.txt"
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## Amosclaud Quick v1.0.0
+
+          This is the first scoped Amosclaud prerelease: a portable, local repository
+          inspection tool that gives developers useful results before account creation
+          or platform setup.
+
+          ### Included
+
+          - Compact repository context selected for an engineering objective.
+          - Deterministic Python, JSON, YAML, TOML, and merge-marker checks.
+          - Sensitive-file exclusion for `.env`, credentials, private keys, and secret paths.
+          - Human-readable and JSON output.
+          - Linux/macOS and Windows launchers.
+          - ZIP and `tar.gz` packages with SHA-256 checksums.
+
+          ### Trust boundary
+
+          Amosclaud Quick runs on the developer's computer. It does not require an
+          Amosclaud account, API key, hosted model, or network connection. This release
+          does not claim that the complete Amosclaud cloud platform is finished.
+          EOF
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to create a duplicate."
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            "$PRODUCT.zip" \
+            "$PRODUCT.tar.gz" \
+            "$PRODUCT-SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target main \
+            --title 'Amosclaud Quick v1.0.0' \
+            --notes-file release-notes.md \
+            --prerelease
