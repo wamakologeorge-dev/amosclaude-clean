@@ -1,0 +1,72 @@
+name: Amosclaud Workflow Policy
+
+on:
+  pull_request:
+    paths:
+      - .github/scripts/agent_chat.py
+      - .github/workflows/agent-chat.yml
+      - .github/workflows/results.yml
+      - .github/workflows/plan.yml
+      - .github/workflows/policy.yml
+      - .github/workflows/fixer.yml
+      - .github/workflows/scan.yml
+      - .github/workflows/main.yml
+      - .github/workflows/action.yml
+      - .github/workflows/Autonomous.yml
+      - .github/workflows/amosclaude-clean.yml
+      - .github/workflows/pull-request-chat-group.yml
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
+
+      - name: Validate controller and workflow syntax
+        run: |
+          set -euo pipefail
+          python -m py_compile .github/scripts/agent_chat.py
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          paths = sorted(Path('.github/workflows').glob('*.yml'))
+          selected = {
+              'agent-chat.yml', 'results.yml', 'plan.yml', 'policy.yml',
+              'fixer.yml', 'scan.yml', 'main.yml', 'action.yml',
+              'Autonomous.yml', 'amosclaude-clean.yml',
+              'pull-request-chat-group.yml',
+          }
+          for path in paths:
+              if path.name not in selected:
+                  continue
+              payload = yaml.safe_load(path.read_text(encoding='utf-8'))
+              if not isinstance(payload, dict) or 'jobs' not in payload:
+                  raise SystemExit(f'invalid workflow contract: {path}')
+              print(f'validated {path}')
+          PY
+
+      - name: Enforce one fixer and least-privilege token use
+        run: |
+          set -euo pipefail
+          test -f .github/workflows/fixer.yml
+          ! grep -R --line-number 'pull_request_target' \
+            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group}.yml
+          ! grep -R --line-number 'secrets\..*TOKEN' \
+            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group}.yml
