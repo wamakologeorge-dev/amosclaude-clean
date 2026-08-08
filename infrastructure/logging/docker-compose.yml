@@ -65,6 +65,9 @@ services:
 
   logging-dashboard:
     build: ../../apps/logging-dashboard
+    depends_on:
+      logging-api: {condition: service_started}
+      logging-query: {condition: service_started}
     ports: ["8082:80"]
 
   prometheus:

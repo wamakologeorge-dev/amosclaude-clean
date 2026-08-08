@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 import httpx
@@ -17,7 +18,7 @@ class FixeeClient:
         payload = {
             "mode": "diagnose-and-propose",
             "allow_execution": False,
-            "incident": incident,
+            "incident": json.loads(json.dumps(incident, default=str)),
             "safety": {
                 "commit": False, "push": False, "deploy": False,
                 "requires_explicit_approval": True,

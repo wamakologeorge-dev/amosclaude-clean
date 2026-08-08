@@ -28,8 +28,9 @@
 <main><div id="logs"></div></main>
 <script>
 const logs = document.querySelector('#logs'); let socket;
-const apiBase = window.LOG_QUERY_URL || 'http://localhost:8081';
-const ingestBase = window.LOG_INGEST_URL || 'ws://localhost:8080';
+const apiBase = '/query';
+const wsScheme = location.protocol === 'https:' ? 'wss' : 'ws';
+const ingestBase = `${wsScheme}://${location.host}/ingest`;
 function render(event) {
   const row=document.createElement('div'); row.className=`row ${event.level||''}`;
   row.textContent=`${event.timestamp||''}  ${event.level||''}  ${event.service||''}  ${event.message||''}`;
