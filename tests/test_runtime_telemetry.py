@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from amoscloud_ai.api.routes import auth, execution_nodes, runtime_telemetry
+from amoscloud_ai.api.routes import auth, execution_nodes
 from amoscloud_ai.api.routes import pipeline_cooperation as cooperation
+from amoscloud_ai.api.routes import runtime_telemetry
 
 
 @pytest.fixture
