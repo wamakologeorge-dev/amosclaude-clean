@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi.routing import APIRoute
 from starlette.routing import Mount
 
-from amoscloud_ai.production_app import app
+from amoscloud_ai.production_app import _mode_skills, _required_skills, app
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,3 +56,40 @@ def test_complete_connected_platform_is_mounted_after_key_routes() -> None:
     )
     assert key_route_indexes
     assert max(key_route_indexes) < platform_mount_index
+
+
+def test_agent_modes_map_to_selected_key_skills() -> None:
+    assert _mode_skills("autonomous-check") == {"answer", "inspect"}
+    assert _mode_skills("build", "Create the feature") == {"build"}
+    assert _mode_skills("build", "Run and verify tests") == {"test", "build"}
+    assert _mode_skills("fix", "Repair the bug") == {"fix"}
+    assert _mode_skills("deploy") == {"deploy"}
+    assert _mode_skills("monitor") == {"monitor"}
+
+
+def test_protected_routes_require_the_expected_scopes() -> None:
+    assert _required_skills("/api/v1/copilot/plan", "POST", {}) == {"plan"}
+    assert _required_skills(
+        "/api/v1/agent/run",
+        "POST",
+        {"mode": "fix", "objective": "Fix the failing API test"},
+    ) == {"test", "fix"}
+    assert _required_skills(
+        "/api/v1/copilot/run",
+        "POST",
+        {
+            "task": "Deploy the verified release",
+            "requested_agent": "amosclaud-autonomous",
+            "context": {"branch": "main"},
+        },
+    ) == {"deploy"}
+    assert _required_skills(
+        "/api/v1/vscode-terminal/repositories",
+        "GET",
+        {},
+    ) == {"inspect"}
+    assert _required_skills(
+        "/api/v1/vscode-terminal/repositories/7/start",
+        "POST",
+        {},
+    ) == {"build"}
