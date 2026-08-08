@@ -119,7 +119,7 @@ The diagram reflects the implemented contract: pipeline creation, worker and nod
 
 ## Project status
 
-Amosclaud is under active development. `main` is the only canonical product and deployment branch. Feature branches are temporary review lanes, and changes are not part of the product until required checks pass and the repository owner merges them.
+Amosclaud is under active development. `main` is the only canonical product and deployment branch. Feature branches are temporary review lanes, and changes are not part of the product until required checks pass and the repository owner merges them. The badges above intentionally report `main`, so a newly added workflow badge becomes authoritative only after its workflow file reaches `main` and runs there.
 
 The small `amosclaud-quick` command remains the safest first experience: it performs deterministic local inspection and never claims that an unfinished hosted capability is available.
 
