@@ -72,7 +72,7 @@ mkdir -p \
     "${AMOSCLAUD_DASHBOARD_DATA:-/data/dashboard}" \
     "${AMOSCLAUD_PREVIEW_DATA:-/data/previews}"
 
-exec uvicorn amoscloud_ai.main:app \
+exec /app/docker/otel-exec.sh uvicorn amoscloud_ai.main:app \
     --host "${HOST:-0.0.0.0}" \
     --port "${PORT:-8000}" \
     --workers "${WORKERS:-1}" \

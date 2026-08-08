@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b14">
+  <title>Control Plane · Amosclaud</title>
+  <link rel="stylesheet" href="/static/control-plane.css">
+  <link rel="stylesheet" href="/static/control-plane-runtime.css">
+  <link rel="stylesheet" href="/static/control-plane-telemetry.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/cloud/agent">Amosclaud</a>
+    <label class="project-picker">
+      <span>Project</span>
+      <select id="repository-select"><option value="">Platform workspace</option></select>
+    </label>
+    <label class="environment-picker">
+      <span>Environment</span>
+      <select id="environment-select">
+        <option value="development">Development</option>
+        <option value="preview">Preview</option>
+        <option value="staging">Staging</option>
+        <option value="production">Production</option>
+      </select>
+    </label>
+    <nav aria-label="Control plane navigation">
+      <a href="/command-center">Command Center</a>
+      <a href="/repositories">Repositories</a>
+      <a href="/cloud/agent">Agent</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Amosclaud platform modules">
+      <div class="sidebar-heading">
+        <span>Amosclaud platform</span>
+        <strong>Control Plane</strong>
+      </div>
+      <ul id="module-list" class="module-list">
+        <li class="loading">Loading modules…</li>
+      </ul>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Pipeline cooperation</p>
+        <h1>One request. Cooperating services. One verified result.</h1>
+        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, approvals, execution nodes, Java pods, telemetry, and PipeFail graphics share one durable Amosclaud contract.</p>
+        <div id="notice" class="notice" role="status" aria-live="polite">Loading the control plane…</div>
+      </header>
+
+      <section class="summary-grid" aria-label="Pipeline cooperation summary">
+        <article><span>Active pipelines</span><strong id="active-pipelines">0</strong><small>Queued, running, or verifying</small></article>
+        <article><span>Pending approvals</span><strong id="pending-approvals">0</strong><small>Protected writes and deployments</small></article>
+        <article><span>Ready workers</span><strong id="ready-workers">0</strong><small>Agents and connected runners</small></article>
+        <article><span>Queued tasks</span><strong id="queued-tasks">0</strong><small>Waiting for a matching capability</small></article>
+      </section>
+
+      <section class="runtime-summary" aria-label="Execution runtime summary">
+        <article><span>Ready nodes</span><strong id="runtime-ready-nodes">0</strong></article>
+        <article><span>Active leases</span><strong id="runtime-active-leases">0</strong></article>
+        <article><span>Running Java pods</span><strong id="runtime-running-pods">0</strong></article>
+        <article><span>Waiting for node</span><strong id="runtime-waiting-pods">0</strong></article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel pipeline-composer">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Start work</p><h2>Create cooperation pipeline</h2></div>
+            <span class="contract-badge">durable · isolated · verified</span>
+          </div>
+          <form id="pipeline-form">
+            <label>Objective
+              <textarea id="pipeline-objective" required maxlength="12000" placeholder="Inspect the selected repository, fix the failure, run tests, and return verification evidence."></textarea>
+            </label>
+            <div class="form-grid">
+              <label>Mode
+                <select id="pipeline-mode">
+                  <option value="inspect">Inspect</option>
+                  <option value="build">Build</option>
+                  <option value="fix">Fix and verify</option>
+                  <option value="deploy">Deploy</option>
+                  <option value="monitor">Monitor</option>
+                </select>
+              </label>
+              <label>Branch
+                <input id="pipeline-branch" value="main" maxlength="200">
+              </label>
+            </div>
+            <label class="approval-toggle">
+              <input id="pipeline-write-approval" type="checkbox">
+              <span>Authorize repository-writing stages now. Leave off to require an approval gate.</span>
+            </label>
+            <button type="submit">Create pipeline</button>
+          </form>
+        </article>
+
+        <article class="panel worker-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Capability workers</p><h2>Cooperating workers</h2></div></div>
+          <form id="worker-form" class="worker-form">
+            <label>Worker name<input id="worker-name" required maxlength="200" placeholder="Local engineering runner"></label>
+            <label>Capabilities<input id="worker-capabilities" required value="context,repository-read,planning,repository-write,testing,security,verification" maxlength="1000"></label>
+            <label>Capacity<input id="worker-capacity" type="number" min="1" max="100" value="1"></label>
+            <button type="submit">Register worker</button>
+          </form>
+          <div id="worker-list" class="worker-list">No workers registered.</div>
+        </article>
+      </section>
+
+      <section class="panel runtime-fabric" aria-label="Execution node fabric">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Shared power and resources</p><h2>Execution nodes</h2></div>
+          <span class="contract-badge">leases · failover · PipeFail</span>
+        </div>
+        <p class="runtime-description">Nodes keep their own specialized tools but lend bounded CPU, memory, disk, GPU, and runtime capability to the same cooperation pipeline.</p>
+        <form id="runtime-node-form" class="runtime-node-form">
+          <label>Node name<input id="runtime-node-name" required maxlength="200" placeholder="Java node 1"></label>
+          <label>Endpoint<input id="runtime-node-endpoint" maxlength="2000" placeholder="https://runner.internal"></label>
+          <label>Capabilities<input id="runtime-node-capabilities" required value="java-pod,maven,gradle,javac" maxlength="1000"></label>
+          <label>CPU millicores<input id="runtime-node-cpu" type="number" min="100" value="4000"></label>
+          <label>Memory MB<input id="runtime-node-memory" type="number" min="256" value="8192"></label>
+          <label>Disk MB<input id="runtime-node-disk" type="number" min="512" value="51200"></label>
+          <button type="submit">Register execution node</button>
+        </form>
+        <p id="runtime-notice" class="runtime-notice" role="status" aria-live="polite">Loading execution nodes…</p>
+        <div id="runtime-node-list" class="runtime-node-list"></div>
+      </section>
+
+      <section class="panel telemetry-layout" aria-label="Runtime telemetry layouts">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Telemetry data layout</p><h2>Node proposer and all PipeFail</h2></div>
+          <span class="contract-badge">truthful data · ranked fit · pipeline graphics</span>
+        </div>
+        <p id="telemetry-notice" class="runtime-notice" role="status" aria-live="polite">Loading telemetry…</p>
+        <div class="telemetry-grid">
+          <article class="telemetry-card">
+            <div class="telemetry-section-heading">
+              <div><p class="eyebrow">node_proposer</p><h3>Propose the best node</h3></div>
+            </div>
+            <p class="telemetry-description">The proposer ranks every node by live heartbeat, Java capability, tool support, available resources, and projected utilization. Scheduling still revalidates capacity.</p>
+            <form id="node-proposer-form" class="node-proposer-form">
+              <label class="wide">Pipeline ID
+                <input id="node-proposer-pipeline" list="telemetry-pipeline-options" maxlength="200" placeholder="Optional pipeline ID">
+                <datalist id="telemetry-pipeline-options"></datalist>
+              </label>
+              <label>JDK
+                <select id="node-proposer-jdk"><option>17</option><option selected>21</option><option>25</option></select>
+              </label>
+              <label>Build tool
+                <select id="node-proposer-tool"><option value="auto">Auto</option><option value="maven">Maven</option><option value="gradle">Gradle</option><option value="javac">javac</option></select>
+              </label>
+              <label>CPU millicores<input id="node-proposer-cpu" type="number" min="100" value="1000"></label>
+              <label>Memory MB<input id="node-proposer-memory" type="number" min="256" value="2048"></label>
+              <label>Disk MB<input id="node-proposer-disk" type="number" min="512" value="4096"></label>
+              <label>GPU units<input id="node-proposer-gpu" type="number" min="0" value="0"></label>
+              <button type="submit">Calculate node proposal</button>
+            </form>
+            <div id="node-proposal-list" class="node-proposal-list"><p class="telemetry-empty">Run the proposer to see ranked nodes.</p></div>
+          </article>
+
+          <article class="telemetry-card">
+            <div class="telemetry-section-heading">
+              <div><p class="eyebrow">all pipefail</p><h3>PipeFail telemetry across pipelines</h3></div>
+            </div>
+            <div class="pipefail-summary-grid">
+              <article><span>Total events</span><strong id="pipefail-total">0</strong></article>
+              <article><span>Recovered</span><strong id="pipefail-recovered">0</strong></article>
+              <article><span>Waiting</span><strong id="pipefail-waiting">0</strong></article>
+              <article><span>Terminal</span><strong id="pipefail-terminal">0</strong></article>
+            </div>
+            <div class="telemetry-charts">
+              <section class="telemetry-chart"><h4>Failure kind</h4><div id="pipefail-kind-chart"></div></section>
+              <section class="telemetry-chart"><h4>Recovery action</h4><div id="pipefail-action-chart"></div></section>
+            </div>
+            <section><h4>Failure timeline</h4><div id="pipefail-timeline" class="telemetry-timeline"></div></section>
+            <section><h4>PipeFail / pipeline graphics</h4><div id="pipefail-pipeline-list" class="pipefail-pipeline-list"></div></section>
+            <details><summary>Latest PipeFail events</summary><div id="pipefail-event-list" class="pipefail-event-list"></div></details>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Execution history</p><h2>Pipeline runs</h2></div>
+          <button id="refresh" class="secondary" type="button">Refresh</button>
+        </div>
+        <div id="pipeline-list" class="pipeline-list">No cooperation pipelines yet.</div>
+      </section>
+    </main>
+  </div>
+
+  <template id="pipeline-template">
+    <article class="pipeline-card">
+      <header>
+        <div><span class="pipeline-mode"></span><h3 class="pipeline-objective"></h3></div>
+        <span class="pipeline-state"></span>
+      </header>
+      <dl class="pipeline-meta"></dl>
+      <ol class="task-list"></ol>
+      <div class="pipeline-actions"></div>
+      <section class="pipeline-runtime" aria-label="Pipeline Java runtime">
+        <div class="pipeline-runtime-actions"></div>
+        <div class="pipeline-java-pods">Loading Java pods…</div>
+        <div class="pipeline-pipefail-graphics">Loading PipeFail pipeline graphics…</div>
+      </section>
+      <details><summary>Artifacts and evidence</summary><div class="artifact-list"></div></details>
+    </article>
+  </template>
+
+  <script src="/static/control-plane.js"></script>
+  <script src="/static/control-plane-runtime.js"></script>
+  <script src="/static/control-plane-telemetry.js"></script>
+</body>
+</html>

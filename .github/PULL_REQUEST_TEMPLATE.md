@@ -1,40 +1,57 @@
-## Summary
+## Problem
 
-Describe the problem and the completed solution.
+<!-- What user, repository, runtime, or maintenance problem does this solve? -->
 
-## Type of change
+## Solution
 
-- [ ] Bug fix
-- [ ] Feature
-- [ ] Repository-platform improvement
-- [ ] Autonomous runtime change
-- [ ] Documentation
-- [ ] Security or infrastructure
+<!-- Describe the smallest complete implementation and why this component owns it. -->
 
-## Evidence
+## Ecosystem integration
 
-- [ ] Tests added or updated
-- [ ] Local tests pass
-- [ ] CI checks pass
-- [ ] Screenshots attached for interface changes
-- [ ] Real output or logs attached for operational changes
+<!-- Explain how current services, legacy applications, GitHub-native applications, pipelines, workers, nodes, artifacts, and PipeFail remain connected. -->
 
-## Repository and runtime safety
+- Affected areas:
+- Existing behavior preserved:
+- New or changed contracts:
+- Files added and why each exists:
 
-- [ ] Manual repository controls remain available
-- [ ] Autonomous use is explicit or correctly routed
-- [ ] No model provider is required for core operation
-- [ ] No secrets or credentials are included
-- [ ] Errors and task states are reported truthfully
+## Verification evidence
 
-## Testing performed
+<!-- Include exact commands and results. Attach sanitized logs or screenshots when useful. -->
 
-List exact commands and results.
+```text
+command:
+result:
+```
 
-## Deployment or migration notes
+- [ ] Focused tests pass
+- [ ] Complete relevant test suite passes
+- [ ] Formatting, import order, and lint pass
+- [ ] Build or package validation passes when applicable
+- [ ] UI changes include sanitized screenshots or recordings
+- [ ] Failure and recovery behavior was exercised when applicable
 
-Describe required variables, migrations, compatibility concerns, or state `None`.
+## Security and approvals
 
-## Known limitations
+- [ ] No secrets, tokens, private keys, cookies, or personal data were committed
+- [ ] User-controlled paths, URLs, commands, and identifiers are validated
+- [ ] Repository writes remain approval-controlled
+- [ ] Merge and production deployment remain owner-controlled
+- [ ] Runtime resources are bounded and tenant-scoped
+- [ ] New GitHub Actions permissions are the minimum required
 
-List anything intentionally deferred.
+## Deployment and migration
+
+<!-- Environment variables, database changes, rollout order, compatibility, rollback, or “None”. -->
+
+## Documentation
+
+<!-- README, quickstart, API docs, workflow docs, diagrams, or “No documentation change”. -->
+
+## Known limitations and follow-up
+
+<!-- State anything not solved by this pull request. Do not hide blockers. -->
+
+## Suggested labels
+
+<!-- Example: area:pipeline, type:feature, size:m, priority:p2, status:needs-review -->

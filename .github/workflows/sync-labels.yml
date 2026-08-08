@@ -1,0 +1,48 @@
+name: Sync Repository Labels
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate and report changes without writing labels
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-repository-labels
+  cancel-in-progress: false
+
+jobs:
+  sync-labels:
+    name: Validate and synchronize labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Install manifest parser
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+
+      - name: Synchronize canonical labels
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          python scripts/ci/sync_github_labels.py "${args[@]}"

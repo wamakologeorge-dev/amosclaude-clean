@@ -1,0 +1,73 @@
+name: Amosclaud Native Pipeline
+
+on:
+  push:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issues:
+    types: [opened, reopened, labeled]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Cooperation pipeline mode
+        required: false
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - build
+          - fix
+          - deploy
+          - monitor
+      objective:
+        description: Optional pipeline objective
+        required: false
+        type: string
+  repository_dispatch:
+    types:
+      - amosclaud_pipeline
+      - amosclaud_inspect
+      - amosclaud_build
+      - amosclaud_fix
+      - amosclaud_deploy
+      - amosclaud_monitor
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: amosclaud-native-${{ github.repository }}-${{ github.event_name }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  route-to-cooperation-pipeline:
+    name: Route GitHub event to Amosclaud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the complete repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Build all-repository trigger evidence and route it
+        env:
+          AMOSCLAUD_PIPELINE_URL: ${{ secrets.AMOSCLAUD_PIPELINE_URL }}
+          AMOSCLAUD_GITHUB_PIPELINE_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_PIPELINE_TOKEN }}
+          AMOSCLAUD_REQUESTED_MODE: ${{ github.event.inputs.mode || github.event.client_payload.mode || '' }}
+          AMOSCLAUD_OBJECTIVE: ${{ github.event.inputs.objective || github.event.client_payload.objective || '' }}
+          AMOSCLAUD_BRIDGE_REQUIRED: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+        run: |
+          set -euo pipefail
+          python scripts/ci/amosclaud_github_native_trigger.py \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --output .amosclaud/evidence/github-native-event.json

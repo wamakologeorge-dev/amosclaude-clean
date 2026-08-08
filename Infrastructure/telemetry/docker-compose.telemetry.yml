@@ -1,0 +1,94 @@
+name: amosclaud-telemetry
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3.11.36
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:-amosclaud_telemetry}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-otel}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD for telemetry storage}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      - "127.0.0.1:8123:8123"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client --user "$${CLICKHOUSE_USER}" --password "$${CLICKHOUSE_PASSWORD}"
+          --query "SELECT 1" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - telemetry
+    security_opt:
+      - no-new-privileges:true
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    restart: unless-stopped
+    # The upstream image is scratch-based. Root is used only so the collector can
+    # initialize its named persistent queue; all Linux capabilities are dropped,
+    # the root filesystem is read-only, and no-new-privileges remains enforced.
+    user: "0:0"
+    read_only: true
+    cap_drop:
+      - ALL
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    environment:
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-amosclaud_telemetry}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-otel}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD for telemetry storage}
+      AMOSCLAUD_TELEMETRY_ENVIRONMENT: ${AMOSCLAUD_TELEMETRY_ENVIRONMENT:-local}
+      AMOSCLAUD_TELEMETRY_TTL: ${AMOSCLAUD_TELEMETRY_TTL:-168h}
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel_queue:/var/lib/otelcol/storage
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - telemetry
+    security_opt:
+      - no-new-privileges:true
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${AMOSCLAUD_PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - otel-collector
+    networks:
+      - telemetry
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  clickhouse_data:
+  clickhouse_logs:
+  otel_queue:
+  prometheus_data:
+
+networks:
+  telemetry:
+    name: amosclaud-telemetry
+    driver: bridge
+    attachable: true

@@ -1,0 +1,153 @@
+.runtime-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 0 0 1rem;
+}
+
+.runtime-summary article {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.8rem;
+  background: rgba(12, 19, 34, 0.72);
+}
+
+.runtime-summary span,
+.java-pod-row small,
+.runtime-node-card p,
+.runtime-description {
+  color: var(--muted, #9aa8bf);
+}
+
+.runtime-summary strong {
+  font-size: 1.45rem;
+}
+
+.runtime-node-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.runtime-node-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.runtime-node-form button {
+  min-height: 44px;
+}
+
+.runtime-notice {
+  margin: 1rem 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.6rem;
+  background: rgba(74, 116, 199, 0.12);
+}
+
+.runtime-notice.success {
+  background: rgba(55, 175, 119, 0.14);
+}
+
+.runtime-notice.error,
+.pipeline-java-pods.error {
+  background: rgba(220, 76, 76, 0.14);
+}
+
+.runtime-node-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.8rem;
+}
+
+.runtime-node-card,
+.java-pod-row {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.75rem;
+  background: rgba(7, 12, 22, 0.72);
+}
+
+.runtime-node-card header,
+.java-pod-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.runtime-node-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+}
+
+.runtime-node-card header span,
+.java-pod-row > span {
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  background: rgba(55, 175, 119, 0.16);
+}
+
+.runtime-node-card header span[data-status="offline"],
+.java-pod-row > span[data-state="failed"],
+.java-pod-row > span[data-state="waiting_for_node"] {
+  background: rgba(220, 76, 76, 0.16);
+}
+
+.runtime-capabilities,
+.runtime-node-actions,
+.pipeline-runtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.runtime-capabilities span {
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.pipeline-runtime {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+  padding: 0.75rem;
+  border: 1px dashed var(--border, #25324a);
+  border-radius: 0.7rem;
+}
+
+.pipeline-java-pods {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.java-pod-row small {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .runtime-summary,
+  .runtime-node-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .runtime-summary,
+  .runtime-node-form {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-node-card header,
+  .java-pod-row {
+    grid-template-columns: 1fr;
+  }
+}

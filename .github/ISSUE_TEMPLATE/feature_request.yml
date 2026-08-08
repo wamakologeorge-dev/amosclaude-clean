@@ -1,0 +1,76 @@
+name: Feature request
+description: Propose a capability that joins the existing Amosclaud ecosystem
+title: "[Feature]: "
+labels: ["type:feature", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem before describing an implementation. New features should cooperate with existing services instead of disabling or duplicating them.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Who has the problem, what are they trying to accomplish, and what blocks them today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the observable result and evidence that would prove the feature works.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - Agent or AI Gateway
+        - Backend API or database
+        - Frontend or Control Plane
+        - Pipeline, tasks, approvals, events, or artifacts
+        - Execution node, runner, sandbox, or resource lease
+        - Java pod or another runtime pod
+        - Logs, metrics, telemetry, analytics, or PipeFail
+        - GitHub App, Actions, issues, or pull requests
+        - Authentication, authorization, firewall, or security
+        - Infrastructure, deployment, domain, CDN, or storage
+        - Legacy or compatibility application
+        - Documentation or contributor experience
+        - Other or cross-platform
+    validations:
+      required: true
+  - type: textarea
+    id: ecosystem
+    attributes:
+      label: Ecosystem integration
+      description: Which current services, legacy applications, pipelines, nodes, integrations, or data contracts should this feature reuse or connect?
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Proposed user flow
+      placeholder: "1. User...\n2. Amosclaud...\n3. Worker or node...\n4. Verification..."
+  - type: textarea
+    id: failure
+    attributes:
+      label: Failure, recovery, and approval behavior
+      description: What can fail, what should PipeFail record, which work can retry, and which actions need explicit approval?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain existing features, integrations, or simpler approaches that were considered.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues and pull requests first.
+          required: true
+        - label: This proposal does not depend on disabling an unrelated working service.
+          required: true
+        - label: I described a verifiable result rather than only a dashboard or status indicator.
+          required: true
