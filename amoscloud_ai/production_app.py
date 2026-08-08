@@ -21,7 +21,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 
-from amoscloud_ai.api.routes import autonomous_keys
+from amoscloud_ai.api.routes import autonomous_keys, owner_access_gateway
 from amoscloud_ai.connected_app import app as connected_platform
 from amoscloud_ai.copilot import build_copilot_plan
 
@@ -245,6 +245,11 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+
+# Preserve both owner-login route formats before the mounted platform. The
+# /api/v1 callback remains compatible with existing GitHub OAuth settings.
+app.include_router(owner_access_gateway.router)
+app.include_router(owner_access_gateway.router, prefix="/api/v1")
 
 # Compatibility route retained for API clients that already use the original
 # autonomous-key path.
