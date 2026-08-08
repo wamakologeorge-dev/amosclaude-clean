@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 
 from fastapi import FastAPI
 
-from amoscloud_ai.combined_app import app as platform_app
 from amoscloud_ai.connectors.amosclaud_account.oauth import router as connector_oauth_router
 from amoscloud_ai.connectors.amosclaud_account.server import mcp as account_mcp
+from amoscloud_ai.workspace_access import install_admin_repository_access
+
+# Install the verified platform-owner access policy before the main application
+# imports repository, terminal, issue, pull-request, or agent route modules.
+install_admin_repository_access()
+platform_app = importlib.import_module("amoscloud_ai.combined_app").app
 
 
 @contextlib.asynccontextmanager
