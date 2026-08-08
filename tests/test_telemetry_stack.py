@@ -2,7 +2,6 @@ from pathlib import Path
 
 import yaml
 
-
 ROOT = Path(__file__).resolve().parents[1]
 TELEMETRY = ROOT / "Infrastructure" / "telemetry"
 
@@ -49,7 +48,7 @@ def test_runtime_wrapper_preserves_legacy_startup_when_disabled() -> None:
     production = (ROOT / "docker" / "production-entrypoint.sh").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert 'AMOSCLAUD_TELEMETRY_ENABLED:-false' in wrapper
+    assert "AMOSCLAUD_TELEMETRY_ENABLED:-false" in wrapper
     assert 'exec "$@"' in wrapper
     assert "opentelemetry-instrument" in wrapper
     assert "exec /app/docker/otel-exec.sh uvicorn amoscloud_ai.main:app" in production
