@@ -56,9 +56,17 @@ def _mode_skills(mode: str, objective: str = "") -> set[str]:
     if normalized == "autonomous-check":
         return {"answer", "inspect"}
     if normalized == "build":
-        return {"test", "build"} if any(term in text for term in ("test", "verify", "ci")) else {"build"}
+        return (
+            {"test", "build"}
+            if any(term in text for term in ("test", "verify", "ci"))
+            else {"build"}
+        )
     if normalized == "fix":
-        return {"test", "fix"} if any(term in text for term in ("test", "verify", "ci")) else {"fix"}
+        return (
+            {"test", "fix"}
+            if any(term in text for term in ("test", "verify", "ci"))
+            else {"fix"}
+        )
     if normalized == "deploy":
         return {"deploy"}
     if normalized == "monitor":
