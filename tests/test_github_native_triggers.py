@@ -149,3 +149,18 @@ def test_trigger_script_classifies_native_legacy_and_unclassified_files() -> Non
     assert scope["scope"] == "all-tracked-files"
     assert scope["file_count"] == 3
     assert scope["excluded_paths"] == []
+
+    sha = "b" * 40
+    push_delivery = module._delivery_id(
+        {"after": sha},
+        "push",
+        "wamakologeorge-dev/amosclaude-clean",
+        sha,
+    )
+    pull_request_delivery = module._delivery_id(
+        {"pull_request": {"head": {"sha": sha}}},
+        "pull_request",
+        "wamakologeorge-dev/amosclaude-clean",
+        sha,
+    )
+    assert push_delivery == pull_request_delivery
