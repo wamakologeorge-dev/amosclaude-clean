@@ -35,14 +35,10 @@ def load_manifest(path: Path) -> list[dict[str, str]]:
             raise ValueError(f"Label entry {index} has no name")
         if name in seen:
             raise ValueError(f"Duplicate label name: {name}")
-        if len(color) != 6 or any(
-            character not in "0123456789abcdef" for character in color
-        ):
+        if len(color) != 6 or any(character not in "0123456789abcdef" for character in color):
             raise ValueError(f"Label {name!r} has an invalid six-digit color")
         if len(description) > 100:
-            raise ValueError(
-                f"Label {name!r} description exceeds GitHub's 100-character limit"
-            )
+            raise ValueError(f"Label {name!r} description exceeds GitHub's 100-character limit")
         seen.add(name)
         labels.append({"name": name, "color": color, "description": description})
     return labels
