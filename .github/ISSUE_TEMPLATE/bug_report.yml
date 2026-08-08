@@ -1,32 +1,38 @@
 name: Bug report
-description: Report a reproducible Amosclaud problem
+description: Report a reproducible Amosclaud problem with sanitized evidence
 title: "[Bug]: "
-labels: ["bug"]
+labels: ["type:bug", "status:needs-triage"]
 body:
   - type: markdown
     attributes:
-      value: Thank you for helping improve Amosclaud. Remove secrets from all logs.
+      value: |
+        Thank you for helping improve Amosclaud. Search existing issues first and remove secrets, private repository content, cookies, personal data, and credentials from every attachment.
   - type: input
     id: version
     attributes:
-      label: Version or commit
-      placeholder: v1.0.1 or commit SHA
+      label: Amosclaud version or commit
+      placeholder: v1.0.1 or full commit SHA
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
-      label: Area
+      label: Affected area
+      description: Maintainers will apply the matching area label during triage.
       options:
-        - Repository workspace
-        - Autonomous runtime
-        - Build or tests
-        - Deployment
-        - Authentication
-        - API
-        - Desktop or mobile
+        - Agent or model routing
+        - Backend API or database
+        - Frontend or Control Plane
+        - Pipeline, tasks, approvals, events, or artifacts
+        - Execution node, runner, sandbox, or resource lease
+        - Java pod, Maven, Gradle, or javac
+        - Logs, metrics, telemetry, analytics, or PipeFail
+        - GitHub App, Actions, issues, or pull requests
+        - Authentication, authorization, secrets, or security
+        - Docker, deployment, domain, CDN, storage, or networking
+        - Legacy or compatibility application
         - Documentation
-        - Other
+        - Other or unknown
     validations:
       required: true
   - type: textarea
@@ -34,33 +40,54 @@ body:
     attributes:
       label: What happened?
       description: Explain the actual behavior and the expected behavior.
+      placeholder: Actual behavior...\n\nExpected behavior...
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Reproduction steps
-      placeholder: "1. Open...\n2. Select...\n3. Observe..."
+      placeholder: "1. Start...\n2. Create...\n3. Observe..."
     validations:
       required: true
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: Operating system, browser, Python version, and deployment platform.
+      description: Operating system, browser, Python version, Docker version, deployment platform, and relevant service versions.
     validations:
       required: true
   - type: textarea
-    id: logs
+    id: evidence
     attributes:
-      label: Sanitized logs or screenshots
-      description: Remove passwords, tokens, cookies, private keys, and personal data.
+      label: Sanitized logs, workflow output, or screenshots
+      description: Include the first failing command, pipeline or workflow ID, and timestamps when available. Remove all sensitive information.
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      options:
+        - Every time
+        - Intermittent
+        - Happened once
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Known workaround or blocker
+      description: State any workaround, missing dependency, pending approval, or unavailable service.
   - type: checkboxes
     id: checks
     attributes:
       label: Confirmation
       options:
-        - label: I searched existing issues first.
+        - label: I searched existing issues and pull requests first.
           required: true
-        - label: I removed secrets and private information.
+        - label: I included enough information to reproduce or investigate the problem.
+          required: true
+        - label: I removed secrets, credentials, private keys, cookies, personal data, and private repository content.
+          required: true
+        - label: This is not a public vulnerability report. I will use SECURITY.md for security disclosures.
           required: true
