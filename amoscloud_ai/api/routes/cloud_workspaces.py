@@ -354,9 +354,7 @@ def stop_repository_workspace(
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "The isolated runtime could not be stopped. Its connection is unavailable."
-            ),
+            detail=("The isolated runtime could not be stopped. Its connection is unavailable."),
         ) from exc
     return {"workspace": workspace, "container": container, "provider": "external"}
 
@@ -441,11 +439,20 @@ def terminal_agent_hub(
     """Describe the terminal-side engineering agents and their safety contract."""
 
     repository = _repository(repository_id, int(user["id"]))
-    _require_write(repository)
+    role = str(repository["role"] or "viewer")
+    can_write = role in {"owner", "developer"}
     return {
         "repository_id": repository_id,
+        "access": {
+            "role": role,
+            "can_write": can_write,
+        },
         "agents": [
-            {"id": agent_id, **spec}
+            {
+                "id": agent_id,
+                **spec,
+                "write_available": bool(can_write and spec["write_capable"]),
+            }
             for agent_id, spec in _TERMINAL_AGENTS.items()
         ],
         "policy": {
@@ -469,12 +476,13 @@ def terminal_agent_message(
     """Run one truthful agent-hub turn against the selected native repository."""
 
     repository = _repository(repository_id, int(user["id"]))
-    _require_write(repository)
     spec = _TERMINAL_AGENTS[body.agent]
     if _HELP_REQUEST.fullmatch(body.message.strip()):
         return _agent_help_response(repository_id, body.agent)
 
     changes_authorized = bool(body.allow_changes and spec["write_capable"])
+    if changes_authorized:
+        _require_write(repository)
     terminal_output = _safe_terminal_output(body.terminal_output)
 
     if body.agent == "doctor":
