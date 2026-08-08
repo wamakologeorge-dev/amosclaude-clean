@@ -100,4 +100,4 @@ RUN test -f /app/amoscloud_ai/main.py || (echo "Amosclaud source is missing from
 
 EXPOSE 8000
 
-CMD ["/app/docker/otel-exec.sh", "uvicorn", "amoscloud_ai.connected_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec /app/docker/otel-exec.sh uvicorn amoscloud_ai.connected_app:app --host 0.0.0.0 --port ${PORT:-8000}"]
