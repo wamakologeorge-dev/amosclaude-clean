@@ -63,9 +63,7 @@ def _mode_skills(mode: str, objective: str = "") -> set[str]:
         )
     if normalized == "fix":
         return (
-            {"test", "fix"}
-            if any(term in text for term in ("test", "verify", "ci"))
-            else {"fix"}
+            {"test", "fix"} if any(term in text for term in ("test", "verify", "ci")) else {"fix"}
         )
     if normalized == "deploy":
         return {"deploy"}
