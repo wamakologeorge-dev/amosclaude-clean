@@ -1,0 +1,78 @@
+@media (max-width: 620px) {
+  .cloud-terminal-shell {
+    gap: 14px;
+  }
+
+  .cloud-terminal-workbench {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cloud-terminal-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 12px;
+  }
+
+  .cloud-terminal-profile,
+  .cloud-terminal-cloud-state {
+    grid-column: 1 / -1;
+  }
+
+  .cloud-terminal-cloud-state {
+    margin-left: 0;
+  }
+
+  .cloud-terminal-toolbar button,
+  .cloud-terminal-toolbar select,
+  .cloud-terminal-search button,
+  .cloud-terminal-search input {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .cloud-terminal-tabs {
+    scroll-snap-type: x proximity;
+  }
+
+  .cloud-terminal-tab {
+    min-height: 42px;
+    scroll-snap-align: start;
+  }
+
+  .cloud-terminal-pane,
+  .cloud-terminal-empty,
+  .cloud-terminal-grid {
+    min-height: 55svh;
+  }
+
+  .cloud-terminal-pane .xterm {
+    padding: 10px 8px;
+    touch-action: manipulation;
+  }
+
+  .terminal-agent-hub {
+    min-height: 440px;
+    max-height: 75svh;
+  }
+
+  .terminal-agent-form textarea {
+    min-height: 110px;
+    font-size: 16px;
+  }
+
+  .terminal-agent-actions {
+    flex-direction: column;
+  }
+
+  .terminal-agent-actions button {
+    min-height: 48px;
+  }
+
+  .cloud-terminal-shortcuts {
+    display: none;
+  }
+}

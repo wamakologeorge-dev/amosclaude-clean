@@ -24,11 +24,16 @@ from fastapi import APIRouter, FastAPI, Request
 from amoscloud_ai.api.routes import autonomous_keys, owner_access_gateway
 from amoscloud_ai.connected_app import app as connected_platform
 from amoscloud_ai.copilot import build_copilot_plan
+from amoscloud_ai.ollama_compat import apply_ollama_environment
 
 ASGIApp = Callable[
     [dict[str, Any], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]],
     Awaitable[None],
 ]
+
+# Normalize protected Railway OLLAMA_* variables before any model request. The
+# resulting report contains no endpoint or credential values.
+OLLAMA_ENVIRONMENT = apply_ollama_environment()
 
 
 @contextlib.asynccontextmanager

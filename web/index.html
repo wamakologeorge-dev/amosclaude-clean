@@ -21,7 +21,7 @@
           <strong>Amosclaud Agent</strong>
           <span id="agent-status">checking</span>
         </div>
-        <p>Real native execution is active for repositories, issues, supplied files, branches, and commits. Model-generated code changes run only when an Amosclaud model service is actually connected; otherwise the platform returns a clear blocker instead of pretending work was completed.</p>
+        <p>Real native execution is active for repositories, issues, supplied files, branches, and commits. Model-generated code changes use the configured Ollama model through the Amosclaud backend; if the model is unavailable, the platform reports the exact blocker instead of pretending work was completed.</p>
       </header>
 
       <section class="agent-project-context" aria-label="Active Amosclaud project context">
@@ -35,7 +35,7 @@
 
       <section class="agent-command-contract" aria-label="Unified agent command path">
         <strong>Execution path</strong>
-        <p>Instructions → server authorization → native repository operation → Git/database write → verification evidence → final result</p>
+        <p>Instructions → server authorization → Ollama planning → native repository operation → Git/database write → verification evidence → final result</p>
         <small>Amosclaud never uses its own platform source as a substitute when no project is selected.</small>
       </section>
 
@@ -55,13 +55,14 @@
         <button type="button" data-agent-suggestion="Review this repository, implement the requested work safely, commit the changes on a branch, verify them, and prepare the result for review.">Build and verify</button>
       </div>
 
-      <section class="autonomous-runtime-controls" aria-label="Unified operator runtime">
+      <section id="amomodel-controls" class="autonomous-runtime-controls" aria-label="Unified operator runtime">
         <h2>Runtime health</h2>
-        <p>Native repository actions do not require a model key. General code generation requires a reachable Amosclaud model endpoint and will fail truthfully when that runtime is unavailable.</p>
+        <p>Repository operations use Amosclaud authorization. Planning, code generation, review, and repair use the configured Ollama model through the Amosclaud backend.</p>
         <button id="btn-check-agent-connections" type="button">Check Autonomous and server</button>
         <button id="btn-amomodel-on" type="button">Turn on AmoModel</button>
         <button id="btn-amomodel-off" type="button">Turn off AmoModel</button>
         <span id="agent-connection-status" aria-live="polite">Checking readiness…</span>
+        <span id="amomodel-status" aria-live="polite">Checking Ollama model…</span>
       </section>
     </section>
   </main>
