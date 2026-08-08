@@ -2,7 +2,6 @@ from pathlib import Path
 
 from amoscloud_ai.ollama_compat import apply_ollama_environment
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -29,7 +28,7 @@ def test_model_planning_requires_write_only_for_fix_mode() -> None:
     source = _source("amosclaud_os/agent/executor.py")
     model_section = source.split("# A general build or repair requires", 1)[1]
 
-    assert 'execution_mode = (' in model_section
+    assert "execution_mode = (" in model_section
     assert 'if execution_mode == "fix":' in model_section
     assert "repositories._require_write(access)" in model_section
     assert 'authorized_writes=role in {"owner", "developer"}' in model_section
@@ -42,7 +41,7 @@ def test_terminal_mobile_deep_link_and_access_ui_are_connected() -> None:
     mobile = _source("web/cloud-terminal/mobile.css")
 
     assert "location.hash !== '#terminal'" in loader
-    assert ".ws-tab[data-tab=\"terminal\"]" in loader
+    assert '.ws-tab[data-tab="terminal"]' in loader
     assert "script.addEventListener('load'" in loader
     assert "/static/cloud-terminal/mobile.css" in loader
     assert "payload.access?.can_write" in hub
