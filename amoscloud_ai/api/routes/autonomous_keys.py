@@ -56,8 +56,7 @@ class KeyCreateRequest(BaseModel):
 
 
 def _schema(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS autonomous_api_keys (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id INTEGER NOT NULL,
@@ -72,17 +71,15 @@ def _schema(db: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_autonomous_keys_user
         ON autonomous_api_keys(user_id, revoked_at);
-        """
-    )
+        """)
     columns = {
-        str(row["name"])
-        for row in db.execute("PRAGMA table_info(autonomous_api_keys)").fetchall()
+        str(row["name"]) for row in db.execute("PRAGMA table_info(autonomous_api_keys)").fetchall()
     }
     if "skills" not in columns:
         db.execute(
             "ALTER TABLE autonomous_api_keys "
             "ADD COLUMN skills TEXT NOT NULL "
-            "DEFAULT '[\"answer\",\"inspect\",\"plan\"]'"
+            'DEFAULT \'["answer","inspect","plan"]\''
         )
     db.commit()
 
@@ -103,9 +100,7 @@ def _decode_skills(raw: str | None) -> list[str]:
         value = json.loads(raw or "[]")
     except json.JSONDecodeError:
         value = []
-    return sorted(
-        item for item in value if isinstance(item, str) and item in AVAILABLE_SKILLS
-    )
+    return sorted(item for item in value if isinstance(item, str) and item in AVAILABLE_SKILLS)
 
 
 def _max_keys_per_user() -> int:
@@ -126,8 +121,7 @@ def _is_admin(user) -> bool:
 def _active_key_count(db: sqlite3.Connection, user_id: int) -> int:
     return int(
         db.execute(
-            "SELECT COUNT(*) FROM autonomous_api_keys "
-            "WHERE user_id=? AND revoked_at IS NULL",
+            "SELECT COUNT(*) FROM autonomous_api_keys " "WHERE user_id=? AND revoked_at IS NULL",
             (user_id,),
         ).fetchone()[0]
     )
@@ -194,8 +188,7 @@ def create_key(body: KeyCreateRequest, request: Request) -> dict:
         "skills": body.skills,
         "created_at": now,
         "warning": (
-            "Copy this key now. Amosclaud stores only its hash and cannot "
-            "display it again."
+            "Copy this key now. Amosclaud stores only its hash and cannot " "display it again."
         ),
     }
 
