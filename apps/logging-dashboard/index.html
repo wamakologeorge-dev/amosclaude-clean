@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Amosclaud Logs</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #090d16; color: #e8eefc; }
+    header { padding: 18px 24px; border-bottom: 1px solid #273047; display:flex; gap:12px; align-items:center; }
+    main { padding: 20px 24px; }
+    input, select, button { background:#11182a; color:#e8eefc; border:1px solid #34415f; border-radius:8px; padding:10px; }
+    #logs { font-family: ui-monospace, monospace; font-size:13px; white-space:pre-wrap; }
+    .row { border-bottom:1px solid #202940; padding:8px 0; }
+    .ERROR,.CRITICAL { color:#ff9a9a; } .WARNING { color:#ffd88a; } .INFO { color:#9ec5ff; }
+    .status { margin-left:auto; opacity:.8; }
+  </style>
+</head>
+<body>
+<header>
+  <strong>Amosclaud Logging</strong>
+  <input id="key" type="password" placeholder="Logging API key" />
+  <input id="service" placeholder="Service filter" />
+  <select id="level"><option value="">All levels</option><option>INFO</option><option>WARNING</option><option>ERROR</option><option>CRITICAL</option></select>
+  <button id="load">Load</button><button id="live">Start live tail</button>
+  <span id="status" class="status">Disconnected</span>
+</header>
+<main><div id="logs"></div></main>
+<script>
+const logs = document.querySelector('#logs'); let socket;
+const apiBase = window.LOG_QUERY_URL || 'http://localhost:8081';
+const ingestBase = window.LOG_INGEST_URL || 'ws://localhost:8080';
+function render(event) {
+  const row=document.createElement('div'); row.className=`row ${event.level||''}`;
+  row.textContent=`${event.timestamp||''}  ${event.level||''}  ${event.service||''}  ${event.message||''}`;
+  logs.prepend(row);
+}
+document.querySelector('#load').onclick=async()=>{
+  const p=new URLSearchParams(); const level=document.querySelector('#level').value; const service=document.querySelector('#service').value;
+  if(level)p.set('level',level); if(service)p.set('service',service);
+  const r=await fetch(`${apiBase}/v1/logs?${p}`,{headers:{'X-Amosclaud-Key':document.querySelector('#key').value}});
+  const data=await r.json(); logs.innerHTML=''; (data.items||[]).reverse().forEach(render);
+};
+document.querySelector('#live').onclick=()=>{
+  if(socket)socket.close(); const key=encodeURIComponent(document.querySelector('#key').value);
+  socket=new WebSocket(`${ingestBase}/v1/logs/stream?key=${key}`);
+  socket.onopen=()=>document.querySelector('#status').textContent='Live';
+  socket.onmessage=e=>render(JSON.parse(e.data));
+  socket.onclose=()=>document.querySelector('#status').textContent='Disconnected';
+};
+</script>
+</body></html>
