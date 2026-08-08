@@ -1,0 +1,123 @@
+# Canonical Amosclaud issue and pull-request labels.
+# Apply or update these labels with the manual Sync Repository Labels workflow.
+# The sync is additive and never deletes labels that are not listed here.
+
+- name: area:backend
+  color: "1d76db"
+  description: API, database, background worker, or server-side change
+- name: area:frontend
+  color: "5319e7"
+  description: Web interface, accessibility, browser behavior, or client asset
+- name: area:pipeline
+  color: "6f42c1"
+  description: Cooperation pipeline, task graph, approval, event, or artifact contract
+- name: area:runtime
+  color: "0052cc"
+  description: Execution node, resource lease, scheduler, runner, or sandbox
+- name: area:java-pod
+  color: "b07219"
+  description: Java pod image, Maven, Gradle, javac, or Java build evidence
+- name: area:observability
+  color: "0e8a16"
+  description: Logs, metrics, traces, telemetry, analytics, or PipeFail graphics
+- name: area:github
+  color: "24292f"
+  description: GitHub App, Actions, triggers, issues, pull requests, or repository integration
+- name: area:security
+  color: "b60205"
+  description: Authentication, authorization, secrets, policy, firewall, or vulnerability work
+- name: area:docs
+  color: "0075ca"
+  description: Documentation, examples, diagrams, README, or contributor experience
+- name: area:infrastructure
+  color: "006b75"
+  description: Docker, Railway, deployment, domain, CDN, storage, or networking
+- name: area:agent
+  color: "8f7cff"
+  description: Autonomous agent, model routing, planning, tools, or memory
+- name: area:legacy
+  color: "8b6f47"
+  description: Legacy or compatibility surface that must remain part of the ecosystem
+
+- name: type:bug
+  color: "d73a4a"
+  description: Confirmed incorrect behavior or regression
+- name: type:feature
+  color: "a2eeef"
+  description: New user-visible or platform capability
+- name: type:docs
+  color: "0075ca"
+  description: Documentation-only improvement
+- name: type:refactor
+  color: "c5def5"
+  description: Internal structure change without an intended behavior change
+- name: type:test
+  color: "bfdadc"
+  description: Test coverage, fixtures, verification, or CI-only change
+- name: type:security
+  color: "b60205"
+  description: Security fix, hardening, or private vulnerability follow-up
+- name: type:maintenance
+  color: "ededed"
+  description: Dependency, tooling, cleanup, release, or repository maintenance
+
+- name: size:xs
+  color: "c2e0c6"
+  description: Very small, isolated change
+- name: size:s
+  color: "7fd37f"
+  description: Small change with limited review surface
+- name: size:m
+  color: "f9d65c"
+  description: Medium change across a few related files or services
+- name: size:l
+  color: "f5a623"
+  description: Large change requiring coordinated review and verification
+- name: size:xl
+  color: "d93f0b"
+  description: Very large change that should normally be split
+
+- name: priority:p0
+  color: "7a0000"
+  description: Critical incident, security exposure, or production outage
+- name: priority:p1
+  color: "b60205"
+  description: High priority; blocks an important user or platform path
+- name: priority:p2
+  color: "fbca04"
+  description: Normal planned priority
+- name: priority:p3
+  color: "d4c5f9"
+  description: Useful improvement without immediate urgency
+
+- name: status:needs-triage
+  color: "d876e3"
+  description: Needs reproduction, ownership, scope, or priority decision
+- name: status:needs-evidence
+  color: "fef2c0"
+  description: Missing logs, reproduction, test output, screenshots, or other proof
+- name: status:blocked
+  color: "b60205"
+  description: Cannot proceed until a named dependency or decision is resolved
+- name: status:needs-review
+  color: "0e8a16"
+  description: Implementation is ready for human review
+- name: status:changes-requested
+  color: "d93f0b"
+  description: Review found changes that must be addressed
+- name: status:ready-to-merge
+  color: "2cbe4e"
+  description: Required checks and review are complete; owner still controls merge
+- name: status:waiting-for-approval
+  color: "fbca04"
+  description: Protected write, deployment, or sensitive action needs explicit approval
+
+- name: good first issue
+  color: "7057ff"
+  description: Focused task suitable for a new contributor
+- name: help wanted
+  color: "008672"
+  description: Maintainers welcome community help on this task
+- name: breaking-change
+  color: "b60205"
+  description: Changes an established API, data, behavior, or compatibility contract
