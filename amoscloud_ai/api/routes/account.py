@@ -62,6 +62,59 @@ def _is_admin(user) -> bool:
         return False
 
 
+def _positive_limit(name: str, default: int) -> int:
+    """Read one bounded positive per-user limit from the environment."""
+    try:
+        value = int(os.getenv(name, str(default)).strip())
+    except (AttributeError, ValueError):
+        value = default
+    return max(1, min(value, 100_000))
+
+
+def _table_exists(db: sqlite3.Connection, name: str) -> bool:
+    return (
+        db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+        is not None
+    )
+
+
+def _account_usage(db: sqlite3.Connection, user_id: int) -> dict[str, int]:
+    """Return counts belonging only to the selected Amosclaud account."""
+    owned_repositories = 0
+    shared_repositories = 0
+    active_api_keys = 0
+    if _table_exists(db, "repositories"):
+        owned_repositories = int(
+            db.execute(
+                "SELECT COUNT(*) FROM repositories WHERE owner_id=?",
+                (user_id,),
+            ).fetchone()[0]
+        )
+    if _table_exists(db, "repository_collaborators"):
+        shared_repositories = int(
+            db.execute(
+                "SELECT COUNT(*) FROM repository_collaborators WHERE user_id=?",
+                (user_id,),
+            ).fetchone()[0]
+        )
+    if _table_exists(db, "autonomous_api_keys"):
+        active_api_keys = int(
+            db.execute(
+                "SELECT COUNT(*) FROM autonomous_api_keys "
+                "WHERE user_id=? AND revoked_at IS NULL",
+                (user_id,),
+            ).fetchone()[0]
+        )
+    return {
+        "owned_repositories": owned_repositories,
+        "shared_repositories": shared_repositories,
+        "active_api_keys": active_api_keys,
+    }
+
+
 def _cookie_domain() -> str | None:
     """Return the optional shared cookie domain configured by the operator."""
     value = os.getenv("AUTH_COOKIE_DOMAIN", "").strip()
@@ -84,6 +137,7 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
         raise HTTPException(status_code=401, detail="Not authenticated")
     billing_ready = bool(os.getenv("STRIPE_SECRET_KEY"))
     github_ready = bool(os.getenv("GITHUB_CLIENT_ID") and os.getenv("GITHUB_CLIENT_SECRET"))
+    administrator = _is_admin(user)
     return {
         "profile": {"available": True},
         "github_connection": {
@@ -92,6 +146,12 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
         },
         "api_keys": {
             "available": True,
+            "admin_only": False,
+            "href": "/account#api-keys",
+            "api_path": "/api/v1/agent/keys",
+        },
+        "service_keys": {
+            "available": administrator,
             "admin_only": True,
             "href": "/admin/service-keys",
         },
@@ -100,7 +160,75 @@ def account_settings(amos_session: str | None = Cookie(default=None)) -> dict:
             "available": bool(_configured_domains()),
             "href": "/api/v1/account/domains",
         },
-        "is_admin": _is_admin(user),
+        "multi_user": {
+            "enabled": True,
+            "shared_platform_service": True,
+            "account_isolation": "per-user",
+        },
+        "is_admin": administrator,
+    }
+
+
+@router.get("/overview")
+def account_overview(amos_session: str | None = Cookie(default=None)) -> dict[str, object]:
+    """Return the signed-in user's isolated plan, usage, and platform identity."""
+    user = get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    from amoscloud_ai.api.routes.billing import _entitlement
+    from amoscloud_ai.organization_support import support_wallet
+
+    user_id = int(user["id"])
+    administrator = _is_admin(user)
+    with _connect() as db:
+        plan = _entitlement(db, user_id)
+        usage = _account_usage(db, user_id)
+        wallet = support_wallet(db, user_id)
+
+    return {
+        "account": {
+            "id": user_id,
+            "name": str(user["name"]),
+            "email": str(user["email"]),
+            "is_admin": administrator,
+            "provider": str(user["provider"]),
+        },
+        "platform": {
+            "name": "Amosclaud",
+            "deployment_model": "single-service",
+            "multi_user": True,
+            "account_isolation": "per-user",
+        },
+        "plan": plan,
+        "usage": {
+            **usage,
+            "hosted_tool_seconds_remaining": (
+                None if administrator else wallet["remaining_seconds"]
+            ),
+            "hosted_tool_lifetime_seconds": (
+                None if administrator else wallet["lifetime_seconds"]
+            ),
+        },
+        "limits": {
+            "repositories": (
+                None
+                if administrator
+                else _positive_limit("MAX_REPOSITORIES_PER_USER", 10)
+            ),
+            "autonomous_api_keys": (
+                None
+                if administrator
+                else _positive_limit("MAX_AUTONOMOUS_KEYS_PER_USER", 10)
+            ),
+            "administrator_bypass": administrator,
+        },
+        "routes": {
+            "api_keys": "/api/v1/agent/keys",
+            "billing": "/api/v1/billing/status",
+            "support_time": "/api/v1/support-time/status",
+            "repositories": "/api/v1/repositories",
+        },
     }
 
 
