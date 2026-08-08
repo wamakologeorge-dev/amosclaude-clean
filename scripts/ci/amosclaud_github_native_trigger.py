@@ -56,8 +56,6 @@ def _changed_files(payload: dict[str, Any], event: str) -> list[str]:
         if base_ref:
             _run_git("fetch", "--no-tags", "origin", base_ref)
             files.extend(_run_git("diff", "--name-only", f"origin/{base_ref}...HEAD"))
-    elif event == "issues":
-        files = []
     return _unique(files)
 
 
@@ -94,17 +92,12 @@ def _surface(path: str) -> str:
 
 
 def _scope(changed: list[str], all_files: list[str], event: str) -> dict[str, Any]:
-    inventory = (
-        all_files if event in {"schedule", "workflow_dispatch", "repository_dispatch"} else changed
-    )
+    full_repository_events = {"schedule", "workflow_dispatch", "repository_dispatch"}
+    inventory = all_files if event in full_repository_events else changed
     manifest = "\n".join(inventory).encode()
     counts = Counter(_surface(path) for path in inventory)
     return {
-        "scope": (
-            "all-tracked-files"
-            if event in {"schedule", "workflow_dispatch", "repository_dispatch"}
-            else "all-changed-files"
-        ),
+        "scope": "all-tracked-files" if event in full_repository_events else "all-changed-files",
         "file_count": len(inventory),
         "manifest_sha256": hashlib.sha256(manifest).hexdigest(),
         "surface_counts": dict(sorted(counts.items())),
@@ -120,25 +113,56 @@ def _mode(event: str) -> str | None:
         return requested
     if event == "schedule":
         return "monitor"
-    if event == "push":
-        return "build"
-    if event == "pull_request":
+    if event in {"push", "pull_request"}:
         return "build"
     return None
 
 
-def _delivery_id() -> str:
-    run_id = os.getenv("GITHUB_RUN_ID", "").strip()
-    if run_id:
-        return f"github-run-{run_id}"
-    raw = "|".join(
-        [
-            os.getenv("GITHUB_EVENT_NAME", ""),
-            os.getenv("GITHUB_REPOSITORY", ""),
-            os.getenv("GITHUB_REF", ""),
-            os.getenv("GITHUB_SHA", ""),
-        ]
-    )
+def _event_sha(payload: dict[str, Any], event: str) -> str:
+    if event == "pull_request":
+        head = (payload.get("pull_request") or {}).get("head") or {}
+        return str(head.get("sha") or os.getenv("GITHUB_SHA", ""))
+    if event == "push":
+        return str(payload.get("after") or os.getenv("GITHUB_SHA", ""))
+    return os.getenv("GITHUB_SHA", "")
+
+
+def _event_ref(payload: dict[str, Any], event: str) -> str:
+    if event == "pull_request":
+        head = (payload.get("pull_request") or {}).get("head") or {}
+        head_ref = str(head.get("ref") or os.getenv("GITHUB_HEAD_REF", ""))
+        return f"refs/heads/{head_ref}" if head_ref else os.getenv("GITHUB_REF", "")
+    return str(payload.get("ref") or os.getenv("GITHUB_REF", ""))
+
+
+def _delivery_id(
+    payload: dict[str, Any],
+    event: str,
+    repository: str,
+    sha: str,
+) -> str:
+    if event in {"push", "pull_request"} and sha:
+        raw = f"code|{repository}|{sha}"
+    elif event == "issues":
+        issue = payload.get("issue") or {}
+        raw = "|".join(
+            [
+                "issue",
+                repository,
+                str(issue.get("number") or ""),
+                str(payload.get("action") or ""),
+                str(issue.get("updated_at") or os.getenv("GITHUB_RUN_ID", "")),
+            ]
+        )
+    else:
+        raw = "|".join(
+            [
+                event,
+                repository,
+                os.getenv("GITHUB_RUN_ID", ""),
+                os.getenv("GITHUB_RUN_ATTEMPT", ""),
+            ]
+        )
     return f"github-{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
@@ -186,7 +210,8 @@ def _write_summary(output: Path, payload: dict[str, Any], result: dict[str, Any]
     if pipeline.get("id"):
         lines.append(f"- Cooperation pipeline: `{pipeline['id']}`")
     lines.append(f"- Evidence: `{output}`")
-    Path(summary_path).open("a", encoding="utf-8").write("\n".join(lines) + "\n")
+    with Path(summary_path).open("a", encoding="utf-8") as summary:
+        summary.write("\n".join(lines) + "\n")
 
 
 def main() -> int:
@@ -207,6 +232,8 @@ def main() -> int:
         or (payload.get("repository") or {}).get("full_name")
         or "unknown/unknown"
     )
+    sha = _event_sha(payload, event)
+    ref = _event_ref(payload, event)
     changed = _changed_files(payload, event)
     all_files = _all_tracked_files()
     repository_scope = _scope(changed, all_files, event)
@@ -214,12 +241,12 @@ def main() -> int:
     objective = os.getenv("AMOSCLAUD_OBJECTIVE", "").strip() or None
 
     trigger_payload: dict[str, Any] = {
-        "delivery_id": _delivery_id(),
+        "delivery_id": _delivery_id(payload, event, repository, sha),
         "event": event,
         "action": action,
         "repository": repository,
-        "ref": os.getenv("GITHUB_REF", ""),
-        "sha": os.getenv("GITHUB_SHA", ""),
+        "ref": ref,
+        "sha": sha,
         "actor": os.getenv("GITHUB_ACTOR", ""),
         "requested_mode": requested_mode,
         "objective": objective,
@@ -260,7 +287,7 @@ def main() -> int:
                 "reason": detail[:20_000],
             }
             exit_code = 1
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
+        except (OSError, ValueError) as exc:
             result = {"status": "bridge_failed", "reason": str(exc)}
             exit_code = 1
 
