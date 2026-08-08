@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b14">
+  <title>Control Plane · Amosclaud</title>
+  <link rel="stylesheet" href="/static/control-plane.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/cloud/agent">Amosclaud</a>
+    <label class="project-picker">
+      <span>Project</span>
+      <select id="repository-select"><option value="">Platform workspace</option></select>
+    </label>
+    <label class="environment-picker">
+      <span>Environment</span>
+      <select id="environment-select">
+        <option value="development">Development</option>
+        <option value="preview">Preview</option>
+        <option value="staging">Staging</option>
+        <option value="production">Production</option>
+      </select>
+    </label>
+    <nav aria-label="Control plane navigation">
+      <a href="/command-center">Command Center</a>
+      <a href="/repositories">Repositories</a>
+      <a href="/cloud/agent">Agent</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Amosclaud platform modules">
+      <div class="sidebar-heading">
+        <span>Amosclaud platform</span>
+        <strong>Control Plane</strong>
+      </div>
+      <ul id="module-list" class="module-list">
+        <li class="loading">Loading modules…</li>
+      </ul>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <p class="eyebrow">Pipeline cooperation</p>
+        <h1>One request. Cooperating services. One verified result.</h1>
+        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, and approvals now share one durable Amosclaud execution contract.</p>
+        <div id="notice" class="notice" role="status" aria-live="polite">Loading the control plane…</div>
+      </header>
+
+      <section class="summary-grid" aria-label="Pipeline cooperation summary">
+        <article><span>Active pipelines</span><strong id="active-pipelines">0</strong><small>Queued, running, or verifying</small></article>
+        <article><span>Pending approvals</span><strong id="pending-approvals">0</strong><small>Protected writes and deployments</small></article>
+        <article><span>Ready workers</span><strong id="ready-workers">0</strong><small>Agents and connected runners</small></article>
+        <article><span>Queued tasks</span><strong id="queued-tasks">0</strong><small>Waiting for a matching capability</small></article>
+      </section>
+
+      <section class="workspace-grid">
+        <article class="panel pipeline-composer">
+          <div class="panel-heading">
+            <div><p class="eyebrow">Start work</p><h2>Create cooperation pipeline</h2></div>
+            <span class="contract-badge">durable · isolated · verified</span>
+          </div>
+          <form id="pipeline-form">
+            <label>Objective
+              <textarea id="pipeline-objective" required maxlength="12000" placeholder="Inspect the selected repository, fix the failure, run tests, and return verification evidence."></textarea>
+            </label>
+            <div class="form-grid">
+              <label>Mode
+                <select id="pipeline-mode">
+                  <option value="inspect">Inspect</option>
+                  <option value="build">Build</option>
+                  <option value="fix">Fix and verify</option>
+                  <option value="deploy">Deploy</option>
+                  <option value="monitor">Monitor</option>
+                </select>
+              </label>
+              <label>Branch
+                <input id="pipeline-branch" value="main" maxlength="200">
+              </label>
+            </div>
+            <label class="approval-toggle">
+              <input id="pipeline-write-approval" type="checkbox">
+              <span>Authorize repository-writing stages now. Leave off to require an approval gate.</span>
+            </label>
+            <button type="submit">Create pipeline</button>
+          </form>
+        </article>
+
+        <article class="panel worker-panel">
+          <div class="panel-heading"><div><p class="eyebrow">Capacity</p><h2>Cooperating workers</h2></div></div>
+          <form id="worker-form" class="worker-form">
+            <label>Worker name<input id="worker-name" required maxlength="200" placeholder="Local engineering runner"></label>
+            <label>Capabilities<input id="worker-capabilities" required value="context,repository-read,planning,repository-write,testing,security,verification" maxlength="1000"></label>
+            <label>Capacity<input id="worker-capacity" type="number" min="1" max="100" value="1"></label>
+            <button type="submit">Register worker</button>
+          </form>
+          <div id="worker-list" class="worker-list">No workers registered.</div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Execution history</p><h2>Pipeline runs</h2></div>
+          <button id="refresh" class="secondary" type="button">Refresh</button>
+        </div>
+        <div id="pipeline-list" class="pipeline-list">No cooperation pipelines yet.</div>
+      </section>
+    </main>
+  </div>
+
+  <template id="pipeline-template">
+    <article class="pipeline-card">
+      <header>
+        <div><span class="pipeline-mode"></span><h3 class="pipeline-objective"></h3></div>
+        <span class="pipeline-state"></span>
+      </header>
+      <dl class="pipeline-meta"></dl>
+      <ol class="task-list"></ol>
+      <div class="pipeline-actions"></div>
+      <details><summary>Artifacts and evidence</summary><div class="artifact-list"></div></details>
+    </article>
+  </template>
+
+  <script src="/static/control-plane.js"></script>
+</body>
+</html>
