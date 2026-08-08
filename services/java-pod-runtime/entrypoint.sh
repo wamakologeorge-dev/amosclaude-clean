@@ -5,8 +5,11 @@ workspace="${AMOSCLAUD_WORKSPACE:-/workspace}"
 artifacts="${AMOSCLAUD_ARTIFACTS:-/artifacts}"
 build_tool="${AMOSCLAUD_BUILD_TOOL:-auto}"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cache_root="$workspace/.amosclaud-cache"
 
-mkdir -p "$workspace" "$artifacts"
+mkdir -p "$workspace" "$artifacts" "$cache_root/m2" "$cache_root/gradle"
+export MAVEN_OPTS="${MAVEN_OPTS:-} -Dmaven.repo.local=$cache_root/m2"
+export GRADLE_USER_HOME="$cache_root/gradle"
 cd "$workspace"
 
 write_failure() {
