@@ -12,6 +12,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from amoscloud_ai.api.routes.auth import DB_PATH
+from amoscloud_ai.api.routes.execution_nodes import router as execution_nodes_router
 from amoscloud_ai.api.routes.pipeline_cooperation import router as cooperation_router
 from amoscloud_ai.copilot import COPILOT_PIPELINE, COPILOT_ROLE, pipeline_reply
 from amoscloud_ai.logger import log
@@ -19,6 +20,7 @@ from amoscloud_ai.models import PipelineJob, PipelineResponse, PipelineStatus, P
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 router.include_router(cooperation_router, prefix="/cooperation")
+router.include_router(execution_nodes_router, prefix="/cooperation/runtime")
 _LOCK = threading.RLock()
 
 
@@ -26,8 +28,7 @@ def _db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS pipeline_runs (
             id TEXT PRIMARY KEY,
             status TEXT NOT NULL,
@@ -45,8 +46,7 @@ def _db() -> sqlite3.Connection:
             updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at DESC);
-        """
-    )
+        """)
     db.commit()
     return db
 
@@ -151,7 +151,9 @@ async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineRe
             from src.core.ci_orchestrator import CIOrchestrator
 
             orchestrator = CIOrchestrator(config=payload)
-            successful = await orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
+            successful = await orchestrator.start_pipeline(
+                payload.get("trigger", "manual"), payload
+            )
             if orchestrator.jobs:
                 pipeline.jobs = orchestrator.jobs
 
@@ -183,7 +185,9 @@ async def _run_pipeline(pipeline: PipelineResponse, payload: dict) -> PipelineRe
 @router.get("", response_model=List[PipelineResponse], summary="List all pipelines")
 async def list_pipelines() -> List[PipelineResponse]:
     with _db() as db:
-        rows = db.execute("SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT 100").fetchall()
+        rows = db.execute(
+            "SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT 100"
+        ).fetchall()
     return [_row_to_pipeline(row) for row in rows]
 
 
@@ -226,14 +230,23 @@ async def cancel_pipeline(pipeline_id: str) -> None:
     pipeline.message = pipeline_reply(PipelineStatus.CANCELLED)
     pipeline.copilot_reply = pipeline.message
     for job in pipeline.jobs:
-        if job.status not in (PipelineStatus.SUCCESS, PipelineStatus.FAILED, PipelineStatus.CANCELLED):
+        if job.status not in (
+            PipelineStatus.SUCCESS,
+            PipelineStatus.FAILED,
+            PipelineStatus.CANCELLED,
+        ):
             job.status = PipelineStatus.CANCELLED
             job.finished_at = pipeline.finished_at
             job.logs.append(pipeline.message)
     _save(pipeline)
 
 
-@router.api_route("/{pipeline_id}", methods=["GET", "DELETE"], response_model=PipelineResponse, summary="Get or cancel a pipeline")
+@router.api_route(
+    "/{pipeline_id}",
+    methods=["GET", "DELETE"],
+    response_model=PipelineResponse,
+    summary="Get or cancel a pipeline",
+)
 async def pipeline_detail(pipeline_id: str, request: Request):
     """Use one route entry for the pipeline resource across its supported methods."""
     if request.method == "GET":
