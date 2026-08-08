@@ -20,7 +20,9 @@ _CREATE_REPOSITORY = re.compile(
     re.IGNORECASE,
 )
 _CREATE_ISSUE = re.compile(r"\b(?:create|open|add|file)\b.*\b(?:issue|ticket)\b", re.IGNORECASE)
-_NO_WRITE = re.compile(r"\b(?:do not|don't|never)\s+(?:edit|change|write|modify|execute|create)\b", re.IGNORECASE)
+_NO_WRITE = re.compile(
+    r"\b(?:do not|don't|never)\s+(?:edit|change|write|modify|execute|create)\b", re.IGNORECASE
+)
 
 
 @dataclass
@@ -62,9 +64,7 @@ def _operation(objective: str, metadata: dict[str, Any]) -> str | None:
 
 def _repository_name(objective: str, metadata: dict[str, Any]) -> str:
     supplied = str(
-        metadata.get("new_repository_name")
-        or metadata.get("repository_name_to_create")
-        or ""
+        metadata.get("new_repository_name") or metadata.get("repository_name_to_create") or ""
     ).strip()
     if supplied:
         return supplied
@@ -284,9 +284,7 @@ def execute_native_operation(
             )
 
         execution_mode = (
-            "fix"
-            if mode in {"build", "fix"} or prepared.get("apply_changes")
-            else "plan"
+            "fix" if mode in {"build", "fix"} or prepared.get("apply_changes") else "plan"
         )
         with repositories._db() as db:
             access = repositories._access(db, repository_id, int(user["id"]))
