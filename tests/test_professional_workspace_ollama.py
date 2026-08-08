@@ -59,7 +59,8 @@ def test_legacy_agent_exposes_live_ollama_controls() -> None:
     assert 'id="amomodel-status"' in page
     assert "configured Ollama model" in page
     assert "/api/v1/amomodel/model/status" in controls
-    assert "Ollama connected" in controls
+    assert "data.provider === 'ollama' ? 'Ollama'" in controls
+    assert "${provider} connected" in controls
     assert "apply_ollama_environment()" in production
 
 
