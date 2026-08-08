@@ -35,10 +35,14 @@ def load_manifest(path: Path) -> list[dict[str, str]]:
             raise ValueError(f"Label entry {index} has no name")
         if name in seen:
             raise ValueError(f"Duplicate label name: {name}")
-        if len(color) != 6 or any(character not in "0123456789abcdef" for character in color):
+        if len(color) != 6 or any(
+            character not in "0123456789abcdef" for character in color
+        ):
             raise ValueError(f"Label {name!r} has an invalid six-digit color")
         if len(description) > 100:
-            raise ValueError(f"Label {name!r} description exceeds GitHub's 100-character limit")
+            raise ValueError(
+                f"Label {name!r} description exceeds GitHub's 100-character limit"
+            )
         seen.add(name)
         labels.append({"name": name, "color": color, "description": description})
     return labels
@@ -91,7 +95,11 @@ def synchronize(
     dry_run: bool,
 ) -> dict[str, list[str]]:
     existing = list_labels(repository, token)
-    result: dict[str, list[str]] = {"created": [], "updated": [], "unchanged": []}
+    result: dict[str, list[str]] = {
+        "created": [],
+        "updated": [],
+        "unchanged": [],
+    }
 
     for label in desired:
         current = existing.get(label["name"])
@@ -156,7 +164,12 @@ def main() -> int:
         print(f"label sync failed: {exc}", file=sys.stderr)
         return 1
 
-    print(json.dumps({"repository": arguments.repository, "dry_run": arguments.dry_run, **result}, indent=2))
+    print(
+        json.dumps(
+            {"repository": arguments.repository, "dry_run": arguments.dry_run, **result},
+            indent=2,
+        )
+    )
     return 0
 
 
