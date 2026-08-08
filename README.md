@@ -132,7 +132,7 @@ The small `amosclaud-quick` command remains the safest first experience: it perf
 - [Label taxonomy](docs/LABELS.md)
 - [Reproducible demo](docs/DEMO.md)
 - [Developer fast path](docs/DEVELOPER_FAST_PATH.md)
-- [Production Docker deployment](docs/PRODUCTION_DOCKER.md)
+- [Production Docker deployment](DEPLOYMENT.md)
 
 ## Contributing
 
