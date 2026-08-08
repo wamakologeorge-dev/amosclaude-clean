@@ -14,6 +14,8 @@ export class TerminalAgentHub {
     this.getTerminalContext = getTerminalContext;
     this.agents = [];
     this.activeAgent = 'doctor';
+    this.canWrite = false;
+    this.repositoryRole = 'viewer';
     this.busy = false;
     this.renderShell();
   }
@@ -69,6 +71,8 @@ export class TerminalAgentHub {
     try {
       const payload = await apiRequest(terminalApi(this.repositoryId, '/agent-hub'));
       this.agents = Array.isArray(payload.agents) ? payload.agents : [];
+      this.canWrite = Boolean(payload.access?.can_write);
+      this.repositoryRole = payload.access?.role || 'viewer';
       this.renderAgents();
       const policy = payload.policy || {};
       this.addMessage(
@@ -79,8 +83,8 @@ export class TerminalAgentHub {
       );
       this.status(
         policy.success_requires_runtime_evidence
-          ? 'Connected · runtime evidence required · protected-branch bypass disabled'
-          : 'Connected to the Amosclaud cloud agent hub.',
+          ? `Connected · ${this.repositoryRole} access · runtime evidence required`
+          : `Connected · ${this.repositoryRole} access`,
       );
     } catch (error) {
       this.status(`Agent hub unavailable: ${error.message}`);
@@ -115,11 +119,20 @@ export class TerminalAgentHub {
     this.selector.querySelectorAll('[data-agent]').forEach(button => {
       button.classList.toggle('active', button.dataset.agent === agentId);
     });
-    this.allowChanges.disabled = !agent.write_capable;
-    if (!agent.write_capable) this.allowChanges.checked = false;
+    const changesAvailable = Boolean(agent.write_capable && this.canWrite);
+    this.allowChanges.disabled = !changesAvailable;
+    if (!changesAvailable) this.allowChanges.checked = false;
     this.input.placeholder = agent.quick_prompts?.[0] || `Message ${agent.name}…`;
     if (announce) {
-      this.status(`${agent.name} selected · ${agent.write_capable ? 'changes require explicit authorization' : 'diagnosis only'}`);
+      this.status(
+        `${agent.name} selected · ${
+          changesAvailable
+            ? 'changes require explicit authorization'
+            : agent.write_capable
+              ? 'planning and diagnosis only for this repository role'
+              : 'diagnosis only'
+        }`,
+      );
     }
   }
 
@@ -162,7 +175,9 @@ export class TerminalAgentHub {
     if (!message || this.busy) return;
     const agent = this.activeAgentSpec();
     const terminal = this.getTerminalContext?.() || {};
-    const changesAuthorized = Boolean(agent.write_capable && this.allowChanges.checked);
+    const changesAuthorized = Boolean(
+      agent.write_capable && this.canWrite && this.allowChanges.checked,
+    );
     const terminalOutput = this.attachOutput.checked ? String(terminal.output || '').slice(-12000) : '';
 
     this.addMessage('user', message);
