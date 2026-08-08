@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/wamakologeorge-dev/amosclaude-clean/blob/main/SECURITY.md
+    about: Do not disclose vulnerabilities, credentials, private data, or exploit details in a public issue.
+  - name: Amosclaud documentation
+    url: https://www.amosclaud.com/docs
+    about: Review product and platform documentation before opening a support issue.

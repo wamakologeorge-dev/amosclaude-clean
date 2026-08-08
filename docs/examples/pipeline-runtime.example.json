@@ -1,0 +1,40 @@
+{
+  "node_registration": {
+    "name": "local-java-node",
+    "endpoint": "http://host.docker.internal:8098",
+    "capabilities": [
+      "java-pod",
+      "maven",
+      "gradle",
+      "javac"
+    ],
+    "cpu_millis": 4000,
+    "memory_mb": 8192,
+    "disk_mb": 51200,
+    "gpu_units": 0,
+    "metadata": {
+      "location": "local",
+      "purpose": "Java pipeline execution"
+    }
+  },
+  "java_pod_request": {
+    "jdk": "21",
+    "build_tool": "auto",
+    "cpu_millis": 1000,
+    "memory_mb": 2048,
+    "disk_mb": 4096,
+    "gpu_units": 0,
+    "network": "restricted",
+    "command": null,
+    "max_attempts": 3,
+    "metadata": {
+      "source": "quickstart-example"
+    }
+  },
+  "notes": [
+    "Send node_registration to POST /api/v1/pipelines/cooperation/runtime/nodes after authenticating.",
+    "Send java_pod_request to POST /api/v1/pipelines/cooperation/runtime/pipelines/{pipeline_id}/java-pods.",
+    "The node proposer is advisory; Java pod creation revalidates capacity before creating a lease.",
+    "Do not place tokens, passwords, private keys, or model credentials in this file."
+  ]
+}

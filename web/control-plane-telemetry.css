@@ -1,0 +1,318 @@
+.telemetry-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(380px, 1.4fr);
+  gap: 1rem;
+}
+
+.telemetry-card {
+  display: grid;
+  align-content: start;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.85rem;
+  background: rgba(7, 12, 22, 0.72);
+}
+
+.telemetry-card h3,
+.telemetry-card h4 {
+  margin: 0;
+}
+
+.telemetry-description,
+.telemetry-empty,
+.telemetry-timestamp,
+.node-proposal-card small,
+.pipefail-event small {
+  color: var(--muted, #9aa8bf);
+}
+
+.node-proposer-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.node-proposer-form label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.node-proposer-form .wide,
+.node-proposer-form button {
+  grid-column: 1 / -1;
+}
+
+.node-proposal-list,
+.pipefail-pipeline-list,
+.pipefail-event-list,
+.pipeline-pipefail-graphics {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.node-proposal-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.7rem;
+  background: rgba(12, 19, 34, 0.76);
+}
+
+.node-proposal-card[data-selected="true"] {
+  border-color: rgba(55, 175, 119, 0.75);
+  box-shadow: 0 0 0 1px rgba(55, 175, 119, 0.2);
+}
+
+.node-proposal-card[data-eligible="false"] {
+  opacity: 0.72;
+}
+
+.node-proposal-heading,
+.telemetry-section-heading,
+.pipefail-event-heading,
+.pipefail-pipeline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.telemetry-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(74, 116, 199, 0.2);
+}
+
+.telemetry-badge[data-state="selected"],
+.telemetry-badge[data-state="recovered"] {
+  background: rgba(55, 175, 119, 0.18);
+}
+
+.telemetry-badge[data-state="blocked"],
+.telemetry-badge[data-state="terminal"] {
+  background: rgba(220, 76, 76, 0.18);
+}
+
+.telemetry-badge[data-state="waiting"] {
+  background: rgba(225, 160, 55, 0.18);
+}
+
+.node-resource-grid,
+.pipefail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.node-resource-grid span,
+.pipefail-summary-grid article {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.node-resource-grid small,
+.pipefail-summary-grid span {
+  color: var(--muted, #9aa8bf);
+  font-size: 0.72rem;
+}
+
+.node-resource-grid strong,
+.pipefail-summary-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.telemetry-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.telemetry-chart {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-height: 145px;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.7rem;
+}
+
+.telemetry-bar-row {
+  display: grid;
+  grid-template-columns: minmax(85px, 0.9fr) minmax(90px, 2fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.telemetry-bar-track {
+  overflow: hidden;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.telemetry-bar-fill {
+  display: block;
+  width: var(--telemetry-percent, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.telemetry-timeline {
+  display: flex;
+  align-items: end;
+  gap: 0.3rem;
+  min-height: 96px;
+  padding: 0.55rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.7rem;
+  overflow-x: auto;
+}
+
+.telemetry-timeline-column {
+  display: grid;
+  grid-template-rows: minmax(15px, 1fr) auto;
+  align-items: end;
+  justify-items: center;
+  gap: 0.3rem;
+  min-width: 34px;
+  height: 82px;
+}
+
+.telemetry-timeline-column i {
+  width: 70%;
+  min-height: 3px;
+  height: var(--telemetry-height, 3px);
+  border-radius: 0.3rem 0.3rem 0 0;
+  background: currentColor;
+}
+
+.telemetry-timeline-column small {
+  font-size: 0.62rem;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  color: var(--muted, #9aa8bf);
+}
+
+.pipefail-pipeline-card,
+.pipefail-event {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.7rem;
+  background: rgba(12, 19, 34, 0.7);
+}
+
+.pipefail-flow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.pipefail-flow-node {
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.2rem;
+  min-height: 74px;
+  padding: 0.45rem;
+  border: 1px solid var(--border, #25324a);
+  border-radius: 0.65rem;
+  text-align: center;
+  background: rgba(74, 116, 199, 0.1);
+}
+
+.pipefail-flow-node:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  right: -0.42rem;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  color: var(--muted, #9aa8bf);
+}
+
+.pipefail-flow-node[data-state="failure"],
+.pipefail-flow-node[data-state="terminal"] {
+  background: rgba(220, 76, 76, 0.12);
+}
+
+.pipefail-flow-node[data-state="recovered"] {
+  background: rgba(55, 175, 119, 0.12);
+}
+
+.pipefail-flow-node[data-state="waiting"] {
+  background: rgba(225, 160, 55, 0.12);
+}
+
+.pipeline-pipefail-graphics {
+  margin-top: 0.65rem;
+  padding: 0.7rem;
+  border-top: 1px solid var(--border, #25324a);
+}
+
+.pipeline-pipefail-graphics .pipefail-flow {
+  grid-template-columns: repeat(6, minmax(62px, 1fr));
+}
+
+@media (max-width: 1050px) {
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pipefail-flow,
+  .pipeline-pipefail-graphics .pipefail-flow {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+
+  .pipefail-flow-node::after {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .node-proposer-form,
+  .telemetry-charts,
+  .node-resource-grid,
+  .pipefail-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pipefail-flow,
+  .pipeline-pipefail-graphics .pipefail-flow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .node-proposer-form,
+  .telemetry-charts,
+  .node-resource-grid,
+  .pipefail-summary-grid,
+  .pipefail-flow,
+  .pipeline-pipefail-graphics .pipefail-flow {
+    grid-template-columns: 1fr;
+  }
+}

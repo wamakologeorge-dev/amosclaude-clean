@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 authors = [
   {name = "Amosclaud Team", email = "support@www.amosclaud.com"}
 ]
-license = "LicenseRef-Proprietary"
+license = "MIT"
 license-files = ["LICENSE", "LICENSE-COMMERCIAL.txt"]
 keywords = ["amosclaud", "amcl", "programming-language", "fastapi", "cicd", "repositories", "deployment", "pwa"]
 classifiers = [
