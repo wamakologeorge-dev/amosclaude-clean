@@ -81,13 +81,21 @@
       const state = proposal.selected ? 'selected' : proposal.eligible ? 'eligible' : 'blocked';
       heading.append(title, badge(proposal.selected ? 'selected' : state, state));
 
-      const score = element('small', '', `Score ${proposal.score} · ${proposal.status} · heartbeat ${proposal.heartbeat_age_seconds ?? 'unknown'}s`);
+      const score = element(
+        'small',
+        '',
+        `Score ${proposal.score} · ${proposal.status} · heartbeat ${proposal.heartbeat_age_seconds ?? 'unknown'}s`,
+      );
       const resources = element('div', 'node-resource-grid');
       Object.entries(proposal.resource_fit || {}).forEach(([key, fit]) => {
         const cell = element('span');
         cell.append(
           element('small', '', resourceLabel(key)),
-          element('strong', '', `${resourceValue(key, fit.requested)} / ${resourceValue(key, fit.available)}`),
+          element(
+            'strong',
+            '',
+            `${resourceValue(key, fit.requested)} / ${resourceValue(key, fit.available)}`,
+          ),
         );
         resources.append(cell);
       });
@@ -128,7 +136,10 @@
       const column = element('span', 'telemetry-timeline-column');
       const bar = element('i');
       bar.title = `${item.bucket}: ${item.total} PipeFail events`;
-      bar.style.setProperty('--telemetry-height', `${Math.max((item.total / maximum) * 56, 3)}px`);
+      bar.style.setProperty(
+        '--telemetry-height',
+        `${Math.max((item.total / maximum) * 56, 3)}px`,
+      );
       const label = element('small', '', String(item.bucket).slice(5, 13));
       column.append(bar, label);
       container.append(column);
@@ -162,7 +173,10 @@
       const card = element('article', 'pipefail-pipeline-card');
       const heading = element('div', 'pipefail-pipeline-heading');
       const title = element('strong', '', item.objective || item.id);
-      heading.append(title, badge(item.state, item.state === 'failed' ? 'terminal' : 'pipeline'));
+      heading.append(
+        title,
+        badge(item.state, item.state === 'failed' ? 'terminal' : 'pipeline'),
+      );
       const meta = element('small', '', `${item.id} · ${item.mode} · ${item.branch}`);
       const flowContainer = element('div');
       const graph = graphById.get(item.id);
@@ -182,10 +196,12 @@
     items.slice(0, 30).forEach((item) => {
       const event = element('article', 'pipefail-event');
       const heading = element('div', 'pipefail-event-heading');
-      heading.append(
-        element('strong', '', item.kind),
-        badge(item.action, item.action === 'retry_reassigned' ? 'recovered' : item.action === 'failed' ? 'terminal' : 'waiting'),
-      );
+      const state = item.action === 'retry_reassigned'
+        ? 'recovered'
+        : item.action === 'failed'
+          ? 'terminal'
+          : 'waiting';
+      heading.append(element('strong', '', item.kind), badge(item.action, state));
       const detail = element('p', '', item.error_detail);
       const meta = element(
         'small',
@@ -213,7 +229,10 @@
   async function refreshTelemetry() {
     const data = await request(`${apiRoot}/telemetry/pipefail?limit=1000`);
     renderTelemetry(data);
-    setNotice('Node proposer, all-PipeFail telemetry, and pipeline graphics are current.', 'success');
+    setNotice(
+      'Node proposer, all-PipeFail telemetry, and pipeline graphics are current.',
+      'success',
+    );
   }
 
   async function loadPipelineTelemetry(card) {
@@ -221,16 +240,25 @@
     const container = card.querySelector('.pipeline-pipefail-graphics');
     if (!pipelineId || !container) return;
     try {
-      const data = await request(`${apiRoot}/pipelines/${pipelineId}/telemetry?limit=500`);
+      const data = await request(
+        `${apiRoot}/pipelines/${pipelineId}/telemetry?limit=500`,
+      );
       container.innerHTML = '';
+      container.classList.remove('error');
       const heading = element('div', 'telemetry-section-heading');
+      const state = data.summary.terminal
+        ? 'terminal'
+        : data.summary.recovered
+          ? 'recovered'
+          : 'pipeline';
       heading.append(
         element('strong', '', 'PipeFail / pipeline graphics'),
-        badge(`${data.summary.total} events`, data.summary.terminal ? 'terminal' : data.summary.recovered ? 'recovered' : 'pipeline'),
+        badge(`${data.summary.total} events`, state),
       );
-      container.append(heading);
+      const flowContainer = element('div');
       const graph = data.graphics?.[0];
-      if (graph) renderFlow(container, graph);
+      if (graph) renderFlow(flowContainer, graph);
+      container.append(heading, flowContainer);
     } catch (error) {
       container.textContent = error.message;
       container.classList.add('error');
@@ -279,7 +307,10 @@
         }),
       });
       renderProposals(data);
-      setNotice('Node proposal calculated from current heartbeat, capability, and resource telemetry.', 'success');
+      setNotice(
+        'Node proposal calculated from current heartbeat, capability, and resource telemetry.',
+        'success',
+      );
     } catch (error) {
       setNotice(error.message, 'error');
     } finally {
