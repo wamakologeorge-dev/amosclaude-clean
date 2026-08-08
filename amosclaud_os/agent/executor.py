@@ -260,7 +260,11 @@ def execute_native_operation(
                     f"Commit: {result['commit']}",
                 ],
                 resource=result,
-                logs=["Write permission verified.", "File written inside the native repository.", "Git commit created."],
+                logs=[
+                    "Write permission verified.",
+                    "File written inside the native repository.",
+                    "Git commit created.",
+                ],
             )
 
         # A general build or repair requires a genuine model endpoint. It executes
@@ -276,13 +280,19 @@ def execute_native_operation(
                 "Real code generation is unavailable because no Amosclaud model endpoint is connected.",
                 f"Selected repository: {context.get('repository_name') or repository_id}",
                 "Deterministic repository, issue, branch, commit, and supplied-file operations remain available.",
-                "Configure AMOSCLAUD_MODEL_ENDPOINT or AMOSCLAUD_MODEL_URL to enable model-generated code changes.",
+                "Configure AMOSCLAUD_MODEL_URL or OLLAMA_URL to enable model-generated code changes.",
             )
 
+        execution_mode = (
+            "fix"
+            if mode in {"build", "fix"} or prepared.get("apply_changes")
+            else "plan"
+        )
         with repositories._db() as db:
             access = repositories._access(db, repository_id, int(user["id"]))
-            repositories._require_write(access)
             role = str(access["role"] or "viewer")
+            if execution_mode == "fix":
+                repositories._require_write(access)
         workspace = repositories._repo_path(repository_id)
         if not Path(workspace).is_dir():
             return _failure(
@@ -290,7 +300,6 @@ def execute_native_operation(
                 "The selected repository storage is unavailable.",
                 f"Expected storage: {workspace}",
             )
-        execution_mode = "fix" if mode in {"build", "fix"} or prepared.get("apply_changes") else "plan"
         raw = run_autonomous(
             objective=objective,
             mode=execution_mode,
@@ -310,7 +319,10 @@ def execute_native_operation(
         summary = (
             f"Changed {len(changed)} file(s) in the native repository and completed verification."
             if succeeded
-            else str(raw.get("blocker") or "The engineering runtime did not produce a verified repository change.")
+            else str(
+                raw.get("blocker")
+                or "The engineering runtime did not produce a verified repository change."
+            )
         )
         evidence = [f"Repository ID: {repository_id}", f"Workspace: {workspace}"]
         evidence.extend(f"Changed: {path}" for path in changed)
