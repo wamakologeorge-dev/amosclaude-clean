@@ -14,8 +14,7 @@ def _source(path: str) -> str:
 def test_account_usage_counts_only_the_selected_user() -> None:
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE repositories (
             id INTEGER PRIMARY KEY,
             owner_id INTEGER NOT NULL
@@ -34,8 +33,7 @@ def test_account_usage_counts_only_the_selected_user() -> None:
         VALUES (2, 10), (1, 20);
         INSERT INTO autonomous_api_keys(id, user_id, revoked_at)
         VALUES (1, 10, NULL), (2, 10, 'revoked'), (3, 20, NULL);
-        """
-    )
+        """)
 
     assert _account_usage(db, 10) == {
         "owned_repositories": 2,
