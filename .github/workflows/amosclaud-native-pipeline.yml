@@ -65,6 +65,7 @@ jobs:
           AMOSCLAUD_GITHUB_PIPELINE_TOKEN: ${{ secrets.AMOSCLAUD_GITHUB_PIPELINE_TOKEN }}
           AMOSCLAUD_REQUESTED_MODE: ${{ github.event.inputs.mode || github.event.client_payload.mode || '' }}
           AMOSCLAUD_OBJECTIVE: ${{ github.event.inputs.objective || github.event.client_payload.objective || '' }}
+          AMOSCLAUD_BRIDGE_REQUIRED: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
         run: |
           set -euo pipefail
           python scripts/ci/amosclaud_github_native_trigger.py \
