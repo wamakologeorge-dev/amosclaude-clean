@@ -206,20 +206,14 @@ def account_overview(amos_session: str | None = Cookie(default=None)) -> dict[st
             "hosted_tool_seconds_remaining": (
                 None if administrator else wallet["remaining_seconds"]
             ),
-            "hosted_tool_lifetime_seconds": (
-                None if administrator else wallet["lifetime_seconds"]
-            ),
+            "hosted_tool_lifetime_seconds": (None if administrator else wallet["lifetime_seconds"]),
         },
         "limits": {
             "repositories": (
-                None
-                if administrator
-                else _positive_limit("MAX_REPOSITORIES_PER_USER", 10)
+                None if administrator else _positive_limit("MAX_REPOSITORIES_PER_USER", 10)
             ),
             "autonomous_api_keys": (
-                None
-                if administrator
-                else _positive_limit("MAX_AUTONOMOUS_KEYS_PER_USER", 10)
+                None if administrator else _positive_limit("MAX_AUTONOMOUS_KEYS_PER_USER", 10)
             ),
             "administrator_bypass": administrator,
         },
