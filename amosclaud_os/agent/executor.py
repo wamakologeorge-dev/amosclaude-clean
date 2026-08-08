@@ -9,10 +9,10 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from amoscloud_ai.api.routes import auth as auth_routes
-from amoscloud_ai.api.routes import repositories
 from amosclaud_os.repository.issues import NativeIssueService
 from amosclaud_os.workspace.context import ProjectContextSelection, ProjectContextService
+from amoscloud_ai.api.routes import auth as auth_routes
+from amoscloud_ai.api.routes import repositories
 
 _CREATE_REPOSITORY = re.compile(
     r"\b(?:create|initialize|start|make)\s+(?:a\s+|an\s+|new\s+)?repository"
