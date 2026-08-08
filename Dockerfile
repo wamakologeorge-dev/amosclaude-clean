@@ -79,11 +79,20 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "python-dotenv>=1.0,<2" \
         "PyYAML>=6.0,<7" \
         "dnspython>=2.6,<3" \
+        "opentelemetry-distro==0.65b0" \
+        "opentelemetry-exporter-otlp==1.44.0" \
+        "opentelemetry-instrumentation-fastapi==0.65b0" \
+        "opentelemetry-instrumentation-flask==0.65b0" \
+        "opentelemetry-instrumentation-httpx==0.65b0" \
+        "opentelemetry-instrumentation-requests==0.65b0" \
+        "opentelemetry-instrumentation-logging==0.65b0" \
+        "opentelemetry-instrumentation-sqlalchemy==0.65b0" \
+        "opentelemetry-instrumentation-redis==0.65b0" \
         "pytest>=8,<10"
 
 COPY . /app
 COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
-RUN chmod 0755 /usr/local/bin/amos
+RUN chmod 0755 /usr/local/bin/amos /app/docker/otel-exec.sh /app/docker/production-entrypoint.sh
 
 # Fail with an explicit source-context error instead of a misleading missing
 # dependency-file error.
@@ -91,4 +100,4 @@ RUN test -f /app/amoscloud_ai/main.py || (echo "Amosclaud source is missing from
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn amoscloud_ai.connected_app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["/app/docker/otel-exec.sh", "uvicorn", "amoscloud_ai.connected_app:app", "--host", "0.0.0.0", "--port", "8000"]
