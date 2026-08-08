@@ -134,7 +134,11 @@ def test_all_pipefail_telemetry_contains_pipeline_graphics(
     assert reassigned["state"] == "failed"
     assert second["id"] != first["id"]
 
-    telemetry = runtime_telemetry.all_pipefail_telemetry(limit=500, user=user)
+    telemetry = runtime_telemetry.all_pipefail_telemetry(
+        pipeline_id=None,
+        limit=500,
+        user=user,
+    )
 
     assert telemetry["layout"] == "amosclaud.telemetry.pipefail.v1"
     assert telemetry["scope"]["type"] == "all-pipelines"
@@ -162,7 +166,10 @@ def test_all_pipefail_telemetry_contains_pipeline_graphics(
         "waiting",
         "terminal",
     }
-    assert any(edge["from"] == "pipefail" and edge["to"] == "recovered" for edge in graphic["edges"])
+    assert any(
+        edge["from"] == "pipefail" and edge["to"] == "recovered"
+        for edge in graphic["edges"]
+    )
 
 
 def test_pipeline_telemetry_returns_zero_failure_graphics(
