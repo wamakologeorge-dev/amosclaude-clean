@@ -1,8 +1,10 @@
 """Per-user Amosclaud Autonomous API key management."""
+
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 from datetime import datetime, timezone
@@ -106,6 +108,31 @@ def _decode_skills(raw: str | None) -> list[str]:
     )
 
 
+def _max_keys_per_user() -> int:
+    try:
+        value = int(os.getenv("MAX_AUTONOMOUS_KEYS_PER_USER", "10").strip())
+    except (AttributeError, ValueError):
+        value = 10
+    return max(1, min(value, 100_000))
+
+
+def _is_admin(user) -> bool:
+    try:
+        return bool(user["is_admin"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def _active_key_count(db: sqlite3.Connection, user_id: int) -> int:
+    return int(
+        db.execute(
+            "SELECT COUNT(*) FROM autonomous_api_keys "
+            "WHERE user_id=? AND revoked_at IS NULL",
+            (user_id,),
+        ).fetchone()[0]
+    )
+
+
 @router.get("")
 def list_keys(request: Request) -> dict:
     user = _user(request)
@@ -116,12 +143,20 @@ def list_keys(request: Request) -> dict:
             "FROM autonomous_api_keys WHERE user_id=? ORDER BY id DESC",
             (user["id"],),
         ).fetchall()
+        active_count = _active_key_count(db, int(user["id"]))
     keys = []
     for row in rows:
         item = dict(row)
         item["skills"] = _decode_skills(item.get("skills"))
         keys.append(item)
-    return {"available_skills": sorted(AVAILABLE_SKILLS), "keys": keys}
+    administrator = _is_admin(user)
+    return {
+        "available_skills": sorted(AVAILABLE_SKILLS),
+        "keys": keys,
+        "active_count": active_count,
+        "limit": None if administrator else _max_keys_per_user(),
+        "administrator_bypass": administrator,
+    }
 
 
 @router.post("", status_code=201)
@@ -133,6 +168,18 @@ def create_key(body: KeyCreateRequest, request: Request) -> dict:
     skills = json.dumps(body.skills, separators=(",", ":"))
     with _connect() as db:
         _schema(db)
+        if not _is_admin(user):
+            limit = _max_keys_per_user()
+            active_count = _active_key_count(db, int(user["id"]))
+            if active_count >= limit:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "autonomous_key_limit_reached",
+                        "message": "This Amosclaud account has reached its active API key limit.",
+                        "limit": limit,
+                    },
+                )
         cursor = db.execute(
             "INSERT INTO autonomous_api_keys"
             "(user_id,name,prefix,key_hash,skills,created_at) VALUES (?,?,?,?,?,?)",
