@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#070b14">
   <title>Control Plane · Amosclaud</title>
   <link rel="stylesheet" href="/static/control-plane.css">
+  <link rel="stylesheet" href="/static/control-plane-runtime.css">
 </head>
 <body>
   <header class="topbar">
@@ -45,7 +46,7 @@
       <header class="hero">
         <p class="eyebrow">Pipeline cooperation</p>
         <h1>One request. Cooperating services. One verified result.</h1>
-        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, and approvals now share one durable Amosclaud execution contract.</p>
+        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, approvals, execution nodes, and Java pods share one durable Amosclaud contract.</p>
         <div id="notice" class="notice" role="status" aria-live="polite">Loading the control plane…</div>
       </header>
 
@@ -54,6 +55,13 @@
         <article><span>Pending approvals</span><strong id="pending-approvals">0</strong><small>Protected writes and deployments</small></article>
         <article><span>Ready workers</span><strong id="ready-workers">0</strong><small>Agents and connected runners</small></article>
         <article><span>Queued tasks</span><strong id="queued-tasks">0</strong><small>Waiting for a matching capability</small></article>
+      </section>
+
+      <section class="runtime-summary" aria-label="Execution runtime summary">
+        <article><span>Ready nodes</span><strong id="runtime-ready-nodes">0</strong></article>
+        <article><span>Active leases</span><strong id="runtime-active-leases">0</strong></article>
+        <article><span>Running Java pods</span><strong id="runtime-running-pods">0</strong></article>
+        <article><span>Waiting for node</span><strong id="runtime-waiting-pods">0</strong></article>
       </section>
 
       <section class="workspace-grid">
@@ -89,7 +97,7 @@
         </article>
 
         <article class="panel worker-panel">
-          <div class="panel-heading"><div><p class="eyebrow">Capacity</p><h2>Cooperating workers</h2></div></div>
+          <div class="panel-heading"><div><p class="eyebrow">Capability workers</p><h2>Cooperating workers</h2></div></div>
           <form id="worker-form" class="worker-form">
             <label>Worker name<input id="worker-name" required maxlength="200" placeholder="Local engineering runner"></label>
             <label>Capabilities<input id="worker-capabilities" required value="context,repository-read,planning,repository-write,testing,security,verification" maxlength="1000"></label>
@@ -98,6 +106,25 @@
           </form>
           <div id="worker-list" class="worker-list">No workers registered.</div>
         </article>
+      </section>
+
+      <section class="panel runtime-fabric" aria-label="Execution node fabric">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Shared power and resources</p><h2>Execution nodes</h2></div>
+          <span class="contract-badge">leases · failover · PipeFail</span>
+        </div>
+        <p class="runtime-description">Nodes keep their own specialized tools but lend bounded CPU, memory, disk, GPU, and runtime capability to the same cooperation pipeline.</p>
+        <form id="runtime-node-form" class="runtime-node-form">
+          <label>Node name<input id="runtime-node-name" required maxlength="200" placeholder="Java node 1"></label>
+          <label>Endpoint<input id="runtime-node-endpoint" maxlength="2000" placeholder="https://runner.internal"></label>
+          <label>Capabilities<input id="runtime-node-capabilities" required value="java-pod,maven,gradle,javac" maxlength="1000"></label>
+          <label>CPU millicores<input id="runtime-node-cpu" type="number" min="100" value="4000"></label>
+          <label>Memory MB<input id="runtime-node-memory" type="number" min="256" value="8192"></label>
+          <label>Disk MB<input id="runtime-node-disk" type="number" min="512" value="51200"></label>
+          <button type="submit">Register execution node</button>
+        </form>
+        <p id="runtime-notice" class="runtime-notice" role="status" aria-live="polite">Loading execution nodes…</p>
+        <div id="runtime-node-list" class="runtime-node-list"></div>
       </section>
 
       <section class="panel">
@@ -119,10 +146,15 @@
       <dl class="pipeline-meta"></dl>
       <ol class="task-list"></ol>
       <div class="pipeline-actions"></div>
+      <section class="pipeline-runtime" aria-label="Pipeline Java runtime">
+        <div class="pipeline-runtime-actions"></div>
+        <div class="pipeline-java-pods">Loading Java pods…</div>
+      </section>
       <details><summary>Artifacts and evidence</summary><div class="artifact-list"></div></details>
     </article>
   </template>
 
   <script src="/static/control-plane.js"></script>
+  <script src="/static/control-plane-runtime.js"></script>
 </body>
 </html>
