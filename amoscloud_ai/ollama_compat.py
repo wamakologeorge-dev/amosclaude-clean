@@ -61,9 +61,7 @@ def apply_ollama_environment(
 
     return {
         "ollama_configured": bool(model_url),
-        "credential_configured": bool(
-            str(target.get("AMOSCLAUD_MODEL_TOKEN") or "").strip()
-        ),
+        "credential_configured": bool(str(target.get("AMOSCLAUD_MODEL_TOKEN") or "").strip()),
         "model": str(target.get("AMOSCLAUD_MODEL") or "").strip() or None,
         "applied": applied,
     }
