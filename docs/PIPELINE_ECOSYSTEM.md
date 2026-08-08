@@ -82,6 +82,8 @@ Every cooperating component is attached to a pipeline ID and user scope:
 
 ## Why the new files exist
 
+### Runtime and pipeline implementation
+
 - `amoscloud_ai/api/routes/pipeline_cooperation.py` owns the durable pipeline, task, worker, approval, event, and artifact contract.
 - `amoscloud_ai/api/routes/execution_nodes.py` adds node capacity, resource leases, Java pod lifecycle, and PipeFail while reusing the cooperation contract.
 - `amoscloud_ai/api/routes/runtime_telemetry.py` computes read-only node proposals, all-PipeFail telemetry, and per-pipeline graphics directly from durable runtime records.
@@ -94,6 +96,33 @@ Every cooperating component is attached to a pipeline ID and user scope:
 - `web/control-plane.html`, `web/control-plane.js`, and `web/control-plane-runtime.js` expose pipelines and runtime operations.
 - `web/control-plane-telemetry.js` renders only the telemetry returned by the backend, including ranked node proposals, all-PipeFail dimensions, timelines, and per-pipeline flow graphics.
 - `web/control-plane-telemetry.css` gives those layouts a responsive visual structure without adding a chart framework or external dependency.
-- The focused tests prove dependency release, approvals, resource return, node-failure reassignment, GitHub-event deduplication, full-repository scope, automatic-trigger safety, node-proposal explanations, all-PipeFail aggregation, and zero-failure graphics.
+
+### Repository storefront and onboarding
+
+- `README.md` is the five-second product storefront, architecture overview, status boundary, and path into deeper documentation.
+- `docs/QUICKSTART.md` gives copyable local, self-hosted, execution-node, Java-pod, GitHub-trigger, and verification instructions.
+- `docs/examples/pipeline-runtime.example.json` provides secret-free node-registration and Java-pod request bodies without pretending they are active resources.
+- `docs/GITHUB_ACTIONS.md` explains workflow responsibilities, triggers, permissions, deduplication, evidence, and approval boundaries.
+- `docs/DEMO.md` provides reproducible tests and runtime commands so visual proof can be regenerated for the current commit.
+- `docs/assets/amosclaud-pipeline-architecture.svg` visualizes the shared control-plane, pipeline, node, Java-pod, evidence, and PipeFail architecture.
+- `docs/assets/amosclaud-pipeline-demo.svg` illustrates the implemented evidence flow and is explicitly identified as an architectural demo rather than a live deployment screenshot.
+
+### Contribution and maintenance controls
+
+- `CONTRIBUTING.md` defines issue evidence, local setup, ecosystem-preserving changes, pipeline responsibilities, workflow safety, and review requirements.
+- `.github/PULL_REQUEST_TEMPLATE.md` requires contributors to state ecosystem integration, verification, security, approvals, migration, and file purpose.
+- `.github/ISSUE_TEMPLATE/bug_report.yml` collects reproducible, sanitized failure evidence using the canonical bug and triage labels.
+- `.github/ISSUE_TEMPLATE/feature_request.yml` requires feature proposals to describe a user problem, shared ecosystem integration, verification, recovery, and approvals.
+- `.github/ISSUE_TEMPLATE/config.yml` directs security reports away from public issues and points users to documentation.
+- `.github/labels.yml` is the canonical area, type, size, priority, status, community, and compatibility taxonomy.
+- `docs/LABELS.md` explains how maintainers and contributors apply that taxonomy consistently.
+- `scripts/ci/sync_github_labels.py` validates and additively creates or updates canonical labels without deleting unrelated labels.
+- `.github/workflows/sync-labels.yml` provides an explicit manual, dry-run-first label synchronization path with minimum GitHub permissions.
+- `tests/test_repository_labels.py` protects label uniqueness, required taxonomy, template alignment, and the no-delete synchronization boundary.
+- `pyproject.toml` declares the same MIT source license represented by `LICENSE`; separate commercial terms remain limited to separately provided managed offerings.
+
+### Verification
+
+The focused tests prove dependency release, approvals, resource return, node-failure reassignment, GitHub-event deduplication, full-repository scope, automatic-trigger safety, node-proposal explanations, all-PipeFail aggregation, zero-failure graphics, and repository-label controls.
 
 No file exists only to imitate a dashboard. A module may report `planned` or `foundation` until a real backend service and verification path are connected.
