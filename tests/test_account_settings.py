@@ -43,7 +43,13 @@ def test_settings_reports_tool_availability(as_admin, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["billing"] == {"available": True, "href": "/plans"}
-    assert body["api_keys"]["href"] == "/admin/service-keys"
+    assert body["api_keys"]["href"] == "/account#api-keys"
+    assert body["api_keys"]["admin_only"] is False
+    assert body["service_keys"] == {
+        "available": True,
+        "admin_only": True,
+        "href": "/admin/service-keys",
+    }
     assert body["github_connection"]["available"] is True
     assert body["is_admin"] is True
 
