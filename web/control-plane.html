@@ -7,6 +7,7 @@
   <title>Control Plane · Amosclaud</title>
   <link rel="stylesheet" href="/static/control-plane.css">
   <link rel="stylesheet" href="/static/control-plane-runtime.css">
+  <link rel="stylesheet" href="/static/control-plane-telemetry.css">
 </head>
 <body>
   <header class="topbar">
@@ -46,7 +47,7 @@
       <header class="hero">
         <p class="eyebrow">Pipeline cooperation</p>
         <h1>One request. Cooperating services. One verified result.</h1>
-        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, approvals, execution nodes, and Java pods share one durable Amosclaud contract.</p>
+        <p>Agents, runners, repositories, tests, security, deployment, logs, artifacts, approvals, execution nodes, Java pods, telemetry, and PipeFail graphics share one durable Amosclaud contract.</p>
         <div id="notice" class="notice" role="status" aria-live="polite">Loading the control plane…</div>
       </header>
 
@@ -127,6 +128,59 @@
         <div id="runtime-node-list" class="runtime-node-list"></div>
       </section>
 
+      <section class="panel telemetry-layout" aria-label="Runtime telemetry layouts">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Telemetry data layout</p><h2>Node proposer and all PipeFail</h2></div>
+          <span class="contract-badge">truthful data · ranked fit · pipeline graphics</span>
+        </div>
+        <p id="telemetry-notice" class="runtime-notice" role="status" aria-live="polite">Loading telemetry…</p>
+        <div class="telemetry-grid">
+          <article class="telemetry-card">
+            <div class="telemetry-section-heading">
+              <div><p class="eyebrow">node_proposer</p><h3>Propose the best node</h3></div>
+            </div>
+            <p class="telemetry-description">The proposer ranks every node by live heartbeat, Java capability, tool support, available resources, and projected utilization. Scheduling still revalidates capacity.</p>
+            <form id="node-proposer-form" class="node-proposer-form">
+              <label class="wide">Pipeline ID
+                <input id="node-proposer-pipeline" list="telemetry-pipeline-options" maxlength="200" placeholder="Optional pipeline ID">
+                <datalist id="telemetry-pipeline-options"></datalist>
+              </label>
+              <label>JDK
+                <select id="node-proposer-jdk"><option>17</option><option selected>21</option><option>25</option></select>
+              </label>
+              <label>Build tool
+                <select id="node-proposer-tool"><option value="auto">Auto</option><option value="maven">Maven</option><option value="gradle">Gradle</option><option value="javac">javac</option></select>
+              </label>
+              <label>CPU millicores<input id="node-proposer-cpu" type="number" min="100" value="1000"></label>
+              <label>Memory MB<input id="node-proposer-memory" type="number" min="256" value="2048"></label>
+              <label>Disk MB<input id="node-proposer-disk" type="number" min="512" value="4096"></label>
+              <label>GPU units<input id="node-proposer-gpu" type="number" min="0" value="0"></label>
+              <button type="submit">Calculate node proposal</button>
+            </form>
+            <div id="node-proposal-list" class="node-proposal-list"><p class="telemetry-empty">Run the proposer to see ranked nodes.</p></div>
+          </article>
+
+          <article class="telemetry-card">
+            <div class="telemetry-section-heading">
+              <div><p class="eyebrow">all pipefail</p><h3>PipeFail telemetry across pipelines</h3></div>
+            </div>
+            <div class="pipefail-summary-grid">
+              <article><span>Total events</span><strong id="pipefail-total">0</strong></article>
+              <article><span>Recovered</span><strong id="pipefail-recovered">0</strong></article>
+              <article><span>Waiting</span><strong id="pipefail-waiting">0</strong></article>
+              <article><span>Terminal</span><strong id="pipefail-terminal">0</strong></article>
+            </div>
+            <div class="telemetry-charts">
+              <section class="telemetry-chart"><h4>Failure kind</h4><div id="pipefail-kind-chart"></div></section>
+              <section class="telemetry-chart"><h4>Recovery action</h4><div id="pipefail-action-chart"></div></section>
+            </div>
+            <section><h4>Failure timeline</h4><div id="pipefail-timeline" class="telemetry-timeline"></div></section>
+            <section><h4>PipeFail / pipeline graphics</h4><div id="pipefail-pipeline-list" class="pipefail-pipeline-list"></div></section>
+            <details><summary>Latest PipeFail events</summary><div id="pipefail-event-list" class="pipefail-event-list"></div></details>
+          </article>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-heading">
           <div><p class="eyebrow">Execution history</p><h2>Pipeline runs</h2></div>
@@ -149,6 +203,7 @@
       <section class="pipeline-runtime" aria-label="Pipeline Java runtime">
         <div class="pipeline-runtime-actions"></div>
         <div class="pipeline-java-pods">Loading Java pods…</div>
+        <div class="pipeline-pipefail-graphics">Loading PipeFail pipeline graphics…</div>
       </section>
       <details><summary>Artifacts and evidence</summary><div class="artifact-list"></div></details>
     </article>
@@ -156,5 +211,6 @@
 
   <script src="/static/control-plane.js"></script>
   <script src="/static/control-plane-runtime.js"></script>
+  <script src="/static/control-plane-telemetry.js"></script>
 </body>
 </html>
