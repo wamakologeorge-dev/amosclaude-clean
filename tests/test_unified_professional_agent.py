@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "web" / "index.html"
 RUNTIME = ROOT / "web" / "unified-agent-runtime.js"
