@@ -176,6 +176,15 @@ def _endpoint() -> str:
     return f"{configured}{suffix}"
 
 
+def _bridge_required() -> bool:
+    return os.getenv("AMOSCLAUD_BRIDGE_REQUIRED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _post(endpoint: str, token: str, payload: dict[str, Any]) -> dict[str, Any]:
     request = urllib.request.Request(
         endpoint,
@@ -206,6 +215,7 @@ def _write_summary(output: Path, payload: dict[str, Any], result: dict[str, Any]
         f"- Legacy applications included: `{scope['includes_legacy_applications']}`",
         f"- GitHub-native applications included: `{scope['includes_github_native_applications']}`",
         f"- Bridge status: `{result['status']}`",
+        f"- Bridge required: `{result.get('required', False)}`",
     ]
     if pipeline.get("id"):
         lines.append(f"- Cooperation pipeline: `{pipeline['id']}`")
@@ -270,26 +280,37 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
     endpoint = _endpoint()
     token = os.getenv("AMOSCLAUD_GITHUB_PIPELINE_TOKEN", "").strip()
+    required = _bridge_required()
     result: dict[str, Any] = {
         "status": "evidence_only",
+        "required": required,
         "reason": "AMOSCLAUD_PIPELINE_URL or AMOSCLAUD_GITHUB_PIPELINE_TOKEN is not configured",
     }
     exit_code = 0
     if endpoint and token:
         try:
             response = _post(endpoint, token, trigger_payload)
-            result = {"status": "pipeline_created", "response": response}
+            result = {
+                "status": "pipeline_created",
+                "required": required,
+                "response": response,
+            }
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")
             result = {
                 "status": "bridge_failed",
+                "required": required,
                 "http_status": exc.code,
                 "reason": detail[:20_000],
             }
-            exit_code = 1
+            exit_code = 1 if required else 0
         except (OSError, ValueError) as exc:
-            result = {"status": "bridge_failed", "reason": str(exc)}
-            exit_code = 1
+            result = {
+                "status": "bridge_failed",
+                "required": required,
+                "reason": str(exc),
+            }
+            exit_code = 1 if required else 0
 
     evidence = {"trigger": trigger_payload, "bridge": result}
     output.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
