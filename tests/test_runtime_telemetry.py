@@ -44,9 +44,7 @@ def _node(user: dict, name: str, cpu: int) -> dict:
     )
 
 
-def test_node_proposer_returns_ranked_telemetry_layout(
-    telemetry_db: Path, user: dict
-) -> None:
+def test_node_proposer_returns_ranked_telemetry_layout(telemetry_db: Path, user: dict) -> None:
     pipeline = _pipeline(user)
     large = _node(user, "node-large", 16_000)
     small = _node(user, "node-small", 4_000)
@@ -98,9 +96,7 @@ def test_node_proposer_explains_ineligible_nodes(telemetry_db: Path, user: dict)
     assert "insufficient memory_mb" in proposal["reasons"]
 
 
-def test_all_pipefail_telemetry_contains_pipeline_graphics(
-    telemetry_db: Path, user: dict
-) -> None:
+def test_all_pipefail_telemetry_contains_pipeline_graphics(telemetry_db: Path, user: dict) -> None:
     pipeline = _pipeline(user, "Compile, recover, and report PipeFail")
     first = _node(user, "primary-node", 8_000)
     second = _node(user, "recovery-node", 4_000)
@@ -167,19 +163,14 @@ def test_all_pipefail_telemetry_contains_pipeline_graphics(
         "terminal",
     }
     assert any(
-        edge["from"] == "pipefail" and edge["to"] == "recovered"
-        for edge in graphic["edges"]
+        edge["from"] == "pipefail" and edge["to"] == "recovered" for edge in graphic["edges"]
     )
 
 
-def test_pipeline_telemetry_returns_zero_failure_graphics(
-    telemetry_db: Path, user: dict
-) -> None:
+def test_pipeline_telemetry_returns_zero_failure_graphics(telemetry_db: Path, user: dict) -> None:
     pipeline = _pipeline(user, "Pipeline without failures")
 
-    telemetry = runtime_telemetry.pipeline_telemetry(
-        pipeline["id"], limit=100, user=user
-    )
+    telemetry = runtime_telemetry.pipeline_telemetry(pipeline["id"], limit=100, user=user)
 
     assert telemetry["scope"]["type"] == "pipeline"
     assert telemetry["summary"]["total"] == 0
