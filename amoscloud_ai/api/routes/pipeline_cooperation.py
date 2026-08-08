@@ -146,8 +146,7 @@ def _db() -> sqlite3.Connection:
     db = sqlite3.connect(auth.DB_PATH, timeout=30)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS cooperation_pipeline_runs (
             id TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
@@ -262,8 +261,7 @@ def _db() -> sqlite3.Connection:
         );
         CREATE INDEX IF NOT EXISTS idx_cooperation_events_pipeline
             ON cooperation_events(pipeline_id, sequence);
-        """
-    )
+        """)
     db.commit()
     return db
 
@@ -359,7 +357,9 @@ def _dependencies_complete(db: sqlite3.Connection, task: sqlite3.Row) -> bool:
         tuple(dependencies),
     ).fetchall()
     states = {row["id"]: row["state"] for row in rows}
-    return all(states.get(task_id) == CooperationTaskState.COMPLETED.value for task_id in dependencies)
+    return all(
+        states.get(task_id) == CooperationTaskState.COMPLETED.value for task_id in dependencies
+    )
 
 
 def _release_ready_tasks(db: sqlite3.Connection, pipeline_id: str) -> int:
@@ -845,9 +845,7 @@ def get_cooperation_pipeline(
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
     with _db() as db:
-        row = _pipeline_row(
-            db, pipeline_id, int(user["id"]), administrator=_is_admin(user)
-        )
+        row = _pipeline_row(db, pipeline_id, int(user["id"]), administrator=_is_admin(user))
         return _serialize_pipeline(db, row)
 
 
@@ -859,9 +857,7 @@ def cooperation_pipeline_events(
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
     with _db() as db:
-        pipeline = _pipeline_row(
-            db, pipeline_id, int(user["id"]), administrator=_is_admin(user)
-        )
+        pipeline = _pipeline_row(db, pipeline_id, int(user["id"]), administrator=_is_admin(user))
         rows = db.execute(
             """SELECT * FROM cooperation_events
                WHERE pipeline_id=? AND sequence>? ORDER BY sequence LIMIT ?""",
@@ -891,9 +887,7 @@ def approve_cooperation_pipeline(
     user_id = int(user["id"])
     with _LOCK, _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        pipeline = _pipeline_row(
-            db, pipeline_id, user_id, administrator=_is_admin(user)
-        )
+        pipeline = _pipeline_row(db, pipeline_id, user_id, administrator=_is_admin(user))
         if pipeline["repository_id"] is not None:
             with repositories._db() as repository_db:
                 access = repositories._access(
@@ -940,9 +934,7 @@ def reject_cooperation_pipeline(
     user_id = int(user["id"])
     with _LOCK, _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        pipeline = _pipeline_row(
-            db, pipeline_id, user_id, administrator=_is_admin(user)
-        )
+        pipeline = _pipeline_row(db, pipeline_id, user_id, administrator=_is_admin(user))
         now = _now()
         pending = db.execute(
             """SELECT id FROM cooperation_approvals
@@ -985,9 +977,7 @@ def cancel_cooperation_pipeline(
     user_id = int(user["id"])
     with _LOCK, _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        pipeline = _pipeline_row(
-            db, pipeline_id, user_id, administrator=_is_admin(user)
-        )
+        pipeline = _pipeline_row(db, pipeline_id, user_id, administrator=_is_admin(user))
         if pipeline["state"] in {
             CooperationPipelineState.COMPLETED.value,
             CooperationPipelineState.FAILED.value,
@@ -1050,9 +1040,7 @@ def register_cooperation_worker(
             db.commit()
         except sqlite3.IntegrityError as exc:
             raise HTTPException(status_code=409, detail="Worker name already exists") from exc
-        row = db.execute(
-            "SELECT * FROM cooperation_workers WHERE id=?", (worker_id,)
-        ).fetchone()
+        row = db.execute("SELECT * FROM cooperation_workers WHERE id=?", (worker_id,)).fetchone()
     return _serialize_worker(row)
 
 
@@ -1129,8 +1117,7 @@ def claim_cooperation_task(
             (
                 candidate
                 for candidate in candidates
-                if candidate["capability"] in capabilities
-                and _dependencies_complete(db, candidate)
+                if candidate["capability"] in capabilities and _dependencies_complete(db, candidate)
             ),
             None,
         )

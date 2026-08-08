@@ -90,8 +90,7 @@ def _user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Row:
 
 def _db() -> sqlite3.Connection:
     db = cooperation._db()
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS cooperation_nodes (
             id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,name TEXT NOT NULL,
             endpoint TEXT,status TEXT NOT NULL,capabilities_json TEXT NOT NULL,
@@ -139,8 +138,7 @@ def _db() -> sqlite3.Connection:
                 ON DELETE CASCADE,
             FOREIGN KEY(pod_id) REFERENCES cooperation_java_pods(id) ON DELETE CASCADE
         );
-        """
-    )
+        """)
     db.commit()
     return db
 
@@ -176,10 +174,12 @@ def _node_json(db: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     total = {key: int(row[key]) for key in used}
     available = {key: max(total[key] - used[key], 0) for key in total}
     return {
-        "id": row["id"],"name": row["name"],"endpoint": row["endpoint"],
+        "id": row["id"],
+        "name": row["name"],
+        "endpoint": row["endpoint"],
         "status": row["status"],
         "capabilities": cooperation._loads(row["capabilities_json"], []),
-        "resources": {"total": total,"used": used,"available": available},
+        "resources": {"total": total, "used": used, "available": available},
         "metadata": cooperation._loads(row["metadata_json"], {}),
         "last_heartbeat": row["last_heartbeat"],
     }
@@ -189,9 +189,12 @@ def _lease_json(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if not row:
         return None
     return {
-        "id": row["id"],"node_id": row["node_id"],"state": row["state"],
+        "id": row["id"],
+        "node_id": row["node_id"],
+        "state": row["state"],
         "resources": cooperation._loads(row["resources_json"], {}),
-        "created_at": row["created_at"],"released_at": row["released_at"],
+        "created_at": row["created_at"],
+        "released_at": row["released_at"],
         "release_reason": row["release_reason"],
     }
 
@@ -202,16 +205,25 @@ def _pod_json(db: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
         "SELECT * FROM cooperation_resource_leases WHERE id=?", (row["lease_id"],)
     ).fetchone()
     return {
-        "id": row["id"],"pipeline_id": row["pipeline_id"],"state": row["state"],
-        "node": _node_json(db, node) if node else None,"lease": _lease_json(lease),
-        "image": row["image"],"jdk": row["jdk"],"build_tool": row["build_tool"],
-        "network": row["network"],"command": row["command"],
-        "attempt": row["attempt"],"max_attempts": row["max_attempts"],
+        "id": row["id"],
+        "pipeline_id": row["pipeline_id"],
+        "state": row["state"],
+        "node": _node_json(db, node) if node else None,
+        "lease": _lease_json(lease),
+        "image": row["image"],
+        "jdk": row["jdk"],
+        "build_tool": row["build_tool"],
+        "network": row["network"],
+        "command": row["command"],
+        "attempt": row["attempt"],
+        "max_attempts": row["max_attempts"],
         "runtime_id": row["runtime_id"],
         "resources": cooperation._loads(row["resources_json"], {}),
         "metadata": cooperation._loads(row["metadata_json"], {}),
-        "created_at": row["created_at"],"updated_at": row["updated_at"],
-        "started_at": row["started_at"],"finished_at": row["finished_at"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "started_at": row["started_at"],
+        "finished_at": row["finished_at"],
         "error_detail": row["error_detail"],
     }
 
@@ -223,8 +235,10 @@ def _select_node(
     exclude: str | None = None,
 ) -> sqlite3.Row | None:
     wanted = {
-        "cpu_millis": request.cpu_millis,"memory_mb": request.memory_mb,
-        "disk_mb": request.disk_mb,"gpu_units": request.gpu_units,
+        "cpu_millis": request.cpu_millis,
+        "memory_mb": request.memory_mb,
+        "disk_mb": request.disk_mb,
+        "gpu_units": request.gpu_units,
     }
     candidates = []
     rows = db.execute(
@@ -259,7 +273,7 @@ def _lease(
         """INSERT INTO cooperation_resource_leases(
             id,pipeline_id,pod_id,node_id,user_id,state,resources_json,created_at
         ) VALUES (?,?,?,?,?,'active',?,?)""",
-        (lease_id,pipeline_id,pod_id,node_id,user_id,cooperation._json(resources),_now()),
+        (lease_id, pipeline_id, pod_id, node_id, user_id, cooperation._json(resources), _now()),
     )
     return db.execute(
         "SELECT * FROM cooperation_resource_leases WHERE id=?", (lease_id,)
@@ -271,7 +285,7 @@ def _release(db: sqlite3.Connection, lease_id: str | None, reason: str) -> None:
         db.execute(
             """UPDATE cooperation_resource_leases SET state='released',released_at=?,
                release_reason=? WHERE id=? AND state='active'""",
-            (_now(),reason[:2_000],lease_id),
+            (_now(), reason[:2_000], lease_id),
         )
 
 
@@ -306,8 +320,11 @@ def _store_pod_artifacts(
 
 def _emit(db: sqlite3.Connection, pod: sqlite3.Row, event: str, payload: dict[str, Any]) -> None:
     cooperation._event(
-        db,pipeline_id=pod["pipeline_id"],user_id=int(pod["user_id"]),
-        event_type=event,payload={"java_pod_id": pod["id"],**payload},
+        db,
+        pipeline_id=pod["pipeline_id"],
+        user_id=int(pod["user_id"]),
+        event_type=event,
+        payload={"java_pod_id": pod["id"], **payload},
     )
 
 
@@ -315,8 +332,11 @@ def _recover(db: sqlite3.Connection, pod: sqlite3.Row, failure: JavaPodFailure) 
     _release(db, pod["lease_id"], f"PipeFail: {failure.kind}")
     request_data = cooperation._loads(pod["resources_json"], {})
     request = JavaPodCreate(
-        jdk=pod["jdk"],build_tool=pod["build_tool"],network=pod["network"],
-        command=pod["command"],max_attempts=int(pod["max_attempts"]),
+        jdk=pod["jdk"],
+        build_tool=pod["build_tool"],
+        network=pod["network"],
+        command=pod["command"],
+        max_attempts=int(pod["max_attempts"]),
         **request_data,
     )
     action = "failed"
@@ -328,31 +348,41 @@ def _recover(db: sqlite3.Connection, pod: sqlite3.Row, failure: JavaPodFailure) 
     now = _now()
     if node:
         lease = _lease(
-            db,pod["pipeline_id"],pod["id"],node["id"],int(pod["user_id"]),request_data
+            db, pod["pipeline_id"], pod["id"], node["id"], int(pod["user_id"]), request_data
         )
         db.execute(
             """UPDATE cooperation_java_pods SET node_id=?,lease_id=?,state='scheduled',
                attempt=attempt+1,runtime_id=NULL,updated_at=?,started_at=NULL,
                finished_at=NULL,error_detail=? WHERE id=?""",
-            (node["id"],lease["id"],now,failure.error.strip(),pod["id"]),
+            (node["id"], lease["id"], now, failure.error.strip(), pod["id"]),
         )
     else:
         state = "waiting_for_node" if action == "waiting_for_node" else "failed"
         db.execute(
             """UPDATE cooperation_java_pods SET node_id=NULL,lease_id=NULL,state=?,
                updated_at=?,finished_at=?,error_detail=? WHERE id=?""",
-            (state,now,now if state == "failed" else None,failure.error.strip(),pod["id"]),
+            (state, now, now if state == "failed" else None, failure.error.strip(), pod["id"]),
         )
     db.execute(
         """INSERT INTO cooperation_pipefail(
             id,pipeline_id,pod_id,node_id,user_id,kind,retryable,action,error_detail,
             metadata_json,created_at
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (f"pipefail_{uuid.uuid4().hex}",pod["pipeline_id"],pod["id"],pod["node_id"],
-         pod["user_id"],failure.kind,int(failure.retryable),action,failure.error.strip(),
-         cooperation._json(failure.metadata),now),
+        (
+            f"pipefail_{uuid.uuid4().hex}",
+            pod["pipeline_id"],
+            pod["id"],
+            pod["node_id"],
+            pod["user_id"],
+            failure.kind,
+            int(failure.retryable),
+            action,
+            failure.error.strip(),
+            cooperation._json(failure.metadata),
+            now,
+        ),
     )
-    _emit(db,pod,f"pipefail.{action}",{"kind": failure.kind,"error": failure.error.strip()})
+    _emit(db, pod, f"pipefail.{action}", {"kind": failure.kind, "error": failure.error.strip()})
     return action
 
 
@@ -395,14 +425,26 @@ def create_node(body: NodeCreate, user: sqlite3.Row = Depends(_user)) -> dict[st
                     memory_mb,disk_mb,gpu_units,metadata_json,created_at,updated_at,
                     last_heartbeat
                 ) VALUES (?,?,?,?,'ready',?,?,?,?,?,?,?,?,?)""",
-                (node_id,int(user["id"]),body.name.strip(),body.endpoint,
-                 cooperation._json(capabilities),body.cpu_millis,body.memory_mb,
-                 body.disk_mb,body.gpu_units,cooperation._json(body.metadata),now,now,now),
+                (
+                    node_id,
+                    int(user["id"]),
+                    body.name.strip(),
+                    body.endpoint,
+                    cooperation._json(capabilities),
+                    body.cpu_millis,
+                    body.memory_mb,
+                    body.disk_mb,
+                    body.gpu_units,
+                    cooperation._json(body.metadata),
+                    now,
+                    now,
+                    now,
+                ),
             )
             db.commit()
         except sqlite3.IntegrityError as exc:
             raise HTTPException(status_code=409, detail="Node name already exists") from exc
-        return _node_json(db, _row(db,"cooperation_nodes",node_id,user))
+        return _node_json(db, _row(db, "cooperation_nodes", node_id, user))
 
 
 @router.get("/nodes")
@@ -412,22 +454,22 @@ def list_nodes(user: sqlite3.Row = Depends(_user)) -> dict[str, Any]:
             "SELECT * FROM cooperation_nodes WHERE user_id=? ORDER BY name",
             (int(user["id"]),),
         ).fetchall()
-        return {"items": [_node_json(db,row) for row in rows]}
+        return {"items": [_node_json(db, row) for row in rows]}
 
 
 @router.post("/nodes/{node_id}/heartbeat")
 def heartbeat_node(
-    node_id: str,body: NodeHeartbeat,user: sqlite3.Row = Depends(_user)
+    node_id: str, body: NodeHeartbeat, user: sqlite3.Row = Depends(_user)
 ) -> dict[str, Any]:
     with _LOCK, _db() as db:
         db.execute("BEGIN IMMEDIATE")
-        node = _row(db,"cooperation_nodes",node_id,user)
-        metadata = {**cooperation._loads(node["metadata_json"], {}),**body.metadata}
+        node = _row(db, "cooperation_nodes", node_id, user)
+        metadata = {**cooperation._loads(node["metadata_json"], {}), **body.metadata}
         now = _now()
         db.execute(
             """UPDATE cooperation_nodes SET status=?,metadata_json=?,updated_at=?,
                last_heartbeat=? WHERE id=?""",
-            (body.status,cooperation._json(metadata),now,now,node_id),
+            (body.status, cooperation._json(metadata), now, now, node_id),
         )
         if body.status == "offline":
             pods = db.execute(
@@ -436,30 +478,38 @@ def heartbeat_node(
                 (node_id,),
             ).fetchall()
             for pod in pods:
-                _recover(db,pod,JavaPodFailure(
-                    error="Execution node reported offline",kind="node_unreachable",
-                    retryable=True,metadata={"node_id": node_id},
-                ))
+                _recover(
+                    db,
+                    pod,
+                    JavaPodFailure(
+                        error="Execution node reported offline",
+                        kind="node_unreachable",
+                        retryable=True,
+                        metadata={"node_id": node_id},
+                    ),
+                )
         db.commit()
-        return _node_json(db,_row(db,"cooperation_nodes",node_id,user))
+        return _node_json(db, _row(db, "cooperation_nodes", node_id, user))
 
 
 @router.post("/pipelines/{pipeline_id}/java-pods", status_code=201)
 def create_java_pod(
-    pipeline_id: str,body: JavaPodCreate,user: sqlite3.Row = Depends(_user)
+    pipeline_id: str, body: JavaPodCreate, user: sqlite3.Row = Depends(_user)
 ) -> dict[str, Any]:
     user_id, resources = int(user["id"]), {
-        "cpu_millis": body.cpu_millis,"memory_mb": body.memory_mb,
-        "disk_mb": body.disk_mb,"gpu_units": body.gpu_units,
+        "cpu_millis": body.cpu_millis,
+        "memory_mb": body.memory_mb,
+        "disk_mb": body.disk_mb,
+        "gpu_units": body.gpu_units,
     }
     with _LOCK, _db() as db:
         db.execute("BEGIN IMMEDIATE")
         pipeline = cooperation._pipeline_row(
-            db,pipeline_id,user_id,administrator=cooperation._is_admin(user)
+            db, pipeline_id, user_id, administrator=cooperation._is_admin(user)
         )
-        if pipeline["state"] in {"completed","failed","cancelled"}:
+        if pipeline["state"] in {"completed", "failed", "cancelled"}:
             raise HTTPException(status_code=409, detail="Pipeline is already finished")
-        node = _select_node(db,user_id,body)
+        node = _select_node(db, user_id, body)
         if not node:
             raise HTTPException(status_code=409, detail="No compatible node has enough resources")
         pod_id, now = f"javapod_{uuid.uuid4().hex}", _now()
@@ -469,129 +519,170 @@ def create_java_pod(
                 command,attempt,max_attempts,resources_json,metadata_json,created_at,
                 updated_at
             ) VALUES (?,?,?,?,'scheduled',?,?,?,?,?,1,?,?,?,?,?)""",
-            (pod_id,pipeline_id,user_id,node["id"],JAVA_IMAGE,body.jdk,body.build_tool,
-             body.network,body.command,body.max_attempts,cooperation._json(resources),
-             cooperation._json(body.metadata),now,now),
+            (
+                pod_id,
+                pipeline_id,
+                user_id,
+                node["id"],
+                JAVA_IMAGE,
+                body.jdk,
+                body.build_tool,
+                body.network,
+                body.command,
+                body.max_attempts,
+                cooperation._json(resources),
+                cooperation._json(body.metadata),
+                now,
+                now,
+            ),
         )
-        lease = _lease(db,pipeline_id,pod_id,node["id"],user_id,resources)
-        db.execute("UPDATE cooperation_java_pods SET lease_id=? WHERE id=?",(lease["id"],pod_id))
-        pod = _row(db,"cooperation_java_pods",pod_id,user)
-        _emit(db,pod,"resource.lease.created",{"lease_id": lease["id"],"node_id": node["id"]})
-        _emit(db,pod,"java_pod.scheduled",{"node_id": node["id"],"image": JAVA_IMAGE})
+        lease = _lease(db, pipeline_id, pod_id, node["id"], user_id, resources)
+        db.execute("UPDATE cooperation_java_pods SET lease_id=? WHERE id=?", (lease["id"], pod_id))
+        pod = _row(db, "cooperation_java_pods", pod_id, user)
+        _emit(db, pod, "resource.lease.created", {"lease_id": lease["id"], "node_id": node["id"]})
+        _emit(db, pod, "java_pod.scheduled", {"node_id": node["id"], "image": JAVA_IMAGE})
         db.commit()
-        return _pod_json(db,_row(db,"cooperation_java_pods",pod_id,user))
+        return _pod_json(db, _row(db, "cooperation_java_pods", pod_id, user))
 
 
 @router.get("/pipelines/{pipeline_id}/java-pods")
 def list_java_pods(
-    pipeline_id: str,limit: int = Query(default=50,ge=1,le=200),
+    pipeline_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
     user: sqlite3.Row = Depends(_user),
 ) -> dict[str, Any]:
     with _db() as db:
         cooperation._pipeline_row(
-            db,pipeline_id,int(user["id"]),administrator=cooperation._is_admin(user)
+            db, pipeline_id, int(user["id"]), administrator=cooperation._is_admin(user)
         )
         rows = db.execute(
             """SELECT * FROM cooperation_java_pods WHERE pipeline_id=? AND user_id=?
                ORDER BY created_at DESC LIMIT ?""",
-            (pipeline_id,int(user["id"]),limit),
+            (pipeline_id, int(user["id"]), limit),
         ).fetchall()
-        return {"items": [_pod_json(db,row) for row in rows]}
+        return {"items": [_pod_json(db, row) for row in rows]}
 
 
 @router.get("/java-pods/{pod_id}/launch-spec")
-def launch_spec(pod_id: str,user: sqlite3.Row = Depends(_user)) -> dict[str, Any]:
+def launch_spec(pod_id: str, user: sqlite3.Row = Depends(_user)) -> dict[str, Any]:
     with _db() as db:
-        pod = _row(db,"cooperation_java_pods",pod_id,user)
+        pod = _row(db, "cooperation_java_pods", pod_id, user)
         if pod["state"] != "scheduled":
             raise HTTPException(status_code=409, detail="Java pod is not scheduled")
         return {
-            "java_pod_id": pod["id"],"pipeline_id": pod["pipeline_id"],
-            "node_id": pod["node_id"],"image": pod["image"],"command": pod["command"],
-            "environment": {"AMOSCLAUD_PIPELINE_ID": pod["pipeline_id"],
-                "AMOSCLAUD_JAVA_POD_ID": pod["id"],"AMOSCLAUD_JDK": pod["jdk"],
-                "AMOSCLAUD_BUILD_TOOL": pod["build_tool"]},
-            "mounts": [{"source": "pipeline-workspace","target": "/workspace"},
-                {"source": "pipeline-artifacts","target": "/artifacts"}],
-            "network": pod["network"],"resources": cooperation._loads(pod["resources_json"], {}),
-            "security": {"run_as_non_root": True,"read_only_root_filesystem": True,
-                "drop_all_capabilities": True,"no_new_privileges": True},
+            "java_pod_id": pod["id"],
+            "pipeline_id": pod["pipeline_id"],
+            "node_id": pod["node_id"],
+            "image": pod["image"],
+            "command": pod["command"],
+            "environment": {
+                "AMOSCLAUD_PIPELINE_ID": pod["pipeline_id"],
+                "AMOSCLAUD_JAVA_POD_ID": pod["id"],
+                "AMOSCLAUD_JDK": pod["jdk"],
+                "AMOSCLAUD_BUILD_TOOL": pod["build_tool"],
+            },
+            "mounts": [
+                {"source": "pipeline-workspace", "target": "/workspace"},
+                {"source": "pipeline-artifacts", "target": "/artifacts"},
+            ],
+            "network": pod["network"],
+            "resources": cooperation._loads(pod["resources_json"], {}),
+            "security": {
+                "run_as_non_root": True,
+                "read_only_root_filesystem": True,
+                "drop_all_capabilities": True,
+                "no_new_privileges": True,
+            },
         }
 
 
 @router.post("/java-pods/{pod_id}/start")
 def start_java_pod(
-    pod_id: str,body: JavaPodStart,user: sqlite3.Row = Depends(_user)
+    pod_id: str, body: JavaPodStart, user: sqlite3.Row = Depends(_user)
 ) -> dict[str, Any]:
     with _LOCK, _db() as db:
-        pod = _row(db,"cooperation_java_pods",pod_id,user)
+        pod = _row(db, "cooperation_java_pods", pod_id, user)
         if pod["state"] != "scheduled":
             raise HTTPException(status_code=409, detail="Java pod is not scheduled")
         now = _now()
         db.execute(
             """UPDATE cooperation_java_pods SET state='running',runtime_id=?,
                started_at=?,updated_at=? WHERE id=?""",
-            (body.runtime_id,now,now,pod_id),
+            (body.runtime_id, now, now, pod_id),
         )
-        _emit(db,pod,"java_pod.started",{"runtime_id": body.runtime_id})
+        _emit(db, pod, "java_pod.started", {"runtime_id": body.runtime_id})
         db.commit()
-        return _pod_json(db,_row(db,"cooperation_java_pods",pod_id,user))
+        return _pod_json(db, _row(db, "cooperation_java_pods", pod_id, user))
 
 
 @router.post("/java-pods/{pod_id}/complete")
 def complete_java_pod(
-    pod_id: str,body: JavaPodComplete,user: sqlite3.Row = Depends(_user)
+    pod_id: str, body: JavaPodComplete, user: sqlite3.Row = Depends(_user)
 ) -> dict[str, Any]:
     with _LOCK, _db() as db:
-        pod = _row(db,"cooperation_java_pods",pod_id,user)
-        if pod["state"] not in {"scheduled","running"}:
+        pod = _row(db, "cooperation_java_pods", pod_id, user)
+        if pod["state"] not in {"scheduled", "running"}:
             raise HTTPException(status_code=409, detail="Java pod is not active")
-        _release(db,pod["lease_id"],"Java pod completed")
-        now, metadata = _now(), {**cooperation._loads(pod["metadata_json"], {}),
-            "summary": body.summary.strip(),"metrics": body.metrics}
+        _release(db, pod["lease_id"], "Java pod completed")
+        now, metadata = _now(), {
+            **cooperation._loads(pod["metadata_json"], {}),
+            "summary": body.summary.strip(),
+            "metrics": body.metrics,
+        }
         db.execute(
             """UPDATE cooperation_java_pods SET state='completed',metadata_json=?,
                updated_at=?,finished_at=?,error_detail='' WHERE id=?""",
-            (cooperation._json(metadata),now,now,pod_id),
+            (cooperation._json(metadata), now, now, pod_id),
         )
         _store_pod_artifacts(db, pod, body.artifacts)
-        _emit(db,pod,"java_pod.completed",{"summary": body.summary.strip()})
-        _emit(db,pod,"resource.lease.released",{"lease_id": pod["lease_id"]})
+        _emit(db, pod, "java_pod.completed", {"summary": body.summary.strip()})
+        _emit(db, pod, "resource.lease.released", {"lease_id": pod["lease_id"]})
         db.commit()
-        return _pod_json(db,_row(db,"cooperation_java_pods",pod_id,user))
+        return _pod_json(db, _row(db, "cooperation_java_pods", pod_id, user))
 
 
 @router.post("/java-pods/{pod_id}/fail")
 def fail_java_pod(
-    pod_id: str,body: JavaPodFailure,user: sqlite3.Row = Depends(_user)
+    pod_id: str, body: JavaPodFailure, user: sqlite3.Row = Depends(_user)
 ) -> dict[str, Any]:
     with _LOCK, _db() as db:
-        pod = _row(db,"cooperation_java_pods",pod_id,user)
-        if pod["state"] not in {"scheduled","running","waiting_for_node"}:
+        pod = _row(db, "cooperation_java_pods", pod_id, user)
+        if pod["state"] not in {"scheduled", "running", "waiting_for_node"}:
             raise HTTPException(status_code=409, detail="Java pod is not recoverable")
-        action = _recover(db,pod,body)
+        action = _recover(db, pod, body)
         db.commit()
-        result = _pod_json(db,_row(db,"cooperation_java_pods",pod_id,user))
+        result = _pod_json(db, _row(db, "cooperation_java_pods", pod_id, user))
         result["pipefail_action"] = action
         return result
 
 
 @router.get("/pipelines/{pipeline_id}/pipefail")
 def pipefail_events(
-    pipeline_id: str,limit: int = Query(default=100,ge=1,le=500),
+    pipeline_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
     user: sqlite3.Row = Depends(_user),
 ) -> dict[str, Any]:
     with _db() as db:
         cooperation._pipeline_row(
-            db,pipeline_id,int(user["id"]),administrator=cooperation._is_admin(user)
+            db, pipeline_id, int(user["id"]), administrator=cooperation._is_admin(user)
         )
         rows = db.execute(
             """SELECT * FROM cooperation_pipefail WHERE pipeline_id=? AND user_id=?
                ORDER BY created_at DESC LIMIT ?""",
-            (pipeline_id,int(user["id"]),limit),
+            (pipeline_id, int(user["id"]), limit),
         ).fetchall()
-        return {"items": [{"id": row["id"],"java_pod_id": row["pod_id"],
-            "node_id": row["node_id"],"kind": row["kind"],
-            "retryable": bool(row["retryable"]),"action": row["action"],
-            "error_detail": row["error_detail"],"created_at": row["created_at"]}
-            for row in rows]}
+        return {
+            "items": [
+                {
+                    "id": row["id"],
+                    "java_pod_id": row["pod_id"],
+                    "node_id": row["node_id"],
+                    "kind": row["kind"],
+                    "retryable": bool(row["retryable"]),
+                    "action": row["action"],
+                    "error_detail": row["error_detail"],
+                    "created_at": row["created_at"],
+                }
+                for row in rows
+            ]
+        }

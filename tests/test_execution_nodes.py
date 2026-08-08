@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from amoscloud_ai.api.routes import auth
-from amoscloud_ai.api.routes import execution_nodes
+from amoscloud_ai.api.routes import auth, execution_nodes
 from amoscloud_ai.api.routes import pipeline_cooperation as cooperation
 
 
@@ -45,9 +44,7 @@ def _node(user: dict, name: str, cpu: int) -> dict:
     )
 
 
-def test_java_pod_uses_and_releases_a_resource_lease(
-    runtime_db: Path, user: dict
-) -> None:
+def test_java_pod_uses_and_releases_a_resource_lease(runtime_db: Path, user: dict) -> None:
     pipeline = _pipeline(user)
     node = _node(user, "java-node-a", 8_000)
 
@@ -98,18 +95,16 @@ def test_java_pod_uses_and_releases_a_resource_lease(
     nodes = execution_nodes.list_nodes(user=user)["items"]
     assert nodes[0]["resources"]["used"]["cpu_millis"] == 0
 
-    events = cooperation.cooperation_pipeline_events(
-        pipeline["id"], after=0, limit=200, user=user
-    )["items"]
+    events = cooperation.cooperation_pipeline_events(pipeline["id"], after=0, limit=200, user=user)[
+        "items"
+    ]
     event_types = [event["event_type"] for event in events]
     assert "resource.lease.created" in event_types
     assert "java_pod.completed" in event_types
     assert "resource.lease.released" in event_types
 
 
-def test_pipefail_reassigns_java_pod_when_node_goes_offline(
-    runtime_db: Path, user: dict
-) -> None:
+def test_pipefail_reassigns_java_pod_when_node_goes_offline(runtime_db: Path, user: dict) -> None:
     pipeline = _pipeline(user)
     first = _node(user, "java-node-primary", 8_000)
     second = _node(user, "java-node-secondary", 4_000)
@@ -143,9 +138,7 @@ def test_pipefail_reassigns_java_pod_when_node_goes_offline(
     assert reassigned["node"]["id"] == second["id"]
     assert reassigned["lease"]["state"] == "active"
 
-    failures = execution_nodes.pipefail_events(
-        pipeline["id"], limit=100, user=user
-    )["items"]
+    failures = execution_nodes.pipefail_events(pipeline["id"], limit=100, user=user)["items"]
     assert failures[0]["kind"] == "node_unreachable"
     assert failures[0]["action"] == "retry_reassigned"
 

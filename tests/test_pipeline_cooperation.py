@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from amoscloud_ai.api.routes import auth, pipeline_cooperation as cooperation
+from amoscloud_ai.api.routes import auth
+from amoscloud_ai.api.routes import pipeline_cooperation as cooperation
 
 
 @pytest.fixture
@@ -90,9 +91,9 @@ def test_inspection_pipeline_completes_through_capability_worker(
     assert all(task["state"] == "completed" for task in pipeline["tasks"])
     assert len(pipeline["artifacts"]) == 4
 
-    events = cooperation.cooperation_pipeline_events(
-        pipeline["id"], after=0, limit=200, user=user
-    )["items"]
+    events = cooperation.cooperation_pipeline_events(pipeline["id"], after=0, limit=200, user=user)[
+        "items"
+    ]
     event_types = [event["event_type"] for event in events]
     assert event_types[0] == "pipeline.created"
     assert event_types.count("task.claimed") == 4
@@ -100,9 +101,7 @@ def test_inspection_pipeline_completes_through_capability_worker(
     assert "pipeline.completed" in event_types
 
 
-def test_fix_pipeline_stops_at_write_gate_until_approved(
-    cooperation_db: Path, user: dict
-) -> None:
+def test_fix_pipeline_stops_at_write_gate_until_approved(cooperation_db: Path, user: dict) -> None:
     pipeline = cooperation.create_cooperation_pipeline(
         cooperation.CooperationPipelineCreate(
             objective="Fix the failing tests without bypassing repository policy.",
