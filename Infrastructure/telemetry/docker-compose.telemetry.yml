@@ -15,7 +15,11 @@ services:
     ports:
       - "127.0.0.1:8123:8123"
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client --user "$${CLICKHOUSE_USER}" --password "$${CLICKHOUSE_PASSWORD}"
+          --query "SELECT 1" >/dev/null
       interval: 10s
       timeout: 5s
       retries: 12
@@ -28,6 +32,13 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.157.0
     restart: unless-stopped
+    # The upstream image is scratch-based. Root is used only so the collector can
+    # initialize its named persistent queue; all Linux capabilities are dropped,
+    # the root filesystem is read-only, and no-new-privileges remains enforced.
+    user: "0:0"
+    read_only: true
+    cap_drop:
+      - ALL
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     environment:
       CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-amosclaud_telemetry}
@@ -80,3 +91,4 @@ networks:
   telemetry:
     name: amosclaud-telemetry
     driver: bridge
+    attachable: true
