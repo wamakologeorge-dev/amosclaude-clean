@@ -1,4 +1,5 @@
 """Tests for the account settings/domain-verification tools."""
+
 from __future__ import annotations
 
 import asyncio
