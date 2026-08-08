@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Amosclaud cooperation pipeline architecture</title>
+  <desc id="desc">GitHub, users, and APIs enter one control plane. A durable pipeline coordinates workers, a resource broker, execution nodes, Java pods, evidence, telemetry, and PipeFail recovery.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07101f"/>
+      <stop offset="1" stop-color="#11152b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8f7cff"/>
+      <stop offset="1" stop-color="#5b8cff"/>
+    </linearGradient>
+    <linearGradient id="success" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ed8a2"/>
+      <stop offset="1" stop-color="#2f9f88"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0 L12 6 L0 12 Z" fill="#8290ad"/>
+    </marker>
+    <style>
+      .title { font: 800 48px system-ui, sans-serif; fill: #f4f7ff; letter-spacing: -1px; }
+      .subtitle { font: 400 20px system-ui, sans-serif; fill: #aab5cc; }
+      .section { font: 800 15px system-ui, sans-serif; fill: #b9adff; letter-spacing: 2px; text-transform: uppercase; }
+      .box-title { font: 750 22px system-ui, sans-serif; fill: #f4f7ff; }
+      .box-copy { font: 400 15px system-ui, sans-serif; fill: #b6c0d5; }
+      .small { font: 650 13px system-ui, sans-serif; fill: #9ca9c2; }
+      .chip { font: 700 12px system-ui, sans-serif; fill: #d9e0ef; }
+      .line { stroke: #8290ad; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #687590; stroke-width: 2; fill: none; stroke-dasharray: 8 8; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" rx="36" fill="url(#bg)"/>
+  <circle cx="1450" cy="80" r="220" fill="#745cff" opacity=".08"/>
+  <circle cx="90" cy="820" r="250" fill="#2cd7a4" opacity=".05"/>
+
+  <text x="80" y="82" class="title">Amosclaud cooperation pipeline</text>
+  <text x="80" y="118" class="subtitle">One request · cooperating services · bounded resources · one verified result</text>
+
+  <text x="80" y="174" class="section">Inputs</text>
+  <g filter="url(#shadow)">
+    <rect x="80" y="198" width="250" height="128" rx="22" fill="#121c31" stroke="#2b3a58"/>
+    <text x="108" y="238" class="box-title">User / Agent</text>
+    <text x="108" y="269" class="box-copy">Inspect · build · fix</text>
+    <text x="108" y="294" class="box-copy">deploy · monitor</text>
+
+    <rect x="80" y="350" width="250" height="128" rx="22" fill="#121c31" stroke="#2b3a58"/>
+    <text x="108" y="390" class="box-title">GitHub events</text>
+    <text x="108" y="421" class="box-copy">Push · pull request · issue</text>
+    <text x="108" y="446" class="box-copy">schedule · manual dispatch</text>
+
+    <rect x="80" y="502" width="250" height="128" rx="22" fill="#121c31" stroke="#2b3a58"/>
+    <text x="108" y="542" class="box-title">API / Integrations</text>
+    <text x="108" y="573" class="box-copy">Webhooks · runners · MCP</text>
+    <text x="108" y="598" class="box-copy">cloud and local services</text>
+  </g>
+
+  <path class="line" d="M330 262 C380 262 382 352 438 352"/>
+  <path class="line" d="M330 414 C380 414 382 380 438 380"/>
+  <path class="line" d="M330 566 C380 566 382 408 438 408"/>
+
+  <text x="438" y="174" class="section">Control plane</text>
+  <g filter="url(#shadow)">
+    <rect x="438" y="198" width="384" height="280" rx="26" fill="#151b36" stroke="#7665e8" stroke-width="2"/>
+    <rect x="458" y="218" width="344" height="58" rx="16" fill="url(#accent)" opacity=".95"/>
+    <text x="486" y="255" class="box-title">Task router + policy</text>
+
+    <rect x="466" y="298" width="156" height="62" rx="14" fill="#202943"/>
+    <text x="486" y="324" class="small">Identity / RBAC</text>
+    <text x="486" y="346" class="small">tenant isolation</text>
+
+    <rect x="638" y="298" width="156" height="62" rx="14" fill="#202943"/>
+    <text x="658" y="324" class="small">Approval gates</text>
+    <text x="658" y="346" class="small">write / deploy</text>
+
+    <rect x="466" y="376" width="156" height="62" rx="14" fill="#202943"/>
+    <text x="486" y="402" class="small">Project context</text>
+    <text x="486" y="424" class="small">branch / environment</text>
+
+    <rect x="638" y="376" width="156" height="62" rx="14" fill="#202943"/>
+    <text x="658" y="402" class="small">Audit contract</text>
+    <text x="658" y="424" class="small">events / artifacts</text>
+  </g>
+
+  <path class="line" d="M630 478 L630 522"/>
+
+  <g filter="url(#shadow)">
+    <rect x="438" y="522" width="384" height="180" rx="24" fill="#111d31" stroke="#334564"/>
+    <text x="468" y="562" class="box-title">Durable cooperation pipeline</text>
+    <text x="468" y="592" class="box-copy">Dependency-aware tasks and shared pipeline ID</text>
+    <g>
+      <rect x="468" y="620" width="72" height="30" rx="15" fill="#273252"/>
+      <text x="485" y="640" class="chip">plan</text>
+      <rect x="548" y="620" width="78" height="30" rx="15" fill="#273252"/>
+      <text x="564" y="640" class="chip">build</text>
+      <rect x="634" y="620" width="72" height="30" rx="15" fill="#273252"/>
+      <text x="652" y="640" class="chip">test</text>
+      <rect x="714" y="620" width="78" height="30" rx="15" fill="#273252"/>
+      <text x="728" y="640" class="chip">verify</text>
+    </g>
+    <text x="468" y="680" class="small">created → queued → running → verifying → completed</text>
+  </g>
+
+  <path class="line" d="M822 610 C870 610 874 278 932 278"/>
+  <path class="line" d="M822 640 C874 640 876 560 932 560"/>
+
+  <text x="932" y="174" class="section">Execution fabric</text>
+  <g filter="url(#shadow)">
+    <rect x="932" y="198" width="590" height="188" rx="24" fill="#111d31" stroke="#334564"/>
+    <text x="962" y="238" class="box-title">Capability workers</text>
+    <text x="962" y="268" class="box-copy">Planner · repository · tester · security · deployer · verifier</text>
+    <rect x="962" y="296" width="166" height="54" rx="14" fill="#202943"/>
+    <text x="984" y="329" class="small">claim matching task</text>
+    <rect x="1144" y="296" width="166" height="54" rx="14" fill="#202943"/>
+    <text x="1169" y="329" class="small">return evidence</text>
+    <rect x="1326" y="296" width="166" height="54" rx="14" fill="#202943"/>
+    <text x="1350" y="329" class="small">bounded retry</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="932" y="414" width="590" height="274" rx="24" fill="#111d31" stroke="#334564"/>
+    <text x="962" y="454" class="box-title">Resource broker + node proposer</text>
+    <text x="962" y="484" class="box-copy">Heartbeat, capability fit, headroom, leases, and failover</text>
+
+    <rect x="962" y="516" width="164" height="124" rx="18" fill="#1a2540" stroke="#425575"/>
+    <text x="984" y="548" class="box-title" font-size="18">Node A</text>
+    <text x="984" y="578" class="small">Python · tests</text>
+    <text x="984" y="604" class="small">4 CPU · 8 GB</text>
+
+    <rect x="1145" y="516" width="164" height="124" rx="18" fill="#1a2540" stroke="#55cba3" stroke-width="2"/>
+    <text x="1167" y="548" class="box-title" font-size="18">Node B</text>
+    <text x="1167" y="578" class="small">Java pod · Maven</text>
+    <text x="1167" y="604" class="small">8 CPU · 32 GB</text>
+
+    <rect x="1328" y="516" width="164" height="124" rx="18" fill="#1a2540" stroke="#425575"/>
+    <text x="1350" y="548" class="box-title" font-size="18">Node C</text>
+    <text x="1350" y="578" class="small">GPU · model</text>
+    <text x="1350" y="604" class="small">remote runner</text>
+  </g>
+
+  <path class="line" d="M1227 688 L1227 735"/>
+
+  <g filter="url(#shadow)">
+    <rect x="932" y="735" width="280" height="108" rx="22" fill="#123128" stroke="#3ed8a2"/>
+    <text x="960" y="774" class="box-title">Java pod</text>
+    <text x="960" y="803" class="box-copy">JDK · Maven · Gradle · javac</text>
+    <text x="960" y="827" class="small">non-root · bounded · isolated</text>
+
+    <rect x="1242" y="735" width="280" height="108" rx="22" fill="#331d2a" stroke="#e36f8b"/>
+    <text x="1270" y="774" class="box-title">PipeFail</text>
+    <text x="1270" y="803" class="box-copy">release · retry · reassign</text>
+    <text x="1270" y="827" class="small">preserve exact failure evidence</text>
+  </g>
+
+  <path class="dash" d="M1382 735 C1382 700 1288 700 1288 650"/>
+
+  <g filter="url(#shadow)">
+    <rect x="438" y="746" width="384" height="98" rx="22" fill="url(#success)" opacity=".92"/>
+    <text x="468" y="786" class="box-title">Verified result</text>
+    <text x="468" y="815" class="box-copy" fill="#eafff8">patch · tests · logs · artifacts · PR · deployment</text>
+  </g>
+  <path class="line" d="M932 789 C880 789 878 795 822 795"/>
+
+  <text x="80" y="858" class="small">All components share authenticated ownership, pipeline IDs, ordered events, evidence artifacts, approval policy, telemetry, and one final result.</text>
+</svg>
