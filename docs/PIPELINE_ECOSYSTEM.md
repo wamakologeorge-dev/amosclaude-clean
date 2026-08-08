@@ -1,6 +1,6 @@
 # Amosclaud Pipeline Ecosystem
 
-Amosclaud uses one control plane, one cooperation pipeline contract, and one PipeFail recovery trail. Existing services keep their specialized responsibilities, but they exchange tasks, events, artifacts, approvals, capacity, and failure evidence through the same ecosystem instead of replacing or disabling one another.
+Amosclaud uses one control plane, one cooperation pipeline contract, and one PipeFail recovery trail. Existing services keep their specialized responsibilities, but they exchange tasks, events, artifacts, approvals, capacity, telemetry, and failure evidence through the same ecosystem instead of replacing or disabling one another.
 
 ## Main-branch product policy
 
@@ -34,6 +34,37 @@ The server also needs an automation owner. Configure `AMOSCLAUD_GITHUB_AUTOMATIO
 
 Automatic triggers never authorize repository writes or deployments. A requested `fix` or `deploy` pipeline is created with `allow_writes=false` and stays behind the normal approval gate.
 
+## Telemetry data layouts
+
+The runtime exposes stable, machine-readable layouts rather than dashboard-only calculations.
+
+### `node_proposer`
+
+`POST /api/v1/pipelines/cooperation/runtime/telemetry/node-proposer`
+
+The request declares the optional pipeline ID, JDK, build tool, CPU, memory, disk, GPU, and heartbeat freshness window. The response uses the `amosclaud.telemetry.node-proposer.v1` layout and includes:
+
+- every registered node, not only eligible nodes;
+- rank, score, eligibility, and selected proposal;
+- heartbeat age and freshness;
+- required, available, and missing capabilities;
+- requested capacity, available capacity, remaining headroom, fit, and projected utilization for every resource;
+- explicit reasons when a node is not eligible.
+
+The proposal is advisory. Java pod creation remains authoritative and revalidates node state and capacity inside the resource-lease transaction.
+
+### All PipeFail telemetry
+
+`GET /api/v1/pipelines/cooperation/runtime/telemetry/pipefail`
+
+The `amosclaud.telemetry.pipefail.v1` layout contains all PipeFail records for the authenticated Amosclaud owner, with optional pipeline filtering. It includes summary totals, failure kinds, recovery actions, nodes, hourly timeline buckets, affected pipelines, metadata, and the latest evidence records.
+
+### PipeFail / pipeline graphics
+
+`GET /api/v1/pipelines/cooperation/runtime/pipelines/{pipeline_id}/telemetry`
+
+Each response includes an `amosclaud.graphics.pipefail-pipeline.v1` graph. Its nodes represent the pipeline, Java pods, PipeFail events, reassigned work, waiting work, and terminal failures. Its edges carry the real counts between those stages. The Control Plane renders these layouts using local HTML and CSS; it does not fabricate events or depend on an external chart provider.
+
 ## Shared contract
 
 Every cooperating component is attached to a pipeline ID and user scope:
@@ -41,24 +72,28 @@ Every cooperating component is attached to a pipeline ID and user scope:
 1. The Agent, API, or GitHub-native trigger creates a cooperation pipeline.
 2. Pipeline tasks declare dependencies and capabilities.
 3. Workers and execution nodes advertise real capacity.
-4. The scheduler assigns work through bounded resource leases.
+4. The node proposer explains current fit; the scheduler revalidates and assigns work through bounded resource leases.
 5. Runtime pods use the selected repository workspace and artifact volume.
 6. Every stage emits ordered events and evidence artifacts.
 7. Protected repository writes and deployments remain behind approval gates.
 8. PipeFail records failures, releases resources, retries bounded work, and can reassign a pod to another healthy node.
-9. The final verification stage reports one result for the original pipeline.
+9. Telemetry converts the same durable records into all-pipeline and per-pipeline graphics layouts.
+10. The final verification stage reports one result for the original pipeline.
 
 ## Why the new files exist
 
 - `amoscloud_ai/api/routes/pipeline_cooperation.py` owns the durable pipeline, task, worker, approval, event, and artifact contract.
 - `amoscloud_ai/api/routes/execution_nodes.py` adds node capacity, resource leases, Java pod lifecycle, and PipeFail while reusing the cooperation contract.
+- `amoscloud_ai/api/routes/runtime_telemetry.py` computes read-only node proposals, all-PipeFail telemetry, and per-pipeline graphics directly from durable runtime records.
 - `amoscloud_ai/api/routes/github_native_triggers.py` authenticates, deduplicates, and maps GitHub events into the same cooperation pipeline without bypassing approval policy.
-- `amoscloud_ai/api/routes/pipelines.py` mounts the cooperation, runtime, and GitHub-native contracts under one `/api/v1/pipelines` API family.
+- `amoscloud_ai/api/routes/pipelines.py` mounts the cooperation, runtime, telemetry, and GitHub-native contracts under one `/api/v1/pipelines` API family.
 - `scripts/ci/amosclaud_github_native_trigger.py` inventories every tracked path, classifies current, legacy, and GitHub-native surfaces, creates trigger evidence, and sends the event to the control plane when configured.
 - `.github/workflows/amosclaud-native-pipeline.yml` declares the repository events that activate the bridge while preserving all existing workflows.
 - `services/java-pod-runtime/Dockerfile` builds the reproducible non-root Java execution image.
 - `services/java-pod-runtime/entrypoint.sh` executes Maven, Gradle-wrapper, or `javac` work and returns machine-readable success or PipeFail evidence.
-- `web/control-plane.html`, `web/control-plane.js`, `web/control-plane-runtime.js`, and their styles expose the shared system to authenticated users without fabricating service health.
-- The focused tests prove dependency release, approvals, resource return, node-failure reassignment, GitHub-event deduplication, full-repository scope, and automatic-trigger safety.
+- `web/control-plane.html`, `web/control-plane.js`, and `web/control-plane-runtime.js` expose pipelines and runtime operations.
+- `web/control-plane-telemetry.js` renders only the telemetry returned by the backend, including ranked node proposals, all-PipeFail dimensions, timelines, and per-pipeline flow graphics.
+- `web/control-plane-telemetry.css` gives those layouts a responsive visual structure without adding a chart framework or external dependency.
+- The focused tests prove dependency release, approvals, resource return, node-failure reassignment, GitHub-event deduplication, full-repository scope, automatic-trigger safety, node-proposal explanations, all-PipeFail aggregation, and zero-failure graphics.
 
 No file exists only to imitate a dashboard. A module may report `planned` or `foundation` until a real backend service and verification path are connected.
