@@ -1,0 +1,86 @@
+# Amosclaud unified telemetry gateway.
+# All current, legacy, GitHub-native, node, pipeline, PipeFail, and Java-pod
+# runtimes can emit OTLP here without depending directly on a storage backend.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage/telemetry:
+    directory: /var/lib/otelcol/storage
+    create_directory: true
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 512
+    spike_limit_mib: 128
+  resource/amosclaud:
+    attributes:
+      - key: service.namespace
+        value: amosclaud
+        action: upsert
+      - key: deployment.environment.name
+        value: ${env:AMOSCLAUD_TELEMETRY_ENVIRONMENT:-local}
+        action: insert
+
+exporters:
+  # Prometheus remains the metrics time-series store. The collector exposes a
+  # scrape endpoint rather than forcing every Amosclaud service to open one.
+  prometheus:
+    endpoint: 0.0.0.0:9464
+    namespace: amosclaud
+    enable_open_metrics: true
+
+  # ClickHouse is the durable private store for logs and traces. Metrics stay in
+  # Prometheus because the ClickHouse metrics exporter is still alpha upstream.
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?dial_timeout=10s
+    username: ${env:CLICKHOUSE_USER:-otel}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    database: ${env:CLICKHOUSE_DATABASE:-amosclaud_telemetry}
+    create_schema: true
+    async_insert: true
+    compress: lz4
+    ttl: ${env:AMOSCLAUD_TELEMETRY_TTL:-168h}
+    timeout: 10s
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    sending_queue:
+      enabled: true
+      storage: file_storage/telemetry
+      num_consumers: 4
+      queue_size: 10000
+      sizer: items
+      batch:
+        min_size: 1000
+        max_size: 5000
+        flush_timeout: 5s
+        sizer: items
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: [health_check, file_storage/telemetry]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/amosclaud]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/amosclaud]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/amosclaud]
+      exporters: [clickhouse]
