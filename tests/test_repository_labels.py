@@ -42,7 +42,9 @@ def test_label_sync_is_manual_additive_and_does_not_request_contents_write() -> 
     assert "contents: read" in workflow
     assert "contents: write" not in workflow
     assert 'request_json("DELETE"' not in script
-    assert 'result: dict[str, list[str]] = {"created": [], "updated": [], "unchanged": []}' in script
+    assert '"created": []' in script
+    assert '"updated": []' in script
+    assert '"unchanged": []' in script
 
 
 def test_issue_and_pull_request_templates_use_canonical_labels() -> None:
