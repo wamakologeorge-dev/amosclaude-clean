@@ -27,6 +27,14 @@ def test_railway_starts_the_canonical_production_app() -> None:
     assert "uvicorn amoscloud_ai.owner_app:app" not in railway
 
 
+def test_owner_recovery_routes_remain_compatible() -> None:
+    paths = _api_paths()
+    assert "/auth/github/admin-login" in paths
+    assert "/auth/github/admin-callback" in paths
+    assert "/api/v1/auth/github/admin-login" in paths
+    assert "/api/v1/auth/github/admin-callback" in paths
+
+
 def test_current_and_compatibility_key_routes_are_registered() -> None:
     paths = _api_paths()
     assert "/api/v1/agent/keys" in paths
