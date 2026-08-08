@@ -12,11 +12,13 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Request, Response
 
 from amoscloud_ai.api.routes.auth import DB_PATH
+from amoscloud_ai.api.routes.pipeline_cooperation import router as cooperation_router
 from amoscloud_ai.copilot import COPILOT_PIPELINE, COPILOT_ROLE, pipeline_reply
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import PipelineJob, PipelineResponse, PipelineStatus, PipelineTrigger
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+router.include_router(cooperation_router, prefix="/cooperation")
 _LOCK = threading.RLock()
 
 
