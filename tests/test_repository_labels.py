@@ -30,12 +30,8 @@ def test_label_manifest_has_complete_unique_taxonomy() -> None:
 
 
 def test_label_sync_is_manual_additive_and_does_not_request_contents_write() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "sync-labels.yml").read_text(
-        encoding="utf-8"
-    )
-    script = (ROOT / "scripts" / "ci" / "sync_github_labels.py").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "sync-labels.yml").read_text(encoding="utf-8")
+    script = (ROOT / "scripts" / "ci" / "sync_github_labels.py").read_text(encoding="utf-8")
 
     assert "workflow_dispatch:" in workflow
     assert "issues: write" in workflow
@@ -48,15 +44,11 @@ def test_label_sync_is_manual_additive_and_does_not_request_contents_write() -> 
 
 
 def test_issue_and_pull_request_templates_use_canonical_labels() -> None:
-    bug_form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(
+    bug_form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml").read_text(encoding="utf-8")
+    feature_form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml").read_text(
         encoding="utf-8"
     )
-    feature_form = (
-        ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml"
-    ).read_text(encoding="utf-8")
-    pull_request = (ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text(
-        encoding="utf-8"
-    )
+    pull_request = (ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md").read_text(encoding="utf-8")
 
     assert 'labels: ["type:bug", "status:needs-triage"]' in bug_form
     assert 'labels: ["type:feature", "status:needs-triage"]' in feature_form
