@@ -9,16 +9,11 @@ from starlette.routing import Mount
 
 from amoscloud_ai.production_app import _mode_skills, _required_skills, app
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _api_paths() -> set[str]:
-    return {
-        route.path
-        for route in app.routes
-        if isinstance(route, APIRoute)
-    }
+    return {route.path for route in app.routes if isinstance(route, APIRoute)}
 
 
 def test_railway_starts_the_canonical_production_app() -> None:
@@ -52,7 +47,8 @@ def test_complete_connected_platform_is_mounted_after_key_routes() -> None:
     key_route_indexes = [
         index
         for index, route in enumerate(app.routes)
-        if getattr(route, "path", "") in {
+        if getattr(route, "path", "")
+        in {
             "/api/v1/agent/keys",
             "/api/v1/autonomous/keys",
         }
