@@ -354,9 +354,7 @@ def stop_repository_workspace(
     except RuntimeError as exc:
         raise HTTPException(
             status_code=503,
-            detail=(
-                "The isolated runtime could not be stopped. Its connection is unavailable."
-            ),
+            detail=("The isolated runtime could not be stopped. Its connection is unavailable."),
         ) from exc
     return {"workspace": workspace, "container": container, "provider": "external"}
 
