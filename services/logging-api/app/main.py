@@ -36,6 +36,9 @@ async def health() -> dict:
 async def ready() -> dict:
     try:
         await get_redis().ping()
-    except Exception as exc:
-        return JSONResponse({"status": "not-ready", "reason": str(exc)}, status_code=503)
+    except Exception:
+        return JSONResponse(
+            {"status": "not-ready", "reason": "Dependency health check failed"},
+            status_code=503,
+        )
     return {"status": "ready"}
