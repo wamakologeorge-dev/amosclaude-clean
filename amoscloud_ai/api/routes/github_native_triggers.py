@@ -88,10 +88,8 @@ def _automation_user() -> sqlite3.Row:
                 (configured_email,),
             ).fetchone()
         else:
-            user = db.execute(
-                """SELECT id,name,email,is_admin,provider FROM users
-                   WHERE is_admin=1 ORDER BY id LIMIT 1"""
-            ).fetchone()
+            user = db.execute("""SELECT id,name,email,is_admin,provider FROM users
+                   WHERE is_admin=1 ORDER BY id LIMIT 1""").fetchone()
     if not user:
         raise HTTPException(
             status_code=503,
@@ -105,8 +103,7 @@ def _automation_user() -> sqlite3.Row:
 
 
 def _ensure_table(db: sqlite3.Connection) -> None:
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS cooperation_github_events (
             delivery_id TEXT PRIMARY KEY,
             user_id INTEGER NOT NULL,
@@ -128,8 +125,7 @@ def _ensure_table(db: sqlite3.Connection) -> None:
             ON cooperation_github_events(user_id,repository,created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_cooperation_github_events_pipeline
             ON cooperation_github_events(pipeline_id);
-        """
-    )
+        """)
 
 
 def _mode(body: GitHubNativeEvent) -> PipelineMode:
@@ -142,7 +138,11 @@ def _mode(body: GitHubNativeEvent) -> PipelineMode:
     if event == "push":
         return "build"
     if event == "pull_request":
-        return "build" if action in {"opened", "reopened", "synchronize", "ready_for_review"} else "inspect"
+        return (
+            "build"
+            if action in {"opened", "reopened", "synchronize", "ready_for_review"}
+            else "inspect"
+        )
     if event == "repository_dispatch":
         for candidate in ("deploy", "fix", "build", "monitor", "inspect"):
             if candidate in action:

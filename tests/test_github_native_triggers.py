@@ -7,8 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from amoscloud_ai.api.routes import auth
-from amoscloud_ai.api.routes import github_native_triggers
+from amoscloud_ai.api.routes import auth, github_native_triggers
 
 
 @pytest.fixture

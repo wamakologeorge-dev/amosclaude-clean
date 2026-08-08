@@ -94,7 +94,9 @@ def _surface(path: str) -> str:
 
 
 def _scope(changed: list[str], all_files: list[str], event: str) -> dict[str, Any]:
-    inventory = all_files if event in {"schedule", "workflow_dispatch", "repository_dispatch"} else changed
+    inventory = (
+        all_files if event in {"schedule", "workflow_dispatch", "repository_dispatch"} else changed
+    )
     manifest = "\n".join(inventory).encode()
     counts = Counter(_surface(path) for path in inventory)
     return {
