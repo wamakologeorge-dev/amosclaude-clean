@@ -47,6 +47,17 @@ aiofiles>=23.2,<25
 python-dotenv>=1.0,<2
 PyYAML>=6.0,<7
 dnspython>=2.6,<3
+# OpenTelemetry is optional at runtime. docker/otel-exec.sh only activates it
+# when AMOSCLAUD_TELEMETRY_ENABLED=true, preserving all legacy start paths.
+opentelemetry-distro==0.65b0
+opentelemetry-exporter-otlp==1.44.0
+opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-instrumentation-flask==0.65b0
+opentelemetry-instrumentation-httpx==0.65b0
+opentelemetry-instrumentation-requests==0.65b0
+opentelemetry-instrumentation-logging==0.65b0
+opentelemetry-instrumentation-sqlalchemy==0.65b0
+opentelemetry-instrumentation-redis==0.65b0
 pytest>=9.1.1,<10
 pytest-asyncio>=0.23,<2
 pytest-cov>=4.1,<7
