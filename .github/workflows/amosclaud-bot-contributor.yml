@@ -31,7 +31,7 @@ jobs:
   contributor-profile-contract:
     name: contributor-profile-contract
     runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -44,11 +44,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
-        with:
-          version: "0.11.16"
-          enable-cache: true
+      - name: Install the Amosclaud repository runtime
+        run: |
+          python -m pip install --disable-pip-version-check -e . pytest
 
       - name: Compile contributor and health contracts
         run: |
@@ -59,8 +57,7 @@ jobs:
 
       - name: Run focused contributor and health tests
         run: |
-          uv run --no-project --with pytest \
-            python -m pytest -q \
+          python -m pytest -q \
             tests/test_amosclaud_status_board.py \
             tests/test_bot_contributor_profile.py \
             tests/test_health_contract.py
