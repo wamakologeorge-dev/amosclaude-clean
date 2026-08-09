@@ -17,6 +17,16 @@ _TRUSTED_WRITE_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 _EPHEMERAL_AUTHORITIES: dict[Path, SecurityAuthority] = {}
 
 
+def _validated_workspace_root(workspace: Path | str) -> Path:
+    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    root = Path(workspace).resolve()
+    try:
+        root.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("Workspace escapes allowed root") from exc
+    return root
+
+
 def repository_identity(workspace: Path | str, explicit: str | None = None) -> str:
     if explicit and "/" in explicit:
         return explicit.strip()
@@ -100,7 +110,8 @@ def authority_for_workspace(
     *,
     required: bool,
 ) -> SecurityAuthority | None:
-    state_path = security_state_path(workspace)
+    root = _validated_workspace_root(workspace)
+    state_path = security_state_path(root)
     configured = SecurityAuthority.from_environment(
         state_path=state_path,
         required=False,
@@ -114,7 +125,6 @@ def authority_for_workspace(
             required=True,
         )
 
-    root = Path(workspace).resolve()
     authority = _EPHEMERAL_AUTHORITIES.get(root)
     if authority is None:
         authority = SecurityAuthority(secrets.token_urlsafe(48), state_path)
