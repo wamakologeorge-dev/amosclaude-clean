@@ -1,0 +1,655 @@
+name: Amosclaud Security and Quality Fixer
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Optional failed GitHub Actions run ID for quality repair
+        required: false
+        default: ''
+        type: string
+      source_ref:
+        description: Branch, tag, or commit associated with the failed run
+        required: false
+        default: main
+        type: string
+      security_alert_number:
+        description: Optional CodeQL alert number for a security autofix
+        required: false
+        default: ''
+        type: string
+  pull_request:
+    paths:
+      - .github/workflows/amosclaud-autofix.yml
+      - scripts/amosclaud_autofix.py
+      - tests/test_amosclaud_autofix.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amosclaud-fixer-${{ github.event.workflow_run.id || inputs.security_alert_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout proposed fixer implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install bounded security and quality dependencies
+        run: >-
+          python -m pip install
+          'pytest>=9.1.1,<10'
+          'PyYAML>=6,<7'
+          'python-dotenv>=1,<2'
+          'black>=24.4,<27'
+          'isort>=5.13,<9'
+          'ruff>=0.9,<1'
+
+      - name: Validate fixer implementation
+        run: |
+          python -m py_compile scripts/amosclaud_autofix.py
+          python -m black --check scripts/amosclaud_autofix.py tests/test_amosclaud_autofix.py
+          python -m isort --check-only scripts/amosclaud_autofix.py tests/test_amosclaud_autofix.py
+          python -m pytest -q tests/test_amosclaud_autofix.py
+
+  prepare-quality-repair:
+    if: >-
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'failure' &&
+        !startsWith(github.event.workflow_run.head_commit.message || '', 'amosclaud-autofix:')
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.run_id != ''
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      default_branch: ${{ steps.resolve.outputs.default_branch }}
+      eligible: ${{ steps.resolve.outputs.eligible }}
+      has_changes: ${{ steps.patch.outputs.has_changes }}
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      source_branch: ${{ steps.resolve.outputs.source_branch }}
+      source_repo: ${{ steps.resolve.outputs.source_repo }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    steps:
+      - name: Resolve failed quality run
+        id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_RUN_ID: ${{ inputs.run_id }}
+          MANUAL_SOURCE_REF: ${{ inputs.source_ref }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_SOURCE_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WORKFLOW_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            run_id="$WORKFLOW_RUN_ID"
+            source_branch="$WORKFLOW_SOURCE_BRANCH"
+            source_repo="$WORKFLOW_SOURCE_REPO"
+            source_sha="$WORKFLOW_SOURCE_SHA"
+          else
+            run_id="$MANUAL_RUN_ID"
+            source_branch="$MANUAL_SOURCE_REF"
+            source_repo="$GITHUB_REPOSITORY"
+            source_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${MANUAL_SOURCE_REF}" --jq .sha)"
+          fi
+
+          eligible=false
+          if [[ -n "$run_id" && -n "$source_sha" && "$source_repo" == "$GITHUB_REPOSITORY" ]]; then
+            eligible=true
+          fi
+
+          {
+            echo "default_branch=$default_branch"
+            echo "eligible=$eligible"
+            echo "run_id=$run_id"
+            echo "source_branch=$source_branch"
+            echo "source_repo=$source_repo"
+            echo "source_sha=$source_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted Amosclaud tooling
+        if: steps.resolve.outputs.eligible == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.default_branch }}
+          path: tooling
+          persist-credentials: false
+
+      - name: Checkout failed commit without credentials
+        if: steps.resolve.outputs.eligible == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.resolve.outputs.source_sha }}
+          path: target
+          persist-credentials: false
+
+      - name: Set up trusted repair runtime
+        if: steps.resolve.outputs.eligible == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted repair dependencies
+        if: steps.resolve.outputs.eligible == 'true'
+        run: >-
+          python -m pip install
+          'PyYAML>=6,<7'
+          'python-dotenv>=1,<2'
+          'black>=24.4,<27'
+          'isort>=5.13,<9'
+          'ruff>=0.9,<1'
+
+      - name: Download actual failed job logs
+        if: steps.resolve.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.resolve.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          if ! gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log-failed > work/failed-run.log; then
+            gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --log > work/failed-run.log || true
+          fi
+          test -s work/failed-run.log
+
+      - name: Run Amosclaud security and quality repair engine
+        if: steps.resolve.outputs.eligible == 'true'
+        env:
+          PYTHONPATH: ${{ github.workspace }}/tooling
+        run: |
+          python tooling/scripts/amosclaud_autofix.py \
+            --root target \
+            --logs work/failed-run.log \
+            --report work/repair-report.json
+
+      - name: Build immutable repair artifact
+        id: patch
+        if: steps.resolve.outputs.eligible == 'true'
+        run: |
+          set -euo pipefail
+          mapfile -d '' changed < <(git -C target diff --name-only --diff-filter=M -z)
+
+          if (( ${#changed[@]} == 0 )); then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if (( ${#changed[@]} > 20 )); then
+            echo "Amosclaud refused a patch touching more than 20 files." >&2
+            exit 1
+          fi
+
+          : > work/changed-files.txt
+          for path in "${changed[@]}"; do
+            case "$path" in
+              .github/workflows/amosclaud-autofix.yml|scripts/amosclaud_autofix.py|tests/test_amosclaud_autofix.py)
+                echo "Amosclaud refused to modify its own privileged tooling: $path" >&2
+                exit 1
+                ;;
+            esac
+            if [[ ! "$path" =~ \.(py|json|ya?ml|sh|html|css|js|mjs|cjs|toml|md)$ ]]; then
+              echo "Unsupported repair path: $path" >&2
+              exit 1
+            fi
+            printf '%s\n' "$path" >> work/changed-files.txt
+          done
+
+          git -C target diff --binary -- "${changed[@]}" > work/repair.patch
+          (
+            cd work
+            sha256sum repair.patch > repair.patch.sha256
+          )
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload proposed quality repair
+        if: steps.patch.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: amosclaud-repair-${{ steps.resolve.outputs.run_id }}
+          path: |
+            work/changed-files.txt
+            work/repair-report.json
+            work/repair.patch
+            work/repair.patch.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  verify-quality-repair:
+    needs: prepare-quality-repair
+    if: needs.prepare-quality-repair.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout failed commit without write credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare-quality-repair.outputs.source_sha }}
+          path: target
+          persist-credentials: false
+
+      - name: Download proposed repair
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: amosclaud-repair-${{ needs.prepare-quality-repair.outputs.run_id }}
+          path: artifact
+
+      - name: Verify and apply exact patch
+        run: |
+          set -euo pipefail
+          (
+            cd artifact
+            sha256sum -c repair.patch.sha256
+          )
+          git -C target apply --check ../artifact/repair.patch
+          git -C target apply ../artifact/repair.patch
+
+      - name: Set up isolated verification runtime
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install bounded verification dependencies
+        run: >-
+          python -m pip install
+          'pytest>=9.1.1,<10'
+          'PyYAML>=6,<7'
+          'python-dotenv>=1,<2'
+          'black>=24.4,<27'
+          'isort>=5.13,<9'
+          'ruff>=0.9,<1'
+
+      - name: Verify every changed file
+        env:
+          TARGET_ROOT: ${{ github.workspace }}/target
+          CHANGED_FILES: ${{ github.workspace }}/artifact/changed-files.txt
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import py_compile
+          import subprocess
+          from pathlib import Path
+
+          import yaml
+
+          root = Path(os.environ["TARGET_ROOT"]).resolve()
+          changed = Path(os.environ["CHANGED_FILES"]).read_text(encoding="utf-8").splitlines()
+          if not changed:
+              raise SystemExit("repair artifact contains no changed files")
+
+          for relative in changed:
+              path = (root / relative).resolve()
+              path.relative_to(root)
+              data = path.read_bytes()
+              if data and not data.endswith(b"\n"):
+                  raise SystemExit(f"{relative}: missing final newline")
+              text = data.decode("utf-8")
+              if any(line.rstrip() != line for line in text.splitlines()):
+                  raise SystemExit(f"{relative}: trailing whitespace remains")
+
+              suffix = path.suffix.lower()
+              if suffix == ".py":
+                  py_compile.compile(str(path), doraise=True)
+              elif suffix == ".json":
+                  json.loads(text)
+              elif suffix in {".yml", ".yaml"}:
+                  yaml.safe_load(text)
+              elif suffix == ".sh":
+                  subprocess.run(["bash", "-n", str(path)], check=True)
+
+          print(f"verified {len(changed)} changed file(s)")
+          PY
+
+      - name: Re-run the quality tools that requested the repair
+        env:
+          REPORT: ${{ github.workspace }}/artifact/repair-report.json
+          CHANGED_FILES: ${{ github.workspace }}/artifact/changed-files.txt
+        working-directory: target
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["REPORT"]).read_text(encoding="utf-8"))
+          changed = Path(os.environ["CHANGED_FILES"]).read_text(encoding="utf-8").splitlines()
+          python_files = [path for path in changed if path.endswith(".py")]
+          tools = set(report.get("quality_tools") or [])
+          if not python_files:
+              raise SystemExit(0)
+          if "black" in tools:
+              subprocess.run([sys.executable, "-m", "black", "--check", "--", *python_files], check=True)
+          if "isort" in tools:
+              subprocess.run([sys.executable, "-m", "isort", "--check-only", "--", *python_files], check=True)
+          if "ruff" in tools:
+              subprocess.run([sys.executable, "-m", "ruff", "check", "--", *python_files], check=True)
+          PY
+
+      - name: Run Amosclaud repair regression tests
+        working-directory: target
+        run: |
+          python -m pytest -q \
+            tests/test_repair_engine.py \
+            tests/test_json_repair_strategy.py \
+            tests/test_doctor_healing_coordinator.py \
+            tests/test_amosclaud_autofix.py
+
+  publish-quality-repair:
+    needs: [prepare-quality-repair, verify-quality-repair]
+    if: >-
+      needs.prepare-quality-repair.outputs.has_changes == 'true' &&
+      needs.verify-quality-repair.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout exact failed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare-quality-repair.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Download verified repair
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: amosclaud-repair-${{ needs.prepare-quality-repair.outputs.run_id }}
+          path: artifact
+
+      - name: Commit verified repair without force push
+        id: publish
+        env:
+          DEFAULT_BRANCH: ${{ needs.prepare-quality-repair.outputs.default_branch }}
+          RUN_ID: ${{ needs.prepare-quality-repair.outputs.run_id }}
+          SOURCE_BRANCH: ${{ needs.prepare-quality-repair.outputs.source_branch }}
+          SOURCE_SHA: ${{ needs.prepare-quality-repair.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          (
+            cd artifact
+            sha256sum -c repair.patch.sha256
+          )
+
+          new_pr=false
+          if [[ -z "$SOURCE_BRANCH" || "$SOURCE_BRANCH" == "$DEFAULT_BRANCH" || "$SOURCE_BRANCH" =~ ^[0-9a-f]{40}$ ]]; then
+            target_branch="amosclaud/autofix-${RUN_ID}"
+            new_pr=true
+            if git ls-remote --exit-code --heads origin "$target_branch" >/dev/null 2>&1; then
+              echo "Repair branch already exists; refusing to overwrite it." >&2
+              exit 1
+            fi
+          else
+            target_branch="$SOURCE_BRANCH"
+            git fetch --no-tags origin "refs/heads/${target_branch}"
+            remote_sha="$(git rev-parse FETCH_HEAD)"
+            if [[ "$remote_sha" != "$SOURCE_SHA" ]]; then
+              echo "Source branch moved after diagnosis; refusing a stale repair." >&2
+              exit 1
+            fi
+          fi
+
+          git checkout -B "$target_branch" "$SOURCE_SHA"
+          git apply --check artifact/repair.patch
+          git apply artifact/repair.patch
+
+          git config user.name "amosclaud-fixer[bot]"
+          git config user.email "amosclaud-fixer[bot]@users.noreply.github.com"
+
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            git add -- "$path"
+          done < artifact/changed-files.txt
+
+          if git diff --cached --quiet; then
+            echo "Verified artifact produced no staged changes." >&2
+            exit 1
+          fi
+
+          git commit -m "amosclaud-autofix: verified quality repair for run ${RUN_ID}"
+          git push origin "HEAD:refs/heads/${target_branch}"
+
+          {
+            echo "new_pr=$new_pr"
+            echo "target_branch=$target_branch"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update quality repair pull request
+        env:
+          DEFAULT_BRANCH: ${{ needs.prepare-quality-repair.outputs.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ needs.prepare-quality-repair.outputs.run_id }}
+          TARGET_BRANCH: ${{ steps.publish.outputs.target_branch }}
+        run: |
+          set -euo pipefail
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}"
+          changed="$(paste -sd ', ' artifact/changed-files.txt)"
+          status="$(jq -r .status artifact/repair-report.json)"
+          tools="$(jq -r '(.quality_tools // []) | join(", ")' artifact/repair-report.json)"
+
+          cat > repair-pr.md <<EOF
+          ## Amosclaud verified security and quality repair
+
+          - Failed GitHub Actions run: ${run_url}
+          - Repair result: \`${status}\`
+          - Quality tools used: \`${tools:-deterministic Doctor/Fixer}\`
+          - Changed files: \`${changed}\`
+          - Verification: changed-file checks, requested quality checks, and repair regression tests passed
+          - Publishing policy: no direct commit to \`${DEFAULT_BRANCH}\`, no force push, no automatic merge
+
+          The original GitHub checks will run again on this commit. Merge remains a repository-owner decision.
+          EOF
+
+          existing_url="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$TARGET_BRANCH" --state open --json url --jq '.[0].url // empty')"
+          if [[ -n "$existing_url" ]]; then
+            gh pr comment "$existing_url" --body-file repair-pr.md
+            echo "Updated existing pull request: $existing_url"
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$DEFAULT_BRANCH" \
+              --head "$TARGET_BRANCH" \
+              --draft \
+              --title "Amosclaud verified repair for failed run ${RUN_ID}" \
+              --body-file repair-pr.md
+          fi
+
+  create-codeql-security-fix:
+    if: >-
+      github.event_name == 'schedule' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.security_alert_number != ''
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      security-events: write
+    steps:
+      - name: Select an open CodeQL security alert
+        id: alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_ALERT: ${{ inputs.security_alert_number }}
+        run: |
+          set -euo pipefail
+          default_branch="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .default_branch)"
+          if [[ -n "$REQUESTED_ALERT" ]]; then
+            if [[ ! "$REQUESTED_ALERT" =~ ^[0-9]+$ ]]; then
+              echo "Security alert number must be numeric." >&2
+              exit 1
+            fi
+            alert_number="$REQUESTED_ALERT"
+          else
+            alerts="$(gh api --method GET \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/${GITHUB_REPOSITORY}/code-scanning/alerts" \
+              -f state=open \
+              -f tool_name=CodeQL \
+              -f per_page=100)"
+            alert_number="$(jq -r '
+              def rank:
+                (.rule.security_severity_level // .rule.severity // "unknown") as $severity |
+                if $severity == "critical" then 0
+                elif $severity == "high" then 1
+                elif $severity == "medium" then 2
+                elif $severity == "low" then 3
+                elif $severity == "error" then 4
+                elif $severity == "warning" then 5
+                elif $severity == "note" then 6
+                else 9 end;
+              sort_by(rank, .number) | .[0].number // empty
+            ' <<< "$alerts")"
+          fi
+
+          if [[ -z "$alert_number" ]]; then
+            echo "No open CodeQL security alert is available for Amosclaud-Fixer."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          alert_json="$(gh api \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/alerts/${alert_number}")"
+          state="$(jq -r .state <<< "$alert_json")"
+          if [[ "$state" != "open" ]]; then
+            echo "Alert ${alert_number} is not open; no repair will be created."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          branch="amosclaud/security-alert-${alert_number}"
+          existing_url="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json url --jq '.[0].url // empty')"
+          if [[ -n "$existing_url" ]]; then
+            echo "A repair PR already exists for alert ${alert_number}: ${existing_url}"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${default_branch}" --jq .sha)"
+          {
+            echo "alert_number=$alert_number"
+            echo "alert_url=$(jq -r .html_url <<< "$alert_json")"
+            echo "branch=$branch"
+            echo "default_branch=$default_branch"
+            echo "base_sha=$base_sha"
+            echo "description=$(jq -r '.rule.description // .rule.name // "CodeQL security alert"' <<< "$alert_json")"
+            echo "eligible=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Ask GitHub CodeQL Autofix to generate a security repair
+        if: steps.alert.outputs.eligible == 'true'
+        id: generate
+        env:
+          ALERT_NUMBER: ${{ steps.alert.outputs.alert_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          if ! gh api --method POST \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/alerts/${ALERT_NUMBER}/autofix" \
+            > autofix-create.json; then
+            echo "GitHub could not generate an autofix for alert ${ALERT_NUMBER}; no branch was changed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ready=false
+          for _ in $(seq 1 20); do
+            status="$(gh api \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/${GITHUB_REPOSITORY}/code-scanning/alerts/${ALERT_NUMBER}/autofix" \
+              --jq .status 2>/dev/null || echo unknown)"
+            if [[ "$status" == "success" ]]; then
+              ready=true
+              break
+            fi
+            if [[ "$status" == "failure" || "$status" == "error" ]]; then
+              break
+            fi
+            sleep 15
+          done
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the generated security fix to an isolated branch
+        if: steps.generate.outputs.ready == 'true'
+        id: commit
+        env:
+          ALERT_NUMBER: ${{ steps.alert.outputs.alert_number }}
+          BASE_SHA: ${{ steps.alert.outputs.base_sha }}
+          BRANCH: ${{ steps.alert.outputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${BRANCH}" >/dev/null 2>&1; then
+            echo "Security repair branch already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${BRANCH}" \
+            -f sha="$BASE_SHA" >/dev/null
+
+          result="$(gh api --method POST \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/alerts/${ALERT_NUMBER}/autofix/commits" \
+            -f target_ref="refs/heads/${BRANCH}" \
+            -f message="amosclaud-security: CodeQL autofix for alert ${ALERT_NUMBER}")"
+          echo "commit_sha=$(jq -r .sha <<< "$result")" >> "$GITHUB_OUTPUT"
+
+      - name: Open a draft security repair pull request
+        if: steps.commit.outputs.commit_sha != ''
+        env:
+          ALERT_NUMBER: ${{ steps.alert.outputs.alert_number }}
+          ALERT_URL: ${{ steps.alert.outputs.alert_url }}
+          BRANCH: ${{ steps.alert.outputs.branch }}
+          DEFAULT_BRANCH: ${{ steps.alert.outputs.default_branch }}
+          DESCRIPTION: ${{ steps.alert.outputs.description }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > security-pr.md <<EOF
+          ## Amosclaud-Fixer CodeQL security repair
+
+          - CodeQL alert: [#${ALERT_NUMBER}](${ALERT_URL})
+          - Finding: ${DESCRIPTION}
+          - Fix source: GitHub CodeQL Autofix API consumed by Amosclaud-Fixer
+          - Target: isolated branch \`${BRANCH}\`
+          - Safety: draft PR, no force push, no direct commit to \`${DEFAULT_BRANCH}\`, no automatic merge
+
+          GitHub security and quality checks will now verify the generated repair. The alert is not treated as fixed until CodeQL confirms it.
+          EOF
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$DEFAULT_BRANCH" \
+            --head "$BRANCH" \
+            --draft \
+            --title "Amosclaud security fix for CodeQL alert #${ALERT_NUMBER}" \
+            --body-file security-pr.md
