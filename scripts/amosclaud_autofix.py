@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Create bounded, deterministic Amosclaud repairs from real CI failure logs.
+"""Create bounded Amosclaud repairs from real GitHub security and quality evidence.
 
 This program intentionally does not commit, push, or open pull requests. It runs in
-an unprivileged GitHub Actions job, edits only existing files named by the failed
-workflow logs, and writes a machine-readable report. A separate verification job
-must approve the resulting patch before a write-enabled publishing job can use it.
+an unprivileged GitHub Actions job, edits only existing files named by trusted
+workflow evidence, and writes a machine-readable report. A separate verification
+job must approve the exact patch before a write-enabled publishing job can use it.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable
@@ -28,6 +30,21 @@ ALLOWED_REPAIR_CODES = frozenset(
         "yaml-tabs",
     }
 )
+
+QUALITY_TOOL_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
+    "black": (
+        re.compile(r"\bblack(?:\s+--check|\s+--diff|\s+would)", re.IGNORECASE),
+        re.compile(r"\bwould reformat\b", re.IGNORECASE),
+    ),
+    "isort": (
+        re.compile(r"\bisort\b", re.IGNORECASE),
+        re.compile(r"imports? (?:are|is) incorrectly sorted", re.IGNORECASE),
+    ),
+    "ruff": (
+        re.compile(r"\bruff\s+(?:check|format)\b", re.IGNORECASE),
+        re.compile(r"\bwould reformat\b.*\bruff\b", re.IGNORECASE),
+    ),
+}
 
 PROTECTED_TOOLING_PATHS = frozenset(
     {
@@ -87,6 +104,81 @@ def extract_candidate_paths(log_text: str, root: Path, limit: int = 25) -> list[
     return discovered
 
 
+def detect_quality_tools(log_text: str) -> list[str]:
+    """Identify deterministic quality tools explicitly named by failure evidence."""
+
+    return [
+        tool
+        for tool, patterns in QUALITY_TOOL_PATTERNS.items()
+        if any(pattern.search(log_text) for pattern in patterns)
+    ]
+
+
+def _quality_command(tool: str, paths: list[str]) -> list[str]:
+    if tool == "black":
+        return [sys.executable, "-m", "black", "--quiet", "--", *paths]
+    if tool == "isort":
+        return [sys.executable, "-m", "isort", "--quiet", "--", *paths]
+    if tool == "ruff":
+        return [
+            sys.executable,
+            "-m",
+            "ruff",
+            "check",
+            "--fix-only",
+            "--exit-zero",
+            "--",
+            *paths,
+        ]
+    raise ValueError(f"unsupported quality tool: {tool}")
+
+
+def apply_quality_repairs(
+    root: Path,
+    candidates: list[str],
+    log_text: str,
+) -> tuple[list[str], list[dict[str, object]]]:
+    """Run only the formatter/linter proven by the failed quality log."""
+
+    tools = detect_quality_tools(log_text)
+    python_paths = [path for path in candidates if Path(path).suffix.lower() == ".py"]
+    results: list[dict[str, object]] = []
+    if not python_paths:
+        return tools, results
+
+    for tool in tools:
+        command = _quality_command(tool, python_paths)
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=180,
+                check=False,
+            )
+            results.append(
+                {
+                    "tool": tool,
+                    "command": command,
+                    "return_code": completed.returncode,
+                    "passed": completed.returncode == 0,
+                    "output": ((completed.stdout or "") + (completed.stderr or ""))[-8000:],
+                }
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            results.append(
+                {
+                    "tool": tool,
+                    "command": command,
+                    "return_code": None,
+                    "passed": False,
+                    "output": str(exc),
+                }
+            )
+    return tools, results
+
+
 def findings_for_path(doctor: Doctor, root: Path, relative: str) -> list[Finding]:
     path = root / relative
     findings = list(doctor._basic_text_checks(path))
@@ -109,7 +201,7 @@ def _serialize_findings(findings: Iterable[Finding]) -> list[dict[str, object]]:
 
 
 def run_repair(root: Path, log_text: str) -> dict[str, object]:
-    """Apply and recheck only low-risk repairs for files proven by CI logs."""
+    """Apply and recheck low-risk repairs for files proven by GitHub evidence."""
 
     root = root.resolve()
     doctor = Doctor(root)
@@ -118,11 +210,13 @@ def run_repair(root: Path, log_text: str) -> dict[str, object]:
     log_digest = hashlib.sha256(log_text.encode("utf-8", errors="replace")).hexdigest()
 
     report: dict[str, object] = {
-        "schema": "amosclaud.github-autofix.v1",
+        "schema": "amosclaud.github-autofix.v2",
         "status": "no-candidates",
         "log_sha256": log_digest,
         "candidate_paths": candidates,
         "allowed_repair_codes": sorted(ALLOWED_REPAIR_CODES),
+        "quality_tools": [],
+        "quality_results": [],
         "findings_before": [],
         "findings_after": [],
         "repairs": [],
@@ -131,10 +225,15 @@ def run_repair(root: Path, log_text: str) -> dict[str, object]:
     if not candidates:
         return report
 
+    snapshots = {relative: (root / relative).read_bytes() for relative in candidates}
     before: list[Finding] = []
     for relative in candidates:
         before.extend(findings_for_path(doctor, root, relative))
     report["findings_before"] = _serialize_findings(before)
+
+    quality_tools, quality_results = apply_quality_repairs(root, candidates, log_text)
+    report["quality_tools"] = quality_tools
+    report["quality_results"] = quality_results
 
     repairable = [
         item
@@ -143,25 +242,29 @@ def run_repair(root: Path, log_text: str) -> dict[str, object]:
         and item.code in ALLOWED_REPAIR_CODES
         and item.path in candidates
     ]
-    if not repairable:
-        report["status"] = "no-safe-repair"
-        return report
-
-    selected_paths = sorted({item.path for item in repairable if item.path})
-    snapshots = {relative: (root / relative).read_bytes() for relative in selected_paths}
-    repairs = fixer.apply(repairable)
-    changed_files = sorted({item.path for item in repairs if item.changed})
+    repairs = fixer.apply(repairable) if repairable else []
     report["repairs"] = [asdict(item) for item in repairs]
+
+    changed_files = sorted(
+        relative
+        for relative, original in snapshots.items()
+        if (root / relative).read_bytes() != original
+    )
 
     after: list[Finding] = []
     for relative in candidates:
         after.extend(findings_for_path(doctor, root, relative))
     report["findings_after"] = _serialize_findings(after)
 
+    failed_quality = [item for item in quality_results if not item.get("passed")]
     blockers = [
         item for item in after if item.path in changed_files and item.severity != Severity.INFO
     ]
-    if not changed_files or blockers:
+    if not changed_files:
+        report["status"] = "no-safe-repair"
+        return report
+
+    if failed_quality or blockers:
         for relative, content in snapshots.items():
             (root / relative).write_bytes(content)
         report["status"] = "rolled-back"
