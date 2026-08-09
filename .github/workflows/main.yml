@@ -17,7 +17,7 @@ on:
     types: [completed]
 
 permissions:
-  actions: read
+  actions: write
   checks: read
   contents: read
   issues: write
