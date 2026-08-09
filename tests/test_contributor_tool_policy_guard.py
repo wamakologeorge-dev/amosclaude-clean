@@ -57,6 +57,7 @@ def test_removing_or_commenting_code_owner_is_rejected(tmp_path: Path) -> None:
     root = _copy_contract(tmp_path, guard)
     codeowners = root / ".github" / "CODEOWNERS"
     protected = f"/docs/CONTRIBUTOR_TOOL_POLICY.md {guard.CODE_OWNER}"
+    _replace(codeowners, f"* {guard.CODE_OWNER}", f"# * {guard.CODE_OWNER}", 1)
     _replace(codeowners, protected, f"# {protected}")
     assert any("CODEOWNERS effective rule" in error for error in guard.validate_repository(root))
 
