@@ -31,6 +31,12 @@
 /scripts/ci/contributor_tool_policy_guard.py @wamakologeorge-dev
 /tests/test_contributor_tool_policy_guard.py @wamakologeorge-dev
 
+# Trusted owner comment-command contract
+/amosclaud_bot/dispatcher.py @wamakologeorge-dev
+/amosclaud_bot/owner_directives.py @wamakologeorge-dev
+/tests/test_owner_directives.py @wamakologeorge-dev
+/.github/workflows/amosclaud-bot-contributor.yml @wamakologeorge-dev
+
 # Formal pull-request review and truthful health contracts
 /.github/workflows/amosclaud-bot-review.yml @wamakologeorge-dev
 /amosclaud_bot/review_publisher.py @wamakologeorge-dev
