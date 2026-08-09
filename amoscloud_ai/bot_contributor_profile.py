@@ -65,9 +65,7 @@ def build_profile(environment: Mapping[str, str] | None = None) -> dict[str, obj
     )
     bot_user_id = _positive_integer(env, "GITHUB_APP_BOT_USER_ID")
     identity_configured = bool(app_id and installation_id and bot_user_id)
-    commit_email = (
-        f"{bot_user_id}+{bot_login}@users.noreply.github.com" if bot_user_id else None
-    )
+    commit_email = f"{bot_user_id}+{bot_login}@users.noreply.github.com" if bot_user_id else None
 
     return {
         "schema": "amosclaud.github-contributor-profile.v2",
