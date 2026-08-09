@@ -52,10 +52,7 @@ def test_connection_verifies_app_installation_repository_and_bot() -> None:
     assert connection.token == "installation-token"
     assert connection.bot_login == "amosclaud-bot[bot]"
     assert connection.actor_name == "Amosclaud Bot"
-    assert (
-        connection.actor_email
-        == "24680+amosclaud-bot[bot]@users.noreply.github.com"
-    )
+    assert connection.actor_email == "24680+amosclaud-bot[bot]@users.noreply.github.com"
     assert calls[0][2] == "Bearer signed-app-jwt"
     assert "installation-token" not in str(connection.public_evidence())
 
@@ -70,10 +67,13 @@ def test_connection_rejects_repository_without_installation_access() -> None:
             return 404, {}
         raise AssertionError(url)
 
-    with patch(
-        "amoscloud_ai.github_app_connection.jwt.encode",
-        return_value="signed-app-jwt",
-    ), pytest.raises(GitHubAppConnectionError) as exc_info:
+    with (
+        patch(
+            "amoscloud_ai.github_app_connection.jwt.encode",
+            return_value="signed-app-jwt",
+        ),
+        pytest.raises(GitHubAppConnectionError) as exc_info,
+    ):
         connect_installation(
             repository="owner/repo",
             environment=environment(),
@@ -95,10 +95,13 @@ def test_connection_rejects_bot_identity_mismatch() -> None:
             return 200, {"id": 99999}
         raise AssertionError(url)
 
-    with patch(
-        "amoscloud_ai.github_app_connection.jwt.encode",
-        return_value="signed-app-jwt",
-    ), pytest.raises(GitHubAppConnectionError) as exc_info:
+    with (
+        patch(
+            "amoscloud_ai.github_app_connection.jwt.encode",
+            return_value="signed-app-jwt",
+        ),
+        pytest.raises(GitHubAppConnectionError) as exc_info,
+    ):
         connect_installation(
             repository="owner/repo",
             environment=environment(),
