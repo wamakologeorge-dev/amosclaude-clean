@@ -153,7 +153,6 @@ def _verification_failure(code: str) -> dict[str, object]:
         "verification_level": "FAILED",
         "failure_code": code,
         "contributor_ready": False,
-        "webhook_configuration_present": False,
         "webhook_delivery_verified": False,
         "fully_ready": False,
     }
@@ -176,7 +175,6 @@ def verify_live_profile(
     )
     bot_user_id = _positive_integer(env, "GITHUB_APP_BOT_USER_ID")
     private_key = _private_key(env)
-    webhook_secret_configured = bool(_value(env, "GITHUB_APP_WEBHOOK_SECRET"))
     if not all((app_id, installation_id, bot_user_id, private_key)):
         return _verification_failure("CONFIGURATION_INCOMPLETE")
 
@@ -245,10 +243,28 @@ def verify_live_profile(
         "verified_bot_login": bot_login,
         "canonical_repository_accessible": True,
         "contributor_ready": True,
-        "webhook_configuration_present": webhook_secret_configured,
         "webhook_delivery_verified": False,
         "fully_ready": False,
         "remaining_verification": "SIGNED_WEBHOOK_DELIVERY_REQUIRED",
+    }
+
+
+def _public_live_verification(result: Mapping[str, object]) -> dict[str, object]:
+    """Return an explicit allowlist of non-secret live-verification evidence."""
+
+    return {
+        "schema": "amosclaud.github-contributor-live-verification.v1",
+        "verification_level": str(result.get("verification_level") or "FAILED"),
+        "failure_code": result.get("failure_code"),
+        "verified_app_slug": str(result.get("verified_app_slug") or ""),
+        "verified_bot_login": str(result.get("verified_bot_login") or ""),
+        "canonical_repository_accessible": bool(
+            result.get("canonical_repository_accessible")
+        ),
+        "contributor_ready": bool(result.get("contributor_ready")),
+        "webhook_delivery_verified": False,
+        "fully_ready": False,
+        "remaining_verification": str(result.get("remaining_verification") or ""),
     }
 
 
@@ -269,7 +285,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.require_ready:
         verification = verify_live_profile()
-        print(json.dumps(verification, indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                _public_live_verification(verification),
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return 0 if verification["contributor_ready"] else 1
 
     print(json.dumps(build_profile(), indent=2, sort_keys=True))
