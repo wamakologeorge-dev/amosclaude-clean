@@ -145,3 +145,122 @@ def test_pull_request_path_filter_is_rejected(tmp_path: Path) -> None:
     errors = guard.validate_repository(root)
 
     assert any("must not use path filters" in error for error in errors)
+
+
+def test_formal_review_cannot_be_changed_to_automatic_approval(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    publisher = root / "amosclaud_bot" / "review_publisher.py"
+    publisher.write_text(
+        publisher.read_text(encoding="utf-8").replace(
+            '"event": "COMMENT"',
+            '"event": "APPROVE"',
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("must submit only GitHub COMMENT reviews" in error for error in errors)
+
+
+def test_formal_review_cannot_execute_pull_request_checkout(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "amosclaud-bot-review.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "ref: ${{ github.event.repository.default_branch }}",
+            "ref: ${{ github.event.pull_request.head.sha }}",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("must check out the trusted default branch" in error for error in errors)
+
+
+def test_formal_review_cannot_receive_protected_secrets(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "amosclaud-bot-review.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "GITHUB_TOKEN: ${{ github.token }}",
+            "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("must not use pull_request_target or protected secrets" in error for error in errors)
+
+
+def test_security_bridge_allowlist_cannot_be_broadened(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "amosclaud-security-repair-bridge.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "      - Fortify AST Scan\n",
+            "      - Fortify AST Scan\n      - Untrusted Workflow\n",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("source allowlist changed" in error for error in errors)
+
+
+def test_security_bridge_repair_target_cannot_be_replaced(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    bridge = root / "amoscloud_ai" / "security_repair_bridge.py"
+    bridge.write_text(
+        bridge.read_text(encoding="utf-8").replace(
+            guard.REPAIR_WORKFLOW,
+            "untrusted-fixer.yml",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("security bridge repair target changed" in error for error in errors)
+
+
+def test_dependency_gate_cannot_ignore_low_severity_threats(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = (
+        root / ".github" / "workflows" / "amosclaud-dependency-threat-gate.yml"
+    )
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "fail-on-severity: low",
+            "fail-on-severity: high",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("dependency threat gate is missing required text" in error for error in errors)
+
+
+def test_security_connection_code_owner_cannot_be_removed(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    codeowners = root / ".github" / "CODEOWNERS"
+    protected_line = f"/amoscloud_ai/security_repair_bridge.py {guard.CODE_OWNER}"
+    codeowners.write_text(
+        codeowners.read_text(encoding="utf-8").replace(protected_line, ""),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("CODEOWNERS is missing effective protected entry" in error for error in errors)
