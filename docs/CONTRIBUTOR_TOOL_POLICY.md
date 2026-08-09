@@ -1,7 +1,7 @@
 # Amosclaud Contributor Tool Sovereignty Policy
 
-**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`  
-**Status:** Permanent repository governance  
+**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`
+**Status:** Permanent repository governance
 **Applies to:** every human contributor, maintainer, bot, autonomous agent, workflow, generated patch, and integration.
 
 ## Mandatory Amosclaud-first order
