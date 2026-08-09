@@ -249,6 +249,58 @@ def test_dependency_gate_cannot_ignore_low_severity_threats(tmp_path: Path) -> N
     assert any("dependency threat gate is missing required text" in error for error in errors)
 
 
+def test_differential_ast_gate_cannot_stop_scanning_exact_base(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "fortify.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "github.event.pull_request.base.sha",
+            "github.event.pull_request.head.sha",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("AST threat gate is missing required text" in error for error in errors)
+
+
+def test_differential_ast_gate_cannot_remove_comparator(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "fortify.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "python head/scripts/ci/bandit_pr_gate.py",
+            "echo comparator removed",
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("AST threat gate is missing required text" in error for error in errors)
+
+
+def test_differential_ast_gate_cannot_add_suppression_flags(tmp_path: Path) -> None:
+    guard = _load_guard()
+    root = _copy_contract(tmp_path, guard)
+    workflow = root / ".github" / "workflows" / "fortify.yml"
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "python -m bandit -r src amoscloud_ai",
+            "python -m bandit -r src amoscloud_ai --skip B602",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    errors = guard.validate_repository(root)
+
+    assert any("forbidden suppression" in error for error in errors)
+
+
 def test_security_connection_code_owner_cannot_be_removed(tmp_path: Path) -> None:
     guard = _load_guard()
     root = _copy_contract(tmp_path, guard)
