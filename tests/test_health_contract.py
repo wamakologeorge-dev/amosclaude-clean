@@ -129,6 +129,6 @@ def test_markdown_distinguishes_expected_skip_from_failure() -> None:
 
     report = render_markdown(result)
     assert "VERIFIED" in report
-    assert "Observed verification: 100%" in report
+    assert "**Observed verification:** 100%" in report
     assert "EXPECTED_SKIP" in report
     assert "ACTION_NEEDED" not in report
