@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       require_live_profile:
-        description: Fail unless the protected GitHub App contributor configuration is complete
+        description: Verify the trusted main branch using protected GitHub App credentials
         required: true
         type: boolean
         default: false
@@ -80,20 +80,7 @@ jobs:
           GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
           GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
           GITHUB_APP_BOT_USER_ID: ${{ vars.GITHUB_APP_BOT_USER_ID }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-          GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GITHUB_APP_WEBHOOK_SECRET }}
         run: python -m amoscloud_ai.bot_contributor_profile > contributor-profile.json
-
-      - name: Require live contributor configuration
-        if: github.event_name == 'workflow_dispatch' && inputs.require_live_profile
-        env:
-          GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
-          GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
-          GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
-          GITHUB_APP_BOT_USER_ID: ${{ vars.GITHUB_APP_BOT_USER_ID }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-          GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GITHUB_APP_WEBHOOK_SECRET }}
-        run: python -m amoscloud_ai.bot_contributor_profile --require-ready
 
       - name: Upload contributor profile evidence
         if: always()
@@ -101,4 +88,45 @@ jobs:
         with:
           name: amosclaud-bot-contributor-profile
           path: contributor-profile.json
+          if-no-files-found: warn
+
+  live-profile-verification:
+    name: live-profile-verification
+    if: github.event_name == 'workflow_dispatch' && inputs.require_live_profile
+    runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out trusted main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Install the trusted Amosclaud runtime
+        run: python -m pip install --disable-pip-version-check -e .
+
+      - name: Authenticate as the GitHub App and installation
+        env:
+          GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
+          GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
+          GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
+          GITHUB_APP_BOT_USER_ID: ${{ vars.GITHUB_APP_BOT_USER_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.GITHUB_APP_WEBHOOK_SECRET }}
+        run: |
+          python -m amoscloud_ai.bot_contributor_profile \
+            --require-ready > live-profile-verification.json
+
+      - name: Upload live verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-bot-live-verification
+          path: live-profile-verification.json
           if-no-files-found: warn
