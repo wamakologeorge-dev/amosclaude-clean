@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from amoscloud_ai.health_contract import evaluate_health
+
 from .bot import AmosclaudBot
 
 _STATUS_REQUESTS = {
@@ -10,6 +12,17 @@ _STATUS_REQUESTS = {
     "@amosclaud-status",
     "amosclaud-status",
 }
+_EXPECTED_SKIP_PATTERNS = (
+    "*Fork PR Fixer*",
+    "*PR Repair Callback*",
+    "*Model Agent*",
+    "*cmood Autonomous Agent Trigger*",
+    "*Autonomous Background Engineer*",
+    "Amosclaud Agent Main",
+    "Amosclaud Repair Results",
+    ".github/workflows/main.yml",
+    ".github/workflows/results.yml",
+)
 
 
 def is_status_request(text: str) -> bool:
@@ -17,22 +30,7 @@ def is_status_request(text: str) -> bool:
     return normalized in _STATUS_REQUESTS
 
 
-def _run_state(run: dict[str, Any]) -> tuple[str, str]:
-    status = str(run.get("status") or "").lower()
-    conclusion = str(run.get("conclusion") or "").lower()
-
-    if status != "completed":
-        return "🟨", "RUNNING"
-    if conclusion == "success":
-        return "🟩", "PASSED"
-    if conclusion in {"neutral", "skipped"}:
-        return "⬜", conclusion.upper()
-    if conclusion in {"cancelled", "stale"}:
-        return "⬜", conclusion.upper()
-    return "🟥", "FAILED"
-
-
-def _latest_unique_runs(runs: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
+def _latest_unique_runs(runs: list[dict[str, Any]], limit: int = 20) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
     for run in runs:
@@ -46,12 +44,9 @@ def _latest_unique_runs(runs: list[dict[str, Any]], limit: int = 10) -> list[dic
     return selected
 
 
-def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
+def _target(bot: AmosclaudBot, payload: dict[str, Any]) -> tuple[str | None, str | None]:
     issue = payload.get("issue") or {}
     issue_number = issue.get("number")
-
-    branch: str | None = None
-    head_sha: str | None = None
 
     if issue.get("pull_request") and isinstance(issue_number, int):
         pr = bot._request("GET", f"/repos/{bot.repository}/pulls/{issue_number}")
@@ -59,47 +54,101 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
             head = pr.get("head") or {}
             branch = str(head.get("ref") or "") or None
             head_sha = str(head.get("sha") or "") or None
-    else:
-        repo = bot._request("GET", f"/repos/{bot.repository}")
-        if isinstance(repo, dict):
-            branch = str(repo.get("default_branch") or "") or None
+            return branch, head_sha
+        return None, None
+
+    repo = bot._request("GET", f"/repos/{bot.repository}")
+    branch = str(repo.get("default_branch") or "") if isinstance(repo, dict) else ""
+    if not branch:
+        return None, None
+
+    branch_data = bot._request("GET", f"/repos/{bot.repository}/branches/{branch}")
+    commit = branch_data.get("commit") or {} if isinstance(branch_data, dict) else {}
+    head_sha = str(commit.get("sha") or "") or None
+    return branch, head_sha
+
+
+def _workflow_checks(runs: list[dict[str, Any]]) -> list[dict[str, object]]:
+    return [
+        {
+            "name": str(run.get("name") or "GitHub Actions"),
+            "status": str(run.get("status") or ""),
+            "conclusion": run.get("conclusion"),
+        }
+        for run in runs
+    ]
+
+
+def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
+    branch, head_sha = _target(bot, payload)
 
     if head_sha:
-        endpoint = f"/repos/{bot.repository}/actions/runs?head_sha={head_sha}&per_page=50"
+        endpoint = f"/repos/{bot.repository}/actions/runs?head_sha={head_sha}&per_page=100"
     elif branch:
-        endpoint = f"/repos/{bot.repository}/actions/runs?branch={branch}&per_page=50"
+        endpoint = f"/repos/{bot.repository}/actions/runs?branch={branch}&per_page=100"
     else:
-        endpoint = f"/repos/{bot.repository}/actions/runs?per_page=50"
+        endpoint = f"/repos/{bot.repository}/actions/runs?per_page=100"
 
     data = bot._request("GET", endpoint)
     runs = data.get("workflow_runs", []) if isinstance(data, dict) else []
     runs = runs if isinstance(runs, list) else []
     latest = _latest_unique_runs(runs)
 
-    if not latest:
-        return "### Amosclaud — Workflow Status\n\n⬜ No GitHub Actions results found for this target."
-
-    lines = ["### Amosclaud — Workflow Status", ""]
-    has_failure = False
-    has_running = False
-    for run in latest:
-        icon, state = _run_state(run)
-        name = str(run.get("name") or "GitHub Actions")
-        lines.append(f"{icon} **{name}** — {state}")
-        has_failure = has_failure or state == "FAILED"
-        has_running = has_running or state == "RUNNING"
-
-    if has_failure:
-        overall = "🟥 ACTION NEEDED"
-    elif has_running:
-        overall = "🟨 RUNNING"
-    else:
-        overall = "🟩 READY"
-
-    lines.extend(["", f"**Overall:** {overall}"])
     target = branch or (head_sha[:7] if head_sha else "repository")
-    lines.append(f"**Target:** `{target}`")
-    return "\n".join(lines)[:1800]
+    commit_label = head_sha[:12] if head_sha else "unresolved"
+    if not latest:
+        return (
+            "### Amosclaud — Verified Workflow Health\n\n"
+            "⬜ No GitHub Actions results were found for the exact target commit.\n\n"
+            "**Overall:** ⬜ INCOMPLETE\n"
+            "**Observed verification:** 0%\n"
+            f"**Target:** `{target}`\n"
+            f"**Commit:** `{commit_label}`"
+        )
+
+    checks = _workflow_checks(latest)
+    required = tuple(str(check["name"]) for check in checks)
+    result = evaluate_health(
+        checks,
+        required=required,
+        expected_skips=_EXPECTED_SKIP_PATTERNS,
+    )
+
+    lines = ["### Amosclaud — Verified Workflow Health", ""]
+    markers = {
+        "PASSED": "🟩",
+        "EXPECTED_SKIP": "⬜",
+        "PENDING": "🟨",
+        "FAILED": "🟥",
+        "MISSING": "🟥",
+        "UNEXPECTED_SKIP": "🟥",
+        "UNKNOWN": "🟥",
+    }
+    for check in result["checks"]:
+        state = str(check["state"])
+        marker = markers.get(state, "⬜")
+        lines.append(f"{marker} **{check['name']}** — {state}")
+
+    overall = str(result["overall"])
+    overall_label = {
+        "VERIFIED": "🟩 VERIFIED",
+        "PENDING": "🟨 PENDING",
+        "ACTION_NEEDED": "🟥 ACTION NEEDED",
+        "INCOMPLETE": "⬜ INCOMPLETE",
+    }.get(overall, "⬜ INCOMPLETE")
+    lines.extend(
+        [
+            "",
+            f"**Overall:** {overall_label}",
+            f"**Observed verification:** {result['percentage']}%",
+            f"**Target:** `{target}`",
+            f"**Commit:** `{commit_label}`",
+            "",
+            "100% is shown only when every observed workflow for this exact commit "
+            "has passed or is a declared conditional skip.",
+        ]
+    )
+    return "\n".join(lines)[:2400]
 
 
 def handle_status_request(bot: AmosclaudBot, payload: dict[str, Any]) -> int | None:
