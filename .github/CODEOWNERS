@@ -37,6 +37,16 @@
 /tests/test_owner_directives.py @wamakologeorge-dev
 /.github/workflows/amosclaud-bot-contributor.yml @wamakologeorge-dev
 
+# Trusted Claude patch-generation and App-publication contract
+/.github/scripts/parse_comment.py @wamakologeorge-dev
+/.github/scripts/ai_patch_executor.py @wamakologeorge-dev
+/.github/workflows/amosclaud-claude-patch.yml @wamakologeorge-dev
+/scripts/ci/claude_patch_policy_guard.py @wamakologeorge-dev
+/tests/test_parse_comment_script.py @wamakologeorge-dev
+/tests/test_ai_patch_executor.py @wamakologeorge-dev
+/tests/test_claude_patch_policy_guard.py @wamakologeorge-dev
+/docs/AMOSCLAUD_CLAUDE_PATCH_EXECUTOR.md @wamakologeorge-dev
+
 # Formal pull-request review and truthful health contracts
 /.github/workflows/amosclaud-bot-review.yml @wamakologeorge-dev
 /amosclaud_bot/review_publisher.py @wamakologeorge-dev
