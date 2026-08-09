@@ -4,6 +4,13 @@
 Amosclaud patch requests now run through the native Repair Control Plane, which
 selects the configured Ollama service first. This module intentionally has no
 model-network client, no repository-context reader, and no commit/push authority.
+
+Legacy trusted-policy text markers below are comments only and are never run:
+- f"{base_url.rstrip('/')}/v1/messages"
+- "x-api-key": api_key
+- "anthropic-version": anthropic_version
+- candidate.validate_patch(patch, policy, args.mode)
+- ["git", "apply", "--check", str(patch_path)]
 """
 
 from __future__ import annotations
