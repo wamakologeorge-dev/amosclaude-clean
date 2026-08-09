@@ -99,9 +99,12 @@ def evaluate_health(
     for state in states:
         counts[state.state] = counts.get(state.state, 0) + 1
 
-    blocking_states = {"FAILED", "MISSING", "UNEXPECTED_SKIP", "UNKNOWN"}
-    has_blocker = any(state.required and state.state in blocking_states for state in states)
-    has_pending = any(state.required and state.state == "PENDING" for state in states)
+    has_blocker = any(
+        state.state in {"FAILED", "UNEXPECTED_SKIP", "UNKNOWN"}
+        or (state.required and state.state == "MISSING")
+        for state in states
+    )
+    has_pending = any(state.state == "PENDING" for state in states)
     all_required_verified = all(
         state.state in {"PASSED", "EXPECTED_SKIP"}
         for state in states
