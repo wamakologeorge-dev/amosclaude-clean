@@ -34,6 +34,17 @@ def test_repository_chat_uses_shared_chat_api_with_repository_context() -> None:
     assert "activateWorkspaceTab" in source
 
 
+def test_repository_chat_bounds_network_wait_and_reports_api_outages() -> None:
+    source = (WEB / "workspace-chat.js").read_text(encoding="utf-8")
+
+    assert "const chatTimeoutMs = 57000" in source
+    assert "new AbortController()" in source
+    assert "signal: controller.signal" in source
+    assert "Chat request timed out" in source
+    assert "/api/chat could not be reached" in source
+    assert "/health endpoint" in source
+
+
 def test_mobile_repository_navigation_is_fixed_and_visible() -> None:
     css = (WEB / "workspace-chat.css").read_text(encoding="utf-8")
 
