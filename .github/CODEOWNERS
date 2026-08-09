@@ -36,3 +36,16 @@
 /amosclaud_bot/review_publisher.py @wamakologeorge-dev
 /tests/test_amosclaud_review_publisher.py @wamakologeorge-dev
 /docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md @wamakologeorge-dev
+
+# Advanced Security and bounded repair connection
+/.github/workflows/codeql.yml @wamakologeorge-dev
+/.github/workflows/fortify.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-dependency-threat-gate.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-security-repair-bridge.yml @wamakologeorge-dev
+/scripts/ci/advanced_security_gate.py @wamakologeorge-dev
+/amoscloud_ai/github_app_connection.py @wamakologeorge-dev
+/amoscloud_ai/security_repair_bridge.py @wamakologeorge-dev
+/tests/test_advanced_security_gate.py @wamakologeorge-dev
+/tests/test_github_app_connection.py @wamakologeorge-dev
+/tests/test_security_repair_bridge.py @wamakologeorge-dev
+/docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md @wamakologeorge-dev
