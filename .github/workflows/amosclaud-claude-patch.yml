@@ -133,7 +133,7 @@ jobs:
         if: steps.target.outputs.eligible == 'true'
         id: candidate
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ''
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' }}
           AMOSCLAUD_SENSITIVE_APPROVED: 'false'
