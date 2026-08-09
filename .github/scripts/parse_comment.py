@@ -8,6 +8,8 @@ directives handled by :mod:`amosclaud_bot.owner_directives`.
 
 The script never executes a requested action. It emits only bounded routing
 metadata and writes the objective to a local file for a later trusted step.
+Normal ``fix`` commands remain on Amosclaud's existing fixer path; only an
+explicit Claude patch alias selects the external Claude executor.
 """
 
 from __future__ import annotations
@@ -96,6 +98,7 @@ def parse_event(payload: Mapping[str, Any]) -> ParsedComment:
     recognized = command is not None
     write_request = command == "fix"
     authorized_write = write_request and association in WRITE_ASSOCIATIONS
+    patch_executor = authorized_write and source_format == "claude-patch-alias"
     issue = mutable.get("issue") if isinstance(mutable.get("issue"), Mapping) else {}
     issue_number = issue.get("number")
 
@@ -106,7 +109,7 @@ def parse_event(payload: Mapping[str, Any]) -> ParsedComment:
         author_association=association,
         authorized_write=authorized_write,
         write_request=write_request,
-        patch_executor=authorized_write,
+        patch_executor=patch_executor,
         source_format=source_format,
         issue_number=issue_number if isinstance(issue_number, int) else None,
         pull_request=bool(issue.get("pull_request")),
@@ -160,11 +163,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     json_path = Path(args.json_output)
     json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(result.public_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    json_path.write_text(
+        json.dumps(result.public_dict(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
     objective_path = Path(args.objective_output)
     objective_path.parent.mkdir(parents=True, exist_ok=True)
-    objective_path.write_text(result.objective or "Repository engineering task", encoding="utf-8")
+    objective_path.write_text(
+        result.objective or "Repository engineering task",
+        encoding="utf-8",
+    )
 
     if args.github_output:
         _write_outputs(Path(args.github_output), result)
