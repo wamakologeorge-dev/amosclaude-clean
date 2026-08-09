@@ -17,12 +17,10 @@ def owner_payload(body: str) -> dict:
 
 
 def test_task_block_becomes_existing_signed_fix_command() -> None:
-    payload = owner_payload(
-        """TASK: Fix the internal server error in the connection string parser.
+    payload = owner_payload("""TASK: Fix the internal server error in the connection string parser.
 RESTRICTION: Keep environment variable names identical to the `.env.example` file.
 OUTPUT: Submit the patch directly to this pull request.
-"""
-    )
+""")
 
     result = normalize_owner_directive(payload)
 
@@ -38,13 +36,11 @@ OUTPUT: Submit the patch directly to this pull request.
 
 
 def test_amosclaud_directive_block_preserves_target_and_safe_rule() -> None:
-    payload = owner_payload(
-        """### 🤖 Amosclaud-bot Directives
+    payload = owner_payload("""### 🤖 Amosclaud-bot Directives
 - **Primary Objective:** Resolve open linting and runtime errors.
 - **Target Directory:** `/backend`
 - **Strict Rule:** Never hardcode secrets; always reference `process.env`.
-"""
-    )
+""")
 
     result = normalize_owner_directive(payload)
 
