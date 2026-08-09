@@ -215,7 +215,7 @@ def test_default_branch_with_slash_is_encoded_as_one_path_component() -> None:
     bot = SlashBranchBot()
     board = build_status_board(bot, {"issue": {"number": 31}})
     assert "**Target:** `release/v1`" in board
-    assert "/branches/release%2Fv1" in bot.calls
+    assert any(path.endswith("/branches/release%2Fv1") for path in bot.calls)
 
 
 def test_unresolved_exact_commit_refuses_branch_history_verification() -> None:
