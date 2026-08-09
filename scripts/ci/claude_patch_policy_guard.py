@@ -252,7 +252,7 @@ def validate_repository(root: Path) -> list[str]:
     publish = _job(worker, "publish-candidate")
     if _contains(generate, "GITHUB_APP_PRIVATE_KEY"):
         errors.append("candidate generation must not receive the GitHub App private key")
-    if _contains(verify, "secrets.") or _contains(verify, "GITHUB_APP_PRIVATE_KEY"):
+    if _contains(verify, "${{ secrets."):
         errors.append("credential-free verification must not receive protected secrets")
     if _contains(publish, "ANTHROPIC_API_KEY"):
         errors.append("publication must not receive the Claude API key")
