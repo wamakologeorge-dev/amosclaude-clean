@@ -148,8 +148,7 @@ def _review_body(
     security_verdict = (
         "## Security threat verdict\n"
         "**BLOCKED — CHANGES REQUIRED**\n"
-        "- Failing security checks: "
-        + ", ".join(f"`{name}`" for name in security_blockers[:10])
+        "- Failing security checks: " + ", ".join(f"`{name}`" for name in security_blockers[:10])
         if security_blockers
         else "## Security threat verdict\n**NO FAILING SECURITY CHECK OBSERVED**"
     )
@@ -226,9 +225,7 @@ def run_from_environment() -> int:
     if event_name != "issue_comment":
         return 0
     if not event_path or not repository or not token:
-        raise RuntimeError(
-            "GITHUB_EVENT_PATH, GITHUB_REPOSITORY, and GITHUB_TOKEN are required"
-        )
+        raise RuntimeError("GITHUB_EVENT_PATH, GITHUB_REPOSITORY, and GITHUB_TOKEN are required")
 
     payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
