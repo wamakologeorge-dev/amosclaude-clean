@@ -12,6 +12,8 @@ name: Amosclaud Ollama Patch Compatibility Worker
 # test "$remote_sha" = "$EXPECTED_SHA"
 # git -C target push origin "HEAD:refs/heads/${HEAD_REF}"
 # All normal pull-request checks and reviews must pass before merge.
+# gh workflow run amosclaud-repair-control-plane.yml
+# -f provider="ollama-cloud"
 
 on:
   workflow_dispatch:
