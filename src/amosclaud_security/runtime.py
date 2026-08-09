@@ -19,7 +19,12 @@ _EPHEMERAL_AUTHORITIES: dict[Path, SecurityAuthority] = {}
 
 def _validated_workspace_root(workspace: Path | str) -> Path:
     base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
-    root = Path(workspace).resolve()
+    raw_workspace = str(workspace or ".").strip()
+    if "\x00" in raw_workspace:
+        raise ValueError("Invalid workspace path")
+
+    workspace_path = Path(raw_workspace)
+    root = (base / workspace_path).resolve() if not workspace_path.is_absolute() else workspace_path.resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
@@ -33,13 +38,13 @@ def repository_identity(workspace: Path | str, explicit: str | None = None) -> s
     configured = os.getenv("GITHUB_REPOSITORY", "").strip()
     if configured and "/" in configured:
         return configured
-    root = Path(workspace).resolve()
+    root = _validated_workspace_root(workspace)
     name = _SAFE_NAME.sub("-", root.name).strip("-.") or "workspace"
     return f"local/{name}"
 
 
 def target_revision(workspace: Path | str) -> str:
-    root = Path(workspace).resolve()
+    root = _validated_workspace_root(workspace)
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,
@@ -59,7 +64,7 @@ def security_state_path(workspace: Path | str) -> Path:
     configured = os.getenv(SecurityAuthority.STATE_ENV, "").strip()
     if configured:
         return Path(configured)
-    root = Path(workspace).resolve()
+    root = _validated_workspace_root(workspace)
     git_dir = root / ".git"
     if git_dir.is_dir():
         return git_dir / "amosclaud-command-bus.db"
