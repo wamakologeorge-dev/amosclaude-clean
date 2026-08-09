@@ -8,6 +8,7 @@ the Amosclaud provider runtime.
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from typing import Optional
 
@@ -20,6 +21,17 @@ from amoscloud_ai.logger import log
 from amoscloud_ai.models import ChatRequest, ChatResponse
 
 router = APIRouter(tags=["chat"])
+
+
+def _chat_timeout_seconds() -> float:
+    """Return a bounded web-request timeout for the model runtime."""
+
+    raw_value = os.getenv("AMOSCLAUD_CHAT_TIMEOUT", "45").strip()
+    try:
+        configured = float(raw_value)
+    except ValueError:
+        configured = 45.0
+    return max(5.0, min(configured, 55.0))
 
 
 @router.post("/api/chat", response_model=ChatResponse, summary="Talk to Amosclaud")
@@ -52,9 +64,27 @@ async def chat(
         history[:] = history[-legacy_chat._MAX_HISTORY_TURNS :]
         request_history = list(history)
 
+    timeout_seconds = _chat_timeout_seconds()
     try:
-        result = await asyncio.to_thread(provider.reply, request_history, legacy_chat._system_prompt())
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                provider.reply,
+                request_history,
+                legacy_chat._system_prompt(),
+            ),
+            timeout=timeout_seconds,
+        )
         reply = result.reply
+    except TimeoutError:
+        log.warning(
+            "Amosclaud model runtime exceeded the workspace chat timeout of %.1f seconds",
+            timeout_seconds,
+        )
+        reply = (
+            "Amosclaud reached the platform, but the model runtime did not answer within "
+            f"{timeout_seconds:g} seconds. No repository action was performed. "
+            "Check the model-service health and try again."
+        )
     except Exception:
         log.exception("Amosclaud first-party model runtime failed")
         reply = (
