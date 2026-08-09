@@ -64,7 +64,7 @@ class BridgeResult:
             "target_sha": self.target_sha,
             "repair_dispatched": self.repair_dispatched,
             "detail": self.detail,
-            "token_exposed": False,
+            "sensitive_value_disclosed": False,
             "exit_code": self.exit_code,
         }
 
