@@ -32,6 +32,16 @@ def test_public_profile_preserves_autonomous_identity_and_bot_attribution() -> N
     )
 
 
+def test_unconfigured_profile_uses_canonical_bot_slug() -> None:
+    profile = build_profile({})
+
+    attribution = profile["github_attribution"]
+    assert attribution["app_slug"] == "amosclaud-bot"
+    assert attribution["bot_login"] == "amosclaud-bot[bot]"
+    assert profile["configuration"]["identity_configuration_level"] == "INCOMPLETE"
+    assert profile["verification"]["contributor_ready"] is False
+
+
 def test_configuration_presence_never_claims_live_readiness_or_exposes_secrets() -> None:
     profile = build_profile(configured_environment())
 
