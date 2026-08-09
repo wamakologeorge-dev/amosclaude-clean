@@ -21,8 +21,10 @@ on:
       - "amoscloud_ai/health_contract.py"
       - "amoscloud_ai/security_repair_bridge.py"
       - "scripts/ci/advanced_security_gate.py"
+      - "scripts/ci/bandit_pr_gate.py"
       - "scripts/ci/contributor_tool_policy_guard.py"
       - "tests/test_advanced_security_gate.py"
+      - "tests/test_bandit_pr_gate.py"
       - "tests/test_amosclaud_review_publisher.py"
       - "tests/test_amosclaud_status_board.py"
       - "tests/test_bot_contributor_profile.py"
@@ -80,12 +82,14 @@ jobs:
             amoscloud_ai/health_contract.py \
             amoscloud_ai/security_repair_bridge.py \
             scripts/ci/advanced_security_gate.py \
+            scripts/ci/bandit_pr_gate.py \
             scripts/ci/contributor_tool_policy_guard.py
 
       - name: Run focused contributor, review, security, and health tests
         run: |
           python -m pytest -q \
             tests/test_advanced_security_gate.py \
+            tests/test_bandit_pr_gate.py \
             tests/test_amosclaud_review_publisher.py \
             tests/test_amosclaud_status_board.py \
             tests/test_bot_contributor_profile.py \
