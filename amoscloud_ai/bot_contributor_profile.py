@@ -14,9 +14,11 @@ import os
 import time
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from jose import jwt
+from jose.exceptions import JWKError, JWSError
 
 PUBLIC_IDENTITY = "Amosclaud Autonomous"
 TECHNICAL_APP_NAME = "Amosclaud Bot"
@@ -187,7 +189,7 @@ def verify_live_profile(
             private_key,
             algorithm="RS256",
         )
-    except Exception:  # jose normalizes backend key parsing failures inconsistently.
+    except (JWKError, JWSError, TypeError, ValueError):
         return _verification_failure("PRIVATE_KEY_INVALID")
 
     requester = request or _http_request
@@ -230,7 +232,7 @@ def verify_live_profile(
     bot_login = f"{verified_slug}[bot]"
     status, bot_user = requester(
         "GET",
-        f"https://api.github.com/users/{bot_login}",
+        f"https://api.github.com/users/{quote(bot_login, safe='')}",
         installation_headers,
         None,
     )
