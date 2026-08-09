@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from amoscloud_ai.health_contract import evaluate_health
 
@@ -14,13 +14,28 @@ _STATUS_REQUESTS = {
     "amosclaud-status",
 }
 _EXPECTED_SKIP_EVENTS: tuple[tuple[str, frozenset[str]], ...] = (
-    ("*Fork PR Fixer*", frozenset({"pull_request"})),
+    ("*Fork PR Fixer*", frozenset({"pull_request", "workflow_run"})),
     ("*PR Repair Callback*", frozenset({"workflow_run"})),
     ("*cmood Autonomous Agent Trigger*", frozenset({"issue_comment"})),
     ("Amosclaud Agent Main", frozenset({"workflow_run"})),
     ("Amosclaud Repair Results", frozenset({"workflow_run"})),
     (".github/workflows/main.yml", frozenset({"workflow_run"})),
     (".github/workflows/results.yml", frozenset({"workflow_run"})),
+)
+_REQUIRED_PULL_REQUEST_WORKFLOWS = (
+    "Fast PR Gate",
+    "Amosclaud Workflow Policy",
+    "Build and Verify",
+    "Amosclaud CI",
+    "CodeQL",
+    "Amosclaud Dependency Threat Gate",
+    "Fortify AST Scan",
+)
+_REQUIRED_DEFAULT_BRANCH_WORKFLOWS = (
+    "Build and Verify",
+    "Amosclaud CI",
+    "CodeQL",
+    "Fortify AST Scan",
 )
 _MAX_PAGES = 100
 _PAGE_SIZE = 100
@@ -50,7 +65,8 @@ def _target(bot: AmosclaudBot, payload: dict[str, Any]) -> tuple[str | None, str
     if not branch:
         return None, None
 
-    branch_data = bot._request("GET", f"/repos/{bot.repository}/branches/{branch}")
+    encoded_branch = quote(branch, safe="")
+    branch_data = bot._request("GET", f"/repos/{bot.repository}/branches/{encoded_branch}")
     commit = branch_data.get("commit") or {} if isinstance(branch_data, dict) else {}
     head_sha = str(commit.get("sha") or "") or None
     return branch, head_sha
@@ -106,6 +122,19 @@ def _workflow_checks(runs: list[dict[str, Any]]) -> list[dict[str, object]]:
     return checks
 
 
+def _required_keys(
+    checks: list[dict[str, object]],
+    *,
+    required_workflows: tuple[str, ...],
+) -> tuple[str, ...]:
+    keys = [str(check["name"]) for check in checks]
+    observed_names = {str(check.get("display_name") or "") for check in checks}
+    for workflow in required_workflows:
+        if workflow not in observed_names:
+            keys.append(f"{workflow} [required workflow]")
+    return tuple(keys)
+
+
 def _incomplete_board(branch: str | None, reason: str) -> str:
     target = branch or "repository"
     return (
@@ -140,7 +169,13 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
         )
 
     checks = _workflow_checks(runs)
-    required = tuple(str(check["name"]) for check in checks)
+    issue = payload.get("issue") or {}
+    required_workflows = (
+        _REQUIRED_PULL_REQUEST_WORKFLOWS
+        if issue.get("pull_request")
+        else _REQUIRED_DEFAULT_BRANCH_WORKFLOWS
+    )
+    required = _required_keys(checks, required_workflows=required_workflows)
     result = evaluate_health(checks, required=required)
     overall = str(result["overall"])
     overall_label = {
@@ -182,8 +217,9 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "100% is shown only when every workflow run observed for this exact "
-            "commit passed or was an event-specific declared conditional skip.",
+            "100% is shown only when every configured required workflow is present "
+            "and every observed run for this exact commit passed or was an "
+            "event-specific declared conditional skip.",
         ]
     )
     return "\n".join(lines)[:4000]
