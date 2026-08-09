@@ -5,14 +5,17 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/amosclaud-bot-contributor.yml"
+      - ".github/workflows/amosclaud-bot-review.yml"
       - ".github/workflows/policy.yml"
       - ".github/PULL_REQUEST_TEMPLATE.md"
       - ".github/CODEOWNERS"
       - "AGENTS.md"
+      - "amosclaud_bot/review_publisher.py"
       - "amosclaud_bot/status_board.py"
       - "amoscloud_ai/bot_contributor_profile.py"
       - "amoscloud_ai/health_contract.py"
       - "scripts/ci/contributor_tool_policy_guard.py"
+      - "tests/test_amosclaud_review_publisher.py"
       - "tests/test_amosclaud_status_board.py"
       - "tests/test_bot_contributor_profile.py"
       - "tests/test_contributor_tool_policy_guard.py"
@@ -55,17 +58,19 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -e . pytest
 
-      - name: Compile contributor and health contracts
+      - name: Compile contributor, review, and health contracts
         run: |
           python -m compileall -q \
+            amosclaud_bot/review_publisher.py \
             amosclaud_bot/status_board.py \
             amoscloud_ai/bot_contributor_profile.py \
             amoscloud_ai/health_contract.py \
             scripts/ci/contributor_tool_policy_guard.py
 
-      - name: Run focused contributor and health tests
+      - name: Run focused contributor, review, and health tests
         run: |
           python -m pytest -q \
+            tests/test_amosclaud_review_publisher.py \
             tests/test_amosclaud_status_board.py \
             tests/test_bot_contributor_profile.py \
             tests/test_contributor_tool_policy_guard.py \
