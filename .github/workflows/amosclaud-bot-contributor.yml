@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/amosclaud-bot-contributor.yml"
       - ".github/workflows/amosclaud-bot-review.yml"
+      - ".github/workflows/amosclaud-codeql-threat-gate.yml"
       - ".github/workflows/amosclaud-security-repair-bridge.yml"
       - ".github/workflows/amosclaud-dependency-threat-gate.yml"
       - ".github/workflows/codeql.yml"
