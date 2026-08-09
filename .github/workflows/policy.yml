@@ -12,9 +12,18 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Check out pull request
+      - name: Check out pull-request candidate as untrusted data
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Check out trusted default-branch policy engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
           persist-credentials: false
 
       - name: Set up Python
@@ -22,21 +31,21 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install repository policy parser
+      - name: Install trusted policy parser dependency
         run: python -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
 
-      - name: Validate controller and workflow syntax
+      - name: Validate candidate controller and workflow syntax
         run: |
           set -euo pipefail
           python -m py_compile \
-            .github/scripts/agent_chat.py \
-            .github/scripts/parse_comment.py \
-            .github/scripts/ai_patch_executor.py
+            candidate/.github/scripts/agent_chat.py \
+            candidate/.github/scripts/parse_comment.py \
+            candidate/.github/scripts/ai_patch_executor.py
           python - <<'PY'
           from pathlib import Path
           import yaml
 
-          paths = sorted(Path('.github/workflows').glob('*.yml'))
+          paths = sorted(Path('candidate/.github/workflows').glob('*.yml'))
           selected = {
               'agent-chat.yml', 'results.yml', 'plan.yml', 'policy.yml',
               'fixer.yml', 'scan.yml', 'main.yml', 'action.yml',
@@ -45,7 +54,8 @@ jobs:
               'amosclaud-bot-review.yml', 'amosclaud-codeql-threat-gate.yml',
               'amosclaud-security-repair-bridge.yml',
               'amosclaud-dependency-threat-gate.yml',
-              'amosclaud-claude-patch.yml', 'codeql.yml', 'fortify.yml',
+              'amosclaud-claude-patch.yml',
+              'amosclaud-claude-patch-worker.yml', 'codeql.yml', 'fortify.yml',
           }
           for path in paths:
               if path.name not in selected:
@@ -56,23 +66,37 @@ jobs:
               print(f'validated {path}')
           PY
 
-      - name: Enforce contributor tool sovereignty
+      - name: Enforce contributor tool sovereignty from trusted code
         run: |
           set -euo pipefail
-          python -m py_compile scripts/ci/contributor_tool_policy_guard.py
-          python scripts/ci/contributor_tool_policy_guard.py
+          PYTHONPATH=trusted python - <<'PY'
+          from pathlib import Path
+          from scripts.ci.contributor_tool_policy_guard import validate_repository
 
-      - name: Enforce trusted Claude patch contract
+          errors = validate_repository(Path('candidate'))
+          if errors:
+              raise SystemExit('\n'.join(errors))
+          print('trusted contributor policy guard passed')
+          PY
+
+      - name: Enforce native Ollama patch contract from trusted code
         run: |
           set -euo pipefail
-          python -m py_compile scripts/ci/claude_patch_policy_guard.py
-          python scripts/ci/claude_patch_policy_guard.py
+          PYTHONPATH=trusted python - <<'PY'
+          from pathlib import Path
+          from scripts.ci.claude_patch_policy_guard import validate_repository
+
+          errors = validate_repository(Path('candidate'))
+          if errors:
+              raise SystemExit('\n'.join(errors))
+          print('trusted Ollama patch policy guard passed')
+          PY
 
       - name: Enforce one fixer and least-privilege token use
         run: |
           set -euo pipefail
-          test -f .github/workflows/fixer.yml
+          test -f candidate/.github/workflows/fixer.yml
           ! grep -R --line-number 'pull_request_target' \
-            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-codeql-threat-gate,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,amosclaud-claude-patch,codeql,fortify}.yml
+            candidate/.github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-codeql-threat-gate,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,amosclaud-claude-patch,amosclaud-claude-patch-worker,codeql,fortify}.yml
           ! grep -R --line-number 'secrets\..*TOKEN' \
-            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-codeql-threat-gate,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,amosclaud-claude-patch,codeql}.yml
+            candidate/.github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-codeql-threat-gate,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,amosclaud-claude-patch,amosclaud-claude-patch-worker,codeql}.yml
