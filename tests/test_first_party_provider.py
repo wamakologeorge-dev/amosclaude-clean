@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 import httpx
 
 from amoscloud_ai import provider
+from amoscloud_ai.api.routes import first_party_chat
 from amoscloud_ai.main import create_app
 
 
@@ -30,6 +32,31 @@ def test_chat_exposes_amosclaud_as_provider(monkeypatch):
     body = response.json()
     assert body["provider"] == "amosclaud"
     assert "model runtime is not connected" in body["reply"]
+
+
+def test_workspace_chat_returns_a_bounded_timeout_response(monkeypatch):
+    def slow_reply(*_args, **_kwargs):
+        time.sleep(0.05)
+        return None
+
+    monkeypatch.setattr(provider, "reply", slow_reply)
+    monkeypatch.setattr(first_party_chat, "_chat_timeout_seconds", lambda: 0.01)
+
+    response = request("POST", "/api/chat", json={"message": "Inspect this repository"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "amosclaud"
+    assert "model runtime did not answer within" in body["reply"]
+    assert "No repository action was performed" in body["reply"]
+
+
+def test_chat_timeout_configuration_is_bounded(monkeypatch):
+    monkeypatch.setenv("AMOSCLAUD_CHAT_TIMEOUT", "999")
+    assert first_party_chat._chat_timeout_seconds() == 55.0
+
+    monkeypatch.setenv("AMOSCLAUD_CHAT_TIMEOUT", "invalid")
+    assert first_party_chat._chat_timeout_seconds() == 45.0
 
 
 def test_self_hosted_runtime_is_primary(monkeypatch):
