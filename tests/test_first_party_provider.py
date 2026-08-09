@@ -9,7 +9,6 @@ from amoscloud_ai import provider
 from amoscloud_ai.api.routes import first_party_chat
 from amoscloud_ai.main import create_app
 
-
 app = create_app()
 
 
