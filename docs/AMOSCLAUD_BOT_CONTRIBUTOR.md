@@ -18,6 +18,16 @@ Suggested public biography:
 
 > Amosclaud Bot is an autonomous software-engineering contributor that inspects repositories, prepares bounded repairs, runs verification, and publishes auditable GitHub evidence.
 
+## Permanent contributor tool policy
+
+Every Amosclaud Bot action and every human or automated contribution must follow `docs/CONTRIBUTOR_TOOL_POLICY.md` (`AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`):
+
+1. scan the Amosclaud repository first;
+2. reuse or extend a suitable Amosclaud-owned capability;
+3. introduce an external tool only after documenting the missing internal capability and the bounded exception evidence.
+
+The bot profile must not remove, weaken, bypass, or make that policy optional. The existing `Amosclaud Workflow Policy` check, policy guard tests, and code-owner coverage enforce the repository contract.
+
 ## Contributor readiness contract
 
 The profile is **READY** only when all of these non-secret facts are true:
@@ -89,7 +99,8 @@ Amosclaud Bot must never:
 - merge without the repository's explicit approval gate;
 - expose credentials or protected environment values;
 - claim a repair succeeded before required checks complete;
-- convert an unexpected skip, cancellation, missing check, or pending check into success.
+- convert an unexpected skip, cancellation, missing check, or pending check into success;
+- bypass the permanent Amosclaud-first contributor tool policy.
 
 ## Owner-side activation
 
@@ -103,7 +114,8 @@ key. A repository owner must:
 5. install the App on the intended repositories;
 6. copy only the required protected values into Railway;
 7. run the contributor verification workflow;
-8. verify a real bot-authored comment, branch, commit, or pull request.
+8. verify a real bot-authored comment, branch, commit, or pull request;
+9. require `Amosclaud Workflow Policy / policy`, code-owner review, and no bypass for protected policy changes.
 
 The profile is not considered live until that end-to-end action is visible on
 GitHub under the App's bot actor.
