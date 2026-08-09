@@ -18,7 +18,7 @@ TRUSTED_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 _MENTION_PREFIXES = ("@amosclaud", "@amosclaud-bot")
 _DIRECTIVE_HEADING = re.compile(r"amosclaud(?:-bot)?\s+directives?", re.IGNORECASE)
 _FIELD = re.compile(
-    r"^\s*(?:[-*]\s*)?(?:\*\*)?([A-Za-z][A-Za-z ]{1,40})(?:\*\*)?\s*:\s*(.*?)\s*$"
+    r"^\s*(?:[-*]\s*)?(?:\*\*)?([A-Za-z][A-Za-z ]{1,40})\s*:\s*(?:\*\*)?\s*(.*?)\s*$"
 )
 
 
@@ -33,13 +33,26 @@ def _compact(value: str) -> str:
     return " ".join((value or "").strip().split())
 
 
+def _clean_field_value(value: str) -> str:
+    text = _compact(value)
+    while text.startswith("**") and text.endswith("**") and len(text) >= 4:
+        text = text[2:-2].strip()
+    return text
+
+
 def _safe_constraint(value: str) -> str:
     """Preserve safety intent without falsely implying secret disclosure."""
 
-    text = _compact(value)
+    text = _clean_field_value(value)
     replacements = (
-        (r"`?\.env\.example`?", "the repository example environment template"),
-        (r"`?\.env`?", "the repository environment template"),
+        (
+            r"(?<![A-Za-z0-9_])`?\.env\.example`?(?![A-Za-z0-9_])",
+            "the repository example environment template",
+        ),
+        (
+            r"(?<![A-Za-z0-9_])`?\.env`?(?![A-Za-z0-9_])",
+            "the repository environment template",
+        ),
         (r"(?i)never\s+hard-?code\s+secrets?", "do not embed sensitive values"),
         (r"(?i)do\s+not\s+hard-?code\s+secrets?", "do not embed sensitive values"),
         (r"(?i)hard-?coded\s+secrets?", "embedded sensitive values"),
@@ -68,7 +81,7 @@ def _task_block(lines: list[str]) -> DirectiveNormalization:
         if not match:
             continue
         name = _compact(match.group(1)).lower()
-        value = _compact(match.group(2))
+        value = _clean_field_value(match.group(2))
         if value:
             fields.setdefault(name, []).append(value)
 
@@ -96,7 +109,7 @@ def _directive_block(lines: list[str]) -> DirectiveNormalization:
         if not match:
             continue
         name = _compact(match.group(1)).lower()
-        value = _compact(match.group(2))
+        value = _clean_field_value(match.group(2))
         if value:
             fields.setdefault(name, []).append(value)
 
