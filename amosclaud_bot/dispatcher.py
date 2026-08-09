@@ -13,6 +13,7 @@ from .autonomous_planning import announce_plan, resolve_continuation
 from .bot import WRITE_ASSOCIATIONS, AmosclaudBot, parse_command
 from .comment_style import compact_public_comment
 from .intelligence_router import handle_intelligence_request
+from .owner_directives import normalize_owner_directive
 from .privacy_gate import requires_private_work, route_private_work
 from .professional import run_professional_from_environment
 from .repository_doctor import handle_repository_doctor_command
@@ -132,7 +133,12 @@ def run_dispatcher_from_environment() -> int:
     if not event_path or not repository:
         raise RuntimeError("GITHUB_EVENT_PATH and GITHUB_REPOSITORY are required")
 
-    payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    event_file = Path(event_path)
+    payload = json.loads(event_file.read_text(encoding="utf-8"))
+    directive = normalize_owner_directive(payload)
+    if directive.recognized:
+        event_file.write_text(json.dumps(payload), encoding="utf-8")
+
     bot = AmosclaudBot(repository=repository, token=token, workspace=Path.cwd())
 
     if event_name == "issue_comment":
