@@ -1,41 +1,37 @@
-name: Amosclaud Claude Patch Worker
+name: Amosclaud Ollama Patch Compatibility Worker
 
 on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: Pull request number validated by the trusted dispatcher
+        description: Pull request number validated by a trusted dispatcher
         required: true
         type: string
       comment_id:
-        description: Owner comment ID validated by the trusted dispatcher
+        description: Source owner comment ID for evidence
         required: true
         type: string
       expected_head_sha:
-        description: Exact pull-request head SHA captured by the trusted dispatcher
+        description: Exact pull-request head SHA captured by the dispatcher
         required: true
         type: string
 
 permissions: {}
 
 concurrency:
-  group: amosclaud-claude-worker-${{ github.repository }}-${{ inputs.issue_number }}-${{ inputs.comment_id }}
+  group: amosclaud-ollama-worker-${{ github.repository }}-${{ inputs.issue_number }}-${{ inputs.comment_id }}
   cancel-in-progress: false
 
 jobs:
-  generate-candidate:
-    name: generate-candidate
+  dispatch-native-repair:
+    name: dispatch-native-repair
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
+      actions: write
       contents: read
       issues: read
       pull-requests: read
-    outputs:
-      head_sha: ${{ steps.target.outputs.head_sha }}
-      head_ref: ${{ steps.target.outputs.head_ref }}
-      base_sha: ${{ steps.target.outputs.base_sha }}
-      artifact_name: ${{ steps.bundle.outputs.artifact_name }}
 
     steps:
       - name: Check out trusted default-branch control plane
@@ -46,395 +42,67 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Set up trusted Python runtime
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.12'
-
-      - name: Install trusted Amosclaud runtime
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check ./trusted
-
-      - name: Re-fetch and authenticate the owner command
+      - name: Revalidate exact unprotected pull-request head
         id: target
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
-          COMMENT_ID: ${{ inputs.comment_id }}
           EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           case "$ISSUE_NUMBER" in (*[!0-9]*|'') echo "Invalid issue number"; exit 1;; esac
-          case "$COMMENT_ID" in (*[!0-9]*|'') echo "Invalid comment ID"; exit 1;; esac
           case "$EXPECTED_HEAD_SHA" in (*[!0-9a-fA-F]*|'') echo "Invalid head SHA"; exit 1;; esac
           test "${#EXPECTED_HEAD_SHA}" -eq 40
-
-          gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${COMMENT_ID}" > "$RUNNER_TEMP/amosclaud-comment-source.json"
           gh api "repos/${GITHUB_REPOSITORY}/pulls/${ISSUE_NUMBER}" > "$RUNNER_TEMP/amosclaud-pr.json"
-
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          temp = Path(os.environ["RUNNER_TEMP"])
-          comment = json.loads(temp.joinpath("amosclaud-comment-source.json").read_text(encoding="utf-8"))
-          pull = json.loads(temp.joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
+          pull = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
           head = pull.get("head") or {}
-          base = pull.get("base") or {}
-          association = str(comment.get("author_association") or "NONE").upper()
           head_repo = str(((head.get("repo") or {}).get("full_name")) or "")
-          expected = os.environ["EXPECTED_HEAD_SHA"].lower()
           current = str(head.get("sha") or "").lower()
+          head_ref = str(head.get("ref") or "")
           eligible = (
               pull.get("state") == "open"
-              and int(pull.get("number") or 0) == int(os.environ["ISSUE_NUMBER"])
               and head_repo == os.environ["GITHUB_REPOSITORY"]
-              and association in {"OWNER", "MEMBER", "COLLABORATOR"}
-              and current == expected
+              and current == os.environ["EXPECTED_HEAD_SHA"].lower()
+              and bool(head_ref)
+              and head_ref != os.environ["DEFAULT_BRANCH"]
           )
           if not eligible:
-              raise SystemExit("Dispatch inputs no longer match an authorized open same-repository pull request")
-
-          event = {
-              "comment": comment,
-              "issue": {
-                  "number": int(pull["number"]),
-                  "pull_request": {"url": str(pull.get("url") or "")},
-              },
-          }
-          temp.joinpath("amosclaud-worker-event.json").write_text(
-              json.dumps(event, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          values = {
-              "head_sha": current,
-              "head_ref": str(head.get("ref") or ""),
-              "base_sha": str(base.get("sha") or ""),
-          }
+              raise SystemExit("Exact PR head is no longer eligible for native Ollama repair")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              for name, value in values.items():
-                  output.write(f"{name}={value}\n")
+              output.write(f"head_sha={current}\n")
+              output.write(f"head_ref={head_ref}\n")
           PY
 
-          python trusted/.github/scripts/parse_comment.py \
-            --event-path "$RUNNER_TEMP/amosclaud-worker-event.json" \
-            --json-output "$RUNNER_TEMP/amosclaud-comment.json" \
-            --objective-output "$RUNNER_TEMP/amosclaud-objective.txt" \
-            --github-output "$GITHUB_OUTPUT"
-
-          grep -qx 'patch_executor=true' "$GITHUB_OUTPUT"
-
-      - name: Materialize exact pull-request and base commits as untrusted data
+      - name: Dispatch native Ollama-backed Repair Control Plane
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
-          BASE_SHA: ${{ steps.target.outputs.base_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
+          COMMENT_ID: ${{ inputs.comment_id }}
+          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          gh auth setup-git
-          git init target
-          git -C target remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git -C target fetch --no-tags --depth=1 origin "$HEAD_SHA"
-          git -C target checkout --detach FETCH_HEAD
-          git -C target fetch --no-tags --depth=1 origin "$BASE_SHA"
-          git -C target branch amosclaud-base FETCH_HEAD
-          git -C target checkout --detach "$HEAD_SHA"
-          git -C target remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          gh workflow run amosclaud-repair-control-plane.yml \
+            --ref "$DEFAULT_BRANCH" \
+            -f scope="pull_request" \
+            -f pull_request_number="$ISSUE_NUMBER" \
+            -f target_sha="$EXPECTED_HEAD_SHA" \
+            -f source_run_id="$GITHUB_RUN_ID" \
+            -f source_name="Amosclaud Ollama Compatibility Worker" \
+            -f provider="ollama-cloud" \
+            -f status_url="$STATUS_URL" \
+            -f failure_summary="Run the bounded owner request from comment ${COMMENT_ID} through the native Amosclaud Ollama repair path."
 
-      - name: Prepare bounded untrusted request evidence
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          temp = Path(os.environ["RUNNER_TEMP"])
-          pull = json.loads(temp.joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
-          evidence = {
-              "pull_request": pull.get("number"),
-              "title": pull.get("title"),
-              "body": pull.get("body"),
-              "head_sha": ((pull.get("head") or {}).get("sha")),
-              "base_sha": ((pull.get("base") or {}).get("sha")),
-          }
-          temp.joinpath("amosclaud-request-evidence.json").write_text(
-              json.dumps(evidence, indent=2) + "\n",
-              encoding="utf-8",
-          )
-          PY
-
-      - name: Generate a bounded Claude diff artifact without executing target code
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
-          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' }}
-          AMOSCLAUD_SENSITIVE_APPROVED: 'false'
-        run: |
-          set -euo pipefail
-          python trusted/.github/scripts/ai_patch_executor.py \
-            --target target \
-            --instructions-root trusted \
-            --policy trusted/.amosclaud/repair-control-plane.json \
-            --objective-file "$RUNNER_TEMP/amosclaud-objective.txt" \
-            --evidence "$RUNNER_TEMP/amosclaud-request-evidence.json" \
-            --base-sha "${{ steps.target.outputs.base_sha }}" \
-            --mode regular \
-            --source "owner-comment:${{ inputs.comment_id }}" \
-            --patch-output "$RUNNER_TEMP/amosclaud-claude.patch" \
-            --report "$RUNNER_TEMP/amosclaud-claude-report.json"
-
-      - name: Apply only the validated diff and seal the candidate bundle
-        id: bundle
-        run: |
-          set -euo pipefail
-          git -C target apply --check "$RUNNER_TEMP/amosclaud-claude.patch"
-          git -C target apply --whitespace=fix "$RUNNER_TEMP/amosclaud-claude.patch"
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          temp = Path(os.environ["RUNNER_TEMP"])
-          report = json.loads(temp.joinpath("amosclaud-claude-report.json").read_text(encoding="utf-8"))
-          expected = set(report.get("changed_files") or [])
-          changed = set(
-              subprocess.run(
-                  ["git", "diff", "--name-only"],
-                  cwd="target",
-                  check=True,
-                  text=True,
-                  stdout=subprocess.PIPE,
-              ).stdout.splitlines()
-          )
-          untracked = set(
-              subprocess.run(
-                  ["git", "ls-files", "--others", "--exclude-standard"],
-                  cwd="target",
-                  check=True,
-                  text=True,
-                  stdout=subprocess.PIPE,
-              ).stdout.splitlines()
-          )
-          actual = changed | untracked
-          if not expected or actual != expected:
-              raise SystemExit(
-                  f"applied file set differs from validated report: expected={sorted(expected)} actual={sorted(actual)}"
-              )
-          PY
-          tar -czf "$RUNNER_TEMP/amosclaud-target.tgz" -C target .
-          artifact_name="amosclaud-claude-candidate-${GITHUB_RUN_ID}"
-          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
-
-      - name: Upload sealed candidate evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ steps.bundle.outputs.artifact_name }}
-          path: |
-            ${{ runner.temp }}/amosclaud-comment.json
-            ${{ runner.temp }}/amosclaud-request-evidence.json
-            ${{ runner.temp }}/amosclaud-claude.patch
-            ${{ runner.temp }}/amosclaud-claude-report.json
-            ${{ runner.temp }}/amosclaud-target.tgz
-          if-no-files-found: error
-          retention-days: 14
-
-  verify-candidate:
-    name: verify-candidate
-    needs: generate-candidate
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    outputs:
-      artifact_name: ${{ steps.bundle.outputs.artifact_name }}
-
-    steps:
-      - name: Check out trusted default-branch verifier
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          path: trusted
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up credential-free Python runtime
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.12'
-
-      - name: Install trusted verifier before untrusted execution
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check ./trusted
-
-      - name: Download sealed candidate bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: ${{ needs.generate-candidate.outputs.artifact_name }}
-          path: candidate
-
-      - name: Verify candidate without model or publication credentials
-        run: |
-          set -euo pipefail
-          mkdir target
-          tar -xzf candidate/amosclaud-target.tgz -C target
-          env -u ANTHROPIC_API_KEY \
-              -u GITHUB_APP_PRIVATE_KEY \
-              -u GITHUB_APP_WEBHOOK_SECRET \
-              -u GH_TOKEN \
-              -u GITHUB_TOKEN \
-            python trusted/.github/scripts/amosclaud_repair_verify.py \
-              --target target \
-              --failure-source "owner-comment" \
-              --candidate-report "candidate/amosclaud-claude-report.json" \
-              --report "$RUNNER_TEMP/amosclaud-claude-verification.json"
-
-      - name: Seal verification evidence
-        id: bundle
-        run: |
-          set -euo pipefail
-          test -s "$RUNNER_TEMP/amosclaud-claude-verification.json"
-          artifact_name="amosclaud-claude-verification-${GITHUB_RUN_ID}"
-          echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"
-
-      - name: Upload credential-free verification evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ steps.bundle.outputs.artifact_name }}
-          path: ${{ runner.temp }}/amosclaud-claude-verification.json
-          if-no-files-found: error
-          retention-days: 14
-
-  publish-candidate:
-    name: publish-candidate
-    needs: [generate-candidate, verify-candidate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      repair_sha: ${{ steps.publish.outputs.repair_sha }}
-
-    steps:
-      - name: Check out trusted default-branch publisher
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          path: trusted
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Set up trusted publication runtime
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.12'
-
-      - name: Install trusted App connection
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check ./trusted
-
-      - name: Download verified candidate bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: ${{ needs.generate-candidate.outputs.artifact_name }}
-          path: candidate
-
-      - name: Download verification evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: ${{ needs.verify-candidate.outputs.artifact_name }}
-          path: verification
-
-      - name: Re-check immutable PR head before privilege use
+      - name: Report truthful routing result
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
-          EXPECTED_SHA: ${{ needs.generate-candidate.outputs.head_sha }}
-          HEAD_REF: ${{ needs.generate-candidate.outputs.head_ref }}
         run: |
-          set -euo pipefail
-          test -s verification/amosclaud-claude-verification.json
-          current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${ISSUE_NUMBER}" --jq '.head.sha')"
-          test "$current_sha" = "$EXPECTED_SHA"
-          remote_sha="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/heads/${HEAD_REF}" | cut -f1)"
-          test -n "$remote_sha"
-          test "$remote_sha" = "$EXPECTED_SHA"
-
-      - name: Connect the verified Amosclaud GitHub App installation
-        id: app
-        env:
-          GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
-          GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
-          GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
-          GITHUB_APP_BOT_USER_ID: ${{ vars.GITHUB_APP_BOT_USER_ID }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          python -m amoscloud_ai.github_app_connection \
-            --repository "$GITHUB_REPOSITORY" \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Commit and push only the verified patch to the same PR branch
-        id: publish
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          EXPECTED_SHA: ${{ needs.generate-candidate.outputs.head_sha }}
-          HEAD_REF: ${{ needs.generate-candidate.outputs.head_ref }}
-          ACTOR_NAME: ${{ steps.app.outputs.actor_name }}
-          ACTOR_EMAIL: ${{ steps.app.outputs.actor_email }}
-        run: |
-          set -euo pipefail
-          mkdir target
-          tar -xzf candidate/amosclaud-target.tgz -C target
-          gh auth setup-git
-          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
-          test "$remote_sha" = "$EXPECTED_SHA"
-
-          mapfile -t changed_files < <(python - <<'PY'
-          import json
-          from pathlib import Path
-
-          payload = json.loads(Path("candidate/amosclaud-claude-report.json").read_text(encoding="utf-8"))
-          for path in payload.get("changed_files") or []:
-              print(path)
-          PY
-          )
-          test "${#changed_files[@]}" -gt 0
-          git -C target config user.name "$ACTOR_NAME"
-          git -C target config user.email "$ACTOR_EMAIL"
-          git -C target add -- "${changed_files[@]}"
-          git -C target diff --cached --quiet && { echo "No verified changes were staged."; exit 1; }
-          git -C target commit -m "fix: apply Amosclaud Claude patch for #${{ inputs.issue_number }}"
-          repair_sha="$(git -C target rev-parse HEAD)"
-          git -C target push origin "HEAD:refs/heads/${HEAD_REF}"
-          echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
-
-  report-result:
-    name: report-result
-    if: always()
-    needs: [generate-candidate, verify-candidate, publish-candidate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      issues: write
-
-    steps:
-      - name: Publish truthful worker result
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          PUBLISH_RESULT: ${{ needs.publish-candidate.result }}
-          REPAIR_SHA: ${{ needs.publish-candidate.outputs.repair_sha }}
-        run: |
-          set -euo pipefail
-          if [ "$PUBLISH_RESULT" = "success" ] && [ -n "$REPAIR_SHA" ]; then
-            gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "### Amosclaud Claude Patch Worker\n\n🟩 **Result:** VERIFIED AND PUBLISHED\n\n- Patch provider: Anthropic Claude Messages API\n- Verification: isolated credential-free repair job passed\n- Commit: \`${REPAIR_SHA}\`\n- Force push: not used\n\nAll normal pull-request checks and reviews must pass before merge."
-          else
-            gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "### Amosclaud Claude Patch Worker\n\n🟥 **Result:** BLOCKED\n\nGeneration, validation, isolated verification, GitHub App authentication, or exact-head publication failed. No force push, approval, or merge was attempted. Review this worker run's evidence for the exact failure."
-          fi
+          gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "### Amosclaud Ollama Compatibility Worker\n\n🟦 **Result:** ROUTED TO NATIVE REPAIR\n\nNo Anthropic service or credential was used. The request was delegated to the Amosclaud Repair Control Plane, which selects the configured Ollama service first and verifies changes before publication."
