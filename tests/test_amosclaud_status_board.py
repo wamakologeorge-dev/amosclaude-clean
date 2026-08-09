@@ -80,6 +80,7 @@ def test_status_board_uses_exact_commit_and_reports_missing_required_workflows()
     assert "**Overall:** 🟥 ACTION NEEDED" in board
     assert "**Observed verification:** 17%" in board
     assert "**Runs evaluated:** 3" in board
+    assert "**Contract checks evaluated:** 6" in board
     assert "**Target:** `main`" in board
     assert "**Commit:** `mainsha12345`" in board
     assert any("head_sha=mainsha1234567890" in call for call in bot.calls)
@@ -101,6 +102,7 @@ def test_all_configured_workflows_must_succeed_for_verified_100_percent() -> Non
     assert "**Overall:** 🟩 VERIFIED" in board
     assert "**Observed verification:** 100%" in board
     assert "**Runs evaluated:** 4" in board
+    assert "**Contract checks evaluated:** 4" in board
 
 
 def test_event_specific_conditional_skip_is_allowed_only_for_its_event() -> None:
@@ -294,5 +296,6 @@ def test_pagination_includes_failures_beyond_the_first_hundred_runs() -> None:
 
     assert "**Overall:** 🟥 ACTION NEEDED" in board
     assert "**Runs evaluated:** 101" in board
-    assert "81 additional exact-commit run(s)" in board
+    assert "**Contract checks evaluated:** 105" in board
+    assert "81 additional contract check(s)" in board
     assert any("&page=2" in call for call in bot.calls)
