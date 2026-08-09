@@ -31,14 +31,18 @@
 /scripts/ci/contributor_tool_policy_guard.py @wamakologeorge-dev
 /tests/test_contributor_tool_policy_guard.py @wamakologeorge-dev
 
-# Formal pull-request review safety contract
+# Formal pull-request review and truthful health contracts
 /.github/workflows/amosclaud-bot-review.yml @wamakologeorge-dev
 /amosclaud_bot/review_publisher.py @wamakologeorge-dev
 /tests/test_amosclaud_review_publisher.py @wamakologeorge-dev
 /docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md @wamakologeorge-dev
+/amosclaud_bot/status_board.py @wamakologeorge-dev
+/tests/test_amosclaud_status_board.py @wamakologeorge-dev
+/amoscloud_ai/bot_contributor_profile.py @wamakologeorge-dev
 
 # Advanced Security and bounded repair connection
 /.github/workflows/codeql.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-codeql-threat-gate.yml @wamakologeorge-dev
 /.github/workflows/fortify.yml @wamakologeorge-dev
 /.github/workflows/amosclaud-dependency-threat-gate.yml @wamakologeorge-dev
 /.github/workflows/amosclaud-security-repair-bridge.yml @wamakologeorge-dev
