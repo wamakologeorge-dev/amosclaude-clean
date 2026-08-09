@@ -1,18 +1,6 @@
 name: Amosclaud Security and Quality Fixer
 
 on:
-  workflow_run:
-    workflows:
-      - CodeQL
-      - Amosclaud CI
-      - Platform Build Check
-      - Build and Verify
-      - CI/CD — Test & Deploy
-      - Fast PR Gate
-      - Amosclaud Main Clean
-      - Amosclaud Clean Doctor
-      - Fortify AST Scan
-    types: [completed]
   schedule:
     - cron: '17 */6 * * *'
   workflow_dispatch:
