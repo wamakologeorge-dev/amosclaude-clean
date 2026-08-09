@@ -190,7 +190,8 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
         "",
         f"**Overall:** {overall_label}",
         f"**Observed verification:** {result['percentage']}%",
-        f"**Runs evaluated:** {result['observed_total']}",
+        f"**Runs evaluated:** {len(runs)}",
+        f"**Contract checks evaluated:** {result['observed_total']}",
         f"**Target:** `{target}`",
         f"**Commit:** `{commit_label}`",
         "",
@@ -212,7 +213,7 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
         lines.append(f"{marker} **{display_name}** — {state}")
     omitted = len(result["checks"]) - len(visible_checks)
     if omitted > 0:
-        lines.append(f"⬜ **{omitted} additional exact-commit run(s)** — evaluated but hidden")
+        lines.append(f"⬜ **{omitted} additional contract check(s)** — evaluated but hidden")
 
     lines.extend(
         [
