@@ -77,9 +77,7 @@ def validate_repository(root: Path) -> list[str]:
     template = _read(root, ".github/PULL_REQUEST_TEMPLATE.md", errors)
     for requirement in PULL_REQUEST_REQUIREMENTS:
         if requirement not in template:
-            errors.append(
-                f"pull-request template is missing required policy text: {requirement}"
-            )
+            errors.append(f"pull-request template is missing required policy text: {requirement}")
 
     workflow = _read(root, ".github/workflows/policy.yml", errors)
     for requirement in WORKFLOW_REQUIREMENTS:
