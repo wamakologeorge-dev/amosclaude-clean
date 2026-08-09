@@ -66,13 +66,19 @@ jobs:
       - name: Install local AST scanner
         run: python -m pip install --upgrade "bandit>=1.9,<2"
 
-      - name: Run policy-compatible AST scan
+      - name: Treat every AST security finding as a blocking threat
         run: |
+          set +e
           python -m bandit -r src amoscloud_ai \
             -f json \
-            -o fortify-compatible-bandit-report.json \
-            --exit-zero
+            -o fortify-compatible-bandit-report.json
+          scan_status=$?
+          set -e
           test -s fortify-compatible-bandit-report.json
+          if [ "$scan_status" -ne 0 ]; then
+            echo "::error title=Amosclaud security threat detected::The AST scan reported one or more security findings."
+            exit "$scan_status"
+          fi
 
       - name: Upload AST evidence
         if: always()
