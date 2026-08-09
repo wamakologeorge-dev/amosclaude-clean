@@ -32,9 +32,7 @@ SECURITY_WORKFLOWS = frozenset(
         "Fortify AST Scan",
     }
 )
-BLOCKING_CONCLUSIONS = frozenset(
-    {"action_required", "failure", "startup_failure", "timed_out"}
-)
+BLOCKING_CONCLUSIONS = frozenset({"action_required", "failure", "startup_failure", "timed_out"})
 REPAIR_WORKFLOW = "amosclaud-repair-control-plane.yml"
 GitHubRequest = Callable[
     [str, str, Mapping[str, str], Mapping[str, object] | None],
