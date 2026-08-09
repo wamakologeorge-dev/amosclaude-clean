@@ -21,3 +21,12 @@
 /amoscloud_ai/api/routes/deployments.py @wamakologeorge-dev
 /amoscloud_ai/api/routes/pipelines.py @wamakologeorge-dev
 /amoscloud_ai/worker.py @wamakologeorge-dev
+
+# Permanent Amosclaud contributor tool-policy contract
+/docs/CONTRIBUTOR_TOOL_POLICY.md @wamakologeorge-dev
+/AGENTS.md @wamakologeorge-dev
+/.github/PULL_REQUEST_TEMPLATE.md @wamakologeorge-dev
+/.github/CODEOWNERS @wamakologeorge-dev
+/.github/workflows/policy.yml @wamakologeorge-dev
+/scripts/ci/contributor_tool_policy_guard.py @wamakologeorge-dev
+/tests/test_contributor_tool_policy_guard.py @wamakologeorge-dev
