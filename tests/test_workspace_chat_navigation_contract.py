@@ -39,9 +39,22 @@ def test_repository_chat_bounds_network_wait_and_reports_api_outages() -> None:
     assert "const chatTimeoutMs = 57000" in source
     assert "new AbortController()" in source
     assert "signal: controller.signal" in source
+    assert "const rawBody = await response.text()" in source
+    assert "response.headers.get('content-type')" in source
+    assert "JSON.parse(rawBody)" in source
+    assert "response.json()" not in source
+    assert "clearTimeout(timeout)" in source
     assert "Chat request timed out" in source
     assert "/api/chat could not be reached" in source
     assert "/health endpoint" in source
+
+
+def test_repository_chat_disables_all_prompt_controls_while_busy() -> None:
+    source = (WEB / "workspace-chat.js").read_text(encoding="utf-8")
+
+    assert "const promptButtons = Array.from" in source
+    assert "promptButtons.forEach" in source
+    assert "button.disabled = busy" in source
 
 
 def test_mobile_repository_navigation_is_fixed_and_visible() -> None:
