@@ -30,3 +30,9 @@
 /.github/workflows/policy.yml @wamakologeorge-dev
 /scripts/ci/contributor_tool_policy_guard.py @wamakologeorge-dev
 /tests/test_contributor_tool_policy_guard.py @wamakologeorge-dev
+
+# Formal pull-request review safety contract
+/.github/workflows/amosclaud-bot-review.yml @wamakologeorge-dev
+/amosclaud_bot/review_publisher.py @wamakologeorge-dev
+/tests/test_amosclaud_review_publisher.py @wamakologeorge-dev
+/docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md @wamakologeorge-dev
