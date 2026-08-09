@@ -526,10 +526,17 @@ jobs:
               -f tool_name=CodeQL \
               -f per_page=100)"
             alert_number="$(jq -r '
-              sort_by(
-                ({"critical":0,"high":1,"medium":2,"low":3,"error":4,"warning":5,"note":6}[.rule.security_severity_level // .rule.severity] // 9),
-                .number
-              ) | .[0].number // empty
+              def rank:
+                (.rule.security_severity_level // .rule.severity // "unknown") as $severity |
+                if $severity == "critical" then 0
+                elif $severity == "high" then 1
+                elif $severity == "medium" then 2
+                elif $severity == "low" then 3
+                elif $severity == "error" then 4
+                elif $severity == "warning" then 5
+                elif $severity == "note" then 6
+                else 9 end;
+              sort_by(rank, .number) | .[0].number // empty
             ' <<< "$alerts")"
           fi
 
