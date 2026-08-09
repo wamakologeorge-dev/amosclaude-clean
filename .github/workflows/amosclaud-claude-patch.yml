@@ -1,4 +1,4 @@
-name: Amosclaud Claude Patch Dispatcher
+name: Amosclaud Ollama Patch Dispatcher
 
 on:
   issue_comment:
@@ -11,12 +11,12 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: amosclaud-claude-dispatch-${{ github.repository }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  group: amosclaud-ollama-dispatch-${{ github.repository }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
   cancel-in-progress: false
 
 jobs:
-  dispatch-patch-worker:
-    name: dispatch-patch-worker
+  dispatch-native-repair:
+    name: dispatch-native-repair
     if: >-
       github.event.issue.pull_request &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
@@ -52,9 +52,9 @@ jobs:
             --objective-output "$RUNNER_TEMP/amosclaud-objective.txt" \
             --github-output "$GITHUB_OUTPUT"
 
-      - name: Ignore comments that are not authorized patch requests
+      - name: Ignore comments that are not authorized bounded patch requests
         if: steps.parse.outputs.patch_executor != 'true'
-        run: echo "The comment is not an authorized Amosclaud patch command."
+        run: echo "The comment is not an authorized Amosclaud Ollama patch command with a bounded objective."
 
       - name: Resolve immutable dispatch inputs
         if: steps.parse.outputs.patch_executor == 'true'
@@ -62,6 +62,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/pulls/${ISSUE_NUMBER}" > "$RUNNER_TEMP/amosclaud-pr.json"
@@ -77,47 +78,60 @@ jobs:
           )
           head = payload.get("head") or {}
           head_repo = str(((head.get("repo") or {}).get("full_name")) or "")
+          head_ref = str(head.get("ref") or "")
+          head_sha = str(head.get("sha") or "").lower()
+          default_branch = os.environ["DEFAULT_BRANCH"]
           eligible = (
               payload.get("state") == "open"
               and head_repo == os.environ["GITHUB_REPOSITORY"]
-              and bool(str(head.get("sha") or "").strip())
+              and bool(head_sha)
+              and bool(head_ref)
+              and head_ref != default_branch
           )
           values = {
               "eligible": str(eligible).lower(),
-              "head_sha": str(head.get("sha") or ""),
+              "head_sha": head_sha,
+              "head_ref": head_ref,
           }
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               for name, value in values.items():
                   output.write(f"{name}={value}\n")
           PY
 
-      - name: Refuse fork or closed pull-request dispatch
+      - name: Refuse fork, closed, unresolved, or protected-head dispatch
         if: steps.parse.outputs.patch_executor == 'true' && steps.target.outputs.eligible != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟥 **Result:** BLOCKED\n\nThe command was not dispatched because the pull request is closed, belongs to a fork, or has no immutable head SHA. No model key, App key, patch, commit, push, or merge was used."
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Ollama Patch Dispatcher\n\n🟥 **Result:** BLOCKED\n\nThe command was not dispatched because the pull request is closed, belongs to a fork, has no immutable head SHA, or uses the protected default branch as its head. No model credential, patch, commit, push, or merge was used."
           exit 1
 
-      - name: Dispatch isolated generation, verification, and publication worker
+      - name: Dispatch native Ollama-backed Repair Control Plane
         if: steps.target.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          COMMENT_ID: ${{ github.event.comment.id }}
           EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
+          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          gh workflow run amosclaud-claude-patch-worker.yml \
+          objective="$(tr '\n' ' ' < "$RUNNER_TEMP/amosclaud-objective.txt" | tr -s ' ' | cut -c1-1000)"
+          test -n "$objective"
+          gh workflow run amosclaud-repair-control-plane.yml \
             --ref "$DEFAULT_BRANCH" \
-            -f issue_number="$ISSUE_NUMBER" \
-            -f comment_id="$COMMENT_ID" \
-            -f expected_head_sha="$EXPECTED_HEAD_SHA"
+            -f scope="pull_request" \
+            -f pull_request_number="$ISSUE_NUMBER" \
+            -f target_sha="$EXPECTED_HEAD_SHA" \
+            -f source_run_id="$GITHUB_RUN_ID" \
+            -f source_name="Amosclaud Ollama Patch Command" \
+            -f provider="ollama-cloud" \
+            -f status_url="$STATUS_URL" \
+            -f failure_summary="$objective"
 
       - name: Publish accepted dispatch status
         if: steps.target.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟦 **Result:** ACCEPTED\n\nThe trusted dispatcher validated this owner command and started the isolated patch worker for exact head \`${{ steps.target.outputs.head_sha }}\`. The comment workflow does not check out or execute pull-request code and receives no Claude or GitHub App private key."
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Ollama Patch Dispatcher\n\n🟦 **Result:** ACCEPTED\n\nThe trusted dispatcher validated this owner command and routed exact head \`${{ steps.target.outputs.head_sha }}\` to the native Amosclaud Repair Control Plane. That control plane selects the configured Ollama service first, verifies the candidate without model credentials, and does not merge automatically."
