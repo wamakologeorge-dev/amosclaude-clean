@@ -32,9 +32,7 @@ def alert(number: int, severity: str = "low") -> dict[str, Any]:
             "security_severity_level": severity,
             "description": "Example security finding",
         },
-        "most_recent_instance": {
-            "location": {"path": "src/example.py", "start_line": 12}
-        },
+        "most_recent_instance": {"location": {"path": "src/example.py", "start_line": 12}},
     }
 
 
