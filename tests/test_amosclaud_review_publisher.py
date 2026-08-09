@@ -24,9 +24,7 @@ class FakeBot:
         if method == "GET" and path == "/repos/owner/repo/pulls/7":
             self.pr_reads += 1
             sha = (
-                "newsha987654321"
-                if self.change_head and self.pr_reads > 1
-                else "headsha123456789"
+                "newsha987654321" if self.change_head and self.pr_reads > 1 else "headsha123456789"
             )
             return {
                 "title": "Add review capability",
