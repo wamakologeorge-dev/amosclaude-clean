@@ -82,6 +82,17 @@ def _blocking_checks(checks: list[dict[str, Any]]) -> list[str]:
     ]
 
 
+def _pending_checks(checks: list[dict[str, Any]]) -> list[str]:
+    pending: list[str] = []
+    for check in checks:
+        name = str(check.get("name") or "unnamed check")
+        status = str(check.get("status") or "").lower()
+        conclusion = str(check.get("conclusion") or "").lower()
+        if status in _PENDING_STATUSES or not conclusion:
+            pending.append(name)
+    return pending
+
+
 def _security_blockers(checks: list[dict[str, Any]]) -> list[str]:
     return [
         name
@@ -91,18 +102,12 @@ def _security_blockers(checks: list[dict[str, Any]]) -> list[str]:
 
 
 def _check_summary(checks: list[dict[str, Any]]) -> str:
-    blocking: list[str] = []
-    pending: list[str] = []
+    blocking = _blocking_checks(checks)
+    pending = _pending_checks(checks)
     passing = 0
     for check in checks:
-        name = str(check.get("name") or "unnamed check")
-        status = str(check.get("status") or "").lower()
         conclusion = str(check.get("conclusion") or "").lower()
-        if conclusion in _BLOCKING_CONCLUSIONS:
-            blocking.append(f"{name} ({conclusion})")
-        elif status in _PENDING_STATUSES or not conclusion:
-            pending.append(f"{name} ({status or 'pending'})")
-        elif conclusion in {"success", "neutral", "skipped"}:
+        if conclusion in {"success", "neutral", "skipped"}:
             passing += 1
 
     lines = [
@@ -138,12 +143,18 @@ def _review_body(
             ],
         },
     )
+
+    # This reviewer currently analyzes changed-file metadata and exact-commit checks,
+    # not complete patch semantics. It must never claim a correctness approval.
+    base = base.replace("**APPROVE**", "**NEEDS HUMAN REVIEW**")
+    blocking = _blocking_checks(checks)
+    pending = _pending_checks(checks)
     security_blockers = _security_blockers(checks)
+    if blocking or pending:
+        base = base.replace("**NEEDS HUMAN REVIEW**", "**CHANGES REQUESTED**")
     if security_blockers:
         base = base.replace("**Risk:** **LOW**", "**Risk:** **HIGH**")
         base = base.replace("**Risk:** **MEDIUM**", "**Risk:** **HIGH**")
-        base = base.replace("**APPROVE**", "**CHANGES REQUESTED**")
-        base = base.replace("**NEEDS HUMAN REVIEW**", "**CHANGES REQUESTED**")
 
     security_verdict = (
         "## Security threat verdict\n"
@@ -152,11 +163,19 @@ def _review_body(
         if security_blockers
         else "## Security threat verdict\n**NO FAILING SECURITY CHECK OBSERVED**"
     )
+    coverage = (
+        "## Content-review coverage\n"
+        "**METADATA AND CHECK EVIDENCE ONLY**\n"
+        "- Changed-file names and size statistics were inspected.\n"
+        "- Complete patch semantics were not analyzed by this review path.\n"
+        "- A human or a future content-aware reviewer must confirm correctness."
+    )
     notice = (
         "\n\n## Review authority\n"
         "- This is an automated, read-only, non-blocking `COMMENT` review.\n"
-        "- Amosclaud Bot does not approve, request changes, merge, or push from this review path.\n"
+        "- Amosclaud Bot does not approve, request changes through GitHub authority, merge, or push.\n"
         f"- Exact reviewed commit: `{head_sha}`\n\n"
+        f"{coverage}\n\n"
         f"{security_verdict}\n\n"
         f"{_check_summary(checks)}"
     )
