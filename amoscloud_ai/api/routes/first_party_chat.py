@@ -136,12 +136,10 @@ async def chat(
             )
 
         with legacy_chat._conversation_lock:
-            legacy_chat._conversations[session_id].append(
-                {"role": "assistant", "content": reply}
-            )
-            legacy_chat._conversations[session_id][:] = legacy_chat._conversations[
-                session_id
-            ][-legacy_chat._MAX_HISTORY_TURNS :]
+            legacy_chat._conversations[session_id].append({"role": "assistant", "content": reply})
+            legacy_chat._conversations[session_id][:] = legacy_chat._conversations[session_id][
+                -legacy_chat._MAX_HISTORY_TURNS :
+            ]
 
         return ChatResponse(
             reply=reply,
