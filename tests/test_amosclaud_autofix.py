@@ -16,6 +16,15 @@ def test_extract_candidate_paths_uses_only_existing_repository_files(tmp_path: P
     assert paths == ["src/worker.py"]
 
 
+def test_extract_candidate_paths_maps_absolute_github_runner_path(tmp_path: Path) -> None:
+    source = tmp_path / "src" / "worker.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("value = 1\n", encoding="utf-8")
+    runner_path = f"/home/runner/work/{tmp_path.name}/{tmp_path.name}/src/worker.py:12"
+
+    assert extract_candidate_paths(runner_path, tmp_path) == ["src/worker.py"]
+
+
 def test_run_repair_fixes_only_file_named_by_failed_log(tmp_path: Path) -> None:
     target = tmp_path / "app.py"
     unrelated = tmp_path / "unrelated.py"
