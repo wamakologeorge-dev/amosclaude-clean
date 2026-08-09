@@ -245,7 +245,7 @@ def verify_live_profile(
         "verified_bot_login": bot_login,
         "canonical_repository_accessible": True,
         "contributor_ready": True,
-        "webhook_configuration_present": None,
+        "webhook_configuration_present": webhook_secret_configured,
         "webhook_delivery_verified": False,
         "fully_ready": False,
         "remaining_verification": "SIGNED_WEBHOOK_DELIVERY_REQUIRED",
