@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
+import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
@@ -155,17 +156,21 @@ def test_executor_writes_validated_diff_without_applying_it(tmp_path: Path) -> N
     )
     patch_output = tmp_path / "candidate.patch"
     report = tmp_path / "report.json"
-    response = """```diff
-    diff --git a/src/worker.py b/src/worker.py
-    --- a/src/worker.py
-    +++ b/src/worker.py
-    @@ -1,2 +1,5 @@
-     def work():
-         return 1
-    +
-    +def work_twice():
-    +    return work() * 2
-    ```""".replace("    ", "")
+    response = textwrap.dedent(
+        """\
+        ```diff
+        diff --git a/src/worker.py b/src/worker.py
+        --- a/src/worker.py
+        +++ b/src/worker.py
+        @@ -1,2 +1,5 @@
+         def work():
+             return 1
+        +
+        +def work_twice():
+        +    return work() * 2
+        ```
+        """
+    )
 
     with patch.object(module, "call_claude", return_value=response), patch.object(
         module.candidate.legacy,
