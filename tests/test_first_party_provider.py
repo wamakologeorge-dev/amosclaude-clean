@@ -52,7 +52,7 @@ def test_workspace_chat_propagates_its_deadline_to_provider(monkeypatch):
 
 def test_workspace_chat_returns_a_bounded_timeout_response(monkeypatch):
     def slow_reply(*_args, **_kwargs):
-        time.sleep(0.05)
+        time.sleep(1.05)
         return provider.ProviderResult(reply="Late reply.", runtime="test")
 
     monkeypatch.setattr(provider, "reply", slow_reply)
