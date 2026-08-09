@@ -27,6 +27,8 @@ from amosclaud_bot.owner_directives import normalize_owner_directive
 
 _PATCH_ALIASES = frozenset({"patch", "ai-fix", "claude-fix"})
 _BOT_NAMES = ("@amosclaud-bot", "@amosclaud")
+# Legacy trusted-policy text marker only; runtime uses Ollama:
+# source_format == "claude-patch-alias"
 
 
 @dataclass(frozen=True)
