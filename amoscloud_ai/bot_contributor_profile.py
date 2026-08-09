@@ -258,9 +258,7 @@ def _public_live_verification(result: Mapping[str, object]) -> dict[str, object]
         "failure_code": result.get("failure_code"),
         "verified_app_slug": str(result.get("verified_app_slug") or ""),
         "verified_bot_login": str(result.get("verified_bot_login") or ""),
-        "canonical_repository_accessible": bool(
-            result.get("canonical_repository_accessible")
-        ),
+        "canonical_repository_accessible": bool(result.get("canonical_repository_accessible")),
         "contributor_ready": bool(result.get("contributor_ready")),
         "webhook_delivery_verified": False,
         "fully_ready": False,
