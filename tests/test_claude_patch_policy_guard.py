@@ -47,7 +47,9 @@ def test_trusted_checkout_cannot_be_changed_to_pr_head(tmp_path: Path) -> None:
 
     errors = guard.validate_repository(root)
 
-    assert any("trusted control plane must check out the default branch" in error for error in errors)
+    assert any(
+        "trusted control plane must check out the default branch" in error for error in errors
+    )
 
 
 def test_force_push_cannot_be_added(tmp_path: Path) -> None:
@@ -95,7 +97,7 @@ def test_all_fix_commands_cannot_be_silently_routed_to_claude(tmp_path: Path) ->
 
     errors = guard.validate_repository(root)
 
-    assert any("source_format == \"claude-patch-alias\"" in error for error in errors)
+    assert any('source_format == "claude-patch-alias"' in error for error in errors)
 
 
 def test_verification_cannot_receive_anthropic_key(tmp_path: Path) -> None:
