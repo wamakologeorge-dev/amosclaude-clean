@@ -73,12 +73,20 @@ jobs:
             candidate/scripts/ci/contributor_tool_policy_guard.py
           (cd candidate && python scripts/ci/contributor_tool_policy_guard.py)
 
-      - name: Enforce trusted Claude patch contract
+      - name: Enforce trusted patch contract
         run: |
           set -euo pipefail
-          cp trusted/scripts/ci/claude_patch_policy_guard.py \
-            candidate/scripts/ci/claude_patch_policy_guard.py
-          (cd candidate && python scripts/ci/claude_patch_policy_guard.py)
+          if grep -q 'AMOSCLAUD-OLLAMA-PATCH-CONTRACT:v2' \
+            candidate/docs/AMOSCLAUD_CLAUDE_PATCH_EXECUTOR.md; then
+            test -f trusted/scripts/ci/ollama_patch_policy_guard.py
+            cp trusted/scripts/ci/ollama_patch_policy_guard.py \
+              candidate/scripts/ci/ollama_patch_policy_guard.py
+            (cd candidate && python scripts/ci/ollama_patch_policy_guard.py)
+          else
+            cp trusted/scripts/ci/claude_patch_policy_guard.py \
+              candidate/scripts/ci/claude_patch_policy_guard.py
+            (cd candidate && python scripts/ci/claude_patch_policy_guard.py)
+          fi
 
       - name: Enforce one fixer and least-privilege token use
         run: |
