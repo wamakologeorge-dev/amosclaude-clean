@@ -28,14 +28,13 @@ def copy_contract(tmp_path: Path, guard) -> Path:
 
 def test_repository_claude_patch_contract_is_intact() -> None:
     guard = load_guard()
-
     assert guard.validate_repository(ROOT) == []
 
 
-def test_trusted_checkout_cannot_be_changed_to_pr_head(tmp_path: Path) -> None:
+def test_dispatcher_trusted_checkout_cannot_be_changed_to_pr_head(tmp_path: Path) -> None:
     guard = load_guard()
     root = copy_contract(tmp_path, guard)
-    workflow = root / guard.WORKFLOW
+    workflow = root / guard.DISPATCHER
     workflow.write_text(
         workflow.read_text(encoding="utf-8").replace(
             "ref: ${{ github.event.repository.default_branch }}",
@@ -44,18 +43,31 @@ def test_trusted_checkout_cannot_be_changed_to_pr_head(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-
     errors = guard.validate_repository(root)
-
     assert any(
-        "trusted control plane must check out the default branch" in error for error in errors
+        "trusted default branch" in error
+        or "forbidden privileged behavior" in error
+        for error in errors
     )
 
 
-def test_force_push_cannot_be_added(tmp_path: Path) -> None:
+def test_issue_comment_dispatcher_cannot_execute_pull_request_code(tmp_path: Path) -> None:
     guard = load_guard()
     root = copy_contract(tmp_path, guard)
-    workflow = root / guard.WORKFLOW
+    workflow = root / guard.DISPATCHER
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8")
+        + "\n# github.event.pull_request.head.sha\n# ai_patch_executor.py\n",
+        encoding="utf-8",
+    )
+    errors = guard.validate_repository(root)
+    assert any("forbidden privileged behavior" in error for error in errors)
+
+
+def test_force_push_cannot_be_added_to_worker(tmp_path: Path) -> None:
+    guard = load_guard()
+    root = copy_contract(tmp_path, guard)
+    workflow = root / guard.WORKER
     workflow.write_text(
         workflow.read_text(encoding="utf-8").replace(
             'git -C target push origin "HEAD:refs/heads/${HEAD_REF}"',
@@ -63,9 +75,7 @@ def test_force_push_cannot_be_added(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-
     errors = guard.validate_repository(root)
-
     assert any("forbidden authority: --force" in error for error in errors)
 
 
@@ -77,9 +87,7 @@ def test_executor_cannot_gain_commit_authority(tmp_path: Path) -> None:
         executor.read_text(encoding="utf-8") + '\nFORBIDDEN = "git commit"\n',
         encoding="utf-8",
     )
-
     errors = guard.validate_repository(root)
-
     assert any("forbidden execution authority: git commit" in error for error in errors)
 
 
@@ -94,24 +102,52 @@ def test_all_fix_commands_cannot_be_silently_routed_to_claude(tmp_path: Path) ->
         ),
         encoding="utf-8",
     )
-
     errors = guard.validate_repository(root)
-
     assert any('source_format == "claude-patch-alias"' in error for error in errors)
 
 
 def test_verification_cannot_receive_anthropic_key(tmp_path: Path) -> None:
     guard = load_guard()
     root = copy_contract(tmp_path, guard)
-    workflow = root / guard.WORKFLOW
+    workflow = root / guard.WORKER
     workflow.write_text(
         workflow.read_text(encoding="utf-8").replace(
-            "env -u ANTHROPIC_API_KEY -u GITHUB_APP_PRIVATE_KEY -u GITHUB_APP_WEBHOOK_SECRET",
+            "env -u ANTHROPIC_API_KEY",
             "env",
         ),
         encoding="utf-8",
     )
-
     errors = guard.validate_repository(root)
-
     assert any("env -u ANTHROPIC_API_KEY" in error for error in errors)
+
+
+def test_verification_job_cannot_receive_protected_secret(tmp_path: Path) -> None:
+    guard = load_guard()
+    root = copy_contract(tmp_path, guard)
+    workflow = root / guard.WORKER
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "      - name: Verify candidate without model or publication credentials\n",
+            "      - name: Verify candidate without model or publication credentials\n"
+            "        env:\n"
+            "          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}\n",
+        ),
+        encoding="utf-8",
+    )
+    errors = guard.validate_repository(root)
+    assert any("credential-free verification" in error for error in errors)
+
+
+def test_worker_cannot_be_triggered_directly_by_issue_comment(tmp_path: Path) -> None:
+    guard = load_guard()
+    root = copy_contract(tmp_path, guard)
+    workflow = root / guard.WORKER
+    workflow.write_text(
+        workflow.read_text(encoding="utf-8").replace(
+            "on:\n  workflow_dispatch:\n",
+            "on:\n  issue_comment:\n    types: [created]\n  workflow_dispatch:\n",
+        ),
+        encoding="utf-8",
+    )
+    errors = guard.validate_repository(root)
+    assert any("must never run directly from issue_comment" in error for error in errors)
