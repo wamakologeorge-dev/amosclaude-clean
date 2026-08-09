@@ -131,11 +131,7 @@ def codebase_context(
     ranked.sort(key=lambda item: (-item[0], item[1]))
 
     tree = "Tracked source files:\n" + "\n".join(tracked[:1200])
-    stat = (
-        _run(["git", "diff", "--stat", f"{base_sha}...HEAD"], target).strip()
-        if base_sha
-        else ""
-    )
+    stat = _run(["git", "diff", "--stat", f"{base_sha}...HEAD"], target).strip() if base_sha else ""
     sections = [tree]
     if stat:
         sections.append("Pull-request diff summary:\n" + stat)
@@ -257,9 +253,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     objective = candidate.legacy.redact(
         candidate.legacy.read_text(Path(args.objective_file), 12_000)
     ).strip()
-    evidence = candidate.legacy.redact(
-        candidate.legacy.read_text(Path(args.evidence), 80_000)
-    )
+    evidence = candidate.legacy.redact(candidate.legacy.read_text(Path(args.evidence), 80_000))
     if not objective:
         raise SystemExit("A parsed command objective is required")
 
