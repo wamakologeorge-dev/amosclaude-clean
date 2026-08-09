@@ -106,9 +106,7 @@ def evaluate_health(
     )
     has_pending = any(state.state == "PENDING" for state in states)
     all_required_verified = all(
-        state.state in {"PASSED", "EXPECTED_SKIP"}
-        for state in states
-        if state.required
+        state.state in {"PASSED", "EXPECTED_SKIP"} for state in states if state.required
     ) and bool(required)
 
     if has_blocker:
@@ -126,9 +124,7 @@ def evaluate_health(
 
     required_total = len(required)
     required_verified = sum(
-        1
-        for state in states
-        if state.required and state.state in {"PASSED", "EXPECTED_SKIP"}
+        1 for state in states if state.required and state.state in {"PASSED", "EXPECTED_SKIP"}
     )
     percentage = round((required_verified / required_total) * 100) if required_total else 0
 
