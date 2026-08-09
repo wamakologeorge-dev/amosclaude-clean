@@ -36,7 +36,7 @@ def test_patch_alias_routes_to_claude_executor() -> None:
     assert result.pull_request is True
 
 
-def test_structured_owner_task_uses_existing_directive_normalizer() -> None:
+def test_structured_owner_task_uses_existing_native_fixer_path() -> None:
     module = load_module()
 
     result = module.parse_event(
@@ -49,10 +49,20 @@ def test_structured_owner_task_uses_existing_directive_normalizer() -> None:
 
     assert result.command == "fix"
     assert result.authorized_write is True
-    assert result.patch_executor is True
+    assert result.patch_executor is False
     assert "Create .github/scripts/parse_comment.py" in result.objective
     assert "do not embed sensitive values" in result.objective
     assert result.source_format == "trusted-owner-directive"
+
+
+def test_normal_fix_command_stays_on_native_fixer_path() -> None:
+    module = load_module()
+
+    result = module.parse_event(payload("@amosclaud fix the failing unit test"))
+
+    assert result.command == "fix"
+    assert result.authorized_write is True
+    assert result.patch_executor is False
 
 
 def test_untrusted_structured_comment_is_not_a_command() -> None:
