@@ -39,6 +39,7 @@ jobs:
               'fixer.yml', 'scan.yml', 'main.yml', 'action.yml',
               'Autonomous.yml', 'amosclaude-clean.yml',
               'pull-request-chat-group.yml', 'amosclaud-bot-contributor.yml',
+              'amosclaud-bot-review.yml',
           }
           for path in paths:
               if path.name not in selected:
@@ -60,6 +61,6 @@ jobs:
           set -euo pipefail
           test -f .github/workflows/fixer.yml
           ! grep -R --line-number 'pull_request_target' \
-            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group}.yml
+            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review}.yml
           ! grep -R --line-number 'secrets\..*TOKEN' \
-            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group}.yml
+            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review}.yml
