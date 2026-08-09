@@ -26,6 +26,7 @@ from amoscloud_ai.api.routes.github_repositories import _db as _repository_db
 from amoscloud_ai.cloud_configuration import load_cloud_configuration
 from amoscloud_ai.db_migrations import ensure_github_repository_schema
 from amoscloud_ai.github_repository_sync import synchronize_github_push
+from amoscloud_ai.logger import log
 
 router = APIRouter(prefix="/agent/github", tags=["github-app"])
 
@@ -72,34 +73,76 @@ def _connect() -> sqlite3.Connection:
     return db
 
 
+def _webhook_secrets() -> tuple[str, ...]:
+    """Return configured webhook secrets without exposing their values.
+
+    The optional previous slot permits a zero-downtime secret rotation. It must
+    be removed after GitHub and Railway both use the new primary secret.
+    """
+
+    configured = (
+        os.getenv("GITHUB_APP_WEBHOOK_SECRET", "").strip(),
+        os.getenv("GITHUB_APP_WEBHOOK_SECRET_PREVIOUS", "").strip(),
+    )
+    return tuple(dict.fromkeys(value for value in configured if value))
+
+
 def _webhook_secret() -> str:
-    return os.getenv("GITHUB_APP_WEBHOOK_SECRET", "").strip()
+    """Return the primary compatible secret value for legacy callers."""
+
+    secrets = _webhook_secrets()
+    return secrets[0] if secrets else ""
 
 
 def _production() -> bool:
-    environment = (
-        os.getenv("AMOSCLAUD_ENV")
-        or os.getenv("ENVIRONMENT")
-        or "development"
-    )
+    environment = os.getenv("AMOSCLAUD_ENV") or os.getenv("ENVIRONMENT") or "development"
     return environment.strip().lower() in {"production", "prod"}
 
 
-def _verify_signature(payload: bytes, signature_header: str | None) -> None:
-    secret = _webhook_secret()
-    if not secret:
+def _verify_signature(
+    payload: bytes,
+    signature_header: str | None,
+    *,
+    delivery_id: str = "",
+    event: str = "",
+) -> None:
+    secrets = _webhook_secrets()
+    delivery_label = delivery_id[:80] or "unknown"
+    event_label = event[:80] or "unknown"
+    if not secrets:
         if _production():
+            log.error(
+                "GitHub webhook rejected: no secret configured event=%s delivery=%s",
+                event_label,
+                delivery_label,
+            )
             raise HTTPException(
                 status_code=503,
                 detail="GITHUB_APP_WEBHOOK_SECRET is not configured",
             )
         return
     if not signature_header or not signature_header.startswith("sha256="):
+        log.warning(
+            "GitHub webhook rejected: missing X-Hub-Signature-256 event=%s delivery=%s",
+            event_label,
+            delivery_label,
+        )
         raise HTTPException(status_code=401, detail="Missing webhook signature")
-    expected = "sha256=" + hmac.new(
-        secret.encode(), payload, hashlib.sha256
-    ).hexdigest()
-    if not hmac.compare_digest(expected, signature_header.strip()):
+
+    supplied = signature_header.strip()
+    valid = False
+    for secret in secrets:
+        expected = "sha256=" + hmac.new(
+            secret.encode(), payload, hashlib.sha256
+        ).hexdigest()
+        valid |= hmac.compare_digest(expected, supplied)
+    if not valid:
+        log.warning(
+            "GitHub webhook rejected: signature mismatch event=%s delivery=%s configured_slots=%s",
+            event_label,
+            delivery_label,
+            len(secrets),
+        )
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
 
@@ -285,11 +328,14 @@ async def receive_webhook(
     background_tasks: BackgroundTasks,
 ) -> dict:
     payload_bytes = await request.body()
+    event = (request.headers.get("X-GitHub-Event") or "").strip().lower()
+    delivery_id = (request.headers.get("X-GitHub-Delivery") or "").strip()
     _verify_signature(
         payload_bytes,
         request.headers.get("X-Hub-Signature-256"),
+        delivery_id=delivery_id,
+        event=event,
     )
-    event = (request.headers.get("X-GitHub-Event") or "").strip().lower()
     if not event:
         raise HTTPException(status_code=400, detail="Missing X-GitHub-Event header")
     try:
@@ -313,7 +359,7 @@ async def receive_webhook(
 
     record = {
         "id": f"ghe_{uuid.uuid4().hex[:20]}",
-        "delivery_id": (request.headers.get("X-GitHub-Delivery") or "")[:80],
+        "delivery_id": delivery_id[:80],
         "event": event,
         "action": action[:80],
         "repository": repository[:200],
@@ -437,10 +483,16 @@ async def app_status(request: Request) -> dict:
             "SELECT COUNT(*) AS events, MAX(received_at) AS last_event_at FROM github_events"
         ).fetchone()
     enabled, policy = _github_to_platform_policy()
+    configured_slots = []
+    if os.getenv("GITHUB_APP_WEBHOOK_SECRET", "").strip():
+        configured_slots.append("primary")
+    if os.getenv("GITHUB_APP_WEBHOOK_SECRET_PREVIOUS", "").strip():
+        configured_slots.append("previous")
     return {
         "app_slug": os.getenv("GITHUB_APP_SLUG", "amosclaud-platform"),
         "webhook_path": "/api/v1/agent/github/webhook",
-        "webhook_secret_configured": bool(_webhook_secret()),
+        "webhook_secret_configured": bool(_webhook_secrets()),
+        "webhook_secret_slots_configured": configured_slots,
         "events_recorded": row["events"],
         "last_event_at": row["last_event_at"],
         "handled_events": sorted(HANDLED_EVENTS),
