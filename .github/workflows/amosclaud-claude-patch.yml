@@ -1,26 +1,27 @@
-name: Amosclaud Claude Patch Executor
+name: Amosclaud Claude Patch Dispatcher
 
 on:
   issue_comment:
     types: [created]
 
 permissions:
+  actions: write
   contents: read
   issues: write
-  pull-requests: write
+  pull-requests: read
 
 concurrency:
-  group: amosclaud-claude-patch-${{ github.repository }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  group: amosclaud-claude-dispatch-${{ github.repository }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
   cancel-in-progress: false
 
 jobs:
-  generate-verify-publish:
-    name: generate-verify-publish
+  dispatch-patch-worker:
+    name: dispatch-patch-worker
     if: >-
       github.event.issue.pull_request &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
 
     steps:
       - name: Check out trusted default-branch control plane
@@ -55,7 +56,7 @@ jobs:
         if: steps.parse.outputs.patch_executor != 'true'
         run: echo "The comment is not an authorized Amosclaud patch command."
 
-      - name: Resolve the exact pull-request target
+      - name: Resolve immutable dispatch inputs
         if: steps.parse.outputs.patch_executor == 'true'
         id: target
         env:
@@ -69,249 +70,54 @@ jobs:
           import os
           from pathlib import Path
 
-          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
+          payload = json.loads(
+              Path(os.environ["RUNNER_TEMP"])
+              .joinpath("amosclaud-pr.json")
+              .read_text(encoding="utf-8")
+          )
           head = payload.get("head") or {}
-          base = payload.get("base") or {}
           head_repo = str(((head.get("repo") or {}).get("full_name")) or "")
-          current_repo = os.environ["GITHUB_REPOSITORY"]
-          eligible = payload.get("state") == "open" and head_repo == current_repo
+          eligible = (
+              payload.get("state") == "open"
+              and head_repo == os.environ["GITHUB_REPOSITORY"]
+              and bool(str(head.get("sha") or "").strip())
+          )
           values = {
               "eligible": str(eligible).lower(),
               "head_sha": str(head.get("sha") or ""),
-              "head_ref": str(head.get("ref") or ""),
-              "head_repo": head_repo,
-              "base_sha": str(base.get("sha") or ""),
-              "base_ref": str(base.get("ref") or ""),
           }
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               for name, value in values.items():
                   output.write(f"{name}={value}\n")
           PY
 
-      - name: Refuse fork or closed pull-request publication
+      - name: Refuse fork or closed pull-request dispatch
         if: steps.parse.outputs.patch_executor == 'true' && steps.target.outputs.eligible != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Executor\n\n🟥 **Result:** BLOCKED\n\nAutomatic publication requires an open pull request whose head branch belongs to this repository. No patch was generated or pushed."
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟥 **Result:** BLOCKED\n\nThe command was not dispatched because the pull request is closed, belongs to a fork, or has no immutable head SHA. No model key, App key, patch, commit, push, or merge was used."
           exit 1
 
-      - name: Check out the exact pull-request head as untrusted input
+      - name: Dispatch isolated generation, verification, and publication worker
         if: steps.target.outputs.eligible == 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: ${{ steps.target.outputs.head_repo }}
-          ref: ${{ steps.target.outputs.head_sha }}
-          path: target
-          fetch-depth: 0
-          persist-credentials: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run amosclaud-claude-patch-worker.yml \
+            --ref "$DEFAULT_BRANCH" \
+            -f issue_number="$ISSUE_NUMBER" \
+            -f comment_id="$COMMENT_ID" \
+            -f expected_head_sha="$EXPECTED_HEAD_SHA"
 
-      - name: Prepare bounded untrusted request evidence
+      - name: Publish accepted dispatch status
         if: steps.target.outputs.eligible == 'true'
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
-          evidence = {
-              "pull_request": payload.get("number"),
-              "title": payload.get("title"),
-              "body": payload.get("body"),
-              "head_sha": ((payload.get("head") or {}).get("sha")),
-              "base_sha": ((payload.get("base") or {}).get("sha")),
-          }
-          Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-request-evidence.json").write_text(
-              json.dumps(evidence, indent=2),
-              encoding="utf-8",
-          )
-          PY
-
-      - name: Generate a bounded Claude diff artifact
-        if: steps.target.outputs.eligible == 'true'
-        id: candidate
-        env:
-          ANTHROPIC_API_KEY: ''
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
-          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' }}
-          AMOSCLAUD_SENSITIVE_APPROVED: 'false'
-        run: |
-          set -euo pipefail
-          python trusted/.github/scripts/ai_patch_executor.py \
-            --target target \
-            --instructions-root trusted \
-            --policy trusted/.amosclaud/repair-control-plane.json \
-            --objective-file "$RUNNER_TEMP/amosclaud-objective.txt" \
-            --evidence "$RUNNER_TEMP/amosclaud-request-evidence.json" \
-            --base-sha "${{ steps.target.outputs.base_sha }}" \
-            --mode regular \
-            --source "owner-comment:${{ github.event.comment.id }}" \
-            --patch-output "$RUNNER_TEMP/amosclaud-claude.patch" \
-            --report "$RUNNER_TEMP/amosclaud-claude-report.json"
-          echo "generated=true" >> "$GITHUB_OUTPUT"
-
-      - name: Apply only the validated diff artifact
-        if: steps.candidate.outputs.generated == 'true'
-        run: |
-          set -euo pipefail
-          git -C target apply --check "$RUNNER_TEMP/amosclaud-claude.patch"
-          git -C target apply --whitespace=fix "$RUNNER_TEMP/amosclaud-claude.patch"
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          report = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-claude-report.json").read_text(encoding="utf-8"))
-          expected = set(report.get("changed_files") or [])
-          changed = set(
-              subprocess.run(
-                  ["git", "diff", "--name-only"],
-                  cwd="target",
-                  check=True,
-                  text=True,
-                  stdout=subprocess.PIPE,
-              ).stdout.splitlines()
-          )
-          untracked = set(
-              subprocess.run(
-                  ["git", "ls-files", "--others", "--exclude-standard"],
-                  cwd="target",
-                  check=True,
-                  text=True,
-                  stdout=subprocess.PIPE,
-              ).stdout.splitlines()
-          )
-          actual = changed | untracked
-          if actual != expected:
-              raise SystemExit(f"applied file set differs from validated report: expected={sorted(expected)} actual={sorted(actual)}")
-          PY
-
-      - name: Verify the patch without model or publication credentials
-        if: steps.candidate.outputs.generated == 'true'
-        id: verify
-        run: |
-          set -euo pipefail
-          env -u ANTHROPIC_API_KEY -u GITHUB_APP_PRIVATE_KEY -u GITHUB_APP_WEBHOOK_SECRET \
-            python trusted/.github/scripts/amosclaud_repair_verify.py \
-              --target target \
-              --failure-source "owner-comment" \
-              --candidate-report "$RUNNER_TEMP/amosclaud-claude-report.json" \
-              --report "$RUNNER_TEMP/amosclaud-claude-verification.json"
-          echo "verified=true" >> "$GITHUB_OUTPUT"
-
-      - name: Upload patch and verification evidence
-        if: always() && steps.parse.outputs.patch_executor == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: amosclaud-claude-patch-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/amosclaud-comment.json
-            ${{ runner.temp }}/amosclaud-request-evidence.json
-            ${{ runner.temp }}/amosclaud-claude.patch
-            ${{ runner.temp }}/amosclaud-claude-report.json
-            ${{ runner.temp }}/amosclaud-claude-verification.json
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Re-check PR head SHA before privileged app connection
-        if: steps.verify.outputs.verified == 'true'
-        id: recheck_head
-        env:
-          EXPECTED_SHA: ${{ steps.target.outputs.head_sha }}
-          HEAD_REF: ${{ steps.target.outputs.head_ref }}
-        run: |
-          set -euo pipefail
-          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
-          test -n "$remote_sha"
-          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
-            echo "Head moved after verification: expected=$EXPECTED_SHA actual=$remote_sha" >&2
-            exit 1
-          fi
-          echo "stable=true" >> "$GITHUB_OUTPUT"
-
-      - name: Final immutable head SHA guard before privileged operations
-        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true'
-        id: final_sha_guard
-        env:
-          EXPECTED_SHA: ${{ steps.target.outputs.head_sha }}
-          HEAD_REF: ${{ steps.target.outputs.head_ref }}
-        run: |
-          set -euo pipefail
-          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
-          test -n "$remote_sha"
-          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
-            echo "Head moved before privilege use: expected=$EXPECTED_SHA actual=$remote_sha" >&2
-            exit 1
-          fi
-          echo "stable=true" >> "$GITHUB_OUTPUT"
-
-      - name: Connect the verified Amosclaud GitHub App installation
-        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true' && steps.final_sha_guard.outputs.stable == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
-        id: app
-        env:
-          GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
-          GITHUB_APP_ID: ${{ vars.GITHUB_APP_ID }}
-          GITHUB_APP_INSTALLATION_ID: ${{ vars.GITHUB_APP_INSTALLATION_ID }}
-          GITHUB_APP_BOT_USER_ID: ${{ vars.GITHUB_APP_BOT_USER_ID }}
-          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          python -m amoscloud_ai.github_app_connection \
-            --repository "$GITHUB_REPOSITORY" \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Commit and push the verified patch to the same PR branch
-        if: steps.verify.outputs.verified == 'true' && steps.final_sha_guard.outputs.stable == 'true' && steps.app.outputs.connected == 'true'
-        id: publish
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          EXPECTED_SHA: ${{ steps.target.outputs.head_sha }}
-          HEAD_REF: ${{ steps.target.outputs.head_ref }}
-          ACTOR_NAME: ${{ steps.app.outputs.actor_name }}
-          ACTOR_EMAIL: ${{ steps.app.outputs.actor_email }}
-        run: |
-          set -euo pipefail
-          gh auth setup-git
-          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
-          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
-            echo "The pull-request branch moved; refusing a stale push."
-            exit 1
-          fi
-          mapfile -t changed_files < <(python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          payload = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-claude-report.json").read_text(encoding="utf-8"))
-          for path in payload.get("changed_files") or []:
-              print(path)
-          PY
-          )
-          if [ "${#changed_files[@]}" -eq 0 ]; then
-            echo "No validated changed files were reported."
-            exit 1
-          fi
-          git -C target config user.name "$ACTOR_NAME"
-          git -C target config user.email "$ACTOR_EMAIL"
-          git -C target add -- "${changed_files[@]}"
-          git -C target diff --cached --quiet && { echo "No verified changes were staged."; exit 1; }
-          git -C target commit -m "fix: apply Amosclaud Claude patch for #${{ github.event.issue.number }}"
-          repair_sha="$(git -C target rev-parse HEAD)"
-          git -C target push origin "HEAD:refs/heads/${HEAD_REF}"
-          echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
-
-      - name: Publish verified result to the pull request
-        if: steps.publish.outputs.repair_sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Executor\n\n🟩 **Result:** VERIFIED AND PUBLISHED\n\n- Parsed through: \`.github/scripts/parse_comment.py\`\n- Patch provider: Anthropic Claude Messages API\n- Verification: credential-free repair verifier passed\n- Commit: \`${{ steps.publish.outputs.repair_sha }}\`\n- Branch: \`${{ steps.target.outputs.head_ref }}\`\n- Force push: not used\n\nAll normal pull-request checks and reviews must pass before merge."
-
-      - name: Report a blocked patch request truthfully
-        if: failure() && steps.parse.outputs.patch_executor == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Executor\n\n🟥 **Result:** BLOCKED\n\nThe requested patch was not published. Generation, validation, verification, GitHub App authentication, or exact-head publication failed. No force push or merge was attempted. Review the workflow evidence for the exact failure."
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟦 **Result:** ACCEPTED\n\nThe trusted dispatcher validated this owner command and started the isolated patch worker for exact head \`${{ steps.target.outputs.head_sha }}\`. The comment workflow does not check out or execute pull-request code and receives no Claude or GitHub App private key."
