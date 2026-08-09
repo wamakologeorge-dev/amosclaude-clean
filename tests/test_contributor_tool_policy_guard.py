@@ -79,7 +79,9 @@ def test_removing_or_commenting_workflow_guard_is_rejected(tmp_path: Path) -> No
     root = _copy_contract(tmp_path, guard)
     workflow = root / ".github" / "workflows" / "policy.yml"
     _replace(workflow, guard.POLICY_COMMAND, f"# {guard.POLICY_COMMAND}")
-    assert any("does not execute the policy guard" in error for error in guard.validate_repository(root))
+    assert any(
+        "does not execute the policy guard" in error for error in guard.validate_repository(root)
+    )
 
 
 def test_policy_job_cannot_be_disabled_with_condition(tmp_path: Path) -> None:
@@ -145,7 +147,9 @@ def test_formal_review_cannot_remove_command_filter(tmp_path: Path) -> None:
     root = _copy_contract(tmp_path, guard)
     workflow = root / ".github" / "workflows" / "amosclaud-bot-review.yml"
     _replace(workflow, "@amosclaud-bot review", "@disabled-bot review")
-    assert any("formal review job filter is missing" in error for error in guard.validate_repository(root))
+    assert any(
+        "formal review job filter is missing" in error for error in guard.validate_repository(root)
+    )
 
 
 def test_formal_review_cannot_execute_pull_request_checkout(tmp_path: Path) -> None:
@@ -187,9 +191,7 @@ def test_review_cannot_restore_unqualified_approval(tmp_path: Path) -> None:
         'base = base.replace("**APPROVE**", "**NEEDS HUMAN REVIEW**")',
         "# approval conversion removed",
     )
-    assert any(
-        "truthful coverage rule" in error for error in guard.validate_repository(root)
-    )
+    assert any("truthful coverage rule" in error for error in guard.validate_repository(root))
 
 
 def test_status_contract_cannot_remove_required_workflow_set(tmp_path: Path) -> None:
@@ -225,7 +227,10 @@ def test_security_bridge_repair_target_cannot_be_replaced(tmp_path: Path) -> Non
     root = _copy_contract(tmp_path, guard)
     bridge = root / "amoscloud_ai" / "security_repair_bridge.py"
     _replace(bridge, guard.REPAIR_WORKFLOW, "untrusted-fixer.yml")
-    assert any("security bridge repair target changed" in error for error in guard.validate_repository(root))
+    assert any(
+        "security bridge repair target changed" in error
+        for error in guard.validate_repository(root)
+    )
 
 
 def test_trusted_codeql_gate_cannot_checkout_pull_request_code(tmp_path: Path) -> None:
@@ -259,8 +264,7 @@ def test_dependency_gate_cannot_ignore_low_severity_threats(tmp_path: Path) -> N
     workflow = root / ".github" / "workflows" / "amosclaud-dependency-threat-gate.yml"
     _replace(workflow, "fail-on-severity: low", "fail-on-severity: high")
     assert any(
-        "dependency threat gate is missing" in error
-        for error in guard.validate_repository(root)
+        "dependency threat gate is missing" in error for error in guard.validate_repository(root)
     )
 
 
