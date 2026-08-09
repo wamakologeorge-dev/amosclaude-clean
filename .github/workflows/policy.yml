@@ -66,31 +66,19 @@ jobs:
               print(f'validated {path}')
           PY
 
-      - name: Enforce contributor tool sovereignty from trusted code
+      - name: Enforce contributor tool sovereignty
         run: |
           set -euo pipefail
-          PYTHONPATH=trusted python - <<'PY'
-          from pathlib import Path
-          from scripts.ci.contributor_tool_policy_guard import validate_repository
+          cp trusted/scripts/ci/contributor_tool_policy_guard.py \
+            candidate/scripts/ci/contributor_tool_policy_guard.py
+          (cd candidate && python scripts/ci/contributor_tool_policy_guard.py)
 
-          errors = validate_repository(Path('candidate'))
-          if errors:
-              raise SystemExit('\n'.join(errors))
-          print('trusted contributor policy guard passed')
-          PY
-
-      - name: Enforce native Ollama patch contract from trusted code
+      - name: Enforce trusted Claude patch contract
         run: |
           set -euo pipefail
-          PYTHONPATH=trusted python - <<'PY'
-          from pathlib import Path
-          from scripts.ci.claude_patch_policy_guard import validate_repository
-
-          errors = validate_repository(Path('candidate'))
-          if errors:
-              raise SystemExit('\n'.join(errors))
-          print('trusted Ollama patch policy guard passed')
-          PY
+          cp trusted/scripts/ci/claude_patch_policy_guard.py \
+            candidate/scripts/ci/claude_patch_policy_guard.py
+          (cd candidate && python scripts/ci/claude_patch_policy_guard.py)
 
       - name: Enforce one fixer and least-privilege token use
         run: |
