@@ -133,15 +133,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _redact_profile_for_output(profile: Mapping[str, object]) -> dict[str, object]:
-    """Return a logging-safe profile without secret-derived readiness details."""
+    """Return a logging-safe profile with secret-derived readiness details removed."""
 
     redacted = dict(profile)
-    readiness = profile.get("readiness")
-    if isinstance(readiness, Mapping):
-        safe_readiness = dict(readiness)
-        safe_readiness.pop("checks", None)
-        safe_readiness.pop("missing_configuration", None)
-        redacted["readiness"] = safe_readiness
+    redacted.pop("readiness", None)
     return redacted
 
 
