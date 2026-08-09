@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Enforce the trusted Claude patch-generation and publication contract."""
+"""Enforce the trusted Claude patch dispatch, verification, and publication contract."""
 
 from __future__ import annotations
 
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
-WORKFLOW = ".github/workflows/amosclaud-claude-patch.yml"
+DISPATCHER = ".github/workflows/amosclaud-claude-patch.yml"
+WORKER = ".github/workflows/amosclaud-claude-patch-worker.yml"
+WORKFLOW = DISPATCHER
 PARSER = ".github/scripts/parse_comment.py"
 EXECUTOR = ".github/scripts/ai_patch_executor.py"
 POLICY_MARKER = "AMOSCLAUD-CLAUDE-PATCH-CONTRACT:v1"
 PROTECTED_FILES = (
-    WORKFLOW,
+    DISPATCHER,
+    WORKER,
     PARSER,
     EXECUTOR,
     "scripts/ci/claude_patch_policy_guard.py",
@@ -48,15 +52,74 @@ def _yaml(root: Path, relative: str, errors: list[str]) -> Mapping[str, object]:
     return payload
 
 
-def _steps(workflow: Mapping[str, object]) -> list[Mapping[str, object]]:
+def _events(workflow: Mapping[str, object]) -> object:
+    return workflow.get("on", workflow.get(True))
+
+
+def _event(workflow: Mapping[str, object], name: str) -> object:
+    events = _events(workflow)
+    if isinstance(events, str):
+        return None if events == name else False
+    if isinstance(events, list):
+        return None if name in events else False
+    if isinstance(events, Mapping):
+        return events.get(name, False)
+    return False
+
+
+def _job(workflow: Mapping[str, object], name: str) -> Mapping[str, object]:
     jobs = workflow.get("jobs")
-    job = jobs.get("generate-verify-publish") if isinstance(jobs, Mapping) else None
-    raw = job.get("steps") if isinstance(job, Mapping) else None
+    value = jobs.get(name) if isinstance(jobs, Mapping) else None
+    return value if isinstance(value, Mapping) else {}
+
+
+def _steps(workflow: Mapping[str, object], job_name: str) -> list[Mapping[str, object]]:
+    raw = _job(workflow, job_name).get("steps")
     return [step for step in raw or [] if isinstance(step, Mapping)]
 
 
 def _step(steps: list[Mapping[str, object]], name: str) -> Mapping[str, object]:
     return next((step for step in steps if step.get("name") == name), {})
+
+
+def _permissions(
+    workflow: Mapping[str, object], job_name: str | None = None
+) -> Mapping[str, object]:
+    value = (
+        workflow.get("permissions")
+        if job_name is None
+        else _job(workflow, job_name).get("permissions")
+    )
+    return value if isinstance(value, Mapping) else {}
+
+
+def _trusted_checkout(
+    workflow: Mapping[str, object],
+    job_name: str,
+    step_name: str,
+    errors: list[str],
+) -> None:
+    checkout = _step(_steps(workflow, job_name), step_name)
+    settings = checkout.get("with") if isinstance(checkout, Mapping) else None
+    if not isinstance(settings, Mapping):
+        errors.append(f"{step_name} configuration is missing")
+        return
+    if settings.get("ref") != "${{ github.event.repository.default_branch }}":
+        errors.append(f"{step_name} must check out the trusted default branch")
+    if settings.get("path") != "trusted":
+        errors.append(f"{step_name} must use the isolated trusted path")
+    if settings.get("persist-credentials") is not False:
+        errors.append(f"{step_name} must not persist credentials")
+
+
+def _contains(value: Any, needle: str) -> bool:
+    if isinstance(value, str):
+        return needle in value
+    if isinstance(value, Mapping):
+        return any(_contains(item, needle) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains(item, needle) for item in value)
+    return False
 
 
 def validate_repository(root: Path) -> list[str]:
@@ -65,66 +128,112 @@ def validate_repository(root: Path) -> list[str]:
     for relative in PROTECTED_FILES:
         _read(root, relative, errors)
 
-    workflow = _yaml(root, WORKFLOW, errors)
-    workflow_text = _read(root, WORKFLOW, errors)
+    dispatcher = _yaml(root, DISPATCHER, errors)
+    worker = _yaml(root, WORKER, errors)
+    dispatcher_text = _read(root, DISPATCHER, errors)
+    worker_text = _read(root, WORKER, errors)
     parser = _read(root, PARSER, errors)
     executor = _read(root, EXECUTOR, errors)
     documentation = _read(root, "docs/AMOSCLAUD_CLAUDE_PATCH_EXECUTOR.md", errors)
-    steps = _steps(workflow)
 
-    events = workflow.get("on", workflow.get(True))
-    issue_comment = events.get("issue_comment") if isinstance(events, Mapping) else None
+    issue_comment = _event(dispatcher, "issue_comment")
     if not isinstance(issue_comment, Mapping) or issue_comment.get("types") != ["created"]:
-        errors.append("Claude patch workflow must run only for newly created issue comments")
-
-    expected_permissions = {
+        errors.append("Claude dispatcher must run only for newly created issue comments")
+    expected_dispatcher_permissions = {
+        "actions": "write",
         "contents": "read",
         "issues": "write",
-        "pull-requests": "write",
+        "pull-requests": "read",
     }
-    permissions = workflow.get("permissions")
-    if not isinstance(permissions, Mapping) or dict(permissions) != expected_permissions:
-        errors.append("Claude patch workflow permissions changed from the bounded contract")
+    if dict(_permissions(dispatcher)) != expected_dispatcher_permissions:
+        errors.append("Claude dispatcher permissions changed from the bounded contract")
 
-    trusted_checkout = _step(steps, "Check out trusted default-branch control plane")
-    trusted_with = trusted_checkout.get("with") if isinstance(trusted_checkout, Mapping) else None
-    if not isinstance(trusted_with, Mapping):
-        errors.append("trusted checkout configuration is missing")
-    else:
-        if trusted_with.get("ref") != "${{ github.event.repository.default_branch }}":
-            errors.append("trusted control plane must check out the default branch")
-        if trusted_with.get("path") != "trusted":
-            errors.append("trusted control plane must use the isolated trusted path")
-        if trusted_with.get("persist-credentials") is not False:
-            errors.append("trusted checkout must not persist credentials")
+    _trusted_checkout(
+        dispatcher,
+        "dispatch-patch-worker",
+        "Check out trusted default-branch control plane",
+        errors,
+    )
+    for required in (
+        "python trusted/.github/scripts/parse_comment.py",
+        "gh workflow run amosclaud-claude-patch-worker.yml",
+        '-f expected_head_sha="$EXPECTED_HEAD_SHA"',
+        "The comment workflow does not check out or execute pull-request code",
+    ):
+        if required not in dispatcher_text:
+            errors.append(f"Claude dispatcher is missing safety contract: {required}")
+    for forbidden in (
+        "secrets.",
+        "ai_patch_executor.py",
+        "amosclaud_repair_verify.py",
+        "github_app_connection",
+        "GITHUB_APP_PRIVATE_KEY",
+        "ANTHROPIC_API_KEY",
+        "Check out the exact pull-request head",
+        "github.event.pull_request.head",
+        "pull_request_target",
+    ):
+        if forbidden in dispatcher_text:
+            errors.append(f"Claude dispatcher contains forbidden privileged behavior: {forbidden}")
 
-    target_checkout = _step(steps, "Check out the exact pull-request head as untrusted input")
-    target_with = target_checkout.get("with") if isinstance(target_checkout, Mapping) else None
-    if not isinstance(target_with, Mapping):
-        errors.append("untrusted target checkout configuration is missing")
-    else:
-        if target_with.get("ref") != "${{ steps.target.outputs.head_sha }}":
-            errors.append("untrusted target checkout must use the exact resolved head SHA")
-        if target_with.get("path") != "target":
-            errors.append("untrusted pull-request files must stay in the target path")
-        if target_with.get("persist-credentials") is not False:
-            errors.append("untrusted target checkout must not persist credentials")
+    workflow_dispatch = _event(worker, "workflow_dispatch")
+    required_inputs = {"issue_number", "comment_id", "expected_head_sha"}
+    inputs = workflow_dispatch.get("inputs") if isinstance(workflow_dispatch, Mapping) else None
+    if not isinstance(inputs, Mapping) or set(inputs) != required_inputs:
+        errors.append("Claude worker dispatch inputs changed from the immutable contract")
+    if _event(worker, "issue_comment") is not False:
+        errors.append("Claude worker must never run directly from issue_comment")
+    if dict(_permissions(worker)) != {}:
+        errors.append("Claude worker must deny permissions by default")
 
-    required_workflow_text = (
+    expected_job_permissions = {
+        "generate-candidate": {
+            "contents": "read",
+            "issues": "read",
+            "pull-requests": "read",
+        },
+        "verify-candidate": {"contents": "read"},
+        "publish-candidate": {"contents": "read", "pull-requests": "read"},
+        "report-result": {"issues": "write"},
+    }
+    for job_name, expected in expected_job_permissions.items():
+        if dict(_permissions(worker, job_name)) != expected:
+            errors.append(f"Claude worker permissions changed for job: {job_name}")
+
+    _trusted_checkout(
+        worker,
+        "generate-candidate",
+        "Check out trusted default-branch control plane",
+        errors,
+    )
+    _trusted_checkout(
+        worker,
+        "verify-candidate",
+        "Check out trusted default-branch verifier",
+        errors,
+    )
+    _trusted_checkout(
+        worker,
+        "publish-candidate",
+        "Check out trusted default-branch publisher",
+        errors,
+    )
+
+    for required in (
         "python trusted/.github/scripts/parse_comment.py",
         "python trusted/.github/scripts/ai_patch_executor.py",
+        "ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}",
         "git -C target apply --check",
-        "python trusted/.github/scripts/amosclaud_repair_verify.py",
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
         "env -u ANTHROPIC_API_KEY",
+        "python trusted/.github/scripts/amosclaud_repair_verify.py",
         "python -m amoscloud_ai.github_app_connection",
-        'remote_sha="$(git -C target ls-remote origin',
-        'if [ "$remote_sha" != "$EXPECTED_SHA" ]',
+        'test "$remote_sha" = "$EXPECTED_SHA"',
         'git -C target push origin "HEAD:refs/heads/${HEAD_REF}"',
         "All normal pull-request checks and reviews must pass before merge.",
-    )
-    for required in required_workflow_text:
-        if required not in workflow_text:
-            errors.append(f"Claude patch workflow is missing safety contract: {required}")
+    ):
+        if required not in worker_text:
+            errors.append(f"Claude worker is missing safety contract: {required}")
 
     for forbidden in (
         "pull_request_target",
@@ -135,8 +244,18 @@ def validate_repository(root: Path) -> list[str]:
         "REQUEST_CHANGES",
         "persist-credentials: true",
     ):
-        if forbidden in workflow_text:
-            errors.append(f"Claude patch workflow contains forbidden authority: {forbidden}")
+        if forbidden in dispatcher_text or forbidden in worker_text:
+            errors.append(f"Claude patch workflows contain forbidden authority: {forbidden}")
+
+    generate = _job(worker, "generate-candidate")
+    verify = _job(worker, "verify-candidate")
+    publish = _job(worker, "publish-candidate")
+    if _contains(generate, "GITHUB_APP_PRIVATE_KEY"):
+        errors.append("candidate generation must not receive the GitHub App private key")
+    if _contains(verify, "secrets.") or _contains(verify, "GITHUB_APP_PRIVATE_KEY"):
+        errors.append("credential-free verification must not receive protected secrets")
+    if _contains(publish, "ANTHROPIC_API_KEY"):
+        errors.append("publication must not receive the Claude API key")
 
     for required in (
         'frozenset({"patch", "ai-fix", "claude-fix"})',
@@ -148,7 +267,7 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"comment parser is missing contract: {required}")
 
     for required in (
-        "f\"{base_url.rstrip('/')}/v1/messages\"",
+        'f"{base_url.rstrip(\'/\')}/v1/messages"',
         '"x-api-key": api_key',
         '"anthropic-version": anthropic_version',
         "candidate.validate_patch(patch, policy, args.mode)",
