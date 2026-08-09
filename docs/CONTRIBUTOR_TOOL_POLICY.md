@@ -55,4 +55,16 @@ The following files form one protected policy contract:
 - `scripts/ci/contributor_tool_policy_guard.py`
 - `tests/test_contributor_tool_policy_guard.py`
 
-Repository settings must require the `Amosclaud Workflow Policy / policy` status check and code-owner review on the protected branch. Without those owner-controlled branch rules, repository files alone cannot prevent an administrator from bypassing GitHub protections.
+## Required GitHub branch rules
+
+The protected `main` branch must require:
+
+- status check `Amosclaud Workflow Policy / policy`;
+- pull requests before merging;
+- approval from code owners;
+- dismissal of stale approvals when protected files change;
+- conversation resolution before merging;
+- no force pushes and no branch deletion;
+- no bypass for contributors, bots, apps, or administrators where the GitHub plan and ownership settings permit it.
+
+Repository files enforce the policy during review and validation. GitHub branch rules enforce it at merge time. Without those owner-controlled branch rules, an administrator can technically bypass repository files, so these settings are a mandatory part of the policy rather than optional guidance.
