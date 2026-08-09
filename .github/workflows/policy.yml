@@ -64,4 +64,4 @@ jobs:
           ! grep -R --line-number 'pull_request_target' \
             .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,codeql,fortify}.yml
           ! grep -R --line-number 'secrets\..*TOKEN' \
-            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,codeql,fortify}.yml
+            .github/workflows/{agent-chat,results,plan,policy,fixer,scan,main,action,amosclaude-clean,pull-request-chat-group,amosclaud-bot-review,amosclaud-security-repair-bridge,amosclaud-dependency-threat-gate,codeql}.yml
