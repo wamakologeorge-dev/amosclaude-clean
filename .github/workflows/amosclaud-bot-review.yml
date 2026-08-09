@@ -17,7 +17,10 @@ concurrency:
 jobs:
   formal-review:
     name: formal-review
-    if: github.event.issue.pull_request
+    if: >-
+      github.event.issue.pull_request &&
+      (startsWith(github.event.comment.body, '@amosclaud review') ||
+       startsWith(github.event.comment.body, '@amosclaud-bot review'))
     runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
 
