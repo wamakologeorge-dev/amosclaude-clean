@@ -19,10 +19,11 @@ jobs:
   route-security-repair:
     name: route-security-repair
     if: >-
-      github.event.workflow_run.conclusion == 'failure' ||
-      github.event.workflow_run.conclusion == 'timed_out' ||
-      github.event.workflow_run.conclusion == 'action_required' ||
-      github.event.workflow_run.conclusion == 'startup_failure'
+      github.event.workflow_run.name != 'CodeQL' &&
+      (github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'timed_out' ||
+       github.event.workflow_run.conclusion == 'action_required' ||
+       github.event.workflow_run.conclusion == 'startup_failure')
     runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
 
