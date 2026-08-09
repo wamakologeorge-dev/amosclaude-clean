@@ -217,7 +217,7 @@ jobs:
           retention-days: 14
 
       - name: Connect the verified Amosclaud GitHub App installation
-        if: steps.verify.outputs.verified == 'true'
+        if: steps.verify.outputs.verified == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         id: app
         env:
           GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
