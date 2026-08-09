@@ -15,6 +15,13 @@ on:
       - .github/workflows/Autonomous.yml
       - .github/workflows/amosclaude-clean.yml
       - .github/workflows/pull-request-chat-group.yml
+      - .github/workflows/amosclaud-bot-contributor.yml
+      - .github/PULL_REQUEST_TEMPLATE.md
+      - .github/CODEOWNERS
+      - AGENTS.md
+      - docs/CONTRIBUTOR_TOOL_POLICY.md
+      - scripts/ci/contributor_tool_policy_guard.py
+      - tests/test_contributor_tool_policy_guard.py
 
 permissions:
   contents: read
@@ -51,7 +58,7 @@ jobs:
               'agent-chat.yml', 'results.yml', 'plan.yml', 'policy.yml',
               'fixer.yml', 'scan.yml', 'main.yml', 'action.yml',
               'Autonomous.yml', 'amosclaude-clean.yml',
-              'pull-request-chat-group.yml',
+              'pull-request-chat-group.yml', 'amosclaud-bot-contributor.yml',
           }
           for path in paths:
               if path.name not in selected:
@@ -61,6 +68,12 @@ jobs:
                   raise SystemExit(f'invalid workflow contract: {path}')
               print(f'validated {path}')
           PY
+
+      - name: Enforce contributor tool sovereignty
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/ci/contributor_tool_policy_guard.py
+          python scripts/ci/contributor_tool_policy_guard.py
 
       - name: Enforce one fixer and least-privilege token use
         run: |
