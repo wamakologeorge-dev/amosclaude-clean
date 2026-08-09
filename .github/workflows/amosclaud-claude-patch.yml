@@ -1,0 +1,123 @@
+name: Amosclaud Claude Patch Dispatcher
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: amosclaud-claude-dispatch-${{ github.repository }}-${{ github.event.issue.number }}-${{ github.event.comment.id }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch-patch-worker:
+    name: dispatch-patch-worker
+    if: >-
+      github.event.issue.pull_request &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out trusted default-branch control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up trusted Python runtime
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Install trusted Amosclaud runtime
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check ./trusted
+
+      - name: Parse owner comment through the repository interface
+        id: parse
+        run: |
+          set -euo pipefail
+          python trusted/.github/scripts/parse_comment.py \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --json-output "$RUNNER_TEMP/amosclaud-comment.json" \
+            --objective-output "$RUNNER_TEMP/amosclaud-objective.txt" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Ignore comments that are not authorized patch requests
+        if: steps.parse.outputs.patch_executor != 'true'
+        run: echo "The comment is not an authorized Amosclaud patch command."
+
+      - name: Resolve immutable dispatch inputs
+        if: steps.parse.outputs.patch_executor == 'true'
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${ISSUE_NUMBER}" > "$RUNNER_TEMP/amosclaud-pr.json"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(
+              Path(os.environ["RUNNER_TEMP"])
+              .joinpath("amosclaud-pr.json")
+              .read_text(encoding="utf-8")
+          )
+          head = payload.get("head") or {}
+          head_repo = str(((head.get("repo") or {}).get("full_name")) or "")
+          eligible = (
+              payload.get("state") == "open"
+              and head_repo == os.environ["GITHUB_REPOSITORY"]
+              and bool(str(head.get("sha") or "").strip())
+          )
+          values = {
+              "eligible": str(eligible).lower(),
+              "head_sha": str(head.get("sha") or ""),
+          }
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for name, value in values.items():
+                  output.write(f"{name}={value}\n")
+          PY
+
+      - name: Refuse fork or closed pull-request dispatch
+        if: steps.parse.outputs.patch_executor == 'true' && steps.target.outputs.eligible != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟥 **Result:** BLOCKED\n\nThe command was not dispatched because the pull request is closed, belongs to a fork, or has no immutable head SHA. No model key, App key, patch, commit, push, or merge was used."
+          exit 1
+
+      - name: Dispatch isolated generation, verification, and publication worker
+        if: steps.target.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run amosclaud-claude-patch-worker.yml \
+            --ref "$DEFAULT_BRANCH" \
+            -f issue_number="$ISSUE_NUMBER" \
+            -f comment_id="$COMMENT_ID" \
+            -f expected_head_sha="$EXPECTED_HEAD_SHA"
+
+      - name: Publish accepted dispatch status
+        if: steps.target.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.issue.number }}" --body "### Amosclaud Claude Patch Dispatcher\n\n🟦 **Result:** ACCEPTED\n\nThe trusted dispatcher validated this owner command and started the isolated patch worker for exact head \`${{ steps.target.outputs.head_sha }}\`. The comment workflow does not check out or execute pull-request code and receives no Claude or GitHub App private key."

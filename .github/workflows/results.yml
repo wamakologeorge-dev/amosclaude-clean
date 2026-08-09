@@ -9,6 +9,7 @@ on:
       - Python package
       - Amosclaud Main Clean
       - Build and Verify
+      - Amosclaud Bot Contributor
       - CI/CD — Test & Deploy
       - Docker Image CI
       - Platform Build Check

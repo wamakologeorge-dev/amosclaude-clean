@@ -9,17 +9,105 @@ on:
     - cron: "25 0 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  fortify-ast-scan:
+  differential-ast-threat-gate:
+    name: Every new AST finding is a threat
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out exact head revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: head
+          persist-credentials: false
+
+      - name: Check out exact base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before }}
+          path: base
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned local AST scanner
+        run: python -m pip install --disable-pip-version-check "bandit==1.9.4"
+
+      - name: Scan exact base and head revisions at every severity
+        run: |
+          set +e
+          (
+            cd base
+            python -m bandit -r src amoscloud_ai \
+              -f json \
+              -o ../base-bandit-report.json
+          )
+          base_status=$?
+          (
+            cd head
+            python -m bandit -r src amoscloud_ai \
+              -f json \
+              -o ../head-bandit-report.json
+          )
+          head_status=$?
+          set -e
+
+          test -s base-bandit-report.json
+          test -s head-bandit-report.json
+          if [ "$base_status" -gt 1 ] || [ "$head_status" -gt 1 ]; then
+            echo "::error title=AST scan unavailable::Bandit could not produce trustworthy exact-revision evidence."
+            exit 2
+          fi
+
+      - name: Treat every AST finding introduced by the head as a blocking threat
+        run: |
+          python head/scripts/ci/bandit_pr_gate.py \
+            --base base-bandit-report.json \
+            --head head-bandit-report.json \
+            --json differential-ast-gate.json \
+            --markdown differential-ast-gate.md
+
+      - name: Publish differential threat summary
+        if: always()
+        run: |
+          if [ -s differential-ast-gate.md ]; then
+            cat differential-ast-gate.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Amosclaud Differential AST Threat Gate" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "🟥 No trustworthy comparison report was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload exact base, head, and comparison evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: fortify-compatible-differential-ast-report
+          path: |
+            base-bandit-report.json
+            head-bandit-report.json
+            differential-ast-gate.json
+            differential-ast-gate.md
+          if-no-files-found: error
+
+  repository-ast-audit:
+    name: Full repository AST security debt audit
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       FOD_TENANT: ${{ secrets.FOD_TENANT }}
       FOD_USER: ${{ secrets.FOD_USER }}
@@ -29,16 +117,16 @@ jobs:
       SC_SAST_TOKEN: ${{ secrets.SC_CLIENT_AUTH_TOKEN }}
 
     steps:
-      - name: Check out source code
+      - name: Check out trusted default branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: Detect configured Fortify provider
         id: config
@@ -53,28 +141,33 @@ jobs:
           fi
 
       - name: Explain policy-compatible scan mode
-        shell: bash
         env:
           PROVIDER: ${{ steps.config.outputs.provider }}
         run: |
           if [ "$PROVIDER" = "none" ]; then
-            echo "No complete Fortify provider configuration is available. Running the local AST fallback."
+            echo "No complete Fortify provider configuration is available. Running the local AST audit."
           else
-            echo "::warning title=Fortify adapter restricted::The Fortify GitHub action currently invokes a nested action that is not pinned to a full commit SHA, so repository policy blocks it. Running the local AST fallback without exposing Fortify credentials."
+            echo "::warning title=Fortify adapter restricted::The Fortify action has an unpinned nested dependency, so Amosclaud runs its pinned local AST audit without exposing provider credentials."
           fi
 
-      - name: Install local AST scanner
-        run: python -m pip install --upgrade "bandit>=1.9,<2"
+      - name: Install pinned local AST scanner
+        run: python -m pip install --disable-pip-version-check "bandit==1.9.4"
 
-      - name: Run policy-compatible AST scan
+      - name: Treat every repository AST security finding as audit debt
         run: |
+          set +e
           python -m bandit -r src amoscloud_ai \
             -f json \
-            -o fortify-compatible-bandit-report.json \
-            --exit-zero
+            -o fortify-compatible-bandit-report.json
+          scan_status=$?
+          set -e
           test -s fortify-compatible-bandit-report.json
+          if [ "$scan_status" -ne 0 ]; then
+            echo "::error title=Amosclaud repository security debt detected::The full AST audit reported one or more findings."
+            exit "$scan_status"
+          fi
 
-      - name: Upload AST evidence
+      - name: Upload full repository AST evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

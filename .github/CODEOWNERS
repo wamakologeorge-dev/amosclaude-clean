@@ -21,3 +21,54 @@
 /amoscloud_ai/api/routes/deployments.py @wamakologeorge-dev
 /amoscloud_ai/api/routes/pipelines.py @wamakologeorge-dev
 /amoscloud_ai/worker.py @wamakologeorge-dev
+
+# Permanent Amosclaud contributor tool-policy contract
+/docs/CONTRIBUTOR_TOOL_POLICY.md @wamakologeorge-dev
+/AGENTS.md @wamakologeorge-dev
+/.github/PULL_REQUEST_TEMPLATE.md @wamakologeorge-dev
+/.github/CODEOWNERS @wamakologeorge-dev
+/.github/workflows/policy.yml @wamakologeorge-dev
+/scripts/ci/contributor_tool_policy_guard.py @wamakologeorge-dev
+/tests/test_contributor_tool_policy_guard.py @wamakologeorge-dev
+
+# Trusted owner comment-command contract
+/amosclaud_bot/dispatcher.py @wamakologeorge-dev
+/amosclaud_bot/owner_directives.py @wamakologeorge-dev
+/tests/test_owner_directives.py @wamakologeorge-dev
+/.github/workflows/amosclaud-bot-contributor.yml @wamakologeorge-dev
+
+# Trusted Claude patch-generation and App-publication contract
+/.github/scripts/parse_comment.py @wamakologeorge-dev
+/.github/scripts/ai_patch_executor.py @wamakologeorge-dev
+/.github/workflows/amosclaud-claude-patch.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-claude-patch-worker.yml @wamakologeorge-dev
+/scripts/ci/claude_patch_policy_guard.py @wamakologeorge-dev
+/tests/test_parse_comment_script.py @wamakologeorge-dev
+/tests/test_ai_patch_executor.py @wamakologeorge-dev
+/tests/test_claude_patch_policy_guard.py @wamakologeorge-dev
+/docs/AMOSCLAUD_CLAUDE_PATCH_EXECUTOR.md @wamakologeorge-dev
+
+# Formal pull-request review and truthful health contracts
+/.github/workflows/amosclaud-bot-review.yml @wamakologeorge-dev
+/amosclaud_bot/review_publisher.py @wamakologeorge-dev
+/tests/test_amosclaud_review_publisher.py @wamakologeorge-dev
+/docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md @wamakologeorge-dev
+/amosclaud_bot/status_board.py @wamakologeorge-dev
+/tests/test_amosclaud_status_board.py @wamakologeorge-dev
+/amoscloud_ai/bot_contributor_profile.py @wamakologeorge-dev
+
+# Advanced Security and bounded repair connection
+/.github/workflows/codeql.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-codeql-threat-gate.yml @wamakologeorge-dev
+/.github/workflows/fortify.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-dependency-threat-gate.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-security-repair-bridge.yml @wamakologeorge-dev
+/scripts/ci/advanced_security_gate.py @wamakologeorge-dev
+/scripts/ci/bandit_pr_gate.py @wamakologeorge-dev
+/amoscloud_ai/github_app_connection.py @wamakologeorge-dev
+/amoscloud_ai/security_repair_bridge.py @wamakologeorge-dev
+/tests/test_advanced_security_gate.py @wamakologeorge-dev
+/tests/test_bandit_pr_gate.py @wamakologeorge-dev
+/tests/test_github_app_connection.py @wamakologeorge-dev
+/tests/test_security_repair_bridge.py @wamakologeorge-dev
+/docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md @wamakologeorge-dev
