@@ -1,7 +1,7 @@
 # Amosclaud Contributor Tool Sovereignty Policy
 
-**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`
-**Status:** Permanent repository governance
+**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`  
+**Status:** Permanent repository governance  
 **Applies to:** every human contributor, maintainer, bot, autonomous agent, workflow, generated patch, and integration.
 
 ## Mandatory Amosclaud-first order
@@ -43,9 +43,37 @@ Any governance change touching this policy must:
 
 A change that removes the policy marker, protected files, guard invocation, required pull-request evidence, or code-owner coverage is invalid and must fail verification.
 
+## Formal review safety contract
+
+Amosclaud Bot pull-request review must remain read-only and non-blocking:
+
+- it checks out trusted default-branch code, not pull-request code;
+- it submits only GitHub `COMMENT` reviews;
+- it binds the review to the exact pull-request head SHA;
+- it refuses a stale review when the head changes;
+- it does not approve, request changes through GitHub authority, merge, push, or receive protected App secrets.
+
+A recommendation inside the review body is evidence only. Repository protections and human approval retain merge authority.
+
+## Advanced Security repair contract
+
+Security findings remain blocking until their root cause is fixed and all security checks rerun successfully.
+
+The trusted security-repair bridge may accept only the protected workflow allowlist documented in `docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md`. It must:
+
+- authenticate the Amosclaud GitHub App and verify repository installation access;
+- verify the open pull request and exact failed head SHA;
+- reject stale results after the branch moves;
+- dispatch the existing Amosclaud Repair Control Plane rather than create a competing fixer;
+- fail closed when authentication, evidence, or dispatch cannot be verified;
+- never suppress, dismiss, downgrade, or disable a security finding to make a check pass;
+- never merge or force-push.
+
+Any open CodeQL alert and every newly introduced vulnerable dependency covered by the repository gates is treated as blocking regardless of low, moderate, high, or critical severity. Ordinary lint and test failures remain blocking engineering failures but must not be falsely labeled as security vulnerabilities.
+
 ## Enforcement files
 
-The following files form one protected policy contract:
+The protected contract includes the core governance files:
 
 - `docs/CONTRIBUTOR_TOOL_POLICY.md`
 - `AGENTS.md`
@@ -55,7 +83,30 @@ The following files form one protected policy contract:
 - `scripts/ci/contributor_tool_policy_guard.py`
 - `tests/test_contributor_tool_policy_guard.py`
 
-The `Amosclaud Workflow Policy / policy` check runs on every pull request without path filters. The repository-owned guard parses the effective workflow structure and active shell commands, and parses effective CODEOWNERS rules while ignoring comments. Its regression tests reject path-filtered enforcement, commented-out guard commands, renamed enforcement steps, commented ownership rules, removed ownership rules, and removed policy markers.
+It also protects the formal-review implementation:
+
+- `.github/workflows/amosclaud-bot-review.yml`
+- `amosclaud_bot/review_publisher.py`
+- `tests/test_amosclaud_review_publisher.py`
+- `docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md`
+
+And the Advanced Security repair connection:
+
+- `.github/workflows/codeql.yml`
+- `.github/workflows/fortify.yml`
+- `.github/workflows/amosclaud-dependency-threat-gate.yml`
+- `.github/workflows/amosclaud-security-repair-bridge.yml`
+- `scripts/ci/advanced_security_gate.py`
+- `amoscloud_ai/github_app_connection.py`
+- `amoscloud_ai/security_repair_bridge.py`
+- `tests/test_advanced_security_gate.py`
+- `tests/test_github_app_connection.py`
+- `tests/test_security_repair_bridge.py`
+- `docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md`
+
+The `Amosclaud Workflow Policy / policy` check runs on every pull request without path filters. The repository-owned guard parses the effective workflow structure and active shell commands, parses effective CODEOWNERS rules while ignoring comments, validates the review event, verifies trusted checkouts, protects the security workflow allowlist, and locks the repair dispatch target to the existing Amosclaud Repair Control Plane.
+
+Regression tests reject path-filtered enforcement, commented-out guard commands, renamed enforcement steps, commented ownership rules, removed ownership rules, removed policy markers, automatic review approval, pull-request-code checkout, protected secrets in the review workflow, broadened security sources, replaced repair targets, and weakened low-severity dependency blocking.
 
 ## Required GitHub branch rules
 
