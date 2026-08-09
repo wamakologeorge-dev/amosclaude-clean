@@ -94,7 +94,7 @@ def test_live_verification_authenticates_app_installation_repository_and_bot() -
     assert result["verification_level"] == "LIVE_AUTH_VERIFIED"
     assert result["contributor_ready"] is True
     assert result["canonical_repository_accessible"] is True
-    assert result["webhook_configuration_present"] is True
+    assert "webhook_configuration_present" not in result
     assert result["webhook_delivery_verified"] is False
     assert result["fully_ready"] is False
     assert result["remaining_verification"] == "SIGNED_WEBHOOK_DELIVERY_REQUIRED"
