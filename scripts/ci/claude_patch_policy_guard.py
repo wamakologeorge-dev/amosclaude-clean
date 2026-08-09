@@ -148,7 +148,7 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"comment parser is missing contract: {required}")
 
     for required in (
-        'f"{base_url.rstrip(\'/\')}/v1/messages"',
+        "f\"{base_url.rstrip('/')}/v1/messages\"",
         '"x-api-key": api_key',
         '"anthropic-version": anthropic_version',
         "candidate.validate_patch(patch, policy, args.mode)",
