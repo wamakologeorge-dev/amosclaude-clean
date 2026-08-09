@@ -72,7 +72,9 @@ def _run(command: list[str], cwd: Path) -> str:
 
 
 def _safe_path(value: str) -> bool:
-    normalized = value.replace("\\", "/").lstrip("./")
+    normalized = value.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     path = Path(normalized)
     lowered = normalized.lower()
     name = path.name.lower()
