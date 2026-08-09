@@ -58,8 +58,7 @@ def _connect() -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(path)
     db.row_factory = sqlite3.Row
-    db.execute(
-        """CREATE TABLE IF NOT EXISTS github_events (
+    db.execute("""CREATE TABLE IF NOT EXISTS github_events (
             id TEXT PRIMARY KEY,
             delivery_id TEXT,
             event TEXT NOT NULL,
@@ -68,8 +67,7 @@ def _connect() -> sqlite3.Connection:
             sender TEXT,
             summary TEXT NOT NULL,
             received_at TEXT NOT NULL
-        )"""
-    )
+        )""")
     return db
 
 
@@ -132,9 +130,7 @@ def _verify_signature(
     supplied = signature_header.strip()
     valid = False
     for secret in secrets:
-        expected = "sha256=" + hmac.new(
-            secret.encode(), payload, hashlib.sha256
-        ).hexdigest()
+        expected = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
         valid |= hmac.compare_digest(expected, supplied)
     if not valid:
         log.warning(
@@ -282,10 +278,7 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         return state, title, summary
     if event == "issues":
         issue = payload.get("issue") or {}
-        title = (
-            f"Issue #{issue.get('number')} {action}: "
-            f"{str(issue.get('title') or '')[:160]}"
-        )
+        title = f"Issue #{issue.get('number')} {action}: " f"{str(issue.get('title') or '')[:160]}"
         return action, title, title
     if event == "issue_comment":
         issue = payload.get("issue") or {}
@@ -310,10 +303,7 @@ def _summarise(event: str, payload: dict[str, Any]) -> tuple[str, str, str]:
         return action, title, title
     if event == "check_suite":
         suite = payload.get("check_suite") or {}
-        title = (
-            f"Check suite "
-            f"{str(suite.get('conclusion') or suite.get('status') or action)}"
-        )
+        title = f"Check suite " f"{str(suite.get('conclusion') or suite.get('status') or action)}"
         return action, title, title
     return (
         action,
