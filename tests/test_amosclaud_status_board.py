@@ -284,7 +284,11 @@ def test_pagination_includes_failures_beyond_the_first_hundred_runs() -> None:
                     ]
                 }
             if "head_sha=paged1234567890" in path and "&page=2" in path:
-                return {"workflow_runs": [run(2001, "Late failing workflow", conclusion="failure")]}
+                return {
+                    "workflow_runs": [
+                        run(2001, "Late failing workflow", conclusion="failure")
+                    ]
+                }
             raise AssertionError(path)
 
     bot = PaginatedBot()
