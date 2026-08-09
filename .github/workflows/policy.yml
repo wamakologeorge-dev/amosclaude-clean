@@ -71,7 +71,8 @@ jobs:
           set -euo pipefail
           cp trusted/scripts/ci/contributor_tool_policy_guard.py \
             candidate/scripts/ci/contributor_tool_policy_guard.py
-          (cd candidate && python scripts/ci/contributor_tool_policy_guard.py)
+          cd candidate
+          python scripts/ci/contributor_tool_policy_guard.py
 
       - name: Enforce trusted patch contract
         run: |
