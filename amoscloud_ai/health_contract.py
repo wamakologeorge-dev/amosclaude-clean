@@ -130,9 +130,7 @@ def evaluate_health(
         1 for state in states if state.required and state.state in {"PASSED", "EXPECTED_SKIP"}
     )
     observed_total = len(states)
-    observed_verified = sum(
-        1 for state in states if state.state in {"PASSED", "EXPECTED_SKIP"}
-    )
+    observed_verified = sum(1 for state in states if state.state in {"PASSED", "EXPECTED_SKIP"})
     percentage = round((observed_verified / observed_total) * 100) if observed_total else 0
     truthful_100_percent = overall == "VERIFIED" and percentage == 100
     if not truthful_100_percent and percentage == 100:
@@ -184,9 +182,7 @@ def _classify(
             f"conclusion={conclusion}",
         )
     if conclusion == "skipped":
-        skip_expected = bool(check.get("skip_expected")) or _matches(
-            display_name, expected_skips
-        )
+        skip_expected = bool(check.get("skip_expected")) or _matches(display_name, expected_skips)
         if skip_expected:
             event = str(check.get("event") or "unknown")
             return CheckState(
@@ -255,7 +251,6 @@ def render_markdown(result: Mapping[str, object]) -> str:
         requirement = "required" if check.get("required") else "observed"
         display_name = check.get("display_name") or check.get("name")
         lines.append(
-            f"{marker} **{display_name}** — {state} "
-            f"({requirement}; {check.get('detail')})"
+            f"{marker} **{display_name}** — {state} " f"({requirement}; {check.get('detail')})"
         )
     return "\n".join(lines) + "\n"
