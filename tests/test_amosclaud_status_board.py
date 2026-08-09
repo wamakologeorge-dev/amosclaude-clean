@@ -13,7 +13,7 @@ class FakeBot:
             return {"default_branch": "main"}
         if path == "/repos/owner/repo/branches/main":
             return {"commit": {"sha": "mainsha1234567890"}}
-        if "head_sha=mainsha1234567890" in path and "page=1" in path:
+        if "head_sha=mainsha1234567890" in path and "&page=1" in path:
             return {
                 "workflow_runs": [
                     {
@@ -72,7 +72,7 @@ def test_all_successful_exact_commit_runs_report_verified_100_percent() -> None:
                 return {"default_branch": "main"}
             if path == "/repos/owner/repo/branches/main":
                 return {"commit": {"sha": "passing123456789"}}
-            if "head_sha=passing123456789" in path and "page=1" in path:
+            if "head_sha=passing123456789" in path and "&page=1" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -108,7 +108,7 @@ def test_event_specific_conditional_skip_is_allowed_only_for_its_event() -> None
                 return {"default_branch": "main"}
             if path == "/repos/owner/repo/branches/main":
                 return {"commit": {"sha": "skipsha123456789"}}
-            if "head_sha=skipsha123456789" in path and "page=1" in path:
+            if "head_sha=skipsha123456789" in path and "&page=1" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -148,7 +148,7 @@ def test_pull_request_status_uses_exact_head_sha() -> None:
             self.calls.append(path)
             if path == "/repos/owner/repo/pulls/42":
                 return {"head": {"ref": "feature/demo", "sha": "abcdef1234567890"}}
-            if "head_sha=abcdef1234567890" in path and "page=1" in path:
+            if "head_sha=abcdef1234567890" in path and "&page=1" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -197,7 +197,7 @@ def test_repeated_workflow_failure_cannot_be_hidden_by_later_success() -> None:
                 return {"default_branch": "main"}
             if path == "/repos/owner/repo/branches/main":
                 return {"commit": {"sha": "repeated123456789"}}
-            if "head_sha=repeated123456789" in path and "page=1" in path:
+            if "head_sha=repeated123456789" in path and "&page=1" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -235,7 +235,7 @@ def test_pagination_includes_failures_beyond_the_first_hundred_runs() -> None:
                 return {"default_branch": "main"}
             if path == "/repos/owner/repo/branches/main":
                 return {"commit": {"sha": "paged1234567890"}}
-            if "head_sha=paged1234567890" in path and "page=1" in path:
+            if "head_sha=paged1234567890" in path and "&page=1" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -248,7 +248,7 @@ def test_pagination_includes_failures_beyond_the_first_hundred_runs() -> None:
                         for index in range(100)
                     ]
                 }
-            if "head_sha=paged1234567890" in path and "page=2" in path:
+            if "head_sha=paged1234567890" in path and "&page=2" in path:
                 return {
                     "workflow_runs": [
                         {
@@ -268,4 +268,4 @@ def test_pagination_includes_failures_beyond_the_first_hundred_runs() -> None:
     assert "**Overall:** 🟥 ACTION NEEDED" in board
     assert "**Runs evaluated:** 101" in board
     assert "77 additional exact-commit run(s)" in board
-    assert any("page=2" in call for call in bot.calls)
+    assert any("&page=2" in call for call in bot.calls)
