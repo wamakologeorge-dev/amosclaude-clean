@@ -142,8 +142,24 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
     checks = _workflow_checks(runs)
     required = tuple(str(check["name"]) for check in checks)
     result = evaluate_health(checks, required=required)
+    overall = str(result["overall"])
+    overall_label = {
+        "VERIFIED": "🟩 VERIFIED",
+        "PENDING": "🟨 PENDING",
+        "ACTION_NEEDED": "🟥 ACTION NEEDED",
+        "INCOMPLETE": "⬜ INCOMPLETE",
+    }.get(overall, "⬜ INCOMPLETE")
 
-    lines = ["### Amosclaud — Verified Workflow Health", ""]
+    lines = [
+        "### Amosclaud — Verified Workflow Health",
+        "",
+        f"**Overall:** {overall_label}",
+        f"**Observed verification:** {result['percentage']}%",
+        f"**Runs evaluated:** {result['observed_total']}",
+        f"**Target:** `{target}`",
+        f"**Commit:** `{commit_label}`",
+        "",
+    ]
     markers = {
         "PASSED": "🟩",
         "EXPECTED_SKIP": "⬜",
@@ -163,21 +179,8 @@ def build_status_board(bot: AmosclaudBot, payload: dict[str, Any]) -> str:
     if omitted > 0:
         lines.append(f"⬜ **{omitted} additional exact-commit run(s)** — evaluated but hidden")
 
-    overall = str(result["overall"])
-    overall_label = {
-        "VERIFIED": "🟩 VERIFIED",
-        "PENDING": "🟨 PENDING",
-        "ACTION_NEEDED": "🟥 ACTION NEEDED",
-        "INCOMPLETE": "⬜ INCOMPLETE",
-    }.get(overall, "⬜ INCOMPLETE")
     lines.extend(
         [
-            "",
-            f"**Overall:** {overall_label}",
-            f"**Observed verification:** {result['percentage']}%",
-            f"**Runs evaluated:** {result['observed_total']}",
-            f"**Target:** `{target}`",
-            f"**Commit:** `{commit_label}`",
             "",
             "100% is shown only when every workflow run observed for this exact "
             "commit passed or was an event-specific declared conditional skip.",
