@@ -1,4 +1,5 @@
 """First-party Amosclaud model provider with bounded retry and normalized responses."""
+
 from __future__ import annotations
 
 import os
@@ -48,12 +49,36 @@ def _model_headers() -> dict[str, str]:
     return headers
 
 
-def _timeout(connect: float | None = None) -> httpx.Timeout:
-    total = max(30.0, float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")))
-    connect_timeout = min(connect or 20.0, total)
+def _deadline(timeout: float | None) -> float | None:
+    if timeout is None:
+        return None
+    return time.monotonic() + max(0.1, float(timeout))
+
+
+def _remaining_seconds(deadline: float | None) -> float | None:
+    if deadline is None:
+        return None
+    return max(0.0, deadline - time.monotonic())
+
+
+def _timeout(
+    connect: float | None = None,
+    *,
+    total: float | None = None,
+) -> httpx.Timeout:
+    configured_total = max(30.0, float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")))
+    total_seconds = (
+        configured_total
+        if total is None
+        else max(0.1, min(float(total), configured_total))
+    )
+    connect_timeout = min(connect or 20.0, total_seconds)
     return httpx.Timeout(
-        total, connect=connect_timeout, read=total, write=min(60.0, total),
-        pool=min(20.0, total),
+        total_seconds,
+        connect=connect_timeout,
+        read=total_seconds,
+        write=min(60.0, total_seconds),
+        pool=min(20.0, total_seconds),
     )
 
 
@@ -63,21 +88,38 @@ def _post_with_retry(
     headers: dict[str, str],
     json: dict,
     attempts: int | None = None,
+    deadline: float | None = None,
 ) -> httpx.Response:
     if attempts is None:
         attempts = int(os.getenv("AMOSCLAUD_MODEL_RETRIES", "2"))
     attempts = max(1, min(attempts, 4))
     last_error: Exception | None = None
     for attempt in range(attempts):
+        remaining = _remaining_seconds(deadline)
+        if remaining is not None and remaining <= 0:
+            last_error = httpx.TimeoutException("Amosclaud model deadline expired")
+            break
         try:
-            response = httpx.post(url, headers=headers, json=json, timeout=_timeout())
+            response = httpx.post(
+                url,
+                headers=headers,
+                json=json,
+                timeout=_timeout(total=remaining),
+            )
             response.raise_for_status()
             return response
         except (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
             last_error = exc
             if attempt + 1 < attempts:
-                time.sleep(min(2 ** attempt, 4))
-    assert last_error is not None
+                delay = min(2**attempt, 4)
+                remaining = _remaining_seconds(deadline)
+                if remaining is not None:
+                    delay = min(delay, remaining)
+                if delay <= 0:
+                    break
+                time.sleep(delay)
+    if last_error is None:
+        last_error = httpx.TimeoutException("Amosclaud model deadline expired")
     raise RuntimeError(
         model_runtime.redact(
             f"Amosclaud model endpoint did not answer after {attempts} "
@@ -97,6 +139,7 @@ def _amosclaud_api_reply(
     system_prompt: str,
     *,
     attempts: int | None = None,
+    deadline: float | None = None,
 ) -> ProviderResult | None:
     # Prefer the dedicated model-endpoint variable; fall back to the legacy
     # AMOSCLAUD_API_URL (the platform base URL) only for backward
@@ -109,15 +152,30 @@ def _amosclaud_api_reply(
     if not endpoint or not api_key:
         return None
     model = os.getenv("AMOSCLAUD_API_MODEL", "amosclaud-agent")
-    path = os.getenv("AMOSCLAUD_API_COMPLETIONS_PATH", "/api/v1/provider/chat/completions").strip()
+    path = os.getenv(
+        "AMOSCLAUD_API_COMPLETIONS_PATH",
+        "/api/v1/provider/chat/completions",
+    ).strip()
     response = _post_with_retry(
         f"{endpoint}/{path.lstrip('/')}",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": [{"role": "system", "content": system_prompt}, *history]},
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "system", "content": system_prompt}, *history],
+        },
         attempts=attempts,
+        deadline=deadline,
     )
     return _require_ready(
-        normalize_model_api_response(response.json(), runtime="amosclaud-api", provider="amosclaud", model=model),
+        normalize_model_api_response(
+            response.json(),
+            runtime="amosclaud-api",
+            provider="amosclaud",
+            model=model,
+        ),
         "Amosclaud API",
     )
 
@@ -127,6 +185,7 @@ def _self_hosted_reply(
     system_prompt: str,
     *,
     attempts: int | None = None,
+    deadline: float | None = None,
 ) -> ProviderResult | None:
     endpoint = _model_endpoint()
     if not endpoint:
@@ -142,9 +201,15 @@ def _self_hosted_reply(
             "max_tokens": int(os.getenv("AMOSCLAUD_MODEL_MAX_TOKENS", "1200")),
         },
         attempts=attempts,
+        deadline=deadline,
     )
     return _require_ready(
-        normalize_model_api_response(response.json(), runtime="self-hosted", provider="amosclaud", model=model),
+        normalize_model_api_response(
+            response.json(),
+            runtime="self-hosted",
+            provider="amosclaud",
+            model=model,
+        ),
         "Amosclaud model",
     )
 
@@ -154,9 +219,16 @@ def _model_network_reply(
     system_prompt: str,
     *,
     timeout: float | None = None,
+    deadline: float | None = None,
 ) -> ProviderResult | None:
     """Ask the outbound model-network stations for one inference."""
     from amoscloud_ai.model_network import request_inference
+
+    remaining = _remaining_seconds(deadline)
+    if remaining is not None:
+        if remaining <= 0:
+            raise TimeoutError("Amosclaud model deadline expired")
+        timeout = remaining if timeout is None else min(timeout, remaining)
 
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     result = request_inference(history, system_prompt, timeout=timeout)
@@ -181,15 +253,31 @@ def _invoke_candidate(
     *,
     attempts: int | None = None,
     timeout: float | None = None,
+    deadline: float | None = None,
 ) -> ProviderResult | None:
     """Call exactly one resolved candidate; never fabricate a reply."""
     if candidate.key == "model-network":
-        return _model_network_reply(history, system_prompt, timeout=timeout)
+        return _model_network_reply(
+            history,
+            system_prompt,
+            timeout=timeout,
+            deadline=deadline,
+        )
     if candidate.key == "amosclaud-api":
-        return _amosclaud_api_reply(history, system_prompt, attempts=attempts)
+        return _amosclaud_api_reply(
+            history,
+            system_prompt,
+            attempts=attempts,
+            deadline=deadline,
+        )
     if candidate.key == "self-hosted":
-        return _self_hosted_reply(history, system_prompt, attempts=attempts)
-    return _external_adapter_reply(history, system_prompt)
+        return _self_hosted_reply(
+            history,
+            system_prompt,
+            attempts=attempts,
+            deadline=deadline,
+        )
+    return _external_adapter_reply(history, system_prompt, deadline=deadline)
 
 
 def probe() -> dict[str, object]:
@@ -201,16 +289,23 @@ def probe() -> dict[str, object]:
     system_prompt = (
         "You are the Amosclaud readiness probe. Follow the exact response instruction."
     )
+    probe_deadline = _deadline(20)
     for health in active.order:
         if not health.candidate.first_party or not health.reachable:
             continue
         try:
             result = _invoke_candidate(
-                health.candidate, history, system_prompt, attempts=1, timeout=20
+                health.candidate,
+                history,
+                system_prompt,
+                attempts=1,
+                timeout=20,
+                deadline=probe_deadline,
             )
         except Exception as exc:
             model_runtime.record_failure(
-                health.candidate, model_runtime.classify(exc, health.candidate)
+                health.candidate,
+                model_runtime.classify(exc, health.candidate),
             )
             continue
         reply_text = (result.reply or "").strip() if result else ""
@@ -265,30 +360,66 @@ def is_configured() -> bool:
     )
 
 
-def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult | None:
+def _external_adapter_reply(
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    deadline: float | None = None,
+) -> ProviderResult | None:
     if not _external_adapters_enabled():
         return None
+
+    remaining = _remaining_seconds(deadline)
+    if remaining is not None and remaining <= 0:
+        raise TimeoutError("Amosclaud model deadline expired")
+    adapter_timeout = remaining if remaining is not None else 60.0
+
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_key:
         import anthropic
+
         model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest")
-        client = anthropic.Anthropic(api_key=anthropic_key)
-        response = client.messages.create(model=model, max_tokens=1200, system=system_prompt, messages=history)
+        client = anthropic.Anthropic(
+            api_key=anthropic_key,
+            timeout=adapter_timeout,
+        )
+        response = client.messages.create(
+            model=model,
+            max_tokens=1200,
+            system=system_prompt,
+            messages=history,
+        )
         payload = {
             "id": getattr(response, "id", None),
             "model": getattr(response, "model", model),
             "content": [
-                {"type": getattr(block, "type", "text"), "text": getattr(block, "text", "")}
+                {
+                    "type": getattr(block, "type", "text"),
+                    "text": getattr(block, "text", ""),
+                }
                 for block in getattr(response, "content", [])
             ],
             "finish_reason": getattr(response, "stop_reason", None),
             "usage": {
-                "input_tokens": getattr(getattr(response, "usage", None), "input_tokens", 0),
-                "output_tokens": getattr(getattr(response, "usage", None), "output_tokens", 0),
+                "input_tokens": getattr(
+                    getattr(response, "usage", None),
+                    "input_tokens",
+                    0,
+                ),
+                "output_tokens": getattr(
+                    getattr(response, "usage", None),
+                    "output_tokens",
+                    0,
+                ),
             },
         }
         return _require_ready(
-            normalize_model_api_response(payload, runtime="external-adapter:anthropic", provider="anthropic", model=model),
+            normalize_model_api_response(
+                payload,
+                runtime="external-adapter:anthropic",
+                provider="anthropic",
+                model=model,
+            ),
             "Anthropic adapter",
         )
     openai_key = os.getenv("OPENAI_API_KEY")
@@ -297,25 +428,48 @@ def _external_adapter_reply(history: list[dict[str, str]], system_prompt: str) -
         response = httpx.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {openai_key}"},
-            json={"model": model, "max_tokens": 1200, "messages": [{"role": "system", "content": system_prompt}, *history]},
-            timeout=60,
+            json={
+                "model": model,
+                "max_tokens": 1200,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    *history,
+                ],
+            },
+            timeout=_timeout(total=adapter_timeout),
         )
         response.raise_for_status()
         return _require_ready(
-            normalize_model_api_response(response.json(), runtime="external-adapter:openai", provider="openai", model=model),
+            normalize_model_api_response(
+                response.json(),
+                runtime="external-adapter:openai",
+                provider="openai",
+                model=model,
+            ),
             "OpenAI adapter",
         )
     return None
 
 
-def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
+def reply(
+    history: list[dict[str, str]],
+    system_prompt: str,
+    *,
+    timeout: float | None = None,
+) -> ProviderResult:
     """Answer through the first usable candidate in the resolution path."""
     model = os.getenv("AMOSCLAUD_MODEL", "amosclaud-folder-v1")
     network = _network_status()
     active = model_runtime.plan(network)
+    deadline = _deadline(timeout)
     errors: list[str] = []
     adapter_attempted = False
     for health in active.order:
+        remaining = _remaining_seconds(deadline)
+        if remaining is not None and remaining <= 0:
+            errors.append("model resolution deadline expired")
+            break
+
         candidate = health.candidate
         if not candidate.first_party:
             if adapter_attempted:
@@ -326,11 +480,16 @@ def reply(history: list[dict[str, str]], system_prompt: str) -> ProviderResult:
         attempts = None if health.reachable else 1
         try:
             result = _invoke_candidate(
-                candidate, history, system_prompt, attempts=attempts
+                candidate,
+                history,
+                system_prompt,
+                attempts=attempts,
+                deadline=deadline,
             )
         except Exception as exc:
             diagnosis = model_runtime.record_failure(
-                candidate, model_runtime.classify(exc, candidate)
+                candidate,
+                model_runtime.classify(exc, candidate),
             )
             errors.append(f"{candidate.label}: [{diagnosis.code}] {diagnosis.detail}")
             continue
