@@ -187,8 +187,7 @@ def _review_body(
     security_verdict = (
         "## Security threat verdict\n"
         "**BLOCKED — CHANGES REQUIRED**\n"
-        "- Failing security checks: "
-        + ", ".join(f"`{name}`" for name in security_blockers[:10])
+        "- Failing security checks: " + ", ".join(f"`{name}`" for name in security_blockers[:10])
         if security_blockers
         else "## Security threat verdict\n**NO FAILING SECURITY CHECK OBSERVED**"
     )
