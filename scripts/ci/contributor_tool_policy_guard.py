@@ -7,6 +7,7 @@ import ast
 import shlex
 import sys
 from collections.abc import Mapping
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 import yaml
@@ -16,10 +17,12 @@ CODE_OWNER = "@wamakologeorge-dev"
 POLICY_COMMAND = "python scripts/ci/contributor_tool_policy_guard.py"
 POLICY_STEP_NAME = "Enforce contributor tool sovereignty"
 REVIEW_COMMAND = "python -m amosclaud_bot.review_publisher"
+CODEQL_GATE_COMMAND = "python trusted/scripts/ci/advanced_security_gate.py"
 SECURITY_BRIDGE_COMMAND = "python -m amoscloud_ai.security_repair_bridge"
 REPAIR_WORKFLOW = "amosclaud-repair-control-plane.yml"
 APPROVED_SECURITY_WORKFLOWS = {
     "CodeQL",
+    "Amosclaud CodeQL Threat Gate",
     "Amosclaud Dependency Threat Gate",
     "Fortify AST Scan",
 }
@@ -36,7 +39,11 @@ PROTECTED_FILES = (
     "amosclaud_bot/review_publisher.py",
     "tests/test_amosclaud_review_publisher.py",
     "docs/AMOSCLAUD_BOT_FORMAL_REVIEW.md",
+    "amosclaud_bot/status_board.py",
+    "tests/test_amosclaud_status_board.py",
+    "amoscloud_ai/bot_contributor_profile.py",
     ".github/workflows/codeql.yml",
+    ".github/workflows/amosclaud-codeql-threat-gate.yml",
     ".github/workflows/fortify.yml",
     ".github/workflows/amosclaud-dependency-threat-gate.yml",
     ".github/workflows/amosclaud-security-repair-bridge.yml",
@@ -112,6 +119,12 @@ def _event_config(payload: Mapping[str, object], event_name: str) -> object:
     return False
 
 
+def _job(payload: Mapping[str, object], job_name: str) -> Mapping[str, object]:
+    jobs = payload.get("jobs")
+    job = jobs.get(job_name) if isinstance(jobs, Mapping) else None
+    return job if isinstance(job, Mapping) else {}
+
+
 def _pull_request_trigger(payload: Mapping[str, object], errors: list[str]) -> None:
     pull_request_config = _event_config(payload, "pull_request")
     if pull_request_config is False:
@@ -134,15 +147,20 @@ def _active_shell_commands(script: str) -> set[str]:
 
 
 def _steps(payload: Mapping[str, object], job_name: str) -> list[Mapping[str, object]]:
-    jobs = payload.get("jobs")
-    job = jobs.get(job_name) if isinstance(jobs, Mapping) else None
-    raw_steps = job.get("steps") if isinstance(job, Mapping) else None
+    raw_steps = _job(payload, job_name).get("steps")
     if not isinstance(raw_steps, list):
         return []
     return [step for step in raw_steps if isinstance(step, Mapping)]
 
 
 def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> None:
+    policy_job = _job(payload, "policy")
+    if not policy_job:
+        errors.append("policy workflow is missing jobs.policy")
+        return
+    if "if" in policy_job:
+        errors.append("policy workflow job must not be conditional")
+
     steps = _steps(payload, "policy")
     if not steps:
         errors.append("policy workflow is missing jobs.policy.steps")
@@ -152,14 +170,16 @@ def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> N
     if len(matching_steps) != 1:
         errors.append("policy workflow must contain exactly one effective sovereignty step")
         return
-    run = matching_steps[0].get("run")
-    commands = _active_shell_commands(str(run or ""))
-    if POLICY_COMMAND not in commands:
+    enforcement_step = matching_steps[0]
+    if "if" in enforcement_step:
+        errors.append("policy workflow sovereignty step must not be conditional")
+    commands = _active_shell_commands(str(enforcement_step.get("run") or ""))
+    if not any(POLICY_COMMAND in command for command in commands):
         errors.append("policy workflow sovereignty step does not execute the policy guard")
 
 
-def _codeowner_rules(text: str) -> dict[str, tuple[str, ...]]:
-    rules: dict[str, tuple[str, ...]] = {}
+def _codeowner_rules(text: str) -> list[tuple[str, tuple[str, ...]]]:
+    rules: list[tuple[str, tuple[str, ...]]] = []
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -169,8 +189,38 @@ def _codeowner_rules(text: str) -> dict[str, tuple[str, ...]]:
         except ValueError:
             continue
         if len(parts) >= 2:
-            rules[parts[0]] = tuple(parts[1:])
+            rules.append((parts[0], tuple(parts[1:])))
     return rules
+
+
+def _codeowner_pattern_matches(pattern: str, relative_path: str) -> bool:
+    path = relative_path.lstrip("/")
+    candidate = pattern.strip()
+    if not candidate or candidate.startswith("!"):
+        return False
+    anchored = candidate.startswith("/")
+    candidate = candidate.lstrip("/")
+    if candidate in {"*", "**", "**/*"}:
+        return True
+    if candidate.endswith("/**"):
+        prefix = candidate[:-3].rstrip("/")
+        return path == prefix or path.startswith(f"{prefix}/")
+    if candidate.endswith("/"):
+        prefix = candidate.rstrip("/")
+        return path == prefix or path.startswith(f"{prefix}/")
+    if anchored or "/" in candidate:
+        return fnmatchcase(path, candidate)
+    return any(fnmatchcase(part, candidate) for part in path.split("/"))
+
+
+def _effective_codeowners(
+    rules: list[tuple[str, tuple[str, ...]]], relative_path: str
+) -> tuple[str, ...]:
+    owners: tuple[str, ...] = ()
+    for pattern, candidate_owners in rules:
+        if _codeowner_pattern_matches(pattern, relative_path):
+            owners = candidate_owners
+    return owners
 
 
 def _permissions(
@@ -179,9 +229,7 @@ def _permissions(
     if job_name is None:
         permissions = payload.get("permissions")
     else:
-        jobs = payload.get("jobs")
-        job = jobs.get(job_name) if isinstance(jobs, Mapping) else None
-        permissions = job.get("permissions") if isinstance(job, Mapping) else None
+        permissions = _job(payload, job_name).get("permissions")
     return permissions if isinstance(permissions, Mapping) else {}
 
 
@@ -201,7 +249,11 @@ def _checkout_is_trusted(steps: list[Mapping[str, object]]) -> bool:
 
 
 def _commands_include(steps: list[Mapping[str, object]], command: str) -> bool:
-    return any(command in _active_shell_commands(str(step.get("run") or "")) for step in steps)
+    return any(
+        command in active
+        for step in steps
+        for active in _active_shell_commands(str(step.get("run") or ""))
+    )
 
 
 def _review_events(source: str, errors: list[str]) -> set[str]:
@@ -241,6 +293,16 @@ def _review_contract(root: Path, errors: list[str]) -> None:
     if dict(permissions) != expected:
         errors.append("formal review workflow permissions must remain least-privilege")
 
+    review_job = _job(workflow, "formal-review")
+    condition = str(review_job.get("if") or "")
+    for required in (
+        "github.event.issue.pull_request",
+        "@amosclaud review",
+        "@amosclaud-bot review",
+    ):
+        if required not in condition:
+            errors.append(f"formal review job filter is missing: {required}")
+
     steps = _steps(workflow, "formal-review")
     if not _checkout_is_trusted(steps):
         errors.append("formal review workflow must check out the trusted default branch")
@@ -253,9 +315,31 @@ def _review_contract(root: Path, errors: list[str]) -> None:
             "formal review workflow must not use pull_request_target or protected secrets"
         )
 
-    events = _review_events(_read(root, "amosclaud_bot/review_publisher.py", errors), errors)
+    publisher = _read(root, "amosclaud_bot/review_publisher.py", errors)
+    events = _review_events(publisher, errors)
     if events != {"COMMENT"}:
         errors.append("formal review publisher must submit only GitHub COMMENT reviews")
+    for required in (
+        "METADATA AND CHECK EVIDENCE ONLY",
+        'base.replace("**APPROVE**", "**NEEDS HUMAN REVIEW**")',
+        'base.replace("**NEEDS HUMAN REVIEW**", "**CHANGES REQUESTED**")',
+        "_pending_checks(checks)",
+    ):
+        if required not in publisher:
+            errors.append(f"formal review publisher is missing truthful coverage rule: {required}")
+
+
+def _status_contract(root: Path, errors: list[str]) -> None:
+    source = _read(root, "amosclaud_bot/status_board.py", errors)
+    for required in (
+        "_REQUIRED_PULL_REQUEST_WORKFLOWS",
+        "_REQUIRED_DEFAULT_BRANCH_WORKFLOWS",
+        'quote(branch, safe="")',
+        'frozenset({"pull_request", "workflow_run"})',
+        "[required workflow]",
+    ):
+        if required not in source:
+            errors.append(f"status board is missing truthful health contract: {required}")
 
 
 def _workflow_run_names(payload: Mapping[str, object]) -> set[str]:
@@ -268,14 +352,37 @@ def _workflow_run_names(payload: Mapping[str, object]) -> set[str]:
 
 def _security_contract(root: Path, errors: list[str]) -> None:
     codeql = _read(root, ".github/workflows/codeql.yml", errors)
-    for required in (
-        "queries: security-extended",
-        "name: Every CodeQL alert is a threat",
-        "security-events: read",
-        "python scripts/ci/advanced_security_gate.py",
-    ):
+    for required in ("queries: security-extended", "security-events: write"):
         if required not in codeql:
-            errors.append(f"CodeQL threat gate is missing required text: {required}")
+            errors.append(f"CodeQL analysis is missing required text: {required}")
+    for forbidden in ("security-events: read", "advanced_security_gate.py"):
+        if forbidden in codeql:
+            errors.append(f"CodeQL analysis contains trusted-gate logic: {forbidden}")
+
+    codeql_gate_path = ".github/workflows/amosclaud-codeql-threat-gate.yml"
+    codeql_gate = _load_yaml(root, codeql_gate_path, errors)
+    if _workflow_run_names(codeql_gate) != {"CodeQL"}:
+        errors.append("trusted CodeQL gate workflow source changed")
+    expected_permissions = {"contents": "read", "security-events": "read"}
+    if dict(_permissions(codeql_gate)) != expected_permissions:
+        errors.append("trusted CodeQL gate permissions must remain least-privilege")
+    codeql_job = _job(codeql_gate, "codeql-threat-gate")
+    codeql_condition = str(codeql_job.get("if") or "")
+    for required in (
+        "github.event.workflow_run.event == 'pull_request'",
+        "github.event.workflow_run.conclusion == 'success'",
+    ):
+        if required not in codeql_condition:
+            errors.append(f"trusted CodeQL gate condition is missing: {required}")
+    codeql_steps = _steps(codeql_gate, "codeql-threat-gate")
+    if not _checkout_is_trusted(codeql_steps):
+        errors.append("trusted CodeQL gate must check out the trusted default branch")
+    if not _commands_include(codeql_steps, CODEQL_GATE_COMMAND):
+        errors.append("trusted CodeQL gate does not execute the trusted alert evaluator")
+    codeql_gate_text = _read(root, codeql_gate_path, errors)
+    for forbidden in ("pull_request_target", "github.event.pull_request.head"):
+        if forbidden in codeql_gate_text:
+            errors.append(f"trusted CodeQL gate contains untrusted checkout input: {forbidden}")
 
     dependency = _read(root, ".github/workflows/amosclaud-dependency-threat-gate.yml", errors)
     for required in (
@@ -348,6 +455,10 @@ def _security_contract(root: Path, errors: list[str]) -> None:
         if required not in app_connection:
             errors.append(f"GitHub App connection is missing safety contract: {required}")
 
+    profile = _read(root, "amoscloud_ai/bot_contributor_profile.py", errors)
+    if 'DEFAULT_APP_SLUG = "amosclaud-bot"' not in profile:
+        errors.append("contributor profile default App slug is not canonical")
+
 
 def validate_repository(root: Path) -> list[str]:
     """Return every policy-contract violation found under *root*."""
@@ -377,14 +488,16 @@ def validate_repository(root: Path) -> list[str]:
     _pull_request_trigger(workflow, errors)
     _workflow_enforcement(workflow, errors)
     _review_contract(root, errors)
+    _status_contract(root, errors)
     _security_contract(root, errors)
 
-    codeowners = _codeowner_rules(_read(root, ".github/CODEOWNERS", errors))
+    rules = _codeowner_rules(_read(root, ".github/CODEOWNERS", errors))
     for relative_path in PROTECTED_FILES:
-        pattern = f"/{relative_path}"
-        owners = codeowners.get(pattern, ())
+        owners = _effective_codeowners(rules, relative_path)
         if CODE_OWNER not in owners:
-            errors.append(f"CODEOWNERS is missing effective protected entry: {pattern}")
+            errors.append(
+                f"CODEOWNERS effective rule does not protect: /{relative_path}"
+            )
 
     return sorted(set(errors))
 
