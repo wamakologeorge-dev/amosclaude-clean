@@ -75,21 +75,16 @@ def test_failed_security_workflow_dispatches_existing_repair_control_plane() -> 
     assert "installation-token" not in str(result.as_dict())
 
 
-def test_trusted_codeql_threat_gate_can_dispatch_existing_fixer() -> None:
-    calls: list[tuple[str, str, dict[str, Any] | None]] = []
-
+def test_second_level_codeql_gate_run_does_not_duplicate_original_dispatch() -> None:
     result = bridge_security_failure(
         repository="owner/repo",
         event=event(workflow="Amosclaud CodeQL Threat Gate"),
         connection=connection(),
-        request=dispatching_request(calls),
+        request=lambda *args: (_ for _ in ()).throw(AssertionError(args)),
     )
 
-    assert result.status == "REPAIR_DISPATCHED"
-    dispatch = next(call for call in calls if call[0] == "POST")
-    payload = dispatch[2]
-    assert payload is not None
-    assert payload["inputs"]["source_name"] == "Amosclaud CodeQL Threat Gate"
+    assert result.status == "NOT_APPLICABLE"
+    assert result.repair_dispatched is False
 
 
 def test_stale_security_result_never_dispatches_repair() -> None:
