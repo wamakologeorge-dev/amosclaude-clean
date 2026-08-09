@@ -3,7 +3,9 @@
 
 Every finding introduced by the pull-request head is blocking. Findings already
 present in the exact base revision remain visible as repository security debt,
-but do not make an unrelated pull request permanently unmergeable.
+but do not make an unrelated pull request permanently unmergeable. Reports that
+contain scanner errors are rejected because an empty result set is not proof that
+the scanned revision is safe.
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 _LINE = re.compile(r"^\s*(\d+)\s+(.*)$")
 
@@ -122,12 +123,34 @@ def _finding(value: Mapping[str, object]) -> Finding:
     )
 
 
+def _render_scan_errors(errors: object) -> str:
+    if not isinstance(errors, list):
+        return "Bandit report contains a non-list errors field"
+    details: list[str] = []
+    for item in errors[:10]:
+        if isinstance(item, Mapping):
+            filename = str(item.get("filename") or "unknown file")
+            reason = str(item.get("reason") or item.get("error") or "scan error")
+            details.append(f"{filename}: {reason}")
+        else:
+            details.append(str(item))
+    suffix = f"; and {len(errors) - 10} more" if len(errors) > 10 else ""
+    return "; ".join(details) + suffix
+
+
 def load_report(path: Path) -> tuple[Finding, ...]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"could not read Bandit report: {path}") from exc
-    results = payload.get("results") if isinstance(payload, Mapping) else None
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Bandit report must be a JSON object: {path}")
+    errors = payload.get("errors", [])
+    if errors:
+        raise ValueError(
+            f"Bandit report contains scan errors: {path}: {_render_scan_errors(errors)}"
+        )
+    results = payload.get("results")
     if not isinstance(results, list):
         raise ValueError(f"Bandit report has no results list: {path}")
     findings = [_finding(item) for item in results if isinstance(item, Mapping)]
@@ -194,7 +217,8 @@ def render_markdown(result: GateResult) -> str:
     for finding in result.new_findings[:30]:
         location = f"{finding.filename}:{finding.line_number}"
         lines.append(
-            f"- `{finding.severity}` `{finding.test_id}` at `{location}` — " f"{finding.issue_text}"
+            f"- `{finding.severity}` `{finding.test_id}` at `{location}` — "
+            f"{finding.issue_text}"
         )
     if len(result.new_findings) > 30:
         lines.append(f"- ...and {len(result.new_findings) - 30} more new threat(s)")
