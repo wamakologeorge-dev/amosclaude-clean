@@ -135,7 +135,10 @@ def evaluate_pull_request(
                 403: "GitHub Code Security is unavailable or the token lacks code-scanning read access",
                 404: "the repository or code-scanning endpoint was not found",
                 503: "GitHub code scanning is temporarily unavailable",
-            }.get(status, f"code-scanning API request failed with status {status or 'network-error'}")
+            }.get(
+                status,
+                f"code-scanning API request failed with status {status or 'network-error'}",
+            )
             return GateResult("BLOCKED", repository, pull_request, (), detail)
         if not isinstance(payload, list):
             return GateResult(
