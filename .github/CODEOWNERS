@@ -41,6 +41,7 @@
 /.github/scripts/parse_comment.py @wamakologeorge-dev
 /.github/scripts/ai_patch_executor.py @wamakologeorge-dev
 /.github/workflows/amosclaud-claude-patch.yml @wamakologeorge-dev
+/.github/workflows/amosclaud-claude-patch-worker.yml @wamakologeorge-dev
 /scripts/ci/claude_patch_policy_guard.py @wamakologeorge-dev
 /tests/test_parse_comment_script.py @wamakologeorge-dev
 /tests/test_ai_patch_executor.py @wamakologeorge-dev
