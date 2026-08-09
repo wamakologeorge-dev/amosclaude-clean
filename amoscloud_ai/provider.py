@@ -68,9 +68,7 @@ def _timeout(
 ) -> httpx.Timeout:
     configured_total = max(30.0, float(os.getenv("AMOSCLAUD_MODEL_TIMEOUT", "300")))
     total_seconds = (
-        configured_total
-        if total is None
-        else max(0.1, min(float(total), configured_total))
+        configured_total if total is None else max(0.1, min(float(total), configured_total))
     )
     connect_timeout = min(connect or 20.0, total_seconds)
     return httpx.Timeout(
@@ -286,9 +284,7 @@ def probe() -> dict[str, object]:
     network = _network_status()
     active = model_runtime.plan(network)
     history = [{"role": "user", "content": PROBE_INSTRUCTION}]
-    system_prompt = (
-        "You are the Amosclaud readiness probe. Follow the exact response instruction."
-    )
+    system_prompt = "You are the Amosclaud readiness probe. Follow the exact response instruction."
     probe_deadline = _deadline(20)
     for health in active.order:
         if not health.candidate.first_party or not health.reachable:
@@ -341,9 +337,7 @@ def probe() -> dict[str, object]:
     return {
         "ready": False,
         "provider": "amosclaud",
-        "runtime": (
-            "unconfigured" if diagnosis.code == model_runtime.UNCONFIGURED else runtime
-        ),
+        "runtime": ("unconfigured" if diagnosis.code == model_runtime.UNCONFIGURED else runtime),
         "model": model,
         "stations": int(network.get("ready_stations") or 0),
         "detail": f"[{diagnosis.code}] {diagnosis.remediation}"[:400],
@@ -494,9 +488,7 @@ def reply(
             errors.append(f"{candidate.label}: [{diagnosis.code}] {diagnosis.detail}")
             continue
         if result is None:
-            errors.append(
-                f"{candidate.label}: [{model_runtime.UNCONFIGURED}] no usable route"
-            )
+            errors.append(f"{candidate.label}: [{model_runtime.UNCONFIGURED}] no usable route")
             continue
         if result.ok:
             return result
