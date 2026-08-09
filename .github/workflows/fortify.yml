@@ -38,6 +38,13 @@ jobs:
           path: base
           persist-credentials: false
 
+      - name: Check out trusted default-branch comparator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -46,19 +53,19 @@ jobs:
       - name: Install pinned local AST scanner
         run: python -m pip install --disable-pip-version-check "bandit==1.9.4"
 
-      - name: Scan exact base and head revisions at every severity
+      - name: Scan every first-party Python path in exact base and head revisions
         run: |
           set +e
           (
             cd base
-            python -m bandit -r src amoscloud_ai \
+            python -m bandit -r . \
               -f json \
               -o ../base-bandit-report.json
           )
           base_status=$?
           (
             cd head
-            python -m bandit -r src amoscloud_ai \
+            python -m bandit -r . \
               -f json \
               -o ../head-bandit-report.json
           )
@@ -74,7 +81,7 @@ jobs:
 
       - name: Treat every AST finding introduced by the head as a blocking threat
         run: |
-          python head/scripts/ci/bandit_pr_gate.py \
+          python trusted/scripts/ci/bandit_pr_gate.py \
             --base base-bandit-report.json \
             --head head-bandit-report.json \
             --json differential-ast-gate.json \
@@ -156,14 +163,14 @@ jobs:
       - name: Treat every repository AST security finding as audit debt
         run: |
           set +e
-          python -m bandit -r src amoscloud_ai \
+          python -m bandit -r . \
             -f json \
             -o fortify-compatible-bandit-report.json
           scan_status=$?
           set -e
           test -s fortify-compatible-bandit-report.json
           if [ "$scan_status" -ne 0 ]; then
-            echo "::error title=Amosclaud repository security debt detected::The full AST audit reported one or more findings."
+            echo "::error title=Amosclaud repository security debt detected::The full AST audit reported one or more findings or scan errors."
             exit "$scan_status"
           fi
 
