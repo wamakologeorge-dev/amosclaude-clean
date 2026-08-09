@@ -37,9 +37,7 @@ def event(
     }
 
 
-def test_failed_security_workflow_dispatches_existing_repair_control_plane() -> None:
-    calls: list[tuple[str, str, dict[str, Any] | None]] = []
-
+def dispatching_request(calls: list[tuple[str, str, dict[str, Any] | None]]):
     def request(method, url, headers, payload):
         calls.append((method, url, payload))
         assert headers["Authorization"] == "Bearer installation-token"
@@ -49,11 +47,17 @@ def test_failed_security_workflow_dispatches_existing_repair_control_plane() -> 
             return 204, {}
         raise AssertionError((method, url, payload))
 
+    return request
+
+
+def test_failed_security_workflow_dispatches_existing_repair_control_plane() -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
     result = bridge_security_failure(
         repository="owner/repo",
         event=event(),
         connection=connection(),
-        request=request,
+        request=dispatching_request(calls),
     )
 
     assert result.status == "REPAIR_DISPATCHED"
@@ -69,6 +73,23 @@ def test_failed_security_workflow_dispatches_existing_repair_control_plane() -> 
     assert inputs["source_name"] == "CodeQL"
     assert "without suppressing" in inputs["failure_summary"]
     assert "installation-token" not in str(result.as_dict())
+
+
+def test_trusted_codeql_threat_gate_can_dispatch_existing_fixer() -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    result = bridge_security_failure(
+        repository="owner/repo",
+        event=event(workflow="Amosclaud CodeQL Threat Gate"),
+        connection=connection(),
+        request=dispatching_request(calls),
+    )
+
+    assert result.status == "REPAIR_DISPATCHED"
+    dispatch = next(call for call in calls if call[0] == "POST")
+    payload = dispatch[2]
+    assert payload is not None
+    assert payload["inputs"]["source_name"] == "Amosclaud CodeQL Threat Gate"
 
 
 def test_stale_security_result_never_dispatches_repair() -> None:
