@@ -110,9 +110,7 @@ def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> N
         return
 
     matching_steps = [
-        step
-        for step in steps
-        if isinstance(step, Mapping) and step.get("name") == POLICY_STEP_NAME
+        step for step in steps if isinstance(step, Mapping) and step.get("name") == POLICY_STEP_NAME
     ]
     if len(matching_steps) != 1:
         errors.append("policy workflow must contain exactly one effective sovereignty step")
