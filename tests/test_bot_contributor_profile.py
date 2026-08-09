@@ -30,8 +30,7 @@ def test_ready_profile_builds_the_github_bot_commit_identity() -> None:
     assert profile["bot_login"] == "amosclaud-bot[bot]"
     assert profile["commit_identity"]["name"] == "Amosclaud Bot"
     assert (
-        profile["commit_identity"]["email"]
-        == "24680+amosclaud-bot[bot]@users.noreply.github.com"
+        profile["commit_identity"]["email"] == "24680+amosclaud-bot[bot]@users.noreply.github.com"
     )
     assert profile["readiness"]["verification_level"] == "READY"
     assert profile["readiness"]["fully_ready"] is True
