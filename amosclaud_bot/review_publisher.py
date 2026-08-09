@@ -93,6 +93,32 @@ def _pending_checks(checks: list[dict[str, Any]]) -> list[str]:
     return pending
 
 
+def _check_label(check: dict[str, Any]) -> str:
+    name = str(check.get("name") or "unnamed check")
+    conclusion = str(check.get("conclusion") or "").lower()
+    status = str(check.get("status") or "").lower()
+    state = conclusion or status or "unknown"
+    return f"{name} ({state})"
+
+
+def _blocking_check_labels(checks: list[dict[str, Any]]) -> list[str]:
+    return [
+        _check_label(check)
+        for check in checks
+        if str(check.get("conclusion") or "").lower() in _BLOCKING_CONCLUSIONS
+    ]
+
+
+def _pending_check_labels(checks: list[dict[str, Any]]) -> list[str]:
+    labels: list[str] = []
+    for check in checks:
+        status = str(check.get("status") or "").lower()
+        conclusion = str(check.get("conclusion") or "").lower()
+        if status in _PENDING_STATUSES or not conclusion:
+            labels.append(_check_label(check))
+    return labels
+
+
 def _security_blockers(checks: list[dict[str, Any]]) -> list[str]:
     return [
         name
@@ -104,6 +130,8 @@ def _security_blockers(checks: list[dict[str, Any]]) -> list[str]:
 def _check_summary(checks: list[dict[str, Any]]) -> str:
     blocking = _blocking_checks(checks)
     pending = _pending_checks(checks)
+    blocking_labels = _blocking_check_labels(checks)
+    pending_labels = _pending_check_labels(checks)
     passing = 0
     for check in checks:
         conclusion = str(check.get("conclusion") or "").lower()
@@ -117,10 +145,10 @@ def _check_summary(checks: list[dict[str, Any]]) -> str:
         f"- Blocking: {len(blocking)}",
         f"- Pending: {len(pending)}",
     ]
-    if blocking:
-        lines.append("- Blocking checks: " + ", ".join(blocking[:10]))
-    if pending:
-        lines.append("- Pending checks: " + ", ".join(pending[:10]))
+    if blocking_labels:
+        lines.append("- Blocking checks: " + ", ".join(blocking_labels[:10]))
+    if pending_labels:
+        lines.append("- Pending checks: " + ", ".join(pending_labels[:10]))
     return "\n".join(lines)
 
 
@@ -159,7 +187,8 @@ def _review_body(
     security_verdict = (
         "## Security threat verdict\n"
         "**BLOCKED — CHANGES REQUIRED**\n"
-        "- Failing security checks: " + ", ".join(f"`{name}`" for name in security_blockers[:10])
+        "- Failing security checks: "
+        + ", ".join(f"`{name}`" for name in security_blockers[:10])
         if security_blockers
         else "## Security threat verdict\n**NO FAILING SECURITY CHECK OBSERVED**"
     )
