@@ -194,8 +194,7 @@ def render_markdown(result: GateResult) -> str:
     for finding in result.new_findings[:30]:
         location = f"{finding.filename}:{finding.line_number}"
         lines.append(
-            f"- `{finding.severity}` `{finding.test_id}` at `{location}` — "
-            f"{finding.issue_text}"
+            f"- `{finding.severity}` `{finding.test_id}` at `{location}` — " f"{finding.issue_text}"
         )
     if len(result.new_findings) > 30:
         lines.append(f"- ...and {len(result.new_findings) - 30} more new threat(s)")
