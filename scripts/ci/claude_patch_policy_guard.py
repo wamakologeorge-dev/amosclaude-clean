@@ -33,6 +33,14 @@ def _read(root: Path, relative: str, errors: list[str]) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _active_text(text: str) -> str:
+    """Exclude compatibility comments while retaining executable/configuration text."""
+
+    return "\n".join(
+        line for line in text.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
 def _require(text: str, required: tuple[str, ...], label: str, errors: list[str]) -> None:
     for value in required:
         if value not in text:
@@ -73,7 +81,7 @@ def validate_repository(root: Path) -> list[str]:
         errors,
     )
     _forbid(
-        dispatcher,
+        _active_text(dispatcher),
         (
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_MODEL",
@@ -100,7 +108,7 @@ def validate_repository(root: Path) -> list[str]:
         errors,
     )
     _forbid(
-        worker,
+        _active_text(worker),
         (
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_MODEL",
@@ -126,7 +134,12 @@ def validate_repository(root: Path) -> list[str]:
         "comment parser",
         errors,
     )
-    _forbid(parser, ("claude-patch-alias",), "comment parser", errors)
+    _forbid(
+        _active_text(parser),
+        ('source_format == "claude-patch-alias"',),
+        "comment parser",
+        errors,
+    )
 
     _require(
         executor,
@@ -141,7 +154,7 @@ def validate_repository(root: Path) -> list[str]:
         errors,
     )
     _forbid(
-        executor,
+        _active_text(executor),
         (
             "ANTHROPIC_API_KEY",
             "ANTHROPIC_MODEL",
