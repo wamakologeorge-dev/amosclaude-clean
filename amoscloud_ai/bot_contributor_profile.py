@@ -132,10 +132,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _redact_profile_for_output(profile: Mapping[str, object]) -> dict[str, object]:
+    """Return a logging-safe profile without secret-derived readiness details."""
+
+    redacted = dict(profile)
+    readiness = profile.get("readiness")
+    if isinstance(readiness, Mapping):
+        safe_readiness = dict(readiness)
+        safe_readiness.pop("checks", None)
+        safe_readiness.pop("missing_configuration", None)
+        redacted["readiness"] = safe_readiness
+    return redacted
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     profile = build_profile()
-    print(json.dumps(profile, indent=2, sort_keys=True))
+    print(json.dumps(_redact_profile_for_output(profile), indent=2, sort_keys=True))
     if args.require_ready and not profile["readiness"]["fully_ready"]:
         return 1
     return 0
