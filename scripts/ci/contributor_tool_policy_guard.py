@@ -41,9 +41,11 @@ PROTECTED_FILES = (
     ".github/workflows/amosclaud-dependency-threat-gate.yml",
     ".github/workflows/amosclaud-security-repair-bridge.yml",
     "scripts/ci/advanced_security_gate.py",
+    "scripts/ci/bandit_pr_gate.py",
     "amoscloud_ai/github_app_connection.py",
     "amoscloud_ai/security_repair_bridge.py",
     "tests/test_advanced_security_gate.py",
+    "tests/test_bandit_pr_gate.py",
     "tests/test_github_app_connection.py",
     "tests/test_security_repair_bridge.py",
     "docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md",
@@ -286,12 +288,27 @@ def _security_contract(root: Path, errors: list[str]) -> None:
 
     fortify = _read(root, ".github/workflows/fortify.yml", errors)
     for required in (
-        "Treat every AST security finding as a blocking threat",
-        "python -m bandit -r src amoscloud_ai",
-        'exit "$scan_status"',
+        "name: Every new AST finding is a threat",
+        "github.event.pull_request.base.sha",
+        "github.event.pull_request.head.sha",
+        '"bandit==1.9.4"',
+        "python head/scripts/ci/bandit_pr_gate.py",
+        "Full repository AST security debt audit",
     ):
         if required not in fortify:
             errors.append(f"AST threat gate is missing required text: {required}")
+    for forbidden in ("--skip", "--exclude", "# nosec"):
+        if forbidden in fortify:
+            errors.append(f"AST threat gate contains a forbidden suppression: {forbidden}")
+
+    bandit_gate = _read(root, "scripts/ci/bandit_pr_gate.py", errors)
+    for required in (
+        "every AST finding introduced by the exact head revision is blocking",
+        '"THREATS_DETECTED"',
+        "Counter(finding.fingerprint for finding in base)",
+    ):
+        if required not in bandit_gate:
+            errors.append(f"differential AST gate is missing required contract: {required}")
 
     bridge_path = ".github/workflows/amosclaud-security-repair-bridge.yml"
     bridge = _load_yaml(root, bridge_path, errors)
