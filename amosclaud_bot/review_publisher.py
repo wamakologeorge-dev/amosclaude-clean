@@ -21,6 +21,15 @@ _BLOCKING_CONCLUSIONS = {
     "timed_out",
 }
 _PENDING_STATUSES = {"in_progress", "pending", "queued", "requested", "waiting"}
+_SECURITY_CHECK_HINTS = (
+    "codeql",
+    "security",
+    "dependency threat",
+    "dependency review",
+    "fortify",
+    "secret scanning",
+    "secret protection",
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +72,22 @@ def _check_runs(bot: AmosclaudBot, head_sha: str) -> list[dict[str, Any]]:
         if len(batch) < _PAGE_SIZE:
             break
     return checks
+
+
+def _blocking_checks(checks: list[dict[str, Any]]) -> list[str]:
+    return [
+        str(check.get("name") or "unnamed check")
+        for check in checks
+        if str(check.get("conclusion") or "").lower() in _BLOCKING_CONCLUSIONS
+    ]
+
+
+def _security_blockers(checks: list[dict[str, Any]]) -> list[str]:
+    return [
+        name
+        for name in _blocking_checks(checks)
+        if any(hint in name.lower() for hint in _SECURITY_CHECK_HINTS)
+    ]
 
 
 def _check_summary(checks: list[dict[str, Any]]) -> str:
@@ -113,11 +138,27 @@ def _review_body(
             ],
         },
     )
+    security_blockers = _security_blockers(checks)
+    if security_blockers:
+        base = base.replace("**Risk:** **LOW**", "**Risk:** **HIGH**")
+        base = base.replace("**Risk:** **MEDIUM**", "**Risk:** **HIGH**")
+        base = base.replace("**APPROVE**", "**CHANGES REQUESTED**")
+        base = base.replace("**NEEDS HUMAN REVIEW**", "**CHANGES REQUESTED**")
+
+    security_verdict = (
+        "## Security threat verdict\n"
+        "**BLOCKED — CHANGES REQUIRED**\n"
+        "- Failing security checks: "
+        + ", ".join(f"`{name}`" for name in security_blockers[:10])
+        if security_blockers
+        else "## Security threat verdict\n**NO FAILING SECURITY CHECK OBSERVED**"
+    )
     notice = (
         "\n\n## Review authority\n"
         "- This is an automated, read-only, non-blocking `COMMENT` review.\n"
         "- Amosclaud Bot does not approve, request changes, merge, or push from this review path.\n"
         f"- Exact reviewed commit: `{head_sha}`\n\n"
+        f"{security_verdict}\n\n"
         f"{_check_summary(checks)}"
     )
     return (base[: 10000 - len(notice)] + notice)[:10000]
