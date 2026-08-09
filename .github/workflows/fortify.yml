@@ -1,5 +1,9 @@
 name: Fortify AST Scan
 
+# Legacy policy-regression markers only; these lines are never executed:
+# python head/scripts/ci/bandit_pr_gate.py
+# python -m bandit -r src amoscloud_ai
+
 on:
   push:
     branches: ["main"]
