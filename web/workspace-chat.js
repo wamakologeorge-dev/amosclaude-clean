@@ -10,7 +10,6 @@
 
   const storageKey = `amosclaud-repository-chat-${repositoryId}`;
   const chatTimeoutMs = 57000;
-  const retryDelayMs = 750;
   let sessionId = sessionStorage.getItem(storageKey) || '';
 
   function repositoryName() {
@@ -39,37 +38,28 @@
     sendButton.textContent = busy ? 'Sending…' : 'Send';
   }
 
-  function wait(milliseconds) {
-    return new Promise(resolve => setTimeout(resolve, milliseconds));
-  }
-
   async function requestChat(payload) {
-    let lastError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), chatTimeoutMs);
-      try {
-        return await fetch('/api/chat', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        lastError = error;
-        if (error?.name === 'AbortError') {
-          throw new Error('Chat request timed out before the Amosclaud service answered.');
-        }
-        if (attempt === 0) await wait(retryDelayMs);
-      } finally {
-        clearTimeout(timeout);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), chatTimeoutMs);
+    try {
+      return await fetch('/api/chat', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Chat request timed out before the Amosclaud service answered.');
       }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    throw lastError || new Error('Chat service request failed.');
   }
 
   async function sendMessage(rawMessage) {
