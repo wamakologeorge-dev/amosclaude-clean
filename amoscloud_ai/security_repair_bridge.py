@@ -19,7 +19,11 @@ from urllib.parse import quote
 
 import httpx
 
-from .github_app_connection import InstallationConnection, connect_installation
+from .github_app_connection import (
+    GitHubAppConnectionError,
+    InstallationConnection,
+    connect_installation,
+)
 
 SECURITY_WORKFLOWS = frozenset(
     {
@@ -319,8 +323,30 @@ def run_from_environment() -> int:
         print(json.dumps(result.as_dict(), sort_keys=True))
         return result.exit_code
 
-    event = json.loads(Path(event_path).read_text(encoding="utf-8"))
-    connection = connect_installation(repository=repository)
+    try:
+        event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        result = BridgeResult(
+            "BLOCKED",
+            "",
+            "",
+            detail="workflow event could not be read safely",
+        )
+        print(json.dumps(result.as_dict(), sort_keys=True))
+        return result.exit_code
+
+    try:
+        connection = connect_installation(repository=repository)
+    except GitHubAppConnectionError as exc:
+        result = BridgeResult(
+            "BLOCKED",
+            str(_workflow_run(event).get("name") or ""),
+            str(_workflow_run(event).get("conclusion") or ""),
+            detail=f"GitHub App connection failed: {exc.code}",
+        )
+        print(json.dumps(result.as_dict(), sort_keys=True))
+        return result.exit_code
+
     result = bridge_security_failure(
         repository=repository,
         event=event,
