@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - CodeQL
+      - Amosclaud CodeQL Threat Gate
       - Amosclaud Dependency Threat Gate
       - Fortify AST Scan
     types: [completed]
