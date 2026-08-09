@@ -232,8 +232,24 @@ jobs:
           fi
           echo "stable=true" >> "$GITHUB_OUTPUT"
 
+      - name: Final immutable head SHA guard before privileged operations
+        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true'
+        id: final_sha_guard
+        env:
+          EXPECTED_SHA: ${{ steps.target.outputs.head_sha }}
+          HEAD_REF: ${{ steps.target.outputs.head_ref }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
+          test -n "$remote_sha"
+          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
+            echo "Head moved before privilege use: expected=$EXPECTED_SHA actual=$remote_sha" >&2
+            exit 1
+          fi
+          echo "stable=true" >> "$GITHUB_OUTPUT"
+
       - name: Connect the verified Amosclaud GitHub App installation
-        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true' && steps.final_sha_guard.outputs.stable == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         id: app
         env:
           GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
@@ -248,7 +264,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Commit and push the verified patch to the same PR branch
-        if: steps.verify.outputs.verified == 'true' && steps.app.outputs.connected == 'true'
+        if: steps.verify.outputs.verified == 'true' && steps.final_sha_guard.outputs.stable == 'true' && steps.app.outputs.connected == 'true'
         id: publish
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
