@@ -1,9 +1,7 @@
 name: Amosclaud Ollama Patch Dispatcher
 
-# Legacy trusted-policy compatibility markers. These comments are not executed:
-# gh workflow run amosclaud-claude-patch-worker.yml
-# -f expected_head_sha="$EXPECTED_HEAD_SHA"
-# The comment workflow does not check out or execute pull-request code
+# Historical workflow name retained only as a compatibility entry point.
+# The comment workflow does not check out or execute pull-request code.
 
 on:
   issue_comment:
