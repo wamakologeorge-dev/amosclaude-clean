@@ -23,13 +23,17 @@ class FakeBot:
         self.calls.append((method, path, payload))
         if method == "GET" and path == "/repos/owner/repo/pulls/7":
             self.pr_reads += 1
-            sha = "newsha987654321" if self.change_head and self.pr_reads > 1 else "headsha123456789"
+            sha = (
+                "newsha987654321"
+                if self.change_head and self.pr_reads > 1
+                else "headsha123456789"
+            )
             return {
                 "title": "Add review capability",
                 "base": {"ref": "main"},
                 "head": {"ref": "feature/review", "sha": sha},
             }
-        if method == "GET" and "pulls/7/files" in path and "page=1" in path:
+        if method == "GET" and "pulls/7/files" in path and "&page=1" in path:
             return [
                 {
                     "filename": f"src/file_{index}.py",
@@ -38,7 +42,7 @@ class FakeBot:
                 }
                 for index in range(100)
             ]
-        if method == "GET" and "pulls/7/files" in path and "page=2" in path:
+        if method == "GET" and "pulls/7/files" in path and "&page=2" in path:
             return [
                 {
                     "filename": "tests/test_review.py",
@@ -46,7 +50,7 @@ class FakeBot:
                     "deletions": 1,
                 }
             ]
-        if method == "GET" and "check-runs" in path and "page=1" in path:
+        if method == "GET" and "check-runs" in path and "&page=1" in path:
             return {
                 "check_runs": [
                     {
