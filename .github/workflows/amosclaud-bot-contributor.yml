@@ -5,8 +5,10 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/amosclaud-bot-contributor.yml"
+      - "amosclaud_bot/status_board.py"
       - "amoscloud_ai/bot_contributor_profile.py"
       - "amoscloud_ai/health_contract.py"
+      - "tests/test_amosclaud_status_board.py"
       - "tests/test_bot_contributor_profile.py"
       - "tests/test_health_contract.py"
       - "docs/AMOSCLAUD_BOT_CONTRIBUTOR.md"
@@ -51,6 +53,7 @@ jobs:
       - name: Compile contributor and health contracts
         run: |
           python -m compileall -q \
+            amosclaud_bot/status_board.py \
             amoscloud_ai/bot_contributor_profile.py \
             amoscloud_ai/health_contract.py
 
@@ -58,6 +61,7 @@ jobs:
         run: |
           uv run --no-project --with pytest \
             python -m pytest -q \
+            tests/test_amosclaud_status_board.py \
             tests/test_bot_contributor_profile.py \
             tests/test_health_contract.py
 
