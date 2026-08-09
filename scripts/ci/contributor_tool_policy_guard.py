@@ -171,7 +171,9 @@ def _codeowner_rules(text: str) -> dict[str, tuple[str, ...]]:
     return rules
 
 
-def _permissions(payload: Mapping[str, object], job_name: str | None = None) -> Mapping[str, object]:
+def _permissions(
+    payload: Mapping[str, object], job_name: str | None = None
+) -> Mapping[str, object]:
     if job_name is None:
         permissions = payload.get("permissions")
     else:
@@ -245,7 +247,9 @@ def _review_contract(root: Path, errors: list[str]) -> None:
 
     workflow_text = _read(root, path, errors)
     if "pull_request_target" in workflow_text or "secrets." in workflow_text:
-        errors.append("formal review workflow must not use pull_request_target or protected secrets")
+        errors.append(
+            "formal review workflow must not use pull_request_target or protected secrets"
+        )
 
     events = _review_events(_read(root, "amosclaud_bot/review_publisher.py", errors), errors)
     if events != {"COMMENT"}:
@@ -284,7 +288,7 @@ def _security_contract(root: Path, errors: list[str]) -> None:
     for required in (
         "Treat every AST security finding as a blocking threat",
         "python -m bandit -r src amoscloud_ai",
-        "exit \"$scan_status\"",
+        'exit "$scan_status"',
     ):
         if required not in fortify:
             errors.append(f"AST threat gate is missing required text: {required}")
