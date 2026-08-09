@@ -20,6 +20,16 @@ These instructions apply to every human or automated engineering agent working i
 4. Run required checks and report the exact result.
 5. Preserve failed and skipped checks as visible blockers instead of converting them into success.
 
+## Amosclaud-first tool sovereignty
+
+Policy marker: `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`
+
+- Scan the Amosclaud repository first before adding, calling, installing, or integrating any tool, action, SDK, library, service, model adapter, workflow component, or automation.
+- Reuse or extend the existing Amosclaud capability when a suitable repository-owned implementation exists.
+- External tools are permitted only when no suitable Amosclaud equivalent exists and the contribution records the repository scan, capability gap, security boundaries, pinned version, verification, fallback, and removal plan.
+- This rule applies to every human contributor, maintainer, bot, autonomous agent, generated patch, workflow, and integration.
+- Do not remove, weaken, bypass, rename, or make this policy optional. Read and follow `docs/CONTRIBUTOR_TOOL_POLICY.md`.
+
 ## Architecture boundaries
 
 - Amosclaud Autonomous is the single public agent identity.
