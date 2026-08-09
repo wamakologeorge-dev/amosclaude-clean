@@ -1,9 +1,9 @@
 """Deterministic workflow health classification for Amosclaud.
 
-A repository is verified only when every required check is present and has an
-accepted conclusion. Conditional checks may be declared as expected skips for
-a specific event. Missing, pending, cancelled, or unexpectedly skipped checks
-remain visible and prevent a 100% claim.
+A repository is verified only when every required check is present and every
+observed check has an accepted conclusion. Conditional skips must be declared
+for the concrete event that produced the check. Missing, pending, cancelled,
+or unexpectedly skipped checks remain visible and prevent a 100% claim.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ PENDING_STATUSES = {"in_progress", "pending", "queued", "requested", "waiting"}
 @dataclass(frozen=True)
 class CheckState:
     name: str
+    display_name: str
     state: str
     conclusion: str | None
     required: bool
@@ -35,6 +36,7 @@ class CheckState:
     def as_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
+            "display_name": self.display_name,
             "state": self.state,
             "conclusion": self.conclusion,
             "required": self.required,
@@ -74,6 +76,7 @@ def evaluate_health(
             states.append(
                 CheckState(
                     name=name,
+                    display_name=name,
                     state="MISSING",
                     conclusion=None,
                     required=True,
@@ -126,7 +129,14 @@ def evaluate_health(
     required_verified = sum(
         1 for state in states if state.required and state.state in {"PASSED", "EXPECTED_SKIP"}
     )
-    percentage = round((required_verified / required_total) * 100) if required_total else 0
+    observed_total = len(states)
+    observed_verified = sum(
+        1 for state in states if state.state in {"PASSED", "EXPECTED_SKIP"}
+    )
+    percentage = round((observed_verified / observed_total) * 100) if observed_total else 0
+    truthful_100_percent = overall == "VERIFIED" and percentage == 100
+    if not truthful_100_percent and percentage == 100:
+        percentage = 99
 
     return {
         "schema": "amosclaud.health-contract.v1",
@@ -134,10 +144,12 @@ def evaluate_health(
         "percentage": percentage,
         "required_total": required_total,
         "required_verified": required_verified,
+        "observed_total": observed_total,
+        "observed_verified": observed_verified,
         "counts": counts,
         "checks": [state.as_dict() for state in states],
         "exit_code": exit_code,
-        "truthful_100_percent": overall == "VERIFIED" and percentage == 100,
+        "truthful_100_percent": truthful_100_percent,
     }
 
 
@@ -148,34 +160,63 @@ def _classify(
     required: bool,
     expected_skips: Sequence[str],
 ) -> CheckState:
+    display_name = str(check.get("display_name") or name).strip() or name
     status = str(check.get("status") or "").strip().lower()
     raw_conclusion = check.get("conclusion")
     conclusion = str(raw_conclusion).strip().lower() if raw_conclusion is not None else None
 
     if status in PENDING_STATUSES or (status != "completed" and conclusion is None):
-        return CheckState(name, "PENDING", conclusion, required, f"status={status or 'unknown'}")
+        return CheckState(
+            name,
+            display_name,
+            "PENDING",
+            conclusion,
+            required,
+            f"status={status or 'unknown'}",
+        )
     if conclusion in PASSING_CONCLUSIONS:
-        return CheckState(name, "PASSED", conclusion, required, f"conclusion={conclusion}")
+        return CheckState(
+            name,
+            display_name,
+            "PASSED",
+            conclusion,
+            required,
+            f"conclusion={conclusion}",
+        )
     if conclusion == "skipped":
-        if _matches(name, expected_skips):
+        skip_expected = bool(check.get("skip_expected")) or _matches(
+            display_name, expected_skips
+        )
+        if skip_expected:
+            event = str(check.get("event") or "unknown")
             return CheckState(
                 name,
+                display_name,
                 "EXPECTED_SKIP",
                 conclusion,
                 required,
-                "conditional check was allowed to skip for this event",
+                f"conditional check was allowed to skip for event={event}",
             )
         return CheckState(
             name,
+            display_name,
             "UNEXPECTED_SKIP",
             conclusion,
             required,
             "skip was not declared by the event contract",
         )
     if conclusion in FAILING_CONCLUSIONS:
-        return CheckState(name, "FAILED", conclusion, required, f"conclusion={conclusion}")
+        return CheckState(
+            name,
+            display_name,
+            "FAILED",
+            conclusion,
+            required,
+            f"conclusion={conclusion}",
+        )
     return CheckState(
         name,
+        display_name,
         "UNKNOWN",
         conclusion,
         required,
@@ -198,7 +239,7 @@ def render_markdown(result: Mapping[str, object]) -> str:
         "### Amosclaud — Verified Health Contract",
         "",
         f"**Overall:** {symbol} {overall}",
-        f"**Required verification:** {percentage}%",
+        f"**Observed verification:** {percentage}%",
         "",
     ]
     for check in result.get("checks", []):
@@ -212,7 +253,9 @@ def render_markdown(result: Mapping[str, object]) -> str:
             "UNEXPECTED_SKIP": "🟥",
         }.get(state, "⬜")
         requirement = "required" if check.get("required") else "observed"
+        display_name = check.get("display_name") or check.get("name")
         lines.append(
-            f"{marker} **{check.get('name')}** — {state} ({requirement}; {check.get('detail')})"
+            f"{marker} **{display_name}** — {state} "
+            f"({requirement}; {check.get('detail')})"
         )
     return "\n".join(lines) + "\n"
