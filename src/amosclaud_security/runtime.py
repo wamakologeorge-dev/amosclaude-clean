@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import secrets
 import subprocess
 from pathlib import Path
 
 from .command_bus import SecurityAuthority
 
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_.:-]+")
+_TRUSTED_WRITE_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+_EPHEMERAL_AUTHORITIES: dict[Path, SecurityAuthority] = {}
 
 
 def repository_identity(workspace: Path | str, explicit: str | None = None) -> str:
@@ -54,12 +58,65 @@ def security_state_path(workspace: Path | str) -> Path:
     return data_root / f"{identity}.db"
 
 
+def _trusted_github_edit_context() -> bool:
+    """Allow a one-run authority only for trusted Amosclaud Bot fix comments.
+
+    The generated signing key exists only in this Python process. It is never
+    written to the repository, workflow output, model prompt, or environment.
+    All normal capability, path, verification, and publication restrictions
+    still apply.
+    """
+
+    if os.getenv("GITHUB_ACTIONS", "").strip().lower() != "true":
+        return False
+    if os.getenv("GITHUB_EVENT_NAME", "").strip() != "issue_comment":
+        return False
+    if os.getenv("GITHUB_WORKFLOW", "").strip() != "Amosclaud Bot":
+        return False
+
+    event_path = Path(os.getenv("GITHUB_EVENT_PATH", "").strip())
+    if not event_path.is_file():
+        return False
+    try:
+        payload = json.loads(event_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+
+    comment = payload.get("comment")
+    if not isinstance(comment, dict):
+        return False
+    association = str(comment.get("author_association") or "NONE").upper()
+    if association not in _TRUSTED_WRITE_ASSOCIATIONS:
+        return False
+
+    body = " ".join(str(comment.get("body") or "").strip().lower().split())
+    return body.startswith("@amosclaud ") or body.startswith("@amosclaud-bot ")
+
+
 def authority_for_workspace(
     workspace: Path | str,
     *,
     required: bool,
 ) -> SecurityAuthority | None:
-    return SecurityAuthority.from_environment(
-        state_path=security_state_path(workspace),
-        required=required,
+    state_path = security_state_path(workspace)
+    configured = SecurityAuthority.from_environment(
+        state_path=state_path,
+        required=False,
     )
+    if configured is not None or not required:
+        return configured
+
+    if not _trusted_github_edit_context():
+        return SecurityAuthority.from_environment(
+            state_path=state_path,
+            required=True,
+        )
+
+    root = Path(workspace).resolve()
+    authority = _EPHEMERAL_AUTHORITIES.get(root)
+    if authority is None:
+        authority = SecurityAuthority(secrets.token_urlsafe(48), state_path)
+        _EPHEMERAL_AUTHORITIES[root] = authority
+    return authority
