@@ -22,7 +22,7 @@ from jose.exceptions import JWKError, JWSError
 
 PUBLIC_IDENTITY = "Amosclaud Autonomous"
 TECHNICAL_APP_NAME = "Amosclaud Bot"
-DEFAULT_APP_SLUG = "amosclaud-platform"
+DEFAULT_APP_SLUG = "amosclaud-bot"
 ROLE = "Autonomous software-engineering contributor"
 HOMEPAGE = "https://www.amosclaud.com"
 CANONICAL_REPOSITORY = "wamakologeorge-dev/amosclaude-clean"
