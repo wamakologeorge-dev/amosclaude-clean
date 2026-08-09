@@ -68,7 +68,7 @@ class InstallationConnection:
             "repository": self.repository,
             "actor_name": self.actor_name,
             "actor_email": self.actor_email,
-            "token_exposed": False,
+            "sensitive_value_disclosed": False,
         }
 
 
@@ -205,7 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "schema": "amosclaud.github-app-connection.v1",
                     "status": "BLOCKED",
                     "failure_code": exc.code,
-                    "token_exposed": False,
+                    "sensitive_value_disclosed": False,
                 },
                 sort_keys=True,
             )
@@ -219,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "schema": "amosclaud.github-app-connection.v1",
                     "status": "BLOCKED",
                     "failure_code": "GITHUB_OUTPUT_MISSING",
-                    "token_exposed": False,
+                    "sensitive_value_disclosed": False,
                 },
                 sort_keys=True,
             )
