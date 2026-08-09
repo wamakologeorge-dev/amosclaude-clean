@@ -83,9 +83,7 @@ def build_profile(environment: Mapping[str, str] | None = None) -> dict[str, obj
         verification_level = "UNCONFIGURED"
 
     commit_email = (
-        f"{bot_user_id}+{bot_login}@users.noreply.github.com"
-        if bot_user_id_valid
-        else None
+        f"{bot_user_id}+{bot_login}@users.noreply.github.com" if bot_user_id_valid else None
     )
 
     return {
