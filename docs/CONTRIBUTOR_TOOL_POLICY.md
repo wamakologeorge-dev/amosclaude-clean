@@ -55,6 +55,8 @@ The following files form one protected policy contract:
 - `scripts/ci/contributor_tool_policy_guard.py`
 - `tests/test_contributor_tool_policy_guard.py`
 
+The `Amosclaud Workflow Policy / policy` check runs on every pull request without path filters. The repository-owned guard parses the effective workflow structure and active shell commands, and parses effective CODEOWNERS rules while ignoring comments. Its regression tests reject path-filtered enforcement, commented-out guard commands, renamed enforcement steps, commented ownership rules, removed ownership rules, and removed policy markers.
+
 ## Required GitHub branch rules
 
 The protected `main` branch must require:
