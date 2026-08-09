@@ -1,7 +1,7 @@
 # Amosclaud Contributor Tool Sovereignty Policy
 
-**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`
-**Status:** Permanent repository governance
+**Policy ID:** `AMOSCLAUD-TOOL-SOVEREIGNTY-POLICY:v1`  
+**Status:** Permanent repository governance  
 **Applies to:** every human contributor, maintainer, bot, autonomous agent, workflow, generated patch, and integration.
 
 ## Mandatory Amosclaud-first order
@@ -69,7 +69,9 @@ The trusted security-repair bridge may accept only the protected workflow allowl
 - never suppress, dismiss, downgrade, or disable a security finding to make a check pass;
 - never merge or force-push.
 
-Any open CodeQL alert and every newly introduced vulnerable dependency covered by the repository gates is treated as blocking regardless of low, moderate, high, or critical severity. Ordinary lint and test failures remain blocking engineering failures but must not be falsely labeled as security vulnerabilities.
+Any open CodeQL alert, every newly introduced vulnerable dependency, and every AST finding introduced by the exact pull-request head is blocking regardless of low, medium, high, or critical severity. Ordinary lint and test failures remain blocking engineering failures but must not be falsely labeled as security vulnerabilities.
+
+The AST gate scans both the exact base and exact head revision with the same pinned scanner and no suppression flags. Existing base findings remain visible as repository security debt and are included in the evidence artifact; they do not make an unrelated pull request permanently unmergeable. Scheduled audits continue to scan and report the full repository debt. A pull request passes the AST gate only when it introduces zero new findings.
 
 ## Enforcement files
 
@@ -97,16 +99,18 @@ And the Advanced Security repair connection:
 - `.github/workflows/amosclaud-dependency-threat-gate.yml`
 - `.github/workflows/amosclaud-security-repair-bridge.yml`
 - `scripts/ci/advanced_security_gate.py`
+- `scripts/ci/bandit_pr_gate.py`
 - `amoscloud_ai/github_app_connection.py`
 - `amoscloud_ai/security_repair_bridge.py`
 - `tests/test_advanced_security_gate.py`
+- `tests/test_bandit_pr_gate.py`
 - `tests/test_github_app_connection.py`
 - `tests/test_security_repair_bridge.py`
 - `docs/AMOSCLAUD_SECURITY_REPAIR_LOOP.md`
 
-The `Amosclaud Workflow Policy / policy` check runs on every pull request without path filters. The repository-owned guard parses the effective workflow structure and active shell commands, parses effective CODEOWNERS rules while ignoring comments, validates the review event, verifies trusted checkouts, protects the security workflow allowlist, and locks the repair dispatch target to the existing Amosclaud Repair Control Plane.
+The `Amosclaud Workflow Policy / policy` check runs on every pull request without path filters. The repository-owned guard parses the effective workflow structure and active shell commands, parses effective CODEOWNERS rules while ignoring comments, validates the review event, verifies trusted checkouts, protects the security workflow allowlist, locks the repair dispatch target to the existing Amosclaud Repair Control Plane, requires exact base/head AST scans, and rejects AST suppression flags.
 
-Regression tests reject path-filtered enforcement, commented-out guard commands, renamed enforcement steps, commented ownership rules, removed ownership rules, removed policy markers, automatic review approval, pull-request-code checkout, protected secrets in the review workflow, broadened security sources, replaced repair targets, and weakened low-severity dependency blocking.
+Regression tests reject path-filtered enforcement, commented-out guard commands, renamed enforcement steps, commented ownership rules, removed ownership rules, removed policy markers, automatic review approval, pull-request-code checkout, protected secrets in the review workflow, broadened security sources, replaced repair targets, weakened low-severity dependency blocking, removed AST comparison, altered exact-base selection, and AST suppression flags.
 
 ## Required GitHub branch rules
 
