@@ -95,3 +95,45 @@ def test_scheduled_scan_does_not_call_the_model_when_healthy() -> None:
     candidate = source.index("Generate bounded repair candidate")
     assert health < candidate
     assert "steps.reproduce.outputs.reproduced == 'true'" in source
+
+
+def test_workflow_dispatch_rejects_a_moved_pull_request_head(monkeypatch) -> None:
+    module = _load(CONTROL, "amosclaud_repair_control_exact_sha")
+
+    def fake_request(method, url, *, token, payload=None, accept="application/vnd.github+json"):
+        assert method == "GET"
+        assert url.endswith("/pulls/42")
+        assert token == "token"
+        assert payload is None
+        return {
+            "state": "open",
+            "head": {
+                "sha": "new-head-sha",
+                "ref": "feature/repair",
+                "repo": {"full_name": "owner/repo"},
+            },
+            "base": {"ref": "main"},
+        }
+
+    monkeypatch.setattr(module, "_request_json", fake_request)
+    route = module.classify(
+        "workflow_dispatch",
+        {
+            "inputs": {
+                "scope": "pull_request",
+                "pull_request_number": "42",
+                "target_sha": "verified-old-sha",
+                "provider": "ollama-cloud",
+                "source_name": "owner repair command",
+            }
+        },
+        "owner/repo",
+        "main",
+        "token",
+    )
+
+    assert route.should_repair is False
+    assert route.route == "stale_dispatch"
+    assert route.target_sha == "verified-old-sha"
+    assert route.pull_request_number == "42"
+    assert "no longer matches" in route.reason
