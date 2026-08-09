@@ -28,7 +28,6 @@ from .github_app_connection import (
 SECURITY_WORKFLOWS = frozenset(
     {
         "CodeQL",
-        "Amosclaud CodeQL Threat Gate",
         "Amosclaud Dependency Threat Gate",
         "Fortify AST Scan",
     }
