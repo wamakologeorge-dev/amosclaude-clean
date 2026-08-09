@@ -9,6 +9,8 @@
   if (!form || !input || !messages || !/^\d+$/.test(repositoryId || '')) return;
 
   const storageKey = `amosclaud-repository-chat-${repositoryId}`;
+  const chatTimeoutMs = 57000;
+  const retryDelayMs = 750;
   let sessionId = sessionStorage.getItem(storageKey) || '';
 
   function repositoryName() {
@@ -37,6 +39,39 @@
     sendButton.textContent = busy ? 'Sending…' : 'Send';
   }
 
+  function wait(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+  }
+
+  async function requestChat(payload) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), chatTimeoutMs);
+      try {
+        return await fetch('/api/chat', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } catch (error) {
+        lastError = error;
+        if (error?.name === 'AbortError') {
+          throw new Error('Chat request timed out before the Amosclaud service answered.');
+        }
+        if (attempt === 0) await wait(retryDelayMs);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    throw lastError || new Error('Chat service request failed.');
+  }
+
   async function sendMessage(rawMessage) {
     const message = rawMessage.trim();
     if (!message) return;
@@ -52,15 +87,10 @@
         '',
         message,
       ].join('\n');
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: contextualMessage,
-          session_id: sessionId || null,
-          base_branch: branchName(),
-        }),
+      const response = await requestChat({
+        message: contextualMessage,
+        session_id: sessionId || null,
+        base_branch: branchName(),
       });
       if (response.status === 401) {
         location.assign('/login');
@@ -73,7 +103,10 @@
       addMessage('assistant', data.reply || 'Amosclaud did not return a reply.');
       state.textContent = `${repositoryName()} · ${branchName()} · ${data.provider || 'Amosclaud'}`;
     } catch (error) {
-      addMessage('assistant', `Chat failed safely: ${error.message}`);
+      const detail = error instanceof TypeError
+        ? 'The website loaded, but /api/chat could not be reached. Check the active deployment and /health endpoint.'
+        : error.message;
+      addMessage('assistant', `Chat failed safely: ${detail}`);
       state.textContent = 'Chat is available, but the last request failed.';
     } finally {
       setBusy(false);
