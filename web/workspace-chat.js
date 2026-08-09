@@ -9,6 +9,8 @@
   if (!form || !input || !messages || !/^\d+$/.test(repositoryId || '')) return;
 
   const storageKey = `amosclaud-repository-chat-${repositoryId}`;
+  const chatTimeoutMs = 57000;
+  const promptButtons = Array.from(document.querySelectorAll('[data-chat-prompt]'));
   let sessionId = sessionStorage.getItem(storageKey) || '';
 
   function repositoryName() {
@@ -34,7 +36,49 @@
   function setBusy(busy) {
     input.disabled = busy;
     sendButton.disabled = busy;
+    promptButtons.forEach(button => {
+      button.disabled = busy;
+    });
     sendButton.textContent = busy ? 'Sending…' : 'Send';
+  }
+
+  async function requestChat(payload) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), chatTimeoutMs);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const contentType = response.headers.get('content-type') || '';
+      const rawBody = await response.text();
+      let data = {};
+      if (rawBody) {
+        if (contentType.includes('application/json')) {
+          try {
+            data = JSON.parse(rawBody);
+          } catch (_error) {
+            data = { message: 'Chat service returned invalid JSON.' };
+          }
+        } else {
+          data = { message: rawBody.trim().slice(0, 500) };
+        }
+      }
+      return { response, data };
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error('Chat request timed out before the Amosclaud service answered.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async function sendMessage(rawMessage) {
@@ -52,28 +96,25 @@
         '',
         message,
       ].join('\n');
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: contextualMessage,
-          session_id: sessionId || null,
-          base_branch: branchName(),
-        }),
+      const { response, data } = await requestChat({
+        message: contextualMessage,
+        session_id: sessionId || null,
+        base_branch: branchName(),
       });
       if (response.status === 401) {
         location.assign('/login');
         return;
       }
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.detail || data.message || `Chat failed (${response.status})`);
       sessionId = data.session_id || sessionId;
       if (sessionId) sessionStorage.setItem(storageKey, sessionId);
       addMessage('assistant', data.reply || 'Amosclaud did not return a reply.');
       state.textContent = `${repositoryName()} · ${branchName()} · ${data.provider || 'Amosclaud'}`;
     } catch (error) {
-      addMessage('assistant', `Chat failed safely: ${error.message}`);
+      const detail = error instanceof TypeError
+        ? 'The website loaded, but /api/chat could not be reached. Check the active deployment and /health endpoint.'
+        : error.message;
+      addMessage('assistant', `Chat failed safely: ${detail}`);
       state.textContent = 'Chat is available, but the last request failed.';
     } finally {
       setBusy(false);
@@ -101,7 +142,7 @@
     }
   });
 
-  document.querySelectorAll('[data-chat-prompt]').forEach(button => {
+  promptButtons.forEach(button => {
     button.addEventListener('click', () => sendMessage(button.dataset.chatPrompt || ''));
   });
 

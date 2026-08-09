@@ -1,4 +1,5 @@
 """Tests for the GitHub App webhook receiver and event feed."""
+
 from __future__ import annotations
 
 import asyncio
@@ -23,6 +24,7 @@ def _isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("AMOSCLAUD_CODEX_MEMORY_DIR", str(tmp_path / "codex"))
     monkeypatch.setenv("AMOSCLAUD_GITHUB_EVENTS_DB", str(tmp_path / "events.db"))
     monkeypatch.setenv("GITHUB_APP_WEBHOOK_SECRET", SECRET)
+    monkeypatch.delenv("GITHUB_APP_WEBHOOK_SECRET_PREVIOUS", raising=False)
     codex_memory.reset_cache_for_tests()
     yield
     codex_memory.reset_cache_for_tests()
@@ -37,7 +39,13 @@ def request(method: str, path: str, **kwargs):
     return asyncio.run(_go())
 
 
-def deliver(event: str, payload: dict, *, secret: str | None = SECRET, signature: str | None = None):
+def deliver(
+    event: str,
+    payload: dict,
+    *,
+    secret: str | None = SECRET,
+    signature: str | None = None,
+):
     body = json.dumps(payload).encode()
     headers = {
         "X-GitHub-Event": event,
@@ -59,9 +67,27 @@ def test_ping_is_answered():
 
 
 def test_bad_signature_is_rejected():
-    response = deliver("push", {"repository": {"full_name": "a/b"}}, signature="sha256=bad")
+    response = deliver(
+        "push",
+        {"repository": {"full_name": "a/b"}},
+        signature="sha256=bad",
+    )
     assert response.status_code == 401
-    assert deliver("push", {}, secret=None).status_code == 401
+    assert response.json()["detail"] == "Invalid webhook signature"
+
+    missing = deliver("push", {}, secret=None)
+    assert missing.status_code == 401
+    assert missing.json()["detail"] == "Missing webhook signature"
+
+
+def test_previous_secret_is_accepted_during_rotation(monkeypatch):
+    monkeypatch.setenv("GITHUB_APP_WEBHOOK_SECRET", "new-secret")
+    monkeypatch.setenv("GITHUB_APP_WEBHOOK_SECRET_PREVIOUS", SECRET)
+
+    response = deliver("ping", {"zen": "Rotate safely."}, secret=SECRET)
+
+    assert response.status_code == 200
+    assert response.json()["pong"] == "Rotate safely."
 
 
 def test_push_event_is_recorded_in_feed_and_codex(monkeypatch):
@@ -127,14 +153,18 @@ def test_app_status_reports_configuration(monkeypatch):
     monkeypatch.setattr(
         github_app, "_authenticated_user", lambda _request: {"id": 1, "name": "Owner"}
     )
-    deliver("issues", {
-        "action": "opened",
-        "repository": {"full_name": "wamakologeorge-dev/amosclaude-clean"},
-        "issue": {"number": 9, "title": "Bug"},
-    })
+    deliver(
+        "issues",
+        {
+            "action": "opened",
+            "repository": {"full_name": "wamakologeorge-dev/amosclaude-clean"},
+            "issue": {"number": 9, "title": "Bug"},
+        },
+    )
     response = request("GET", "/api/v1/agent/github/app")
     assert response.status_code == 200
     body = response.json()
     assert body["webhook_secret_configured"] is True
+    assert body["webhook_secret_slots_configured"] == ["primary"]
     assert body["events_recorded"] >= 1
     assert body["webhook_path"] == "/api/v1/agent/github/webhook"
