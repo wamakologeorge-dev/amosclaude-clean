@@ -216,8 +216,24 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Re-check PR head SHA before privileged app connection
+        if: steps.verify.outputs.verified == 'true'
+        id: recheck_head
+        env:
+          EXPECTED_SHA: ${{ steps.target.outputs.head_sha }}
+          HEAD_REF: ${{ steps.target.outputs.head_ref }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(git -C target ls-remote origin "refs/heads/${HEAD_REF}" | cut -f1)"
+          test -n "$remote_sha"
+          if [ "$remote_sha" != "$EXPECTED_SHA" ]; then
+            echo "Head moved after verification: expected=$EXPECTED_SHA actual=$remote_sha" >&2
+            exit 1
+          fi
+          echo "stable=true" >> "$GITHUB_OUTPUT"
+
       - name: Connect the verified Amosclaud GitHub App installation
-        if: steps.verify.outputs.verified == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+        if: steps.verify.outputs.verified == 'true' && steps.recheck_head.outputs.stable == 'true' && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         id: app
         env:
           GITHUB_APP_SLUG: ${{ vars.GITHUB_APP_SLUG || 'amosclaud-bot' }}
