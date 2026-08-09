@@ -69,6 +69,7 @@ def validate_repository(root: Path) -> list[str]:
     workflow_text = _read(root, WORKFLOW, errors)
     parser = _read(root, PARSER, errors)
     executor = _read(root, EXECUTOR, errors)
+    documentation = _read(root, "docs/AMOSCLAUD_CLAUDE_PATCH_EXECUTOR.md", errors)
     steps = _steps(workflow)
 
     events = workflow.get("on", workflow.get(True))
@@ -138,7 +139,6 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"Claude patch workflow contains forbidden authority: {forbidden}")
 
     for required in (
-        POLICY_MARKER,
         'frozenset({"patch", "ai-fix", "claude-fix"})',
         'source_format == "claude-patch-alias"',
         "association in WRITE_ASSOCIATIONS",
@@ -148,7 +148,6 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"comment parser is missing contract: {required}")
 
     for required in (
-        POLICY_MARKER,
         'f"{base_url.rstrip(\'/\')}/v1/messages"',
         '"x-api-key": api_key',
         '"anthropic-version": anthropic_version',
@@ -170,6 +169,9 @@ def validate_repository(root: Path) -> list[str]:
     ):
         if forbidden in executor:
             errors.append(f"Claude executor contains forbidden execution authority: {forbidden}")
+
+    if POLICY_MARKER not in documentation:
+        errors.append("Claude patch documentation is missing the policy marker")
 
     return sorted(set(errors))
 
