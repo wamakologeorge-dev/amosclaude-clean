@@ -39,25 +39,39 @@ PROTECTED_TOOLING_PATHS = frozenset(
 
 PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.-])"
-    r"((?:\.?\.?/)?(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
+    r"((?:(?:[A-Za-z]:)?/|\.?\.?/)?(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\."
     r"(?:py|json|ya?ml|sh|html|css|js|mjs|cjs|toml|md))"
     r"(?=[:\s\"')\],]|$)",
     re.IGNORECASE,
 )
 
 
-def _relative_existing_path(root: Path, candidate: str) -> str | None:
+def _candidate_suffixes(root: Path, candidate: str) -> list[str]:
     cleaned = candidate.strip().replace("\\", "/").removeprefix("./")
-    if not cleaned or cleaned in PROTECTED_TOOLING_PATHS:
-        return None
-    path = (root / cleaned).resolve()
-    try:
-        relative = path.relative_to(root.resolve())
-    except ValueError:
-        return None
-    if not path.is_file():
-        return None
-    return relative.as_posix()
+    normalized = cleaned.lstrip("/")
+    trials = [normalized]
+    parts = [part for part in normalized.split("/") if part]
+    repository_indexes = [index for index, part in enumerate(parts) if part == root.name]
+    if repository_indexes:
+        suffix = "/".join(parts[repository_indexes[-1] + 1 :])
+        if suffix:
+            trials.insert(0, suffix)
+    return list(dict.fromkeys(item for item in trials if item))
+
+
+def _relative_existing_path(root: Path, candidate: str) -> str | None:
+    root = root.resolve()
+    for cleaned in _candidate_suffixes(root, candidate):
+        if cleaned in PROTECTED_TOOLING_PATHS:
+            continue
+        path = (root / cleaned).resolve()
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            continue
+        if path.is_file():
+            return relative.as_posix()
+    return None
 
 
 def extract_candidate_paths(log_text: str, root: Path, limit: int = 25) -> list[str]:
