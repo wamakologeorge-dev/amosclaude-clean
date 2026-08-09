@@ -2,26 +2,6 @@ name: Amosclaud Workflow Policy
 
 on:
   pull_request:
-    paths:
-      - .github/scripts/agent_chat.py
-      - .github/workflows/agent-chat.yml
-      - .github/workflows/results.yml
-      - .github/workflows/plan.yml
-      - .github/workflows/policy.yml
-      - .github/workflows/fixer.yml
-      - .github/workflows/scan.yml
-      - .github/workflows/main.yml
-      - .github/workflows/action.yml
-      - .github/workflows/Autonomous.yml
-      - .github/workflows/amosclaude-clean.yml
-      - .github/workflows/pull-request-chat-group.yml
-      - .github/workflows/amosclaud-bot-contributor.yml
-      - .github/PULL_REQUEST_TEMPLATE.md
-      - .github/CODEOWNERS
-      - AGENTS.md
-      - docs/CONTRIBUTOR_TOOL_POLICY.md
-      - scripts/ci/contributor_tool_policy_guard.py
-      - tests/test_contributor_tool_policy_guard.py
 
 permissions:
   contents: read
@@ -42,7 +22,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install YAML parser
+      - name: Install repository policy parser
         run: python -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
 
       - name: Validate controller and workflow syntax
