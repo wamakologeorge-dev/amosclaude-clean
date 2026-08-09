@@ -24,7 +24,12 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
         raise ValueError("Invalid workspace path")
 
     workspace_path = Path(raw_workspace)
-    root = (base / workspace_path).resolve() if not workspace_path.is_absolute() else workspace_path.resolve()
+    if workspace_path.is_absolute():
+        raise ValueError("Workspace must be a relative path")
+    if ".." in workspace_path.parts:
+        raise ValueError("Workspace escapes allowed root")
+
+    root = (base / workspace_path).resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
