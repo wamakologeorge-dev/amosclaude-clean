@@ -87,11 +87,7 @@ def test_claude_messages_request_uses_required_headers_and_text_blocks() -> None
         captured["headers"] = dict(request.header_items())
         captured["body"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse(
-            {
-                "content": [
-                    {"type": "text", "text": "```diff\ndiff --git a/a.py b/a.py\n```"}
-                ]
-            }
+            {"content": [{"type": "text", "text": "```diff\ndiff --git a/a.py b/a.py\n```"}]}
         )
 
     with patch.object(module.urllib.request, "urlopen", side_effect=urlopen):
@@ -156,8 +152,7 @@ def test_executor_writes_validated_diff_without_applying_it(tmp_path: Path) -> N
     )
     patch_output = tmp_path / "candidate.patch"
     report = tmp_path / "report.json"
-    response = textwrap.dedent(
-        """\
+    response = textwrap.dedent("""\
         ```diff
         diff --git a/src/worker.py b/src/worker.py
         --- a/src/worker.py
@@ -169,13 +164,15 @@ def test_executor_writes_validated_diff_without_applying_it(tmp_path: Path) -> N
         +def work_twice():
         +    return work() * 2
         ```
-        """
-    )
+        """)
 
-    with patch.object(module, "call_claude", return_value=response), patch.object(
-        module.candidate.legacy,
-        "memory_context",
-        return_value="No verified memory matched.",
+    with (
+        patch.object(module, "call_claude", return_value=response),
+        patch.object(
+            module.candidate.legacy,
+            "memory_context",
+            return_value="No verified memory matched.",
+        ),
     ):
         status = module.main(
             [
