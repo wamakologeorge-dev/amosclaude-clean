@@ -22,7 +22,6 @@ SECURITY_BRIDGE_COMMAND = "python -m amoscloud_ai.security_repair_bridge"
 REPAIR_WORKFLOW = "amosclaud-repair-control-plane.yml"
 APPROVED_SECURITY_WORKFLOWS = {
     "CodeQL",
-    "Amosclaud CodeQL Threat Gate",
     "Amosclaud Dependency Threat Gate",
     "Fortify AST Scan",
 }
@@ -65,14 +64,12 @@ CANONICAL_REQUIREMENTS = (
     "This policy must not be removed, weakened, bypassed",
     "Amosclaud Workflow Policy / policy",
 )
-
 AGENT_REQUIREMENTS = (
     POLICY_MARKER,
     "Scan the Amosclaud repository first",
     "Reuse or extend the existing Amosclaud capability",
     "External tools are permitted only when no suitable Amosclaud equivalent exists",
 )
-
 PULL_REQUEST_REQUIREMENTS = (
     POLICY_MARKER,
     "Amosclaud-first tool scan",
@@ -104,12 +101,8 @@ def _load_yaml(root: Path, relative_path: str, errors: list[str]) -> Mapping[str
     return payload
 
 
-def _events(payload: Mapping[str, object]) -> object:
-    return payload.get("on", payload.get(True))
-
-
 def _event_config(payload: Mapping[str, object], event_name: str) -> object:
-    events = _events(payload)
+    events = payload.get("on", payload.get(True))
     if isinstance(events, str):
         return None if events == event_name else False
     if isinstance(events, list):
@@ -121,39 +114,42 @@ def _event_config(payload: Mapping[str, object], event_name: str) -> object:
 
 def _job(payload: Mapping[str, object], job_name: str) -> Mapping[str, object]:
     jobs = payload.get("jobs")
-    job = jobs.get(job_name) if isinstance(jobs, Mapping) else None
-    return job if isinstance(job, Mapping) else {}
-
-
-def _pull_request_trigger(payload: Mapping[str, object], errors: list[str]) -> None:
-    pull_request_config = _event_config(payload, "pull_request")
-    if pull_request_config is False:
-        errors.append("policy workflow must run on every pull_request")
-        return
-    if isinstance(pull_request_config, Mapping) and any(
-        key in pull_request_config for key in ("paths", "paths-ignore")
-    ):
-        errors.append("policy workflow pull_request trigger must not use path filters")
-
-
-def _active_shell_commands(script: str) -> set[str]:
-    commands: set[str] = set()
-    for raw_line in script.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        commands.add(line)
-    return commands
+    value = jobs.get(job_name) if isinstance(jobs, Mapping) else None
+    return value if isinstance(value, Mapping) else {}
 
 
 def _steps(payload: Mapping[str, object], job_name: str) -> list[Mapping[str, object]]:
-    raw_steps = _job(payload, job_name).get("steps")
-    if not isinstance(raw_steps, list):
+    value = _job(payload, job_name).get("steps")
+    if not isinstance(value, list):
         return []
-    return [step for step in raw_steps if isinstance(step, Mapping)]
+    return [step for step in value if isinstance(step, Mapping)]
+
+
+def _active_shell_commands(script: str) -> set[str]:
+    return {
+        line
+        for raw_line in script.splitlines()
+        if (line := raw_line.strip()) and not line.startswith("#")
+    }
+
+
+def _commands_include(steps: list[Mapping[str, object]], command: str) -> bool:
+    return any(
+        command in active
+        for step in steps
+        for active in _active_shell_commands(str(step.get("run") or ""))
+    )
 
 
 def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> None:
+    pull_request = _event_config(payload, "pull_request")
+    if pull_request is False:
+        errors.append("policy workflow must run on every pull_request")
+    elif isinstance(pull_request, Mapping) and any(
+        key in pull_request for key in ("paths", "paths-ignore")
+    ):
+        errors.append("policy workflow pull_request trigger must not use path filters")
+
     policy_job = _job(payload, "policy")
     if not policy_job:
         errors.append("policy workflow is missing jobs.policy")
@@ -161,20 +157,18 @@ def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> N
     if "if" in policy_job:
         errors.append("policy workflow job must not be conditional")
 
-    steps = _steps(payload, "policy")
-    if not steps:
-        errors.append("policy workflow is missing jobs.policy.steps")
-        return
-
-    matching_steps = [step for step in steps if step.get("name") == POLICY_STEP_NAME]
-    if len(matching_steps) != 1:
+    matching = [
+        step for step in _steps(payload, "policy") if step.get("name") == POLICY_STEP_NAME
+    ]
+    if len(matching) != 1:
         errors.append("policy workflow must contain exactly one effective sovereignty step")
         return
-    enforcement_step = matching_steps[0]
-    if "if" in enforcement_step:
+    if "if" in matching[0]:
         errors.append("policy workflow sovereignty step must not be conditional")
-    commands = _active_shell_commands(str(enforcement_step.get("run") or ""))
-    if not any(POLICY_COMMAND in command for command in commands):
+    if not any(
+        POLICY_COMMAND in command
+        for command in _active_shell_commands(str(matching[0].get("run") or ""))
+    ):
         errors.append("policy workflow sovereignty step does not execute the policy guard")
 
 
@@ -226,34 +220,24 @@ def _effective_codeowners(
 def _permissions(
     payload: Mapping[str, object], job_name: str | None = None
 ) -> Mapping[str, object]:
-    if job_name is None:
-        permissions = payload.get("permissions")
-    else:
-        permissions = _job(payload, job_name).get("permissions")
-    return permissions if isinstance(permissions, Mapping) else {}
+    value = payload.get("permissions") if job_name is None else _job(payload, job_name).get("permissions")
+    return value if isinstance(value, Mapping) else {}
 
 
 def _checkout_is_trusted(steps: list[Mapping[str, object]]) -> bool:
     for step in steps:
-        uses = str(step.get("uses") or "")
-        if not uses.startswith("actions/checkout@"):
+        if not str(step.get("uses") or "").startswith("actions/checkout@"):
             continue
         settings = step.get("with")
         if not isinstance(settings, Mapping):
             return False
         ref = str(settings.get("ref") or "")
-        persist = settings.get("persist-credentials")
-        if "github.event.repository.default_branch" in ref and persist is False:
+        if (
+            "github.event.repository.default_branch" in ref
+            and settings.get("persist-credentials") is False
+        ):
             return True
     return False
-
-
-def _commands_include(steps: list[Mapping[str, object]], command: str) -> bool:
-    return any(
-        command in active
-        for step in steps
-        for active in _active_shell_commands(str(step.get("run") or ""))
-    )
 
 
 def _review_events(source: str, errors: list[str]) -> set[str]:
@@ -262,18 +246,16 @@ def _review_events(source: str, errors: list[str]) -> set[str]:
     except SyntaxError:
         errors.append("review publisher is not valid Python")
         return set()
-
     values: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Dict):
             continue
         for key, value in zip(node.keys, node.values):
-            if not isinstance(key, ast.Constant) or key.value != "event":
-                continue
-            if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                values.add(value.value)
-            else:
-                values.add("<dynamic>")
+            if isinstance(key, ast.Constant) and key.value == "event":
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    values.add(value.value)
+                else:
+                    values.add("<dynamic>")
     return values
 
 
@@ -282,15 +264,13 @@ def _review_contract(root: Path, errors: list[str]) -> None:
     workflow = _load_yaml(root, path, errors)
     if _event_config(workflow, "issue_comment") is False:
         errors.append("formal review workflow must use issue_comment")
-
-    permissions = _permissions(workflow)
-    expected = {
+    expected_permissions = {
         "contents": "read",
         "checks": "read",
         "issues": "write",
         "pull-requests": "write",
     }
-    if dict(permissions) != expected:
+    if dict(_permissions(workflow)) != expected_permissions:
         errors.append("formal review workflow permissions must remain least-privilege")
 
     review_job = _job(workflow, "formal-review")
@@ -308,7 +288,6 @@ def _review_contract(root: Path, errors: list[str]) -> None:
         errors.append("formal review workflow must check out the trusted default branch")
     if not _commands_include(steps, REVIEW_COMMAND):
         errors.append("formal review workflow does not execute the Amosclaud review publisher")
-
     workflow_text = _read(root, path, errors)
     if "pull_request_target" in workflow_text or "secrets." in workflow_text:
         errors.append(
@@ -316,8 +295,7 @@ def _review_contract(root: Path, errors: list[str]) -> None:
         )
 
     publisher = _read(root, "amosclaud_bot/review_publisher.py", errors)
-    events = _review_events(publisher, errors)
-    if events != {"COMMENT"}:
+    if _review_events(publisher, errors) != {"COMMENT"}:
         errors.append("formal review publisher must submit only GitHub COMMENT reviews")
     for required in (
         "METADATA AND CHECK EVIDENCE ONLY",
@@ -345,9 +323,7 @@ def _status_contract(root: Path, errors: list[str]) -> None:
 def _workflow_run_names(payload: Mapping[str, object]) -> set[str]:
     config = _event_config(payload, "workflow_run")
     workflows = config.get("workflows") if isinstance(config, Mapping) else None
-    if not isinstance(workflows, list):
-        return set()
-    return {str(item) for item in workflows}
+    return {str(item) for item in workflows} if isinstance(workflows, list) else set()
 
 
 def _security_contract(root: Path, errors: list[str]) -> None:
@@ -366,22 +342,29 @@ def _security_contract(root: Path, errors: list[str]) -> None:
     expected_permissions = {"contents": "read", "security-events": "read"}
     if dict(_permissions(codeql_gate)) != expected_permissions:
         errors.append("trusted CodeQL gate permissions must remain least-privilege")
-    codeql_job = _job(codeql_gate, "codeql-threat-gate")
-    codeql_condition = str(codeql_job.get("if") or "")
+    condition = str(_job(codeql_gate, "codeql-threat-gate").get("if") or "")
     for required in (
         "github.event.workflow_run.event == 'pull_request'",
         "github.event.workflow_run.conclusion == 'success'",
     ):
-        if required not in codeql_condition:
+        if required not in condition:
             errors.append(f"trusted CodeQL gate condition is missing: {required}")
-    codeql_steps = _steps(codeql_gate, "codeql-threat-gate")
-    if not _checkout_is_trusted(codeql_steps):
+    steps = _steps(codeql_gate, "codeql-threat-gate")
+    if not _checkout_is_trusted(steps):
         errors.append("trusted CodeQL gate must check out the trusted default branch")
-    if not _commands_include(codeql_steps, CODEQL_GATE_COMMAND):
+    if not _commands_include(steps, CODEQL_GATE_COMMAND):
         errors.append("trusted CodeQL gate does not execute the trusted alert evaluator")
-    codeql_gate_text = _read(root, codeql_gate_path, errors)
+    if not _commands_include(steps, SECURITY_BRIDGE_COMMAND):
+        errors.append("trusted CodeQL gate does not route threats through Amosclaud")
+    gate_text = _read(root, codeql_gate_path, errors)
+    for required in (
+        "Keep the pull request blocked until threats are cleared",
+        "GITHUB_APP_PRIVATE_KEY",
+    ):
+        if required not in gate_text:
+            errors.append(f"trusted CodeQL gate is missing repair contract: {required}")
     for forbidden in ("pull_request_target", "github.event.pull_request.head"):
-        if forbidden in codeql_gate_text:
+        if forbidden in gate_text:
             errors.append(f"trusted CodeQL gate contains untrusted checkout input: {forbidden}")
 
     dependency = _read(root, ".github/workflows/amosclaud-dependency-threat-gate.yml", errors)
@@ -426,14 +409,15 @@ def _security_contract(root: Path, errors: list[str]) -> None:
         errors.append("security repair bridge must check out the trusted default branch")
     if not _commands_include(bridge_steps, SECURITY_BRIDGE_COMMAND):
         errors.append("security repair bridge does not execute the Amosclaud bridge module")
-    bridge_text = _read(root, bridge_path, errors)
-    if "pull_request_target" in bridge_text:
+    if "pull_request_target" in _read(root, bridge_path, errors):
         errors.append("security repair bridge must not use pull_request_target")
 
     bridge_source = _read(root, "amoscloud_ai/security_repair_bridge.py", errors)
     for workflow in APPROVED_SECURITY_WORKFLOWS:
         if f'"{workflow}"' not in bridge_source:
             errors.append(f"security bridge source is missing approved workflow: {workflow}")
+    if '"Amosclaud CodeQL Threat Gate"' in bridge_source:
+        errors.append("security bridge must not accept second-level CodeQL gate runs")
     if f'REPAIR_WORKFLOW = "{REPAIR_WORKFLOW}"' not in bridge_source:
         errors.append("security bridge repair target changed")
     for required in (
@@ -465,7 +449,6 @@ def validate_repository(root: Path) -> list[str]:
 
     root = root.resolve()
     errors: list[str] = []
-
     for relative_path in PROTECTED_FILES:
         _read(root, relative_path, errors)
 
@@ -473,19 +456,16 @@ def validate_repository(root: Path) -> list[str]:
     for requirement in (POLICY_MARKER, *CANONICAL_REQUIREMENTS):
         if requirement not in canonical:
             errors.append(f"canonical policy is missing required text: {requirement}")
-
     agents = _read(root, "AGENTS.md", errors)
     for requirement in AGENT_REQUIREMENTS:
         if requirement not in agents:
             errors.append(f"AGENTS.md is missing required policy text: {requirement}")
-
     template = _read(root, ".github/PULL_REQUEST_TEMPLATE.md", errors)
     for requirement in PULL_REQUEST_REQUIREMENTS:
         if requirement not in template:
             errors.append(f"pull-request template is missing required policy text: {requirement}")
 
     workflow = _load_yaml(root, ".github/workflows/policy.yml", errors)
-    _pull_request_trigger(workflow, errors)
     _workflow_enforcement(workflow, errors)
     _review_contract(root, errors)
     _status_contract(root, errors)
@@ -493,12 +473,10 @@ def validate_repository(root: Path) -> list[str]:
 
     rules = _codeowner_rules(_read(root, ".github/CODEOWNERS", errors))
     for relative_path in PROTECTED_FILES:
-        owners = _effective_codeowners(rules, relative_path)
-        if CODE_OWNER not in owners:
+        if CODE_OWNER not in _effective_codeowners(rules, relative_path):
             errors.append(
                 f"CODEOWNERS effective rule does not protect: /{relative_path}"
             )
-
     return sorted(set(errors))
 
 
@@ -510,7 +488,6 @@ def main() -> int:
         for error in errors:
             print(f"- {error}")
         return 1
-
     print(f"Amosclaud contributor tool policy: PASSED ({POLICY_MARKER})")
     print(f"Protected policy files: {len(PROTECTED_FILES)}")
     return 0
