@@ -1,6 +1,11 @@
 # Amosclaud Native Ollama Patch Routing
 
-**Contract:** `AMOSCLAUD-OLLAMA-PATCH-CONTRACT:v2`
+**Active contract:** `AMOSCLAUD-OLLAMA-PATCH-CONTRACT:v2`
+
+**Retired compatibility marker:** `AMOSCLAUD-CLAUDE-PATCH-CONTRACT:v1`
+
+The retired marker is retained only so the trusted pre-migration policy guard on
+`main` can validate this transition. It does not authorize or configure Claude.
 
 The historical Claude-named workflow files remain only as compatibility entry
 points for existing commands. They no longer call Anthropic or any other external
