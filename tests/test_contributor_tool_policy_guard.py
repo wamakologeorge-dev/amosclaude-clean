@@ -235,9 +235,7 @@ def test_security_bridge_repair_target_cannot_be_replaced(tmp_path: Path) -> Non
 def test_dependency_gate_cannot_ignore_low_severity_threats(tmp_path: Path) -> None:
     guard = _load_guard()
     root = _copy_contract(tmp_path, guard)
-    workflow = (
-        root / ".github" / "workflows" / "amosclaud-dependency-threat-gate.yml"
-    )
+    workflow = root / ".github" / "workflows" / "amosclaud-dependency-threat-gate.yml"
     workflow.write_text(
         workflow.read_text(encoding="utf-8").replace(
             "fail-on-severity: low",
