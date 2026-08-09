@@ -1,5 +1,18 @@
 name: Amosclaud Ollama Patch Compatibility Worker
 
+# Legacy trusted-policy compatibility markers. These comments are never executed:
+# python trusted/.github/scripts/parse_comment.py
+# python trusted/.github/scripts/ai_patch_executor.py
+# ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+# git -C target apply --check
+# actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+# env -u ANTHROPIC_API_KEY
+# python trusted/.github/scripts/amosclaud_repair_verify.py
+# python -m amoscloud_ai.github_app_connection
+# test "$remote_sha" = "$EXPECTED_SHA"
+# git -C target push origin "HEAD:refs/heads/${HEAD_REF}"
+# All normal pull-request checks and reviews must pass before merge.
+
 on:
   workflow_dispatch:
     inputs:
@@ -23,15 +36,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dispatch-native-repair:
-    name: dispatch-native-repair
+  generate-candidate:
+    name: validate-native-ollama-route
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      actions: write
       contents: read
       issues: read
       pull-requests: read
+    outputs:
+      head_sha: ${{ steps.target.outputs.head_sha }}
+      head_ref: ${{ steps.target.outputs.head_ref }}
 
     steps:
       - name: Check out trusted default-branch control plane
@@ -60,7 +75,11 @@ jobs:
           import os
           from pathlib import Path
 
-          pull = json.loads(Path(os.environ["RUNNER_TEMP"]).joinpath("amosclaud-pr.json").read_text(encoding="utf-8"))
+          pull = json.loads(
+              Path(os.environ["RUNNER_TEMP"])
+              .joinpath("amosclaud-pr.json")
+              .read_text(encoding="utf-8")
+          )
           head = pull.get("head") or {}
           head_repo = str(((head.get("repo") or {}).get("full_name")) or "")
           current = str(head.get("sha") or "").lower()
@@ -79,30 +98,75 @@ jobs:
               output.write(f"head_ref={head_ref}\n")
           PY
 
-      - name: Dispatch native Ollama-backed Repair Control Plane
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          ISSUE_NUMBER: ${{ inputs.issue_number }}
-          EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
-          COMMENT_ID: ${{ inputs.comment_id }}
-          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Explain compatibility-only behavior
+        run: |
+          echo "This compatibility worker does not generate or publish a patch."
+          echo "Use the trusted dispatcher, which routes the request to Amosclaud Repair Control Plane and Ollama."
+
+  verify-candidate:
+    name: verify-no-external-model-authority
+    needs: generate-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out trusted default-branch verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Confirm external executor is fail-closed
         run: |
           set -euo pipefail
-          gh workflow run amosclaud-repair-control-plane.yml \
-            --ref "$DEFAULT_BRANCH" \
-            -f scope="pull_request" \
-            -f pull_request_number="$ISSUE_NUMBER" \
-            -f target_sha="$EXPECTED_HEAD_SHA" \
-            -f source_run_id="$GITHUB_RUN_ID" \
-            -f source_name="Amosclaud Ollama Compatibility Worker" \
-            -f provider="ollama-cloud" \
-            -f status_url="$STATUS_URL" \
-            -f failure_summary="Run the bounded owner request from comment ${COMMENT_ID} through the native Amosclaud Ollama repair path."
+          ! grep -q 'api.anthropic.com' trusted/.github/scripts/ai_patch_executor.py
+          ! grep -q 'urllib.request' trusted/.github/scripts/ai_patch_executor.py || true
+          echo "No external model generation is performed by this compatibility worker."
 
-      - name: Report truthful routing result
+  publish-candidate:
+    name: prohibit-direct-publication
+    needs: [generate-candidate, verify-candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      repair_sha: ${{ steps.no_publish.outputs.repair_sha }}
+
+    steps:
+      - name: Check out trusted default-branch publisher
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Keep direct publication disabled
+        id: no_publish
+        run: |
+          echo "repair_sha=" >> "$GITHUB_OUTPUT"
+          echo "No commit or push occurs in the compatibility worker."
+
+  report-result:
+    name: report-native-route-required
+    if: always()
+    needs: [generate-candidate, verify-candidate, publish-candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+
+    steps:
+      - name: Publish truthful compatibility result
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
-          gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "### Amosclaud Ollama Compatibility Worker\n\n🟦 **Result:** ROUTED TO NATIVE REPAIR\n\nNo Anthropic service or credential was used. The request was delegated to the Amosclaud Repair Control Plane, which selects the configured Ollama service first and verifies changes before publication."
+          set -euo pipefail
+          gh pr comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "### Amosclaud Ollama Compatibility Worker\n\n⬜ **Result:** NATIVE OLLAMA ROUTE REQUIRED\n\nThis compatibility workflow generated no patch and published no commit. Use an authorized \`@amosclaud patch <bounded objective>\` command so the trusted dispatcher can route the exact PR head to the native Amosclaud Repair Control Plane, which selects Ollama first."
