@@ -1,0 +1,70 @@
+name: Amosclaud CodeQL Threat Gate
+
+on:
+  workflow_run:
+    workflows: [CodeQL]
+    types: [completed]
+
+permissions:
+  contents: read
+  security-events: read
+
+concurrency:
+  group: amosclaud-codeql-threat-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  codeql-threat-gate:
+    name: Every CodeQL alert is a threat
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.pull_requests[0].number
+    runs-on: ${{ vars.AMOSCLAUD_CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+
+      - name: Compile trusted Advanced Security gate
+        run: python -m py_compile trusted/scripts/ci/advanced_security_gate.py
+
+      - name: Treat every open CodeQL alert as a blocking threat
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          python trusted/scripts/ci/advanced_security_gate.py \
+            --json advanced-security-gate.json \
+            --markdown advanced-security-gate.md
+
+      - name: Publish threat-gate summary
+        if: always()
+        run: |
+          if [ -s advanced-security-gate.md ]; then
+            cat advanced-security-gate.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Amosclaud Advanced Security Threat Gate" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "🟥 No trustworthy gate report was produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload threat evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-codeql-threat-gate
+          path: |
+            advanced-security-gate.json
+            advanced-security-gate.md
+          if-no-files-found: warn
