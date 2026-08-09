@@ -45,8 +45,7 @@ def test_dispatcher_trusted_checkout_cannot_be_changed_to_pr_head(tmp_path: Path
     )
     errors = guard.validate_repository(root)
     assert any(
-        "trusted default branch" in error
-        or "forbidden privileged behavior" in error
+        "trusted default branch" in error or "forbidden privileged behavior" in error
         for error in errors
     )
 
