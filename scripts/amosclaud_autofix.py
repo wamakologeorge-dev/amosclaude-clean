@@ -159,9 +159,7 @@ def run_repair(root: Path, log_text: str) -> dict[str, object]:
     report["findings_after"] = _serialize_findings(after)
 
     blockers = [
-        item
-        for item in after
-        if item.path in changed_files and item.severity != Severity.INFO
+        item for item in after if item.path in changed_files and item.severity != Severity.INFO
     ]
     if not changed_files or blockers:
         for relative, content in snapshots.items():
