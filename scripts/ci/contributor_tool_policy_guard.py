@@ -157,9 +157,7 @@ def _workflow_enforcement(payload: Mapping[str, object], errors: list[str]) -> N
     if "if" in policy_job:
         errors.append("policy workflow job must not be conditional")
 
-    matching = [
-        step for step in _steps(payload, "policy") if step.get("name") == POLICY_STEP_NAME
-    ]
+    matching = [step for step in _steps(payload, "policy") if step.get("name") == POLICY_STEP_NAME]
     if len(matching) != 1:
         errors.append("policy workflow must contain exactly one effective sovereignty step")
         return
@@ -220,7 +218,11 @@ def _effective_codeowners(
 def _permissions(
     payload: Mapping[str, object], job_name: str | None = None
 ) -> Mapping[str, object]:
-    value = payload.get("permissions") if job_name is None else _job(payload, job_name).get("permissions")
+    value = (
+        payload.get("permissions")
+        if job_name is None
+        else _job(payload, job_name).get("permissions")
+    )
     return value if isinstance(value, Mapping) else {}
 
 
@@ -474,9 +476,7 @@ def validate_repository(root: Path) -> list[str]:
     rules = _codeowner_rules(_read(root, ".github/CODEOWNERS", errors))
     for relative_path in PROTECTED_FILES:
         if CODE_OWNER not in _effective_codeowners(rules, relative_path):
-            errors.append(
-                f"CODEOWNERS effective rule does not protect: /{relative_path}"
-            )
+            errors.append(f"CODEOWNERS effective rule does not protect: /{relative_path}")
     return sorted(set(errors))
 
 
