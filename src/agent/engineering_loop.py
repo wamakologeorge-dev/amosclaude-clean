@@ -105,7 +105,13 @@ class AutonomousEngineeringLoop:
         target_versions: set[Any] = set()
         try:
             payload = tomllib.loads(self.files.read("pyproject.toml"))
-        except (AttributeError, FileNotFoundError, OSError, PermissionError, tomllib.TOMLDecodeError):
+        except (
+            AttributeError,
+            FileNotFoundError,
+            OSError,
+            PermissionError,
+            tomllib.TOMLDecodeError,
+        ):
             payload = {}
 
         tool = payload.get("tool", {}) if isinstance(payload, dict) else {}
@@ -126,9 +132,7 @@ class AutonomousEngineeringLoop:
             target_versions=target_versions,
         )
 
-    def _deterministic_black_proposals(
-        self, objective: str
-    ) -> list[ChangeProposal] | None:
+    def _deterministic_black_proposals(self, objective: str) -> list[ChangeProposal] | None:
         """Format explicitly named Python files without waiting on model inference.
 
         This path is intentionally narrow: the owner must name each ``.py`` file
@@ -315,9 +319,7 @@ class AutonomousEngineeringLoop:
 
             if mode != "fix" or attempt == self.max_attempts:
                 blocker = failed[0].get("summary") or "Verification failed"
-                lessons.append(
-                    f"Do not report success until this blocker is resolved: {blocker}"
-                )
+                lessons.append(f"Do not report success until this blocker is resolved: {blocker}")
                 record(
                     LoopPhase.LEARN,
                     "recorded",
@@ -350,9 +352,7 @@ class AutonomousEngineeringLoop:
                 )
             except Exception as exc:
                 blocker = f"Corrective repair stopped safely: {type(exc).__name__}: {exc}"
-                lessons.append(
-                    f"Verification logs were available but correction failed: {blocker}"
-                )
+                lessons.append(f"Verification logs were available but correction failed: {blocker}")
                 record(LoopPhase.EXECUTE, "failed", blocker)
                 return self._finish(
                     started,
@@ -430,9 +430,7 @@ class AutonomousEngineeringLoop:
             if not path or path in seen:
                 raise ValueError("Every proposed path must be unique and non-empty")
             seen.add(path)
-            proposals.append(
-                ChangeProposal(path, item["content"], str(item.get("reason", "")))
-            )
+            proposals.append(ChangeProposal(path, item["content"], str(item.get("reason", ""))))
         return proposals
 
     @staticmethod
