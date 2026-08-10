@@ -25,13 +25,7 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
 
     workspace_path = Path(raw_workspace)
     if workspace_path.is_absolute():
-        root = workspace_path.resolve()
-        try:
-            root.relative_to(base)
-        except ValueError as exc:
-            raise ValueError("Workspace escapes allowed root") from exc
-        return root
-
+        raise ValueError("Workspace must be a relative path")
     if ".." in workspace_path.parts:
         raise ValueError("Workspace escapes allowed root")
 
