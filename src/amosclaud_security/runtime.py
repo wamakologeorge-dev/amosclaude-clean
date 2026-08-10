@@ -29,14 +29,14 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
 
     base = Path(configured_root).resolve()
     if workspace_path.is_absolute():
-        root = workspace_path.resolve()
-    else:
-        if ".." in workspace_path.parts:
-            raise ValueError("Workspace escapes allowed root")
-        normalized_workspace = Path(os.path.normpath(str(workspace_path)))
-        if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
-            raise ValueError("Workspace escapes allowed root")
-        root = (base / normalized_workspace).resolve()
+        raise ValueError("Workspace must be a relative path")
+
+    if ".." in workspace_path.parts:
+        raise ValueError("Workspace escapes allowed root")
+    normalized_workspace = Path(os.path.normpath(str(workspace_path)))
+    if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
+        raise ValueError("Workspace escapes allowed root")
+    root = (base / normalized_workspace).resolve()
 
     try:
         root.relative_to(base)
