@@ -37,6 +37,6 @@ def test_executor_module_contains_no_external_model_client() -> None:
     assert "api.anthropic.com" not in source
     assert "ANTHROPIC_API_KEY" not in source
     assert "urllib.request" not in source
-    assert "read_text(encoding=\"utf-8\", errors=\"replace\")" not in source
+    assert 'read_text(encoding="utf-8", errors="replace")' not in source
     assert "git push" not in source
     assert "git commit" not in source
