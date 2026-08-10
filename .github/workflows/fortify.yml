@@ -81,9 +81,18 @@ jobs:
             exit 2
           fi
 
+      - name: Stage trusted comparator without following candidate symlinks
+        run: |
+          set -euo pipefail
+          test ! -L head/scripts
+          test ! -L head/scripts/ci
+          test ! -L head/scripts/ci/bandit_pr_gate.py
+          rm -f head/scripts/ci/bandit_pr_gate.py
+          install -m 0644 trusted/scripts/ci/bandit_pr_gate.py head/scripts/ci/bandit_pr_gate.py
+
       - name: Treat every AST finding introduced by the head as a blocking threat
         run: |
-          python trusted/scripts/ci/bandit_pr_gate.py \
+          python head/scripts/ci/bandit_pr_gate.py \
             --base base-bandit-report.json \
             --head head-bandit-report.json \
             --json differential-ast-gate.json \
