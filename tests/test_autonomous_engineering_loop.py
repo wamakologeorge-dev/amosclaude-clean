@@ -99,11 +99,7 @@ class CorrectingModel:
     def complete(self, objective, evidence):
         self.calls.append((objective, list(evidence)))
         content = "broken" if len(self.calls) == 1 else "corrected"
-        return (
-            '{"changes":[{"path":"result.txt","content":"'
-            + content
-            + '","reason":"test"}]}'
-        )
+        return '{"changes":[{"path":"result.txt","content":"' + content + '","reason":"test"}]}'
 
 
 class CorrectingRuntime:
