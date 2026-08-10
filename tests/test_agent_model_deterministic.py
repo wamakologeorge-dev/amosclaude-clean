@@ -66,7 +66,9 @@ def test_remote_completion_uses_configured_timeout(monkeypatch) -> None:
 
     monkeypatch.setattr(model_module.native_provider, "reply", fake_reply)
     gateway = AutonomousModelGateway(
-        ModelConfig(endpoint="https://example.invalid", model="test", api_key="token", timeout_seconds=17)
+        ModelConfig(
+            endpoint="https://example.invalid", model="test", api_key="token", timeout_seconds=17
+        )
     )
 
     response = gateway.complete("repair result.txt", ["verified failure evidence"])
