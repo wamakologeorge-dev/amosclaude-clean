@@ -64,7 +64,7 @@ def test_worker_cannot_gain_push_authority(tmp_path: Path) -> None:
     root = copy_contract(tmp_path, guard)
     workflow = root / guard.WORKER
     workflow.write_text(
-        workflow.read_text(encoding="utf-8") + '\n# git push origin HEAD:main\n',
+        workflow.read_text(encoding="utf-8") + "\n# git push origin HEAD:main\n",
         encoding="utf-8",
     )
     errors = guard.validate_repository(root)
