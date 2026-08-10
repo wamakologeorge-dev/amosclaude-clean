@@ -18,22 +18,26 @@ _EPHEMERAL_AUTHORITIES: dict[Path, SecurityAuthority] = {}
 
 
 def _validated_workspace_root(workspace: Path | str) -> Path:
-    base = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    configured_root = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
     raw_workspace = str(workspace or ".").strip()
     if "\x00" in raw_workspace:
         raise ValueError("Invalid workspace path")
 
     workspace_path = Path(raw_workspace)
+    if not configured_root:
+        return workspace_path.resolve()
+
+    base = Path(configured_root).resolve()
     if workspace_path.is_absolute():
-        raise ValueError("Workspace must be a relative path")
-    if ".." in workspace_path.parts:
-        raise ValueError("Workspace escapes allowed root")
+        root = workspace_path.resolve()
+    else:
+        if ".." in workspace_path.parts:
+            raise ValueError("Workspace escapes allowed root")
+        normalized_workspace = Path(os.path.normpath(str(workspace_path)))
+        if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
+            raise ValueError("Workspace escapes allowed root")
+        root = (base / normalized_workspace).resolve()
 
-    normalized_workspace = Path(os.path.normpath(str(workspace_path)))
-    if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
-        raise ValueError("Workspace escapes allowed root")
-
-    root = (base / normalized_workspace).resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
