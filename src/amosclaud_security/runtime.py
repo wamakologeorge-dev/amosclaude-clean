@@ -23,18 +23,15 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
     if "\x00" in raw_workspace:
         raise ValueError("Invalid workspace path")
 
-    workspace_path = Path(raw_workspace)
+    normalized_raw = os.path.normpath(raw_workspace or ".")
+    workspace_path = Path(normalized_raw)
     base = Path(configured_root or ".").resolve()
     if workspace_path.is_absolute():
         raise ValueError("Workspace must be a relative path")
-
     if ".." in workspace_path.parts:
         raise ValueError("Workspace escapes allowed root")
-    normalized_workspace = Path(os.path.normpath(str(workspace_path)))
-    if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
-        raise ValueError("Workspace escapes allowed root")
-    root = (base / normalized_workspace).resolve()
 
+    root = (base / workspace_path).resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
