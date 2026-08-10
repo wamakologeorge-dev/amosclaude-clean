@@ -113,6 +113,7 @@ jobs:
         if: steps.target.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           EXPECTED_HEAD_SHA: ${{ steps.target.outputs.head_sha }}
