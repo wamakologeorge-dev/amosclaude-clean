@@ -29,7 +29,11 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
     if ".." in workspace_path.parts:
         raise ValueError("Workspace escapes allowed root")
 
-    root = (base / workspace_path).resolve()
+    normalized_workspace = Path(os.path.normpath(str(workspace_path)))
+    if normalized_workspace.is_absolute() or ".." in normalized_workspace.parts:
+        raise ValueError("Workspace escapes allowed root")
+
+    root = (base / normalized_workspace).resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
@@ -121,7 +125,7 @@ def authority_for_workspace(
     required: bool,
 ) -> SecurityAuthority | None:
     root = _validated_workspace_root(workspace)
-    state_path = security_state_path(root)
+    state_path = security_state_path(workspace)
     configured = SecurityAuthority.from_environment(
         state_path=state_path,
         required=False,
