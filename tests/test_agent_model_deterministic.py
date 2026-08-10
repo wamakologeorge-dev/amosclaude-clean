@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from src.agent import model as model_module
 from src.agent.model import AutonomousModelGateway, ModelConfig
 
 
@@ -44,3 +45,31 @@ def test_deterministic_fallback_rejects_source_and_protected_paths() -> None:
         )
         is None
     )
+
+
+def test_remote_completion_uses_configured_timeout(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class Result:
+        ok = True
+        error = None
+        reply = (
+            '{"diagnosis":"test","changes":[{"path":"result.txt",'
+            '"content":"verified","reason":"test"}],"verification":[]}'
+        )
+
+    def fake_reply(history, system_prompt, *, timeout=None):
+        captured["history"] = history
+        captured["system_prompt"] = system_prompt
+        captured["timeout"] = timeout
+        return Result()
+
+    monkeypatch.setattr(model_module.native_provider, "reply", fake_reply)
+    gateway = AutonomousModelGateway(
+        ModelConfig(endpoint="https://example.invalid", model="test", api_key="token", timeout_seconds=17)
+    )
+
+    response = gateway.complete("repair result.txt", ["verified failure evidence"])
+
+    assert json.loads(response)["changes"][0]["path"] == "result.txt"
+    assert captured["timeout"] == 17
