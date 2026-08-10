@@ -28,12 +28,23 @@ class Runtime:
         self.passed = passed
 
     def verify(self):
-        return [{"name": "tests", "passed": self.passed, "summary": "tests passed" if self.passed else "tests failed"}]
+        return [
+            {
+                "name": "tests",
+                "passed": self.passed,
+                "summary": "tests passed" if self.passed else "tests failed",
+            }
+        ]
 
 
 def make_loop(passed=True):
     files = Files()
-    loop = AutonomousEngineeringLoop(analyzer=Analyzer(), model=Model(), files=files, runtime=Runtime(passed))
+    loop = AutonomousEngineeringLoop(
+        analyzer=Analyzer(),
+        model=Model(),
+        files=files,
+        runtime=Runtime(passed),
+    )
     return loop, files
 
 
@@ -42,7 +53,15 @@ def test_read_only_loop_runs_all_reporting_phases_without_writes():
     result = loop.run(objective="inspect project", mode="plan", authorized_writes=False)
     assert result.status == "success"
     assert files.writes == []
-    assert [event.phase for event in result.events] == ["understand", "inspect", "plan", "execute", "verify", "learn", "report"]
+    assert [event.phase for event in result.events] == [
+        "understand",
+        "inspect",
+        "plan",
+        "execute",
+        "verify",
+        "learn",
+        "report",
+    ]
 
 
 def test_fix_requires_explicit_write_authorization():
@@ -147,3 +166,46 @@ def test_failed_isolated_verification_drives_a_corrective_patch():
     assert "failed isolated verification" in retry_objective.lower()
     assert any("NameError: missing symbol" in item for item in retry_evidence)
     assert any(event.status == "retry" for event in result.events)
+
+
+class BlackFiles(Files):
+    def __init__(self):
+        super().__init__()
+        self.contents = {
+            "sample.py": "x=1\n",
+            "pyproject.toml": (
+                '[tool.black]\nline-length = 100\ntarget-version = ["py311", "py312"]\n'
+            ),
+        }
+
+    def read(self, path):
+        return self.contents[path]
+
+    def write(self, path, content, *, authorized):
+        super().write(path, content, authorized=authorized)
+        self.contents[path] = content
+
+
+class NoRemoteModel(Model):
+    def complete(self, objective, evidence):
+        raise AssertionError("Black formatting must not wait for remote model inference")
+
+
+def test_explicit_black_formatting_uses_deterministic_ast_safe_repair():
+    files = BlackFiles()
+    loop = AutonomousEngineeringLoop(
+        analyzer=Analyzer(),
+        model=NoRemoteModel(),
+        files=files,
+        runtime=Runtime(),
+    )
+
+    result = loop.run(
+        objective="Black formatting only in `sample.py`",
+        mode="fix",
+        authorized_writes=True,
+    )
+
+    assert result.status == "success"
+    assert result.changed_files == ["sample.py"]
+    assert files.writes == [("sample.py", "x = 1\n")]
