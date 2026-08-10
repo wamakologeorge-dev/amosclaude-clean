@@ -72,7 +72,7 @@ def load_model_config() -> ModelConfig:
         raise ValueError("AMOSCLAUD_MODEL_TIMEOUT must be an integer") from exc
 
     if completions_path and not completions_path.startswith("/"):
-        completions_path = f"/{completions_path}"
+        completions_path = f"/{completions_path.lstrip('/')}"
 
     return ModelConfig(
         endpoint=endpoint,
@@ -222,6 +222,7 @@ class AutonomousModelGateway:
         result = native_provider.reply(
             [{"role": "user", "content": user_content}],
             SYSTEM_PROMPT,
+            timeout=self.config.timeout_seconds,
         )
         if not result.ok:
             raise RuntimeError(result.error or "Amosclaud execution model is not configured")
