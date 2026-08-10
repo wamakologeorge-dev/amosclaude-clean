@@ -95,9 +95,7 @@ def parse_event(payload: Mapping[str, Any]) -> ParsedComment:
     write_request = command == "fix"
     authorized_write = write_request and association in WRITE_ASSOCIATIONS
     patch_executor = (
-        authorized_write
-        and source_format == "ollama-patch-alias"
-        and bool(compact_objective)
+        authorized_write and source_format == "ollama-patch-alias" and bool(compact_objective)
     )
     issue = mutable.get("issue") if isinstance(mutable.get("issue"), Mapping) else {}
     issue_number = issue.get("number")
