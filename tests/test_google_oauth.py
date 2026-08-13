@@ -51,7 +51,7 @@ def _configure(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv(
         "GOOGLE_CALLBACK_URL",
-        "https://www.amosclaud.com/api/v1/auth/google/callback",
+        "https://amosclauds.com/api/v1/auth/google/callback",
     )
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
     monkeypatch.setattr(google_auth.httpx, "AsyncClient", _FakeGoogleClient)
@@ -63,7 +63,7 @@ def _complete_google_login(client):
     query = parse_qs(urlparse(start.headers["location"]).query)
     assert query["client_id"] == ["client.apps.googleusercontent.com"]
     assert query["scope"] == ["openid email profile"]
-    assert query["redirect_uri"] == ["https://www.amosclaud.com/api/v1/auth/google/callback"]
+    assert query["redirect_uri"] == ["https://amosclauds.com/api/v1/auth/google/callback"]
     state = client.cookies.get(google_auth.GOOGLE_STATE_COOKIE)
     assert state
     return client.get(
@@ -179,5 +179,5 @@ def test_google_oauth_remains_available_without_cluttering_primary_login():
     assert '@router.get("/google/status")' in routes
     assert '@router.get("/google")' in routes
     assert (
-        "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback" in environment
+        "GOOGLE_CALLBACK_URL=https://amosclauds.com/api/v1/auth/google/callback" in environment
     )
