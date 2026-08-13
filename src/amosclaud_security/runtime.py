@@ -27,11 +27,15 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
     workspace_path = Path(normalized_raw)
     base = Path(configured_root or ".").resolve()
     if workspace_path.is_absolute():
-        raise ValueError("Workspace must be a relative path")
-    if ".." in workspace_path.parts:
-        raise ValueError("Workspace escapes allowed root")
-
-    root = (base / workspace_path).resolve()
+        # Trusted internal callers (the autonomous kernel resolves its own
+        # repository root) may pass an absolute workspace. Containment against
+        # the allowed root is still enforced below, so this cannot escape.
+        # Untrusted HTTP input is rejected earlier, at the router boundary.
+        root = workspace_path.resolve()
+    else:
+        if ".." in workspace_path.parts:
+            raise ValueError("Workspace escapes allowed root")
+        root = (base / workspace_path).resolve()
     try:
         root.relative_to(base)
     except ValueError as exc:
