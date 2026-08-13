@@ -27,16 +27,23 @@ def _validated_workspace_root(workspace: Path | str) -> Path:
     workspace_path = Path(normalized_raw)
     base = Path(configured_root or ".").resolve()
     if workspace_path.is_absolute():
-        raise ValueError("Workspace must be a relative path")
-    if ".." in workspace_path.parts:
-        raise ValueError("Workspace escapes allowed root")
+        # Trusted internal callers (the autonomous kernel resolves its own
+        # repository root before handing it over) may pass an absolute
+        # workspace. Untrusted HTTP input is rejected at the router boundary.
+        candidate = workspace_path
+    else:
+        if ".." in workspace_path.parts:
+            raise ValueError("Workspace escapes allowed root")
+        candidate = base / workspace_path
 
-    root = (base / workspace_path).resolve()
-    try:
-        root.relative_to(base)
-    except ValueError as exc:
-        raise ValueError("Workspace escapes allowed root") from exc
-    return root
+    # Containment guard: the fully resolved workspace must be the allowed root
+    # or sit strictly beneath it. Symlinks are resolved first, so a symlinked
+    # escape is rejected too.
+    base_real = os.path.realpath(base)
+    root_real = os.path.realpath(candidate)
+    if root_real != base_real and not root_real.startswith(base_real + os.sep):
+        raise ValueError("Workspace escapes allowed root")
+    return Path(root_real)
 
 
 def repository_identity(workspace: Path | str, explicit: str | None = None) -> str:
