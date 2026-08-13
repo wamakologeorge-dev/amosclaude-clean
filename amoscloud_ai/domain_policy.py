@@ -1,8 +1,15 @@
 """Canonical public-domain policy for the Amosclaud platform deployment.
 
-The apex ``amosclaud.com`` hostname is hosted by a separate platform. The
-Amosclaud application, its authentication cookies, and its OAuth callback must
-stay on ``www.amosclaud.com``. Custom self-hosted domains remain supported.
+The canonical platform domain is ``amosclauds.com`` (note the trailing "s").
+It is the domain the live Railway deployment actually serves, with a valid
+TLS certificate.
+
+The legacy ``amosclaud.com`` apex and its ``www.amosclaud.com`` subdomain are
+hosted by an unrelated third-party account. Any configuration still pointing
+at those legacy hosts is normalised forward to the new canonical domain, so a
+stale environment variable can never drag the platform, its authentication
+cookies, or its OAuth callback back onto the old host. Custom self-hosted
+domains remain supported and pass through untouched.
 """
 
 from __future__ import annotations
@@ -10,21 +17,26 @@ from __future__ import annotations
 import os
 from urllib.parse import urlsplit
 
-WWW_PLATFORM_URL = "https://www.amosclaud.com"
-AMOSCLAUD_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+CANONICAL_PLATFORM_URL = "https://amosclauds.com"
+LEGACY_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
+CANONICAL_HOSTS = {"amosclauds.com", "www.amosclauds.com"}
+AMOSCLAUD_HOSTS = LEGACY_HOSTS | CANONICAL_HOSTS
 GITHUB_CALLBACK_PATH = "/api/v1/auth/github/admin-callback"
+
+# Backwards-compatible alias for modules/tests that still import the old name.
+WWW_PLATFORM_URL = CANONICAL_PLATFORM_URL
 
 
 def _normalise_public_url(value: str) -> str:
     candidate = value.strip()
     if not candidate:
-        return WWW_PLATFORM_URL
+        return CANONICAL_PLATFORM_URL
     if "://" not in candidate:
         candidate = f"https://{candidate}"
     parsed = urlsplit(candidate)
     hostname = (parsed.hostname or "").lower()
     if hostname in AMOSCLAUD_HOSTS:
-        return WWW_PLATFORM_URL
+        return CANONICAL_PLATFORM_URL
     return candidate.rstrip("/")
 
 
@@ -39,9 +51,7 @@ def enforce_platform_domain_policy() -> None:
     os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] = callback_url
 
     public_host = (urlsplit(public_url).hostname or "").lower()
-    configured_cookie_domain = os.getenv("AUTH_COOKIE_DOMAIN", "").strip()
-    cookie_host = configured_cookie_domain.lstrip(".").lower()
-    if public_host == "www.amosclaud.com" and cookie_host == "amosclaud.com":
-        # Host-only cookies prevent the unrelated apex platform from receiving
-        # Amosclaud sessions or OAuth state values.
+    if public_host in CANONICAL_HOSTS:
+        # Host-only cookies prevent the unrelated legacy apex platform from
+        # receiving Amosclaud sessions or OAuth state values.
         os.environ["AUTH_COOKIE_DOMAIN"] = ""
