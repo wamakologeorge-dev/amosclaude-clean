@@ -45,16 +45,27 @@ def load_model_config() -> ModelConfig:
         "AMOSCLAUD_BOT_URL",
     ).rstrip("/")
     provider = "amosclaud-model"
-    completions_path = _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
-    model = _first_value("AMOSCLAUD_MODEL", "AMOSCLAUD_API_MODEL") or "amosclaud-folder-v1"
+    completions_path = (
+        _first_value("AMOSCLAUD_MODEL_COMPLETIONS_PATH") or "/v1/chat/completions"
+    )
+    model = (
+        _first_value("AMOSCLAUD_MODEL", "AMOSCLAUD_API_MODEL")
+        or "amosclaud-folder-v1"
+    )
     api_key = _first_value("AMOSCLAUD_MODEL_TOKEN") or None
 
     if endpoint == _first_value("AMOSCLAUD_BOT_URL").rstrip("/") and endpoint:
         provider = "amosclaud-bot"
-        completions_path = _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH") or completions_path
-        api_key = _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
+        completions_path = (
+            _first_value("AMOSCLAUD_BOT_COMPLETIONS_PATH") or completions_path
+        )
+        api_key = (
+            _first_value("AMOSCLAUD_BOT_TOKEN", "AMOSCLAUD_MODEL_TOKEN") or api_key
+        )
     elif not endpoint:
-        api_endpoint = _first_value("AMOSCLAUD_PROVIDER_API_URL", "AMOSCLAUD_API_URL").rstrip("/")
+        api_endpoint = _first_value(
+            "AMOSCLAUD_PROVIDER_API_URL", "AMOSCLAUD_API_URL"
+        ).rstrip("/")
         api_token = _first_value("AMOSCLAUD_API_KEY")
         if api_endpoint and api_token:
             endpoint = api_endpoint
@@ -72,7 +83,7 @@ def load_model_config() -> ModelConfig:
         raise ValueError("AMOSCLAUD_MODEL_TIMEOUT must be an integer") from exc
 
     if completions_path and not completions_path.startswith("/"):
-        completions_path = f"/{completions_path}"
+        completions_path = f"/{completions_path.lstrip('/')}"
 
     return ModelConfig(
         endpoint=endpoint,
@@ -89,7 +100,8 @@ class AutonomousModelGateway:
 
     MAX_EVIDENCE_CHARS = 32_000
     _FILE_REQUEST = re.compile(
-        r"\bcreate\s+(?:a\s+)?new\s+file\s+(?:named|called)\s+" r"[`\"']?([A-Za-z0-9_.\-/]+)",
+        r"\bcreate\s+(?:a\s+)?new\s+file\s+(?:named|called)\s+"
+        r"[`\"']?([A-Za-z0-9_.\-/]+)",
         re.IGNORECASE,
     )
 
@@ -156,7 +168,8 @@ class AutonomousModelGateway:
             details.append(f"- **Repository:** `{repository}`")
         if "purpose of this test" in lowered:
             details.append(
-                "- **Purpose:** Verify that Amosclaud can complete a guarded, real repository write."
+                "- **Purpose:** Verify that Amosclaud can complete a guarded, "
+                "real repository write."
             )
         if "date the task was executed" in lowered:
             details.append(f"- **Executed:** `{executed}`")
@@ -177,11 +190,16 @@ class AutonomousModelGateway:
                     {
                         "path": path,
                         "content": content,
-                        "reason": "Create the exact requested repository action-test document.",
+                        "reason": (
+                            "Create the exact requested repository action-test document."
+                        ),
                     }
                 ],
                 "verification": [
-                    f"Confirm {path} exists and contains the requested repository, purpose, date, and result fields."
+                    (
+                        f"Confirm {path} exists and contains the requested repository, "
+                        "purpose, date, and result fields."
+                    )
                 ],
             },
             ensure_ascii=False,
@@ -222,9 +240,12 @@ class AutonomousModelGateway:
         result = native_provider.reply(
             [{"role": "user", "content": user_content}],
             SYSTEM_PROMPT,
+            timeout=self.config.timeout_seconds,
         )
         if not result.ok:
-            raise RuntimeError(result.error or "Amosclaud execution model is not configured")
+            raise RuntimeError(
+                result.error or "Amosclaud execution model is not configured"
+            )
         return result.reply
 
     def plan(self, objective: str, evidence: list[str]) -> list[str]:
@@ -237,7 +258,10 @@ class AutonomousModelGateway:
             plan.append(f"Prioritize the first verified blocker: {evidence[0][:160]}")
         plan.extend(
             [
-                "Ask the connected Ollama route for a structured minimal " "change proposal",
+                (
+                    "Ask the connected Ollama route for a structured minimal "
+                    "change proposal"
+                ),
                 "Apply only authorized files inside the designated workspace",
                 "Run focused verification for the changed files before publishing",
                 "Create a branch and pull request only after verification passes",
