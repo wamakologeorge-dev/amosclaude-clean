@@ -2,14 +2,9 @@
 """Parse an issue comment into the trusted Amosclaud command contract.
 
 The helper centralizes regex extraction and command classification for GitHub
-Actions. It recognizes normal ``@amosclaud`` commands, the explicit Claude patch
-aliases ``patch``, ``ai-fix``, and ``claude-fix``, plus trusted structured owner
-directives handled by :mod:`amosclaud_bot.owner_directives`.
-
-The script never executes a requested action. It emits only bounded routing
-metadata and writes the objective to a local file for a later trusted step.
-Normal ``fix`` commands remain on Amosclaud's existing fixer path; only an
-explicit Claude patch alias selects the external Claude executor.
+Actions. Legacy ``patch``, ``ai-fix``, and ``claude-fix`` aliases are preserved
+for compatibility, but they route to Amosclaud's native Ollama-backed Repair
+Control Plane. No external Claude executor is selected.
 """
 
 from __future__ import annotations
@@ -67,7 +62,7 @@ def _explicit_patch_alias(body: str) -> tuple[str, str] | None:
     command, _, objective = remainder.partition(" ")
     if command.lower().strip() not in _PATCH_ALIASES:
         return None
-    return "@amosclaud fix " + objective.strip(), "claude-patch-alias"
+    return "@amosclaud fix " + objective.strip(), "ollama-patch-alias"
 
 
 def parse_event(payload: Mapping[str, Any]) -> ParsedComment:
@@ -95,17 +90,20 @@ def parse_event(payload: Mapping[str, Any]) -> ParsedComment:
 
     canonical_body = str(comment.get("body") or raw_body)
     command, objective = parse_command(canonical_body)
+    compact_objective = _compact(objective)
     recognized = command is not None
     write_request = command == "fix"
     authorized_write = write_request and association in WRITE_ASSOCIATIONS
-    patch_executor = authorized_write and source_format == "claude-patch-alias"
+    patch_executor = (
+        authorized_write and source_format == "ollama-patch-alias" and bool(compact_objective)
+    )
     issue = mutable.get("issue") if isinstance(mutable.get("issue"), Mapping) else {}
     issue_number = issue.get("number")
 
     return ParsedComment(
         recognized=recognized,
         command=command,
-        objective=_compact(objective),
+        objective=compact_objective,
         author_association=association,
         authorized_write=authorized_write,
         write_request=write_request,
@@ -170,10 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     objective_path = Path(args.objective_output)
     objective_path.parent.mkdir(parents=True, exist_ok=True)
-    objective_path.write_text(
-        result.objective or "Repository engineering task",
-        encoding="utf-8",
-    )
+    objective_path.write_text(result.objective, encoding="utf-8")
 
     if args.github_output:
         _write_outputs(Path(args.github_output), result)

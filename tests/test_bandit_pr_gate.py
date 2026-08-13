@@ -99,3 +99,24 @@ def test_invalid_report_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="no results list"):
         load_report(invalid)
+
+
+def test_report_with_scan_errors_fails_closed(tmp_path: Path) -> None:
+    incomplete = tmp_path / "incomplete.json"
+    incomplete.write_text(
+        json.dumps(
+            {
+                "errors": [
+                    {
+                        "filename": "amosclaud_bot/broken.py",
+                        "reason": "syntax error while scanning",
+                    }
+                ],
+                "results": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="contains scan errors"):
+        load_report(incomplete)
