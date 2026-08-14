@@ -47,6 +47,24 @@
       </article>
     </section>
 
+    <section class="panel" aria-labelledby="password-title">
+      <h2 id="password-title">Password</h2>
+      <p>Set or change the password used to sign in to Amosclaud with email and password.</p>
+      <form id="password-form">
+        <label>Current password
+          <input id="password-current" type="password" autocomplete="current-password" placeholder="Leave blank if you have no password yet">
+        </label>
+        <label>New password
+          <input id="password-new" type="password" autocomplete="new-password" minlength="10" required>
+        </label>
+        <label>Confirm new password
+          <input id="password-confirm" type="password" autocomplete="new-password" minlength="10" required>
+        </label>
+        <button type="submit">Change password</button>
+        <p id="password-status" class="message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
     <section class="panel" aria-labelledby="tools-title">
       <h2 id="tools-title">Account tools</h2>
       <ul id="tool-list" class="tool-list">

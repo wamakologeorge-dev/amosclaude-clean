@@ -47,7 +47,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .tool-list { margin: 0; padding-left: 1.2rem; display: grid; gap: .6rem; }
 .tool-list a { font-weight: 700; }
 .danger-zone { border-color: #efb4b4; }
-.danger-zone form { display: grid; gap: 1rem; max-width: 620px; margin-top: 1.2rem; }
+.panel form { display: grid; gap: 1rem; max-width: 620px; margin-top: 1.2rem; }
 label { display: grid; gap: .45rem; font-weight: 700; }
 input { width: 100%; border: 1px solid #c7ccd5; border-radius: .7rem; padding: .8rem; background: #ffffff; color: #111827; }
 .confirm-row { grid-template-columns: auto 1fr; align-items: start; font-weight: 500; }

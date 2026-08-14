@@ -3,7 +3,14 @@
   const logoutCurrent = document.getElementById('logout-current');
   const logoutAll = document.getElementById('logout-all');
   const deleteForm = document.getElementById('delete-account-form');
+  const passwordForm = document.getElementById('password-form');
+  const passwordStatus = document.getElementById('password-status');
   let currentUser = null;
+
+  function setPasswordStatus(text, kind = '') {
+    passwordStatus.textContent = text;
+    passwordStatus.className = `message ${kind}`.trim();
+  }
 
   function setMessage(text, kind = '') {
     message.textContent = text;
@@ -104,6 +111,40 @@
       window.location.assign('/login?account=deleted');
     } catch (error) {
       setMessage(error.message || 'Account deletion failed.', 'error');
+      submit.disabled = false;
+    }
+  });
+
+  passwordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const currentPassword = document.getElementById('password-current').value;
+    const newPassword = document.getElementById('password-new').value;
+    const confirmPassword = document.getElementById('password-confirm').value;
+
+    if (newPassword.length < 10) {
+      setPasswordStatus('New password must be at least 10 characters.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus('New password and confirmation do not match.', 'error');
+      return;
+    }
+
+    const submit = passwordForm.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      await request('/api/v1/account/password', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword || null,
+          new_password: newPassword,
+        }),
+      });
+      passwordForm.reset();
+      setPasswordStatus('Password updated.', 'success');
+    } catch (error) {
+      setPasswordStatus(error.message || 'Password change failed.', 'error');
+    } finally {
       submit.disabled = false;
     }
   });
