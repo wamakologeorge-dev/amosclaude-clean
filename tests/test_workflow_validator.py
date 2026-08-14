@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -245,3 +248,46 @@ def test_repository_workflows_are_all_valid() -> None:
 
     findings = validate_directory(REPO_ROOT)
     assert findings == [], "\n".join(finding.format() for finding in findings)
+
+
+def test_guard_runs_without_the_full_runtime_dependency_set(tmp_path):
+    """The guard must import under the fast lane's minimal dependencies.
+
+    The fast pull-request lane installs ``requirements-ci-fast.txt`` -- a
+    formatter, pytest, PyYAML and websockets. It does not install FastAPI. An
+    earlier version of this guard imported ``amosclaud_bot.workflow_validator``
+    through the package, which executes ``amosclaud_bot/__init__.py`` and pulls
+    in the whole bot and FastAPI. It passed every local check only because the
+    development machine happened to have FastAPI installed.
+
+    This test denies the guard the heavy dependencies and insists it still runs.
+    """
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    for blocked in ("fastapi", "starlette", "pydantic", "uvicorn"):
+        (shim / f"{blocked}.py").write_text(
+            f'raise ImportError("{blocked} is not available in the fast lane")\n',
+            encoding="utf-8",
+        )
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(shim)
+    guard = REPO_ROOT / "scripts" / "ci" / "workflow_validator_guard.py"
+    clean = tmp_path / "clean"
+    (clean / ".github" / "workflows").mkdir(parents=True)
+    (clean / ".github" / "workflows" / "ok.yml").write_text(
+        "name: Ok\non:\n  push:\njobs:\n  a:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: echo hi\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(guard), "--root", str(clean)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    assert "ModuleNotFoundError" not in result.stderr, result.stderr
+    assert "ImportError" not in result.stderr, result.stderr
+    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
