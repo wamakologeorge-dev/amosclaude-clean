@@ -13,7 +13,7 @@
 
     <string name="hint_message">Ask Amosclaud-AI anything…</string>
     <string name="hint_url">Enter URL or search…</string>
-    <string name="hint_api_url">http://your-server:8000</string>
+    <string name="hint_api_url">https://amosclauds.com</string>
     <string name="hint_delete_email">Type your account email</string>
     <string name="hint_delete_password">Enter password</string>
 

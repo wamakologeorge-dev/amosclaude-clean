@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(tile("Storage", "Use files stored directly by Amosclaud") {
             NativeModuleActivity.open(this, "storage")
         })
-        content.addView(tile("Amos Mail", "Read and send native @amosclaud.com messages") {
+        content.addView(tile("Amos Mail", "Read and send native @amosclauds.com messages") {
             NativeModuleActivity.open(this, "mail")
         })
         content.addView(tile("Community", "Read and create native Amosclaud community posts") {
