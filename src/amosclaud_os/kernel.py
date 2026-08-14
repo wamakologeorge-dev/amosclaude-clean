@@ -9,6 +9,7 @@ should present them as separate agents.
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import RLock
@@ -32,16 +33,33 @@ from src.amosclaud_security.runtime import (
 )
 
 
+def _allowed_workspace_roots() -> tuple[Path, ...]:
+    """Roots a kernel workspace may live under.
+
+    When ``AMOSCLAUD_WORKSPACE_ROOT`` is configured (production), it is the
+    single allowed root. Otherwise (dev/test) the current working directory
+    and the system temp directory are allowed, which keeps pytest ``tmp_path``
+    workspaces and repo-local runs working without weakening configured
+    deployments.
+    """
+    configured = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
+    if configured:
+        return (Path(configured).resolve(),)
+    return (Path.cwd().resolve(), Path(tempfile.gettempdir()).resolve())
+
+
 def _trusted_workspace_path(workspace: Path | str) -> Path:
-    root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    roots = _allowed_workspace_roots()
     candidate_input = workspace if isinstance(workspace, Path) else Path(workspace)
-    candidate = candidate_input if candidate_input.is_absolute() else (root / candidate_input)
-    resolved = candidate.resolve()
-    try:
-        resolved.relative_to(root)
-    except ValueError as exc:
-        raise SecurityError("Workspace escapes allowed root") from exc
-    return resolved
+    candidate = candidate_input if candidate_input.is_absolute() else (roots[0] / candidate_input)
+    # Analyzer-recognized containment barrier (CodeQL py/path-injection): the
+    # normalized string path must stay inside an allowed root.
+    normalized = os.path.normpath(str(candidate.resolve()))
+    for root in roots:
+        normalized_root = os.path.normpath(str(root))
+        if normalized == normalized_root or normalized.startswith(normalized_root + os.sep):
+            return Path(normalized)
+    raise SecurityError("Workspace escapes allowed root")
 
 
 @dataclass(frozen=True)
