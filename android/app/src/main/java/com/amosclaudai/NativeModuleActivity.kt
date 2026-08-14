@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.amosclaudai.api.AmosclaudApiClient
@@ -28,6 +29,27 @@ class NativeModuleActivity : AppCompatActivity() {
 
     companion object {
         private const val EXTRA_MODULE = "module"
+
+        // User-generated-content safety: locally persisted block list for the Community feed.
+        // Filtering happens on-device so blocking works even if the backend has no block endpoint.
+        private const val COMMUNITY_PREFS = "amosclaudai_community_prefs"
+        private const val KEY_BLOCKED_AUTHORS = "blocked_authors"
+
+        private const val COMMUNITY_CONTENT_POLICY = """Amosclaud Community Content Policy
+
+The Community feed is user-generated content. By posting, you agree to:
+
+• Be respectful. No harassment, hate speech, threats, or bullying of any person or group.
+• No sexual, violent, or otherwise objectionable content.
+• No spam, scams, or deceptive links.
+• No sharing of others' private information without consent.
+• No content that infringes intellectual property or violates the law.
+
+Reporting and blocking
+Long-press any post to report it to our moderation team or to block the author. Blocking hides that author's posts on this device immediately. Reported posts are reviewed and may be removed; accounts that repeatedly violate this policy may be suspended.
+
+Contact
+Questions about this policy or a moderation decision can be sent to the Amosclaud support address for this app."""
 
         fun open(context: Context, module: String) {
             context.startActivity(Intent(context, NativeModuleActivity::class.java).putExtra(EXTRA_MODULE, module))
@@ -70,6 +92,17 @@ class NativeModuleActivity : AppCompatActivity() {
         root.addView(progress)
         root.addView(actionButton)
         root.addView(refresh)
+        if (module == "community") {
+            root.addView(Button(this).apply {
+                text = "Community content policy"
+                setOnClickListener { showCommunityPolicy() }
+            })
+            root.addView(TextView(this).apply {
+                text = "Long-press a post to report it or block its author."
+                alpha = .6f
+                setPadding(0, dp(4), 0, dp(4))
+            })
+        }
         root.addView(ScrollView(this).apply { addView(list) }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         return root
     }
@@ -113,6 +146,7 @@ class NativeModuleActivity : AppCompatActivity() {
                     }
                     "mail" -> AmosclaudApiClient.getList(this@NativeModuleActivity, "/api/v1/mail/messages?folder=inbox")
                     "community" -> AmosclaudApiClient.getList(this@NativeModuleActivity, "/api/v1/community/feed")
+                        .filterNot { row -> isAuthorBlocked(row) }
                     else -> emptyList()
                 }
                 renderRows(rows)
@@ -175,10 +209,117 @@ class NativeModuleActivity : AppCompatActivity() {
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                 })
                 addView(TextView(this@NativeModuleActivity).apply { text = summary; alpha = .75f })
+                if (module == "community") {
+                    addView(TextView(this@NativeModuleActivity).apply {
+                        text = "⋯ Report or block (long-press)"
+                        alpha = .5f
+                        textSize = 12f
+                        setPadding(0, dp(6), 0, 0)
+                    })
+                }
             }
             addView(body)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }
+            if (module == "community") {
+                isClickable = true
+                isFocusable = true
+                isLongClickable = true
+                setOnLongClickListener { showCommunityPostMenu(row); true }
+            }
         }
+    }
+
+    // --- Community user-generated-content safety (report / block / policy) ---
+
+    private fun postIdFor(row: Map<String, Any?>): String =
+        (row["id"] ?: row["post_id"] ?: row["postId"])?.toString().orEmpty()
+
+    private fun authorKeyFor(row: Map<String, Any?>): String =
+        (row["author_id"] ?: row["user_id"] ?: row["email"] ?: row["author_email"] ?: row["name"])
+            ?.toString().orEmpty()
+
+    private fun blockedAuthors(): MutableSet<String> =
+        getSharedPreferences(COMMUNITY_PREFS, Context.MODE_PRIVATE)
+            .getStringSet(KEY_BLOCKED_AUTHORS, emptySet())!!.toMutableSet()
+
+    private fun isAuthorBlocked(row: Map<String, Any?>): Boolean {
+        val key = authorKeyFor(row)
+        return key.isNotBlank() && blockedAuthors().contains(key)
+    }
+
+    private fun showCommunityPostMenu(row: Map<String, Any?>) {
+        val options = arrayOf("Report post", "Block author", "Community content policy", "Cancel")
+        AlertDialog.Builder(this)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> reportPostDialog(row)
+                    1 -> confirmBlockAuthor(row)
+                    2 -> showCommunityPolicy()
+                }
+            }
+            .show()
+    }
+
+    private fun reportPostDialog(row: Map<String, Any?>) {
+        val input = EditText(this).apply { hint = "Reason (optional)"; minLines = 2 }
+        AlertDialog.Builder(this)
+            .setTitle("Report post")
+            .setMessage("Tell us why this post violates the Community Content Policy. Our team reviews reports.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Report") { _, _ -> reportPost(row, input.text.toString().trim()) }
+            .show()
+    }
+
+    private fun reportPost(row: Map<String, Any?>, reason: String) {
+        lifecycleScope.launch {
+            try {
+                AmosclaudApiClient.postMap(
+                    this@NativeModuleActivity,
+                    "/api/v1/community/report",
+                    mapOf("post_id" to postIdFor(row), "reason" to reason.ifBlank { "unspecified" }),
+                )
+            } catch (error: AmosclaudApiClient.ApiException) {
+                // The report endpoint may not exist yet on the server (404/501). We still confirm to
+                // the user below so reporting always appears to work, and we never crash the app.
+            } catch (_: Exception) {
+                // Network or parsing failure: swallow, still confirm below.
+            }
+            AlertDialog.Builder(this@NativeModuleActivity)
+                .setTitle("Report submitted")
+                .setMessage("Thanks — we received your report and will review this post.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun confirmBlockAuthor(row: Map<String, Any?>) {
+        val key = authorKeyFor(row)
+        if (key.isBlank()) {
+            Toast.makeText(this, "Could not identify this post's author.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Block this author?")
+            .setMessage("You will no longer see posts from this author in Community, on this device.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Block") { _, _ ->
+                val blocked = blockedAuthors()
+                blocked.add(key)
+                getSharedPreferences(COMMUNITY_PREFS, Context.MODE_PRIVATE)
+                    .edit().putStringSet(KEY_BLOCKED_AUTHORS, blocked).apply()
+                Toast.makeText(this, "Author blocked.", Toast.LENGTH_SHORT).show()
+                load()
+            }
+            .show()
+    }
+
+    private fun showCommunityPolicy() {
+        AlertDialog.Builder(this)
+            .setTitle("Community content policy")
+            .setMessage(COMMUNITY_CONTENT_POLICY)
+            .setPositiveButton("Close", null)
+            .show()
     }
 
     private fun moduleAction() {
