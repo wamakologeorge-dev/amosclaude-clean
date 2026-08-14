@@ -8,6 +8,7 @@ key, so both credentials work on the platform and in CI.
 A failed model call is returned as honest evidence — the engine never
 fabricates an answer and never echoes the prompt back as a response.
 """
+
 from __future__ import annotations
 
 import json
@@ -63,8 +64,7 @@ class ModelEngine:
             or _DEFAULT_MODEL
         )
         self.endpoint = (
-            os.getenv("AMOSCLAUD_MODEL_URL", "").strip()
-            or os.getenv("OLLAMA_BASE_URL", "").strip()
+            os.getenv("AMOSCLAUD_MODEL_URL", "").strip() or os.getenv("OLLAMA_BASE_URL", "").strip()
         ).rstrip("/")
         self._amosclaud_token = os.getenv("AMOSCLAUD_MODEL_TOKEN", "").strip()
         self._ollama_key = os.getenv("OLLAMA_API_KEY", "").strip()
@@ -93,9 +93,7 @@ class ModelEngine:
             "owner": "src.amosclaud_os.kernel.AutonomousKernel",
         }
 
-    def respond(
-        self, prompt: str, *, context: dict[str, Any] | None = None
-    ) -> ModelResult:
+    def respond(self, prompt: str, *, context: dict[str, Any] | None = None) -> ModelResult:
         prompt = prompt.strip()
         if not prompt:
             return ModelResult(
@@ -123,22 +121,34 @@ class ModelEngine:
         messages.append({"role": "user", "content": prompt[:8000]})
 
         url = (
-            self.endpoint
-            if self.endpoint.endswith(_CHAT_SUFFIX)
-            else self.endpoint + _CHAT_SUFFIX
+            self.endpoint if self.endpoint.endswith(_CHAT_SUFFIX) else self.endpoint + _CHAT_SUFFIX
         )
-        payload = json.dumps(
-            {"model": self.model, "messages": messages, "stream": False}
-        ).encode("utf-8")
+        payload = json.dumps({"model": self.model, "messages": messages, "stream": False}).encode(
+            "utf-8"
+        )
         headers = {"Content-Type": "application/json"}
         token = self._amosclaud_token or self._ollama_key
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
+        scheme = urlsplit(url).scheme.lower()
+        if scheme not in {"http", "https"}:
+            return ModelResult(
+                text=(
+                    "The Amosclaud model station URL must use http or https "
+                    f"(got {scheme or 'no'} scheme). Autonomous refused the call."
+                ),
+                model=self.model,
+                failed=True,
+                error="unsupported_url_scheme",
+            )
+
         started = time.monotonic()
         try:
-            request = urllib.request.Request(url, data=payload, headers=headers)
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            request = urllib.request.Request(url, data=payload, headers=headers)  # noqa: S310
+            with urllib.request.urlopen(  # nosec B310 - scheme is restricted to http/https above
+                request, timeout=self.timeout
+            ) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             return ModelResult(
@@ -172,9 +182,7 @@ class ModelEngine:
                 if isinstance(choices, list) and choices:
                     first = choices[0]
                     if isinstance(first, dict):
-                        text = str(
-                            (first.get("message") or {}).get("content") or ""
-                        ).strip()
+                        text = str((first.get("message") or {}).get("content") or "").strip()
         if not text:
             return ModelResult(
                 text=(

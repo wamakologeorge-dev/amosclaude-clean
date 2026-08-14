@@ -5,6 +5,7 @@ All model, repair, deployment, CI, document, and repository capabilities are
 private abilities of this one Autonomous instance. No backend route or response
 should present them as separate agents.
 """
+
 from __future__ import annotations
 
 import os
@@ -47,7 +48,9 @@ class AutonomousKernel:
     WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
     def __init__(self, workspace: Path | str = ".") -> None:
-        self.workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+        self.workspace = (
+            workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+        )
         self.identity = SystemIdentity()
         self._lock = RLock()
         self._orchestrator = AutonomousOrchestrator(self.workspace)
@@ -77,16 +80,24 @@ class AutonomousKernel:
         enforced = security_enforced()
         if not security_grant:
             if enforced:
-                return False, None, {
-                    "enforced": True,
-                    "authorized": False,
-                    "reason": "signed_security_grant_required",
-                }
-            return bool(legacy_authorized_writes), None, {
-                "enforced": False,
-                "authorized": bool(legacy_authorized_writes),
-                "legacy_authorization": bool(legacy_authorized_writes),
-            }
+                return (
+                    False,
+                    None,
+                    {
+                        "enforced": True,
+                        "authorized": False,
+                        "reason": "signed_security_grant_required",
+                    },
+                )
+            return (
+                bool(legacy_authorized_writes),
+                None,
+                {
+                    "enforced": False,
+                    "authorized": bool(legacy_authorized_writes),
+                    "legacy_authorization": bool(legacy_authorized_writes),
+                },
+            )
 
         authority = authority_for_workspace(self.workspace, required=True)
         assert authority is not None
@@ -131,17 +142,19 @@ class AutonomousKernel:
                     correlation_id=root.correlation_id,
                     state=CommandState.BLOCKED,
                     actor=Principal.AUTONOMOUS,
-                    detail={
-                        "reason": "deployment_execution_is_not_an_autonomous_capability"
+                    detail={"reason": "deployment_execution_is_not_an_autonomous_capability"},
+                )
+                return (
+                    False,
+                    None,
+                    {
+                        "enforced": True,
+                        "authorized": False,
+                        "command_id": root.command_id,
+                        "correlation_id": root.correlation_id,
+                        "reason": "deployment_execution_requires_separate_human_control",
                     },
                 )
-                return False, None, {
-                    "enforced": True,
-                    "authorized": False,
-                    "command_id": root.command_id,
-                    "correlation_id": root.correlation_id,
-                    "reason": "deployment_execution_requires_separate_human_control",
-                }
 
             constraints = bounded_repair_constraints(
                 max_changed_files=min(
@@ -175,21 +188,29 @@ class AutonomousKernel:
                 correlation_id=root.correlation_id,
                 parent_command_id=root.command_id,
             )
-            return True, fixer_grant, {
-                "enforced": True,
-                "authorized": True,
-                "command_id": root.command_id,
-                "correlation_id": root.correlation_id,
-                "issuer": root.issuer,
-                "root_capabilities": list(root.capabilities),
-                "fixer_capability": Capability.REPAIR_APPLY.value,
-            }
+            return (
+                True,
+                fixer_grant,
+                {
+                    "enforced": True,
+                    "authorized": True,
+                    "command_id": root.command_id,
+                    "correlation_id": root.correlation_id,
+                    "issuer": root.issuer,
+                    "root_capabilities": list(root.capabilities),
+                    "fixer_capability": Capability.REPAIR_APPLY.value,
+                },
+            )
         except SecurityError as exc:
-            return False, None, {
-                "enforced": enforced,
-                "authorized": False,
-                "reason": type(exc).__name__,
-            }
+            return (
+                False,
+                None,
+                {
+                    "enforced": enforced,
+                    "authorized": False,
+                    "reason": type(exc).__name__,
+                },
+            )
 
     def execute(
         self,
@@ -242,9 +263,7 @@ class AutonomousKernel:
                     {
                         "status": "blocked",
                         "failed": False,
-                        "error": str(
-                            security.get("reason") or "write_not_authorized"
-                        ),
+                        "error": str(security.get("reason") or "write_not_authorized"),
                         "evidence": [
                             "The requested capability can make repository or deployment changes.",
                             "A valid, unexpired, one-time signed capability grant is required.",
@@ -311,10 +330,14 @@ class AutonomousKernel:
             return None, summary, []
         if not self.model_engine.endpoint:
             summary["error"] = "model_station_not_configured"
-            return None, summary, [
-                "Model station not configured (AMOSCLAUD_MODEL_URL empty); "
-                "run continued deterministically."
-            ]
+            return (
+                None,
+                summary,
+                [
+                    "Model station not configured (AMOSCLAUD_MODEL_URL empty); "
+                    "run continued deterministically."
+                ],
+            )
         result = self.model_engine.respond(
             "Objective: "
             + objective[:2000]
@@ -326,10 +349,14 @@ class AutonomousKernel:
         )
         if result.failed:
             summary["error"] = result.error
-            return None, summary, [
-                f"Model station call failed ({result.error}); "
-                "run continued deterministically."
-            ]
+            return (
+                None,
+                summary,
+                [
+                    f"Model station call failed ({result.error}); "
+                    "run continued deterministically."
+                ],
+            )
         summary["engaged"] = True
         plan_text = result.text.strip()
         evidence = [
@@ -571,7 +598,9 @@ _KERNELS_LOCK = RLock()
 
 def get_autonomous_kernel(workspace: Path | str = ".") -> AutonomousKernel:
     """Return one process-wide Autonomous instance per resolved workspace."""
-    resolved_workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+    resolved_workspace = (
+        workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+    )
     key = str(resolved_workspace)
     with _KERNELS_LOCK:
         kernel = _KERNELS.get(key)

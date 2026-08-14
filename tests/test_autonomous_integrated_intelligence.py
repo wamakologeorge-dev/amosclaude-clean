@@ -32,9 +32,7 @@ def test_read_write_is_governed_by_same_autonomous(tmp_path: Path) -> None:
     assert denied["ok"] is False
     assert denied["error"] in {"write_not_authorized", "signed_security_grant_required"}
 
-    written = kernel.write_document(
-        "result.txt", "hello", authorized_writes=True
-    )
+    written = kernel.write_document("result.txt", "hello", authorized_writes=True)
     # In strict security enforcement mode the legacy authorized_writes flag is
     # insufficient; a signed security grant is required instead.
     if written.get("ok") is True:

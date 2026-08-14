@@ -4,6 +4,7 @@ These tests run a local HTTP stub that speaks the ollama /api/chat protocol,
 so they prove the wiring (URL, auth headers, payload, parsing, honest
 failures) without needing a live model station.
 """
+
 from __future__ import annotations
 
 import json

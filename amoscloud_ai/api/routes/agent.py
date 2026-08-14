@@ -251,7 +251,9 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
                 "repository, make the authorized changes, run verification, and report "
                 "the exact files and results."
             )
-        return _model_conversation_reply(message, name) or ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
+        return _model_conversation_reply(message, name) or ASSISTANT_SYSTEM_TEMPLATE.guidance(
+            message
+        )
     if normalised in {"build", "make", "create", "fix"}:
         return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
     return None
@@ -282,11 +284,23 @@ def _project_intake_reply(request: Request, objective: str, metadata: dict | Non
         return None
     generic_request = any(
         phrase in current
-        for phrase in ("create a website", "build a website", "make a website", "learn how to create a website")
+        for phrase in (
+            "create a website",
+            "build a website",
+            "make a website",
+            "learn how to create a website",
+        )
     )
     if len(messages) == 1 or generic_request:
-        return f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
-    if current in {"business", "a business", "it is about business", "the website is about business"}:
+        return (
+            f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
+        )
+    if current in {
+        "business",
+        "a business",
+        "it is about business",
+        "the website is about business",
+    }:
         return f"What kind of business, {name or 'and who will use the platform'}?"
     return None
 
@@ -371,7 +385,9 @@ async def run_agent(
     supplied_objective = (body.objective or "").strip()
     objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
     intake_reply = None if continued else _project_intake_reply(request, objective, body.metadata)
-    conversational_reply = intake_reply or (None if continued else _conversation_reply(request, mode, objective))
+    conversational_reply = intake_reply or (
+        None if continued else _conversation_reply(request, mode, objective)
+    )
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,
