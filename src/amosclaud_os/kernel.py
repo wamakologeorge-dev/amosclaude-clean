@@ -32,6 +32,18 @@ from src.amosclaud_security.runtime import (
 )
 
 
+def _trusted_workspace_path(workspace: Path | str) -> Path:
+    root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).resolve()
+    candidate_input = workspace if isinstance(workspace, Path) else Path(workspace)
+    candidate = candidate_input if candidate_input.is_absolute() else (root / candidate_input)
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise SecurityError("Workspace escapes allowed root") from exc
+    return resolved
+
+
 @dataclass(frozen=True)
 class SystemIdentity:
     product: str = "Amosclaud"
@@ -48,9 +60,7 @@ class AutonomousKernel:
     WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
     def __init__(self, workspace: Path | str = ".") -> None:
-        self.workspace = (
-            workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
-        )
+        self.workspace = _trusted_workspace_path(workspace)
         self.identity = SystemIdentity()
         self._lock = RLock()
         self._orchestrator = AutonomousOrchestrator(self.workspace)
@@ -598,9 +608,7 @@ _KERNELS_LOCK = RLock()
 
 def get_autonomous_kernel(workspace: Path | str = ".") -> AutonomousKernel:
     """Return one process-wide Autonomous instance per resolved workspace."""
-    resolved_workspace = (
-        workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
-    )
+    resolved_workspace = _trusted_workspace_path(workspace)
     key = str(resolved_workspace)
     with _KERNELS_LOCK:
         kernel = _KERNELS.get(key)
