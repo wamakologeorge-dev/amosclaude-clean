@@ -71,9 +71,10 @@ jobs:
       all_green: ${{ steps.doctor.outputs.all_green }}
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      REPORT_PATH: ${{ runner.temp }}/amosclaud-agent-chat/report.json
 
     steps:
+      - name: Resolve the report path
+        run: echo "REPORT_PATH=$RUNNER_TEMP/amosclaud-agent-chat/report.json" >> "$GITHUB_ENV"
       - name: Check out trusted Agent Chat controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
