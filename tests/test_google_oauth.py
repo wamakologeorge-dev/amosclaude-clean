@@ -178,6 +178,4 @@ def test_google_oauth_remains_available_without_cluttering_primary_login():
     assert 'id="google-login-button"' not in login
     assert '@router.get("/google/status")' in routes
     assert '@router.get("/google")' in routes
-    assert (
-        "GOOGLE_CALLBACK_URL=https://amosclauds.com/api/v1/auth/google/callback" in environment
-    )
+    assert "GOOGLE_CALLBACK_URL=https://amosclauds.com/api/v1/auth/google/callback" in environment
