@@ -8,14 +8,31 @@ import sys
 import textwrap
 from pathlib import Path
 
-from amosclaud_bot.workflow_validator import (
-    Finding,
-    contexts_in,
-    validate_directory,
-    validate_text,
-)
+import importlib.util
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Load the validator straight from its file rather than importing
+# ``amosclaud_bot.workflow_validator``. Importing through the package would run
+# ``amosclaud_bot/__init__.py``, which pulls in the whole bot, FastAPI and
+# python-dotenv. These tests must stay collectable in the fast pull-request
+# lane, whose dependency set is PyYAML and a formatter. This mirrors the same
+# direct load used by ``scripts/ci/workflow_validator_guard.py`` and honours the
+# lazy-import contract documented in ``tests/conftest.py``.
+_VALIDATOR_PATH = REPO_ROOT / "amosclaud_bot" / "workflow_validator.py"
+_spec = importlib.util.spec_from_file_location("amosclaud_workflow_validator", _VALIDATOR_PATH)
+if _spec is None or _spec.loader is None:  # pragma: no cover - defensive
+    raise RuntimeError(f"cannot load workflow validator from {_VALIDATOR_PATH}")
+_validator = importlib.util.module_from_spec(_spec)
+# Register before executing: dataclasses resolves field types through
+# ``sys.modules[cls.__module__]``, which is absent for a bare path load.
+sys.modules[_spec.name] = _validator
+_spec.loader.exec_module(_validator)
+
+Finding = _validator.Finding
+contexts_in = _validator.contexts_in
+validate_directory = _validator.validate_directory
+validate_text = _validator.validate_text
 
 
 def codes(findings: list[Finding]) -> set[str]:
