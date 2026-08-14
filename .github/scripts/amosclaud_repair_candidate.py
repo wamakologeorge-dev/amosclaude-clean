@@ -298,7 +298,7 @@ def main() -> int:
     parser.add_argument("--patch-output", required=True)
     parser.add_argument("--report", required=True)
     parser.add_argument(
-        "--api-url", default=os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com")
+        "--api-url", default=os.getenv("AMOSCLAUD_API_URL", "https://amosclauds.com")
     )
     parser.add_argument("--api-key", default=os.getenv("AMOSCLAUD_API_KEY", ""))
     parser.add_argument("--model", default=os.getenv("AMOSCLAUD_FIXER_MODEL", "amosclaud-agent"))

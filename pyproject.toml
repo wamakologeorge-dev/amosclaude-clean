@@ -9,7 +9,7 @@ description = "Amosclaud development, repository, mail, storage, community, CI/C
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  {name = "Amosclaud Team", email = "support@www.amosclaud.com"}
+  {name = "Amosclaud Team", email = "support@amosclauds.com"}
 ]
 license = "MIT"
 license-files = ["LICENSE", "LICENSE-COMMERCIAL.txt"]
@@ -26,12 +26,12 @@ classifiers = [
 dynamic = ["dependencies"]
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.27.2,<3"]
+mcp = ["mcp>=1.27.2,<2"]
 
 [project.urls]
-Homepage = "https://www.amosclaud.com"
-Repository = "https://www.amosclaud.com/repositories"
-Documentation = "https://www.amosclaud.com/docs"
+Homepage = "https://amosclauds.com"
+Repository = "https://amosclauds.com/repositories"
+Documentation = "https://amosclauds.com/docs"
 
 [project.scripts]
 amosclaud = "amoscloud_ai.main:main"

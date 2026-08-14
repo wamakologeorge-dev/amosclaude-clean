@@ -102,9 +102,9 @@ def test_owner_callback_still_issues_an_admin_session() -> None:
 
 def test_production_example_documents_public_and_unified_callbacks() -> None:
     example = _read(".env.production.example")
-    canonical = "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
+    canonical = "https://amosclauds.com/api/v1/auth/github/admin-callback"
 
-    assert "GITHUB_CALLBACK_URL=https://www.amosclaud.com/auth/github/callback" in example
+    assert "GITHUB_CALLBACK_URL=https://amosclauds.com/auth/github/callback" in example
     assert f"GITHUB_ADMIN_CALLBACK_URL={canonical}" in example
     assert f"GITHUB_REPOSITORY_CALLBACK_URL={canonical}" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_IDS=271083488" in example

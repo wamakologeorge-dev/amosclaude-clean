@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-_DEFAULT_PUBLIC_URL = "https://www.amosclaud.com"
-_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
-_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
+_DEFAULT_PUBLIC_URL = "https://amosclauds.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com", "amosclauds.com", "www.amosclauds.com"}
+_CANONICAL_PUBLIC_HOST = "amosclauds.com"
 
 
 def normalize_url(value: str | None) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from amoscloud_ai.repair_engine import (
@@ -70,7 +71,15 @@ def test_decision_engine_prioritizes_explicit_objective_file(tmp_path: Path) -> 
     assert report.changed_files == ["controlled-test.txt"]
     assert requested.read_text(encoding="utf-8") == "repair this line\n"
     assert unrelated.read_text(encoding="utf-8") == "leave this line   "
-    assert any("confidence=98%" in item.output for item in report.evidence)
+    # Naming an explicit objective file must yield a high-confidence, scoped
+    # decision. Assert the intent rather than a literal: the engine reports a
+    # higher confidence (99%) when Storage Memory matches a verified technique.
+    confidences = [
+        int(match.group(1))
+        for item in report.evidence
+        if (match := re.search(r"confidence=(\d+)%", item.output))
+    ]
+    assert confidences and max(confidences) >= 98
 
 
 def test_decision_engine_scans_named_text_file_outside_default_suffixes(tmp_path: Path) -> None:
@@ -103,7 +112,9 @@ def test_unverified_repair_is_rolled_back_and_not_publishable(tmp_path: Path) ->
     assert report.final_verdict == Verdict.FAIL
     assert report.changed_files == []
     assert target.read_text(encoding="utf-8") == "repair me   "
-    assert any(item.name == "Rollback unverified repair" and item.passed for item in report.evidence)
+    assert any(
+        item.name == "Rollback unverified repair" and item.passed for item in report.evidence
+    )
 
 
 def test_critical_finding_blocks_decision_engine_repair(tmp_path: Path) -> None:
