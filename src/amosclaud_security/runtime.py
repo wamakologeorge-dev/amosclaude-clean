@@ -18,31 +18,42 @@ _EPHEMERAL_AUTHORITIES: dict[Path, SecurityAuthority] = {}
 
 
 def _validated_workspace_root(workspace: Path | str) -> Path:
-    configured_root = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
+    """Resolve a workspace path, enforcing the configured containment boundary.
+
+    ``AMOSCLAUD_WORKSPACE_ROOT`` defines the boundary. When it is set, the
+    fully resolved workspace must be that root or sit strictly beneath it.
+    When it is unset there is no operator-configured boundary, so a
+    caller-supplied workspace is accepted on its own -- the same contract
+    ``RuntimeExecutor`` already implements in ``src/services/runtime_exec.py``.
+    Defaulting the boundary to the process working directory instead would
+    reject every legitimate absolute workspace.
+
+    Untrusted HTTP input never reaches this helper unconstrained: the routers
+    in ``src/server`` reject absolute and traversing workspaces at the request
+    boundary, so this remains defence in depth rather than the only guard.
+    """
+
+    raw_configured = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
     raw_workspace = str(workspace or ".").strip()
     if "\x00" in raw_workspace:
         raise ValueError("Invalid workspace path")
 
-    normalized_raw = os.path.normpath(raw_workspace or ".")
-    workspace_path = Path(normalized_raw)
-    base = Path(configured_root or ".").resolve()
+    workspace_path = Path(os.path.normpath(raw_workspace or "."))
+    base = Path(raw_configured).resolve() if raw_configured else None
+
     if workspace_path.is_absolute():
-        # Trusted internal callers (the autonomous kernel resolves its own
-        # repository root before handing it over) may pass an absolute
-        # workspace. Untrusted HTTP input is rejected at the router boundary.
         candidate = workspace_path
     else:
         if ".." in workspace_path.parts:
             raise ValueError("Workspace escapes allowed root")
-        candidate = base / workspace_path
+        candidate = (base if base is not None else Path.cwd()) / workspace_path
 
-    # Containment guard: the fully resolved workspace must be the allowed root
-    # or sit strictly beneath it. Symlinks are resolved first, so a symlinked
-    # escape is rejected too.
-    base_real = os.path.realpath(base)
+    # Resolve symlinks before comparing so a symlinked escape is rejected too.
     root_real = os.path.realpath(candidate)
-    if root_real != base_real and not root_real.startswith(base_real + os.sep):
-        raise ValueError("Workspace escapes allowed root")
+    if base is not None:
+        base_real = os.path.realpath(base)
+        if root_real != base_real and not root_real.startswith(base_real + os.sep):
+            raise ValueError("Workspace escapes allowed root")
     return Path(root_real)
 
 
