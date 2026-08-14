@@ -2,15 +2,15 @@ import os
 from pathlib import Path
 
 from amoscloud_ai.domain_policy import (
-    WWW_PLATFORM_URL,
+    CANONICAL_PLATFORM_URL,
     enforce_platform_domain_policy,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_CALLBACK = "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
+CANONICAL_CALLBACK = "https://amosclauds.com/api/v1/auth/github/admin-callback"
 
 
-def test_apex_configuration_is_normalised_to_the_www_platform(monkeypatch) -> None:
+def test_apex_configuration_is_normalised_to_the_canonical_platform(monkeypatch) -> None:
     monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://amosclaud.com")
     monkeypatch.setenv(
         "GITHUB_ADMIN_CALLBACK_URL",
@@ -24,18 +24,43 @@ def test_apex_configuration_is_normalised_to_the_www_platform(monkeypatch) -> No
 
     enforce_platform_domain_policy()
 
-    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == WWW_PLATFORM_URL
+    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == CANONICAL_PLATFORM_URL
     assert os.environ["GITHUB_ADMIN_CALLBACK_URL"] == CANONICAL_CALLBACK
     assert os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] == CANONICAL_CALLBACK
     assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
-def test_www_configuration_uses_host_only_session_cookies(monkeypatch) -> None:
+def test_legacy_www_configuration_is_normalised_forward(monkeypatch) -> None:
+    """Anti-regression guarantee: a stale legacy env value must not drag the
+    platform back. www.amosclaud.com is legacy and must normalise forward to
+    the new canonical https://amosclauds.com, with host-only cookies."""
     monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://www.amosclaud.com")
     monkeypatch.setenv("AUTH_COOKIE_DOMAIN", "amosclaud.com")
 
     enforce_platform_domain_policy()
 
+    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == CANONICAL_PLATFORM_URL
+    assert os.environ["GITHUB_ADMIN_CALLBACK_URL"] == CANONICAL_CALLBACK
+    assert os.environ["GITHUB_REPOSITORY_CALLBACK_URL"] == CANONICAL_CALLBACK
+    assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
+
+
+def test_canonical_configuration_uses_host_only_session_cookies(monkeypatch) -> None:
+    monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://amosclauds.com")
+    monkeypatch.setenv("AUTH_COOKIE_DOMAIN", "amosclauds.com")
+
+    enforce_platform_domain_policy()
+
+    assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
+
+
+def test_canonical_www_subdomain_normalises_to_bare_canonical_host(monkeypatch) -> None:
+    monkeypatch.setenv("AMOSCLAUD_PUBLIC_URL", "https://www.amosclauds.com")
+    monkeypatch.setenv("AUTH_COOKIE_DOMAIN", "")
+
+    enforce_platform_domain_policy()
+
+    assert os.environ["AMOSCLAUD_PUBLIC_URL"] == CANONICAL_PLATFORM_URL
     assert os.environ["AUTH_COOKIE_DOMAIN"] == ""
 
 
@@ -62,12 +87,12 @@ def test_startup_applies_domain_policy_after_loading_dotenv() -> None:
     )
 
 
-def test_production_example_keeps_the_apex_platform_separate() -> None:
+def test_production_example_keeps_the_legacy_platform_separate() -> None:
     production = (ROOT / ".env.production.example").read_text(encoding="utf-8")
 
-    assert "PRIMARY_DOMAIN=www.amosclaud.com" in production
+    assert "PRIMARY_DOMAIN=amosclauds.com" in production
     assert "APEX_DOMAIN=\n" in production
-    assert "AMOSCLAUD_PUBLIC_URL=https://www.amosclaud.com" in production
+    assert "AMOSCLAUD_PUBLIC_URL=https://amosclauds.com" in production
     assert "AUTH_COOKIE_DOMAIN=\n" in production
     assert f"GITHUB_ADMIN_CALLBACK_URL={CANONICAL_CALLBACK}" in production
     assert f"GITHUB_REPOSITORY_CALLBACK_URL={CANONICAL_CALLBACK}" in production

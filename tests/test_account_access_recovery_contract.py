@@ -50,7 +50,7 @@ def test_username_password_and_qr_routes_are_registered() -> None:
     assert not (required - _paths())
 
 
-def test_login_page_uses_username_password_and_trusted_qr_only() -> None:
+def test_login_page_uses_username_password_trusted_qr_and_google() -> None:
     html = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     for text in (
@@ -60,12 +60,14 @@ def test_login_page_uses_username_password_and_trusted_qr_only() -> None:
         "Six-digit code from your trusted device",
         "Create account",
         "/static/login.js",
+        # Google is offered on both tabs; the buttons stay hidden until
+        # /api/v1/auth/google/status reports the server is configured.
+        "Continue with Google",
+        "Sign up with Google",
     ):
         assert text in html
 
     for removed in (
-        "Continue with Google",
-        "Sign up with Google",
         "Sign in directly as platform owner",
         "Email me a sign-in code",
         "/static/account-access.js",

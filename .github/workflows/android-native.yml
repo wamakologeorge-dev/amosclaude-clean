@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload Android build diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: android-build-diagnostics
           path: |
@@ -82,7 +82,7 @@ jobs:
         run: gradle --no-daemon --console=plain testDebugUnitTest
 
       - name: Upload debug APK
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: amosclaud-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
