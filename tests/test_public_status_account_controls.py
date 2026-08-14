@@ -59,7 +59,9 @@ def test_login_exposes_username_password_and_trusted_qr() -> None:
     assert "Scan secure QR code" in login
     assert "Create account" in login
     assert "Email me a sign-in code" not in login
-    assert "Continue with Google" not in login
+    # Google is a secondary option below the password form, hidden until
+    # /api/v1/auth/google/status reports the server is configured.
+    assert "Continue with Google" in login
     assert "location.replace('/auth/github')" not in login
     assert '@router.get("/auth/github"' in github_access
     assert '@router.get("/auth/github/callback"' in github_access
