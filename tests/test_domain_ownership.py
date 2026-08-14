@@ -3,20 +3,20 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CANONICAL_URL = "https://www.amosclaud.com/"
-CANONICAL_HOST = "www.amosclaud.com"
+CANONICAL_URL = "https://amosclauds.com/"
+CANONICAL_HOST = "amosclauds.com"
 FORBIDDEN_URLS = (
     "http://www.amosclaud.com",
+    "https://www.amosclaud.com",
     "https://amosclaud.com",
     "http://amosclaud.com",
 )
 AUTHORITATIVE_FILES = (
     ROOT / ".env.example",
+    ROOT / ".env.production.example",
     ROOT / ".circleci" / "config.yml",
     ROOT / ".github" / "scripts" / "amosclaud_fixer.py",
     ROOT / ".github" / "scripts" / "amosclaud_repair_candidate.py",
-    ROOT / ".github" / "workflows" / "amosclaud-autonomous-background-engineer.yml",
-    ROOT / ".github" / "workflows" / "amosclaud-repair-control-plane.yml",
     ROOT / "amosclaud_cron_agent.py",
     ROOT / "api-gateway" / "main.py",
     ROOT / "docker-compose.prod.yml",

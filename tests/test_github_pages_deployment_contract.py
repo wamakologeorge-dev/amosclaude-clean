@@ -4,7 +4,6 @@ import yaml
 
 from amoscloud_ai.main import create_app
 
-
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "pages.yml"
 INDEX = ROOT / "pages-site" / "index.html"
@@ -35,7 +34,9 @@ def _has_supported_major(action: str, minimum_major: int) -> bool:
     for ref in _workflow_action_refs():
         if not ref.startswith(prefix):
             continue
-        major = ref[len(prefix):]
+        # Refs may be pinned as a bare major ("v4") or a full version
+        # ("v7.0.1"); compare only the major component.
+        major = ref[len(prefix) :].split(".", 1)[0]
         if major.isdigit() and int(major) >= minimum_major:
             return True
     return False

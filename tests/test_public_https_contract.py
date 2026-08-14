@@ -26,7 +26,7 @@ def test_public_amosclaud_http_is_upgraded_to_canonical_https() -> None:
         normalize_public_amosclaud_url("http://www.amosclaud.com:80/v1/chat/completions")
         == "https://www.amosclaud.com/v1/chat/completions"
     )
-    assert normalize_url("http://amosclaud.com:80") == "https://www.amosclaud.com"
+    assert normalize_url("http://amosclaud.com:80") == "https://amosclauds.com"
 
 
 def test_private_and_local_http_endpoints_are_preserved() -> None:
@@ -106,7 +106,7 @@ def test_api_gateway_guard_sets_https_cors_default() -> None:
 
 def test_sdk_upgrades_legacy_public_url_without_changing_request_method() -> None:
     client = AmosclaudAgentClient(base_url="http://amosclaud.com:80/")
-    assert client.base_url == "https://www.amosclaud.com"
+    assert client.base_url == "https://amosclauds.com"
 
     request = Request(
         client.base_url + "/v1/chat/completions",

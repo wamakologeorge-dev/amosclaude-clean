@@ -59,7 +59,7 @@ def test_autonomous_gateway_delegates_to_shared_native_provider(monkeypatch):
 
     captured = {}
 
-    def native_reply(history, system_prompt):
+    def native_reply(history, system_prompt, *, timeout=None):
         captured["history"] = history
         captured["system_prompt"] = system_prompt
         return ModelApiResponse(
