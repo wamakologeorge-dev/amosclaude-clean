@@ -31,9 +31,10 @@ jobs:
     continue-on-error: true
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      SCAN_DIR: ${{ runner.temp }}/amosclaud-scan
 
     steps:
+      - name: Resolve the scan directory
+        run: echo "SCAN_DIR=$RUNNER_TEMP/amosclaud-scan" >> "$GITHUB_ENV"
       - name: Resolve target
         id: target
         env:
