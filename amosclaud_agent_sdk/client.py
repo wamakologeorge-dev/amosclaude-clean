@@ -1,4 +1,4 @@
-"""Dependency-free client for Amosclaud Autonomous on www.amosclaud.com."""
+"""Dependency-free client for Amosclaud Autonomous on amosclauds.com."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ from urllib.request import Request, urlopen
 from .errors import AmosclaudAgentError, AmosclaudConnectionError, AmosclaudResponseError
 
 _TERMINAL_STATUSES = {"success", "failed", "cancelled"}
-_DEFAULT_BASE_URL = "https://www.amosclaud.com"
-_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com"}
-_CANONICAL_PUBLIC_HOST = "www.amosclaud.com"
+_DEFAULT_BASE_URL = "https://amosclauds.com"
+_PUBLIC_HOSTS = {"amosclaud.com", "www.amosclaud.com", "amosclauds.com", "www.amosclauds.com"}
+_CANONICAL_PUBLIC_HOST = "amosclauds.com"
 
 
 def _normalize_base_url(value: str | None) -> str:

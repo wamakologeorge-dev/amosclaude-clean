@@ -17,6 +17,8 @@ def test_agentic_cloud_engine_exposes_five_internal_engines(tmp_path: Path):
 def test_read_only_agent_run_reports_all_five_engines(tmp_path: Path, monkeypatch):
     (tmp_path / "sample.py").write_text("VALUE = 1\n", encoding="utf-8")
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "agentic-test")
+    # Security contract: the workspace must resolve inside the allowed root.
+    monkeypatch.setenv("AMOSCLAUD_WORKSPACE_ROOT", str(tmp_path))
 
     run = AmosclaudAgenticCloudEngine(tmp_path).run(
         "Inspect the repository and report evidence",

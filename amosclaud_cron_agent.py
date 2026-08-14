@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
-API_URL = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/")
+API_URL = os.getenv("AMOSCLAUD_API_URL", "https://amosclauds.com").rstrip("/")
 API_KEY = os.getenv("AMOSCLAUD_API_KEY", "").strip()
 MODEL = os.getenv("AMOSCLAUD_CRON_MODEL", "amosclaud-agent").strip()
 GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "wamakologeorge-dev/amosclaude-clean").strip()

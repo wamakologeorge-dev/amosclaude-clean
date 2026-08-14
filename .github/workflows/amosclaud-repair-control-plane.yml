@@ -20,7 +20,6 @@ on:
       - CircleCI Pipeline
       - Amosclaud Autonomous Fixer
       - Amosclaud Pull Request CI Repair
-      - Amosclaud Repair Control Plane
     types: [completed]
   status:
   schedule:

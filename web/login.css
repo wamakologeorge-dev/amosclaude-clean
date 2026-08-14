@@ -252,3 +252,15 @@ summary { cursor: pointer; color: #3f4650; font-weight: 780; }
   .method-tabs, .organization-tabs, .recovery-actions { grid-template-columns: 1fr; }
   .auth-card { padding-left: 16px; padding-right: 16px; }
 }
+
+.google-block { display: flex; flex-direction: column; gap: .75rem; }
+.google-button {
+  display: flex; align-items: center; justify-content: center; gap: .625rem;
+  width: 100%; min-height: 44px; padding: .75rem 1rem;
+  border: 1px solid #747775; border-radius: 8px; background: #ffffff;
+  color: #1f1f1f; font-size: 1rem; font-weight: 500; cursor: pointer;
+}
+.google-button:hover { background: #f7f8f8; }
+.google-button:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
+.google-button:disabled { opacity: .55; cursor: wait; }
+.google-glyph { flex: 0 0 auto; }

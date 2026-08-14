@@ -89,7 +89,8 @@ def test_username_password_and_qr_access_are_primary() -> None:
     assert "/static/login.js" in login
     assert "Username" in login
     assert "Scan secure QR code" in login
-    assert "Continue with Google" not in login
+    # Google sign-in is offered alongside, not instead of, owner access.
+    assert "Continue with Google" in login
 
 
 def test_owner_callback_still_issues_an_admin_session() -> None:
@@ -102,9 +103,9 @@ def test_owner_callback_still_issues_an_admin_session() -> None:
 
 def test_production_example_documents_public_and_unified_callbacks() -> None:
     example = _read(".env.production.example")
-    canonical = "https://www.amosclaud.com/api/v1/auth/github/admin-callback"
+    canonical = "https://amosclauds.com/api/v1/auth/github/admin-callback"
 
-    assert "GITHUB_CALLBACK_URL=https://www.amosclaud.com/auth/github/callback" in example
+    assert "GITHUB_CALLBACK_URL=https://amosclauds.com/auth/github/callback" in example
     assert f"GITHUB_ADMIN_CALLBACK_URL={canonical}" in example
     assert f"GITHUB_REPOSITORY_CALLBACK_URL={canonical}" in example
     assert "AMOSCLAUD_ADMIN_GITHUB_IDS=271083488" in example

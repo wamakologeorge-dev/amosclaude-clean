@@ -74,7 +74,7 @@ def test_domains_reports_configured_hosts(as_admin, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     domains = {d["domain"]: d for d in body["domains"]}
-    assert set(domains) == {"www.amosclaud.com", "amosclaud.com"}
+    assert set(domains) == {"www.amosclaud.com", "amosclaud.com", "amosclauds.com"}
     assert domains["www.amosclaud.com"]["active"] is True
     assert domains["www.amosclaud.com"]["https"] is True
     assert domains["amosclaud.com"]["active"] is False
@@ -84,7 +84,11 @@ def test_domains_tolerates_comma_separated_hosts(as_admin, monkeypatch):
     monkeypatch.setenv("ALLOWED_HOSTS", "www.amosclaud.com, amosclaud.com")
     response = request("GET", "/api/v1/account/domains")
     body = response.json()
-    assert [d["domain"] for d in body["domains"]] == ["www.amosclaud.com", "amosclaud.com"]
+    assert [d["domain"] for d in body["domains"]] == [
+        "www.amosclaud.com",
+        "amosclaud.com",
+        "amosclauds.com",
+    ]
 
 
 def test_domains_normalises_scheme_port_and_duplicates(as_admin, monkeypatch):
@@ -96,4 +100,8 @@ def test_domains_normalises_scheme_port_and_duplicates(as_admin, monkeypatch):
     )
     response = request("GET", "/api/v1/account/domains")
     body = response.json()
-    assert [d["domain"] for d in body["domains"]] == ["www.amosclaud.com", "amosclaud.com"]
+    assert [d["domain"] for d in body["domains"]] == [
+        "www.amosclaud.com",
+        "amosclaud.com",
+        "amosclauds.com",
+    ]

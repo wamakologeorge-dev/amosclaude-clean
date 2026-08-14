@@ -7,7 +7,16 @@ from amoscloud_ai.repair_engine import AutonomousDecisionEngine, Verdict, recomm
 from amoscloud_ai.repair_engine.core import Finding, Repair, Severity
 
 
-def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: Path) -> None:
+def test_doctor_repairs_distinct_safe_findings_with_validated_cycles(tmp_path: Path) -> None:
+    """Distinct safe repairs must all land, and every Fixer cycle must be validated.
+
+    Since ``Connect Doctor and Fixer to verified repair memory`` (ead8c380),
+    Amosclaud Storage Memory may batch multiple trusted deterministic repairs
+    into a single memory-guided cycle instead of one repair type per cycle.
+    The protections that matter are unchanged and asserted here: every file is
+    repaired exactly, the session verdict is PASS, at least one explicit Doctor
+    assignment exists, and Doctor re-validates every cycle it assigned.
+    """
     first = tmp_path / "first.md"
     second = tmp_path / "second.md"
     first.write_text("first   ", encoding="utf-8")
@@ -24,14 +33,19 @@ def test_doctor_accumulates_distinct_safe_repairs_before_verification(tmp_path: 
     assert first.read_text(encoding="utf-8") == "first\n"
     assert second.read_text(encoding="utf-8") == "second\n"
     assignments = [
-        item for item in report.evidence if item.name.startswith("Doctor assigned Amosclaud-fixer cycle")
+        item
+        for item in report.evidence
+        if item.name.startswith("Doctor assigned Amosclaud-fixer cycle")
     ]
     validations = [
-        item for item in report.evidence if item.name.startswith("Doctor validated Amosclaud-fixer cycle")
+        item
+        for item in report.evidence
+        if item.name.startswith("Doctor validated Amosclaud-fixer cycle")
     ]
-    assert len(assignments) >= 2
+    assert len(assignments) >= 1
     assert len(validations) == len(assignments)
     assert all(item.passed for item in validations)
+    assert report.attempts <= 4
 
 
 def test_doctor_rolls_back_whole_healing_session_when_critical_remains(tmp_path: Path) -> None:

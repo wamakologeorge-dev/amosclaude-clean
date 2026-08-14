@@ -47,6 +47,14 @@ jobs:
             python scripts/ci/fast_gate.py --base "$BASE_SHA" --head "$HEAD_SHA" \
             2>&1 | tee fast-pr-gate.log
 
+      - name: Validate GitHub Actions workflows
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --no-project --with-requirements requirements-ci-fast.txt \
+            python scripts/ci/workflow_validator_guard.py \
+            2>&1 | tee -a fast-pr-gate.log
+
       - name: Upload fast-gate diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
