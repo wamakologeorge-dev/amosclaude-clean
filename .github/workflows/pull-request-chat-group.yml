@@ -26,10 +26,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.issue.number }}
-      REPORT_PATH: ${{ runner.temp }}/amosclaud-agent-chat/report.json
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
+      - name: Resolve the report path
+        run: echo "REPORT_PATH=$RUNNER_TEMP/amosclaud-agent-chat/report.json" >> "$GITHUB_ENV"
       - name: Route trusted slash command
         id: route
         run: |

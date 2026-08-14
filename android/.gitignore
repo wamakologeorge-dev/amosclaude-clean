@@ -1,0 +1,15 @@
+# Android/Gradle build and machine-specific files
+.gradle/
+build/
+**/build/
+local.properties
+*.jks
+*.keystore
+keystore.properties
+.cxx/
+**/.cxx/
+captures/
+*.iml
+.idea/
+.DS_Store
+.externalNativeBuild/

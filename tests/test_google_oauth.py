@@ -1,3 +1,4 @@
+import re
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
@@ -51,7 +52,7 @@ def _configure(monkeypatch, tmp_path):
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv(
         "GOOGLE_CALLBACK_URL",
-        "https://www.amosclaud.com/api/v1/auth/google/callback",
+        "https://amosclauds.com/api/v1/auth/google/callback",
     )
     monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
     monkeypatch.setattr(google_auth.httpx, "AsyncClient", _FakeGoogleClient)
@@ -63,7 +64,7 @@ def _complete_google_login(client):
     query = parse_qs(urlparse(start.headers["location"]).query)
     assert query["client_id"] == ["client.apps.googleusercontent.com"]
     assert query["scope"] == ["openid email profile"]
-    assert query["redirect_uri"] == ["https://www.amosclaud.com/api/v1/auth/google/callback"]
+    assert query["redirect_uri"] == ["https://amosclauds.com/api/v1/auth/google/callback"]
     state = client.cookies.get(google_auth.GOOGLE_STATE_COOKIE)
     assert state
     return client.get(
@@ -170,14 +171,49 @@ def test_google_oauth_requires_verified_email(monkeypatch, tmp_path):
         assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
 
 
-def test_google_oauth_remains_available_without_cluttering_primary_login():
+def test_google_is_offered_for_both_sign_in_and_account_creation():
+    """Both tabs must expose Google, otherwise the backend flow is unreachable."""
+
     login = open("web/login.html", encoding="utf-8").read()
     routes = open("amoscloud_ai/api/routes/google_auth.py", encoding="utf-8").read()
     environment = open(".env.production.example", encoding="utf-8").read()
 
-    assert 'id="google-login-button"' not in login
+    assert 'id="google-login-button"' in login
+    assert 'id="google-register-button"' in login
     assert '@router.get("/google/status")' in routes
     assert '@router.get("/google")' in routes
-    assert (
-        "GOOGLE_CALLBACK_URL=https://www.amosclaud.com/api/v1/auth/google/callback" in environment
-    )
+    assert "GOOGLE_CALLBACK_URL=https://amosclauds.com/api/v1/auth/google/callback" in environment
+
+
+def test_google_buttons_start_hidden_and_are_revealed_by_the_status_probe():
+    """A server without Google credentials must not show a button that 503s."""
+
+    login = open("web/login.html", encoding="utf-8").read()
+    script = open("web/login.js", encoding="utf-8").read()
+
+    assert 'id="google-signin" class="google-block hidden"' in login
+    assert 'id="google-register" class="google-block hidden"' in login
+    assert "/api/v1/auth/google/status" in script
+    assert "status.enabled !== true" in script
+    assert "googleSignin?.classList.remove('hidden')" in script
+    assert "googleRegister?.classList.remove('hidden')" in script
+
+
+def test_login_page_explains_every_google_error_redirect():
+    """Each _login_error code the callback can emit needs a human message."""
+
+    routes = open("amoscloud_ai/api/routes/google_auth.py", encoding="utf-8").read()
+    script = open("web/login.js", encoding="utf-8").read()
+
+    emitted = set(re.findall(r'_login_error\("([a-z_]+)"\)', routes))
+    assert emitted, "expected the callback to emit at least one error code"
+    for code in emitted:
+        assert f"{code}:" in script, f"login.js has no message for google_error={code}"
+
+
+def test_google_button_click_sends_the_browser_to_the_authorize_route():
+    script = open("web/login.js", encoding="utf-8").read()
+
+    assert "window.location.href = '/api/v1/auth/google'" in script
+    assert "googleLoginButton?.addEventListener('click'" in script
+    assert "googleRegisterButton?.addEventListener('click'" in script

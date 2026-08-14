@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -196,6 +197,35 @@ def _is_guidance_request(message: str, mode: str) -> bool:
     return asks_for_guidance and not explicitly_execute
 
 
+def _model_conversation_reply(objective: str, name: str | None) -> str | None:
+    """Answer a guidance question with the Amosclaud model station (ollama).
+
+    Returns None when the station is unavailable so callers fall back to the
+    deterministic template. Never fabricates a model answer.
+    """
+    if os.getenv("AMOSCLAUD_MODEL_CHAT", "").strip().lower() in {"off", "0", "false"}:
+        return None
+    try:
+        from src.amosclaud_os.intelligence.model_engine import ModelEngine
+
+        engine = ModelEngine()
+        if not engine.endpoint:
+            return None
+        result = engine.respond(
+            objective[:4000],
+            context={
+                "system": ASSISTANT_SYSTEM_TEMPLATE.system_prompt()
+                + (f"\nThe user's name is {name}." if name else ""),
+                "purpose": "cloud-agent-chat",
+            },
+        )
+    except Exception:  # pragma: no cover - never break chat on wiring errors
+        return None
+    if result.failed or not result.text.strip():
+        return None
+    return result.text.strip()
+
+
 def _conversation_reply(request: Request, mode: str, objective: str) -> str | None:
     """Return a natural answer only when no engineering execution is required."""
 
@@ -221,7 +251,9 @@ def _conversation_reply(request: Request, mode: str, objective: str) -> str | No
                 "repository, make the authorized changes, run verification, and report "
                 "the exact files and results."
             )
-        return ASSISTANT_SYSTEM_TEMPLATE.guidance(message)
+        return _model_conversation_reply(message, name) or ASSISTANT_SYSTEM_TEMPLATE.guidance(
+            message
+        )
     if normalised in {"build", "make", "create", "fix"}:
         return ASSISTANT_SYSTEM_TEMPLATE.missing_objective(normalised, name)
     return None
@@ -252,11 +284,23 @@ def _project_intake_reply(request: Request, objective: str, metadata: dict | Non
         return None
     generic_request = any(
         phrase in current
-        for phrase in ("create a website", "build a website", "make a website", "learn how to create a website")
+        for phrase in (
+            "create a website",
+            "build a website",
+            "make a website",
+            "learn how to create a website",
+        )
     )
     if len(messages) == 1 or generic_request:
-        return f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
-    if current in {"business", "a business", "it is about business", "the website is about business"}:
+        return (
+            f"Yes {prefix}I’ll help you build it and organize the work. What is the website about?"
+        )
+    if current in {
+        "business",
+        "a business",
+        "it is about business",
+        "the website is about business",
+    }:
         return f"What kind of business, {name or 'and who will use the platform'}?"
     return None
 
@@ -341,7 +385,9 @@ async def run_agent(
     supplied_objective = (body.objective or "").strip()
     objective, continued = _resolve_follow_up(supplied_objective, body.metadata)
     intake_reply = None if continued else _project_intake_reply(request, objective, body.metadata)
-    conversational_reply = intake_reply or (None if continued else _conversation_reply(request, mode, objective))
+    conversational_reply = intake_reply or (
+        None if continued else _conversation_reply(request, mode, objective)
+    )
     if conversational_reply:
         return AutonomousAgentRunResponse(
             accepted=True,

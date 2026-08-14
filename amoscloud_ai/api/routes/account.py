@@ -18,6 +18,7 @@ from amoscloud_ai.api.routes.auth import (
     _connect,
     _cookie_secure,
     _create_session,
+    _hash_password,
     _token_hash,
     _verify_password,
     get_user_from_session,
@@ -298,6 +299,58 @@ def logout_all_devices(
         db.execute("DELETE FROM sessions WHERE user_id=?", (int(user["id"]),))
         db.commit()
     _clear_session_cookie(response)
+    response.status_code = 204
+    return response
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str | None = Field(default=None, max_length=200)
+    new_password: str = Field(..., min_length=10, max_length=200)
+
+
+@router.post("/password", status_code=204, response_class=Response)
+def change_password(
+    body: PasswordChangeRequest,
+    response: Response,
+    amos_session: str | None = Cookie(default=None),
+) -> Response:
+    """Change the signed-in user's Amosclaud password, or set one for the first time."""
+    user = get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with _connect() as db:
+        full_user = db.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not full_user:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        existing_hash = full_user["password_hash"]
+        if existing_hash:
+            if not body.current_password or not _verify_password(
+                body.current_password, existing_hash
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Current password is incorrect",
+                )
+            if _verify_password(body.new_password, existing_hash):
+                raise HTTPException(
+                    status_code=400,
+                    detail="New password must be different from the current password",
+                )
+
+        provider = full_user["provider"]
+        if not existing_hash and provider and "password" not in provider.split("+"):
+            provider = f"password+{provider}"
+        elif not provider:
+            provider = "password"
+
+        db.execute(
+            "UPDATE users SET password_hash=?,provider=? WHERE id=?",
+            (_hash_password(body.new_password), provider, int(user["id"])),
+        )
+        db.commit()
+
     response.status_code = 204
     return response
 

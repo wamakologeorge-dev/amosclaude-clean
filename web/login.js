@@ -22,6 +22,10 @@
   const registerUsername = byId('register-username');
   const registerPassword = byId('register-password');
   const message = byId('message');
+  const googleSignin = byId('google-signin');
+  const googleRegister = byId('google-register');
+  const googleLoginButton = byId('google-login-button');
+  const googleRegisterButton = byId('google-register-button');
 
   if (!loginTab || !registerTab || !passwordForm || !registerForm || !message) return;
 
@@ -308,6 +312,48 @@
       if (!navigating) registerButton.disabled = false;
     }
   });
+
+  const GOOGLE_ERRORS = {
+    access_denied: 'Google sign-in was cancelled.',
+    missing_response: 'Google did not return a sign-in response. Please try again.',
+    not_configured: 'Google sign-in is not configured on this server yet.',
+    token_exchange_failed: 'Amosclaud could not complete the exchange with Google. Please try again.',
+    provider_unavailable: 'Google is not reachable right now. Please try again shortly.',
+    unverified_email: 'That Google account has no verified email address, so Amosclaud cannot use it.',
+    account_conflict: 'That Google email already belongs to a different Amosclaud account.',
+  };
+
+  function startGoogle(button) {
+    if (navigating) return;
+    navigating = true;
+    button.disabled = true;
+    show('Redirecting to Google\u2026');
+    window.location.href = '/api/v1/auth/google';
+  }
+
+  (async () => {
+    const reported = new URLSearchParams(window.location.search).get('google_error');
+    if (reported) {
+      show(GOOGLE_ERRORS[reported] || 'Google sign-in could not be completed.', 'error');
+    }
+    if (!googleSignin && !googleRegister) return;
+    try {
+      const response = await fetch('/api/v1/auth/google/status', {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const status = await response.json();
+      if (!status || status.enabled !== true) return;
+      googleSignin?.classList.remove('hidden');
+      googleRegister?.classList.remove('hidden');
+    } catch (_) {
+      // Leave the Google options hidden when the probe fails.
+    }
+  })();
+
+  googleLoginButton?.addEventListener('click', () => startGoogle(googleLoginButton));
+  googleRegisterButton?.addEventListener('click', () => startGoogle(googleRegisterButton));
 
   setMode(new URLSearchParams(window.location.search).get('mode') === 'register' ? 'register' : 'login');
 

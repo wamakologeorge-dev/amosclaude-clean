@@ -309,19 +309,28 @@ def classify(event_name: str, event: dict[str, Any], repository: str, default_br
         inputs = event.get("inputs") or {}
         scope = str(inputs.get("scope") or "default")
         pr_number = str(inputs.get("pull_request_number") or "")
-        sha = str(inputs.get("target_sha") or os.getenv("GITHUB_SHA", ""))
+        requested_sha = str(inputs.get("target_sha") or os.getenv("GITHUB_SHA", ""))
+        sha = requested_sha
         branch = default_branch
         base = default_branch
+        source = str(inputs.get("source_name") or inputs.get("failure_summary") or "manual repair")
+        provider = str(inputs.get("provider") or "manual")
         if pr_number:
             pull = _request_json("GET", _api(repository, f"/pulls/{pr_number}"), token=token)
-            sha = str(pull.get("head", {}).get("sha") or sha)
+            current_sha = str(pull.get("head", {}).get("sha") or "")
             branch = str(pull.get("head", {}).get("ref") or branch)
             base = str(pull.get("base", {}).get("ref") or base)
+            if pull.get("state") != "open":
+                return Route(False, "stale_dispatch", provider, source, requested_sha, branch, base, pull_request_number=pr_number, reason="pull request is no longer open")
             if pull.get("head", {}).get("repo", {}).get("full_name") != repository:
-                return Route(False, "report_only", "manual", "manual repair", sha, branch, base, pull_request_number=pr_number, reason="fork pull requests are report-only")
-        source = str(inputs.get("source_name") or inputs.get("failure_summary") or "manual repair")
+                return Route(False, "report_only", provider, source, requested_sha, branch, base, pull_request_number=pr_number, reason="fork pull requests are report-only")
+            if requested_sha and current_sha != requested_sha:
+                return Route(False, "stale_dispatch", provider, source, requested_sha, branch, base, pull_request_number=pr_number, reason="pull-request head no longer matches the dispatched target_sha")
+            if branch == default_branch:
+                return Route(False, "report_only", provider, source, current_sha or requested_sha, branch, base, pull_request_number=pr_number, reason="protected default-branch heads cannot receive automated repair publication")
+            sha = current_sha or requested_sha
         route = "maintenance" if scope == "maintenance" else ("pull_request" if pr_number or scope == "pull_request" else "default")
-        return Route(True, route, str(inputs.get("provider") or "manual"), source, sha, branch, base, source_run_id=str(inputs.get("source_run_id") or ""), status_url=str(inputs.get("status_url") or ""), pull_request_number=pr_number)
+        return Route(True, route, provider, source, sha, branch, base, source_run_id=str(inputs.get("source_run_id") or ""), status_url=str(inputs.get("status_url") or ""), pull_request_number=pr_number)
 
     return Route(False, "none", "unknown", event_name, "", "", default_branch, reason="unsupported event")
 

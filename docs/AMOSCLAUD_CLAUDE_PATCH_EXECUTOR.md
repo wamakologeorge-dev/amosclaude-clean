@@ -1,89 +1,69 @@
-# Amosclaud Claude Patch Executor
+# Amosclaud Native Ollama Patch Routing
 
-**Contract:** `AMOSCLAUD-CLAUDE-PATCH-CONTRACT:v1`
+**Active contract:** `AMOSCLAUD-OLLAMA-PATCH-CONTRACT:v2`
 
-The Claude Patch Executor is an optional backup lane for owner-authorized pull-request changes. It extends Amosclaud's existing parser, patch validation, repair memory, credential-free verifier, and GitHub App connection. It does not replace the native Amosclaud Fixer.
+**Retired compatibility marker:** `AMOSCLAUD-CLAUDE-PATCH-CONTRACT:v1`
 
-## Command
+The retired marker is retained only so the trusted pre-migration policy guard on
+`main` can validate this transition. It does not authorize or configure Claude.
 
-Post this comment on an open pull request whose head branch belongs to the same repository:
+The historical Claude-named workflow files remain only as compatibility entry
+points for existing commands. They no longer call Anthropic or any other external
+model provider. Every accepted patch command is routed to the existing Amosclaud
+Repair Control Plane, which selects the configured Ollama service first.
+
+## Compatible commands
 
 ```text
 @amosclaud patch <bounded engineering objective>
+@amosclaud ai-fix <bounded engineering objective>
+@amosclaud claude-fix <bounded engineering objective>
 ```
 
-The aliases `@amosclaud ai-fix ...` and `@amosclaud claude-fix ...` select the same lane.
+The last alias is retained only to avoid breaking old instructions. It does not
+select Claude. An empty objective is rejected.
 
-Normal `@amosclaud fix ...` commands and structured owner directives remain on Amosclaud's native fixer path. This prevents two repair engines from racing on one comment.
+Normal `@amosclaud fix ...` commands and structured owner directives continue to
+use the same native repair path.
 
-## Required configuration
+## Ollama configuration
 
-Repository variables:
+Repository secrets and variables used by the native Repair Control Plane:
 
 ```text
-ANTHROPIC_MODEL=<owner-selected Claude model identifier>
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-GITHUB_APP_SLUG=amosclaud-bot
-GITHUB_APP_ID=<numeric app id>
-GITHUB_APP_INSTALLATION_ID=<numeric installation id>
-GITHUB_APP_BOT_USER_ID=<numeric bot account id>
+OLLAMA_API_KEY=<configured Ollama service key>
+OLLAMA_URL=<configured Ollama endpoint>
+OLLAMA_MODEL=<owner-selected Ollama model>
 ```
 
-Repository secrets:
+When `OLLAMA_API_KEY` is present, the control plane sets the repair provider to
+`ollama-cloud`, uses `OLLAMA_URL`, and selects `OLLAMA_MODEL`. The Amosclaud
+gateway remains a fallback only when the Ollama configuration is unavailable.
 
-```text
-ANTHROPIC_API_KEY=<dedicated Anthropic API key>
-GITHUB_APP_PRIVATE_KEY=<GitHub App private key>
-```
+## Trusted routing boundary
 
-The model identifier is intentionally owner-configured rather than hardcoded to a moving alias.
+1. The issue-comment dispatcher checks out trusted default-branch code.
+2. The parser authenticates the author association and requires a nonempty,
+   bounded objective.
+3. The dispatcher resolves the exact open same-repository PR head.
+4. Forks, moved heads, closed PRs, and PRs whose head is the protected default
+   branch are rejected.
+5. The dispatcher starts `amosclaud-repair-control-plane.yml` with the exact SHA,
+   PR number, Ollama provider label, and bounded objective evidence.
+6. The Repair Control Plane reproduces the failure, creates a candidate through
+   the native Ollama-first model route, removes model credentials for verification,
+   verifies the changed-file set, and publishes only a validated repair.
+7. It never merges automatically and never force-pushes.
 
-## Trusted execution boundary
+## Retired external executor
 
-The workflow checks out trusted default-branch code into `trusted/` and checks out the exact pull-request head into `target/`. Pull-request code is treated as untrusted input and is never executed while the Claude key or GitHub App private key is available.
+`.github/scripts/ai_patch_executor.py` is a fail-closed compatibility guard. It:
 
-The sequence is:
+- has no model HTTP client;
+- receives no external model key;
+- reads no pull-request source or symlink targets;
+- generates no patch;
+- commits and pushes nothing;
+- returns `NATIVE_OLLAMA_REPAIR_REQUIRED` when invoked directly.
 
-1. `.github/scripts/parse_comment.py` classifies the comment and stores the objective locally.
-2. GitHub metadata resolves the exact PR head SHA, base SHA, source repository, and branch.
-3. Fork and closed-PR publication are rejected.
-4. `.github/scripts/ai_patch_executor.py` sends bounded, secret-filtered repository context to the Anthropic Messages API.
-5. The executor accepts only one unified Git diff, validates paths and size using the existing Amosclaud repair policy, and runs `git apply --check`.
-6. A separate step applies the artifact and verifies that the actual changed-file set exactly matches the validated report.
-7. Amosclaud's credential-free repair verifier runs without the Claude key or GitHub App credentials.
-8. Only after verification does the trusted GitHub App connection mint a short-lived installation token.
-9. The workflow rechecks the remote PR head SHA, commits only reported files, and performs a normal non-force push to the same PR branch.
-10. All ordinary CI, security, policy, code-owner, and review requirements still apply.
-
-## Codebase context
-
-The Claude request receives a bounded context containing:
-
-- a tracked source-file inventory;
-- the pull-request diff summary;
-- changed files and objective-relevant source excerpts;
-- repository operating instructions;
-- verified Amosclaud repair-memory hints;
-- the owner objective and request evidence as untrusted data.
-
-The context builder excludes `.env` files, credential files, private keys, common build/vendor directories, and unsupported binary formats. It limits both the file count and total character count.
-
-## Authority boundaries
-
-The Claude executor cannot:
-
-- apply its own patch;
-- execute target repository code;
-- commit or push;
-- approve or merge a pull request;
-- force-push;
-- write to the default branch;
-- access the GitHub App private key;
-- publish when the PR head moved;
-- bypass Amosclaud's repair policy or sensitive-data controls.
-
-The publication workflow cannot publish unless generation, patch validation, exact changed-file matching, credential-free verification, GitHub App authentication, repository-access verification, bot-identity verification, and stale-head protection all pass.
-
-## Evidence
-
-Every attempt uploads a fourteen-day evidence artifact containing the public command metadata, request evidence, diff artifact, candidate report, and verification report. Secret values and installation tokens are not included.
+This prevents the earlier Anthropic-specific path from being restored silently.
