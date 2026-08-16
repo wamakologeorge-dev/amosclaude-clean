@@ -38,7 +38,9 @@ def test_username_password_and_qr_portal_is_the_primary_entry() -> None:
     assert "Scan secure QR code" in page
     assert '<form id="password-login-form"' in page
     assert "Email me a sign-in code" not in page
-    assert "Continue with Google" not in page
+    # Google is offered as a secondary option; it does not displace the
+    # username/password and QR portal as the primary entry.
+    assert "Continue with Google" in page
     assert "location.replace('/auth/github')" not in page
 
     paths = {getattr(route, "path", "") for route in create_app().routes}

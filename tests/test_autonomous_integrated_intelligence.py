@@ -3,7 +3,11 @@ from pathlib import Path
 from src.amosclaud_os.kernel import AutonomousKernel
 
 
-def test_model_and_connectors_belong_to_same_autonomous(tmp_path: Path) -> None:
+def test_model_and_connectors_belong_to_same_autonomous(tmp_path: Path, monkeypatch) -> None:
+    # Real inference wiring: without a configured model station the kernel now
+    # reports an honest failure instead of echoing the prompt back as success.
+    monkeypatch.delenv("AMOSCLAUD_MODEL_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     kernel = AutonomousKernel(tmp_path)
 
     status = kernel.status()
@@ -17,7 +21,8 @@ def test_model_and_connectors_belong_to_same_autonomous(tmp_path: Path) -> None:
     assert response["source"] == "src.amosclaud_os.kernel.AutonomousKernel"
     assert response["agent"] == "Amosclaud Autonomous"
     assert response["agent_identity"] == "one-agent"
-    assert response["failed"] is False
+    assert response["failed"] is True
+    assert response["error"] == "model_station_not_configured"
 
 
 def test_read_write_is_governed_by_same_autonomous(tmp_path: Path) -> None:
@@ -27,9 +32,7 @@ def test_read_write_is_governed_by_same_autonomous(tmp_path: Path) -> None:
     assert denied["ok"] is False
     assert denied["error"] in {"write_not_authorized", "signed_security_grant_required"}
 
-    written = kernel.write_document(
-        "result.txt", "hello", authorized_writes=True
-    )
+    written = kernel.write_document("result.txt", "hello", authorized_writes=True)
     # In strict security enforcement mode the legacy authorized_writes flag is
     # insufficient; a signed security grant is required instead.
     if written.get("ok") is True:

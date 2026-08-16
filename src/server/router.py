@@ -1,4 +1,5 @@
 """HTTP control interface for the single Amosclaud OS Autonomous kernel."""
+
 from __future__ import annotations
 
 import hmac
@@ -11,7 +12,13 @@ from pydantic import BaseModel, Field
 
 from src.agent.autonomy_supervisor import AutonomySupervisor
 from src.amosclaud_os import get_autonomous_kernel
-from .schemas import AutonomousTaskRequest, AutonomousTaskResponse, CloudAgentChatRequest, MiniAutonomousRequest
+
+from .schemas import (
+    AutonomousTaskRequest,
+    AutonomousTaskResponse,
+    CloudAgentChatRequest,
+    MiniAutonomousRequest,
+)
 
 router = APIRouter(prefix="/api/v2/autonomous", tags=["autonomous"])
 supervisor = AutonomySupervisor()
@@ -54,11 +61,21 @@ def _safe_workspace(workspace: str) -> Path:
         candidate.relative_to(base)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Workspace escapes allowed root") from exc
-    return candidate
+
+    # Second, analyzer-recognized containment barrier (CodeQL py/path-injection):
+    # the normalized string path must stay inside the allowed root.
+    normalized = os.path.normpath(str(candidate))
+    normalized_base = os.path.normpath(str(base))
+    if normalized != normalized_base and not normalized.startswith(normalized_base + os.sep):
+        raise HTTPException(status_code=400, detail="Workspace escapes allowed root")
+    return Path(normalized)
 
 
 @router.post("/run", response_model=AutonomousTaskResponse)
-def run_task(payload: AutonomousTaskRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def run_task(
+    payload: AutonomousTaskRequest,
+    self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER),
+) -> dict:
     require_self_key(self_key)
     safe_workspace = _safe_workspace(payload.workspace)
     return get_autonomous_kernel(safe_workspace).execute(
@@ -70,7 +87,10 @@ def run_task(payload: AutonomousTaskRequest, self_key: str | None = Header(defau
 
 
 @router.post("/chat")
-def cloud_agent_chat(payload: CloudAgentChatRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def cloud_agent_chat(
+    payload: CloudAgentChatRequest,
+    self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER),
+) -> dict:
     require_self_key(self_key)
     safe_workspace = _safe_workspace(payload.workspace)
     return get_autonomous_kernel(safe_workspace).assist(
@@ -83,7 +103,10 @@ def cloud_agent_chat(payload: CloudAgentChatRequest, self_key: str | None = Head
 
 
 @router.post("/mini")
-def mini_autonomous(payload: MiniAutonomousRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def mini_autonomous(
+    payload: MiniAutonomousRequest,
+    self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER),
+) -> dict:
     require_self_key(self_key)
     safe_workspace = _safe_workspace(payload.workspace)
     return get_autonomous_kernel(safe_workspace).repair(
@@ -93,19 +116,25 @@ def mini_autonomous(payload: MiniAutonomousRequest, self_key: str | None = Heade
 
 
 @router.post("/missions")
-def create_mission(payload: MissionRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def create_mission(
+    payload: MissionRequest, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)
+) -> dict:
     require_self_key(self_key)
     return asdict(supervisor.create_mission(payload.objective, payload.max_attempts))
 
 
 @router.get("/missions")
-def list_missions(limit: int = 50, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> list[dict]:
+def list_missions(
+    limit: int = 50, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)
+) -> list[dict]:
     require_self_key(self_key)
     return supervisor.list_missions(limit)
 
 
 @router.get("/missions/{mission_id}")
-def get_mission(mission_id: str, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def get_mission(
+    mission_id: str, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)
+) -> dict:
     require_self_key(self_key)
     try:
         return asdict(supervisor.get(mission_id))
@@ -114,7 +143,11 @@ def get_mission(mission_id: str, self_key: str | None = Header(default=None, ali
 
 
 @router.post("/approvals/{approval_id}")
-def decide_approval(approval_id: str, payload: ApprovalDecision, self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER)) -> dict:
+def decide_approval(
+    approval_id: str,
+    payload: ApprovalDecision,
+    self_key: str | None = Header(default=None, alias=SELF_KEY_HEADER),
+) -> dict:
     require_self_key(self_key)
     try:
         return supervisor.decide_approval(approval_id, payload.approved)
