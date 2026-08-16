@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import json
+import re
+import tomllib
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from pathlib import PurePosixPath
 from time import monotonic
 from typing import Any
 
@@ -75,6 +79,100 @@ class AutonomousEngineeringLoop:
             return self.runtime.verify(changed_files=changed)
         except TypeError:
             return self.runtime.verify()
+
+    @staticmethod
+    def _explicit_black_paths(objective: str) -> list[str] | None:
+        """Return explicit Python targets for a narrow Black-formatting request."""
+
+        lowered = " ".join((objective or "").lower().split())
+        if "black" not in lowered or "format" not in lowered:
+            return None
+
+        paths: list[str] = []
+        for raw in re.findall(r"`([^`\n]+\.py)`", objective or ""):
+            normalized = raw.strip().replace("\\", "/")
+            pure = PurePosixPath(normalized)
+            if not normalized or pure.is_absolute() or ".." in pure.parts:
+                raise ValueError("Black formatting target must be a safe relative Python path")
+            if normalized not in paths:
+                paths.append(normalized)
+        return paths or None
+
+    def _black_mode(self, black_module) -> Any:
+        """Load the repository Black mode without allowing configuration to expand scope."""
+
+        line_length = 88
+        target_versions: set[Any] = set()
+        try:
+            payload = tomllib.loads(self.files.read("pyproject.toml"))
+        except (
+            AttributeError,
+            FileNotFoundError,
+            OSError,
+            PermissionError,
+            tomllib.TOMLDecodeError,
+        ):
+            payload = {}
+
+        tool = payload.get("tool", {}) if isinstance(payload, dict) else {}
+        config = tool.get("black", {}) if isinstance(tool, dict) else {}
+        if isinstance(config, dict):
+            configured_length = config.get("line-length")
+            if isinstance(configured_length, int) and 60 <= configured_length <= 200:
+                line_length = configured_length
+            versions = config.get("target-version", [])
+            if isinstance(versions, list):
+                for value in versions:
+                    target = getattr(black_module.TargetVersion, str(value).upper(), None)
+                    if target is not None:
+                        target_versions.add(target)
+
+        return black_module.Mode(
+            line_length=line_length,
+            target_versions=target_versions,
+        )
+
+    def _deterministic_black_proposals(self, objective: str) -> list[ChangeProposal] | None:
+        """Format explicitly named Python files without waiting on model inference.
+
+        This path is intentionally narrow: the owner must name each ``.py`` file
+        inside backticks and explicitly request Black formatting. Every result is
+        AST-compared with the source before it can enter the normal authorized
+        write and verification path.
+        """
+
+        paths = self._explicit_black_paths(objective)
+        if paths is None:
+            return None
+        try:
+            import black
+        except ImportError as exc:  # pragma: no cover - packaging failure boundary
+            raise RuntimeError("Black formatter is unavailable in the Autonomous runtime") from exc
+
+        mode = self._black_mode(black)
+        proposals: list[ChangeProposal] = []
+        for path in paths[:8]:
+            source = self.files.read(path)
+            try:
+                formatted = black.format_file_contents(source, fast=False, mode=mode)
+            except black.NothingChanged:
+                continue
+
+            before = ast.dump(ast.parse(source), include_attributes=False)
+            after = ast.dump(ast.parse(formatted), include_attributes=False)
+            if before != after:
+                raise ValueError(f"Black formatting changed Python semantics for {path}")
+            proposals.append(
+                ChangeProposal(
+                    path=path,
+                    content=formatted,
+                    reason="Apply deterministic Black formatting with AST-equivalent source.",
+                )
+            )
+
+        if not proposals:
+            raise ValueError("Requested Black targets already satisfy the formatter")
+        return proposals
 
     def _apply_proposals(
         self,
@@ -176,10 +274,10 @@ class AutonomousEngineeringLoop:
 
         if mode == "fix":
             try:
-                applied = self._apply_proposals(
-                    self._proposals(objective, evidence),
-                    changed,
-                )
+                proposals = self._deterministic_black_proposals(objective)
+                if proposals is None:
+                    proposals = self._proposals(objective, evidence)
+                applied = self._apply_proposals(proposals, changed)
                 record(
                     LoopPhase.EXECUTE,
                     "passed",
@@ -221,9 +319,7 @@ class AutonomousEngineeringLoop:
 
             if mode != "fix" or attempt == self.max_attempts:
                 blocker = failed[0].get("summary") or "Verification failed"
-                lessons.append(
-                    f"Do not report success until this blocker is resolved: {blocker}"
-                )
+                lessons.append(f"Do not report success until this blocker is resolved: {blocker}")
                 record(
                     LoopPhase.LEARN,
                     "recorded",
@@ -256,9 +352,7 @@ class AutonomousEngineeringLoop:
                 )
             except Exception as exc:
                 blocker = f"Corrective repair stopped safely: {type(exc).__name__}: {exc}"
-                lessons.append(
-                    f"Verification logs were available but correction failed: {blocker}"
-                )
+                lessons.append(f"Verification logs were available but correction failed: {blocker}")
                 record(LoopPhase.EXECUTE, "failed", blocker)
                 return self._finish(
                     started,
@@ -336,9 +430,7 @@ class AutonomousEngineeringLoop:
             if not path or path in seen:
                 raise ValueError("Every proposed path must be unique and non-empty")
             seen.add(path)
-            proposals.append(
-                ChangeProposal(path, item["content"], str(item.get("reason", "")))
-            )
+            proposals.append(ChangeProposal(path, item["content"], str(item.get("reason", ""))))
         return proposals
 
     @staticmethod

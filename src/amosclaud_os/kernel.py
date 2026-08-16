@@ -5,8 +5,11 @@ All model, repair, deployment, CI, document, and repository capabilities are
 private abilities of this one Autonomous instance. No backend route or response
 should present them as separate agents.
 """
+
 from __future__ import annotations
 
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import RLock
@@ -30,6 +33,35 @@ from src.amosclaud_security.runtime import (
 )
 
 
+def _allowed_workspace_roots() -> tuple[Path, ...]:
+    """Roots a kernel workspace may live under.
+
+    When ``AMOSCLAUD_WORKSPACE_ROOT`` is configured (production), it is the
+    single allowed root. Otherwise (dev/test) the current working directory
+    and the system temp directory are allowed, which keeps pytest ``tmp_path``
+    workspaces and repo-local runs working without weakening configured
+    deployments.
+    """
+    configured = os.getenv("AMOSCLAUD_WORKSPACE_ROOT", "").strip()
+    if configured:
+        return (Path(configured).resolve(),)
+    return (Path.cwd().resolve(), Path(tempfile.gettempdir()).resolve())
+
+
+def _trusted_workspace_path(workspace: Path | str) -> Path:
+    roots = _allowed_workspace_roots()
+    candidate_input = workspace if isinstance(workspace, Path) else Path(workspace)
+    candidate = candidate_input if candidate_input.is_absolute() else (roots[0] / candidate_input)
+    # Analyzer-recognized containment barrier (CodeQL py/path-injection): the
+    # normalized string path must stay inside an allowed root.
+    normalized = os.path.normpath(str(candidate.resolve()))
+    for root in roots:
+        normalized_root = os.path.normpath(str(root))
+        if normalized == normalized_root or normalized.startswith(normalized_root + os.sep):
+            return Path(normalized)
+    raise SecurityError("Workspace escapes allowed root")
+
+
 @dataclass(frozen=True)
 class SystemIdentity:
     product: str = "Amosclaud"
@@ -46,7 +78,7 @@ class AutonomousKernel:
     WRITE_MODES = frozenset({"build", "create", "deploy", "fix", "write"})
 
     def __init__(self, workspace: Path | str = ".") -> None:
-        self.workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+        self.workspace = _trusted_workspace_path(workspace)
         self.identity = SystemIdentity()
         self._lock = RLock()
         self._orchestrator = AutonomousOrchestrator(self.workspace)
@@ -76,16 +108,24 @@ class AutonomousKernel:
         enforced = security_enforced()
         if not security_grant:
             if enforced:
-                return False, None, {
-                    "enforced": True,
-                    "authorized": False,
-                    "reason": "signed_security_grant_required",
-                }
-            return bool(legacy_authorized_writes), None, {
-                "enforced": False,
-                "authorized": bool(legacy_authorized_writes),
-                "legacy_authorization": bool(legacy_authorized_writes),
-            }
+                return (
+                    False,
+                    None,
+                    {
+                        "enforced": True,
+                        "authorized": False,
+                        "reason": "signed_security_grant_required",
+                    },
+                )
+            return (
+                bool(legacy_authorized_writes),
+                None,
+                {
+                    "enforced": False,
+                    "authorized": bool(legacy_authorized_writes),
+                    "legacy_authorization": bool(legacy_authorized_writes),
+                },
+            )
 
         authority = authority_for_workspace(self.workspace, required=True)
         assert authority is not None
@@ -130,17 +170,19 @@ class AutonomousKernel:
                     correlation_id=root.correlation_id,
                     state=CommandState.BLOCKED,
                     actor=Principal.AUTONOMOUS,
-                    detail={
-                        "reason": "deployment_execution_is_not_an_autonomous_capability"
+                    detail={"reason": "deployment_execution_is_not_an_autonomous_capability"},
+                )
+                return (
+                    False,
+                    None,
+                    {
+                        "enforced": True,
+                        "authorized": False,
+                        "command_id": root.command_id,
+                        "correlation_id": root.correlation_id,
+                        "reason": "deployment_execution_requires_separate_human_control",
                     },
                 )
-                return False, None, {
-                    "enforced": True,
-                    "authorized": False,
-                    "command_id": root.command_id,
-                    "correlation_id": root.correlation_id,
-                    "reason": "deployment_execution_requires_separate_human_control",
-                }
 
             constraints = bounded_repair_constraints(
                 max_changed_files=min(
@@ -174,21 +216,29 @@ class AutonomousKernel:
                 correlation_id=root.correlation_id,
                 parent_command_id=root.command_id,
             )
-            return True, fixer_grant, {
-                "enforced": True,
-                "authorized": True,
-                "command_id": root.command_id,
-                "correlation_id": root.correlation_id,
-                "issuer": root.issuer,
-                "root_capabilities": list(root.capabilities),
-                "fixer_capability": Capability.REPAIR_APPLY.value,
-            }
+            return (
+                True,
+                fixer_grant,
+                {
+                    "enforced": True,
+                    "authorized": True,
+                    "command_id": root.command_id,
+                    "correlation_id": root.correlation_id,
+                    "issuer": root.issuer,
+                    "root_capabilities": list(root.capabilities),
+                    "fixer_capability": Capability.REPAIR_APPLY.value,
+                },
+            )
         except SecurityError as exc:
-            return False, None, {
-                "enforced": enforced,
-                "authorized": False,
-                "reason": type(exc).__name__,
-            }
+            return (
+                False,
+                None,
+                {
+                    "enforced": enforced,
+                    "authorized": False,
+                    "reason": type(exc).__name__,
+                },
+            )
 
     def execute(
         self,
@@ -241,9 +291,7 @@ class AutonomousKernel:
                     {
                         "status": "blocked",
                         "failed": False,
-                        "error": str(
-                            security.get("reason") or "write_not_authorized"
-                        ),
+                        "error": str(security.get("reason") or "write_not_authorized"),
                         "evidence": [
                             "The requested capability can make repository or deployment changes.",
                             "A valid, unexpired, one-time signed capability grant is required.",
@@ -253,6 +301,7 @@ class AutonomousKernel:
                 )
 
         model_route = self.model_engine.route(objective)
+        model_plan, model_summary, model_evidence = self._model_plan(objective, mode)
         task = AutonomousTask(
             objective=objective,
             mode=mode,
@@ -262,6 +311,7 @@ class AutonomousKernel:
                 "driver": self.identity.driver,
                 "architecture": self.identity.architecture,
                 "model_route": model_route,
+                "model_plan": model_plan,
                 "security": security,
                 **prepared,
             },
@@ -274,6 +324,13 @@ class AutonomousKernel:
             self._missions += 1
             outcome = self._orchestrator.run(task).to_dict()
         outcome["model_route"] = model_route
+        outcome["model"] = model_summary
+        if model_evidence:
+            existing = outcome.get("evidence")
+            if isinstance(existing, list):
+                existing.extend(model_evidence)
+            else:
+                outcome["evidence"] = list(model_evidence)
         outcome["available_capabilities"] = self.connectors.capabilities()
         outcome["security"] = {
             **security,
@@ -281,6 +338,61 @@ class AutonomousKernel:
             "grant_material_exposed": False,
         }
         return self._stamp(outcome)
+
+    def _model_plan(
+        self, objective: str, mode: str
+    ) -> tuple[str | None, dict[str, Any], list[str]]:
+        """Ask the Amosclaud model station (ollama) to draft a bounded plan.
+
+        Returns (plan_text, summary_dict, evidence_lines). A missing or failing
+        station never blocks the run — it is reported as honest evidence.
+        """
+        summary: dict[str, Any] = {
+            "engaged": False,
+            "model": self.model_engine.model,
+            "auth": self.model_engine.auth_mode,
+            "error": None,
+        }
+        if os.getenv("AMOSCLAUD_MODEL_PLAN", "").strip().lower() in {"off", "0", "false"}:
+            summary["error"] = "disabled_by_env"
+            return None, summary, []
+        if not self.model_engine.endpoint:
+            summary["error"] = "model_station_not_configured"
+            return (
+                None,
+                summary,
+                [
+                    "Model station not configured (AMOSCLAUD_MODEL_URL empty); "
+                    "run continued deterministically."
+                ],
+            )
+        result = self.model_engine.respond(
+            "Objective: "
+            + objective[:2000]
+            + f"\nMode: {mode}\n"
+            + "Write a numbered plan of at most 5 short steps for Amosclaud "
+            + "Autonomous to complete this objective safely. Reply with only "
+            + "the numbered steps.",
+            context={"purpose": "kernel-plan", "mode": mode},
+        )
+        if result.failed:
+            summary["error"] = result.error
+            return (
+                None,
+                summary,
+                [
+                    f"Model station call failed ({result.error}); "
+                    "run continued deterministically."
+                ],
+            )
+        summary["engaged"] = True
+        plan_text = result.text.strip()
+        evidence = [
+            "Model plan (Amosclaud model station via ollama): "
+            + plan_text[:500].replace("\n", " | "),
+            *result.evidence,
+        ]
+        return plan_text, summary, evidence
 
     def run(
         self,
@@ -514,7 +626,7 @@ _KERNELS_LOCK = RLock()
 
 def get_autonomous_kernel(workspace: Path | str = ".") -> AutonomousKernel:
     """Return one process-wide Autonomous instance per resolved workspace."""
-    resolved_workspace = workspace.resolve() if isinstance(workspace, Path) else Path(workspace).resolve()
+    resolved_workspace = _trusted_workspace_path(workspace)
     key = str(resolved_workspace)
     with _KERNELS_LOCK:
         kernel = _KERNELS.get(key)

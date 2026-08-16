@@ -294,8 +294,8 @@ def test_differential_ast_gate_cannot_add_suppression_flags(tmp_path: Path) -> N
     workflow = root / ".github" / "workflows" / "fortify.yml"
     _replace(
         workflow,
-        "python -m bandit -r src amoscloud_ai",
-        "python -m bandit -r src amoscloud_ai --skip B602",
+        "python -m bandit -r .",
+        "python -m bandit -r . --skip B602",
         1,
     )
     assert any("forbidden suppression" in error for error in guard.validate_repository(root))

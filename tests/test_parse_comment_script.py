@@ -24,7 +24,7 @@ def payload(body: str, association: str = "OWNER") -> dict[str, object]:
     }
 
 
-def test_patch_alias_routes_to_claude_executor() -> None:
+def test_patch_alias_routes_to_native_ollama_repair() -> None:
     module = load_module()
 
     result = module.parse_event(payload("@amosclaud patch add a regression test"))
@@ -34,8 +34,19 @@ def test_patch_alias_routes_to_claude_executor() -> None:
     assert result.objective == "add a regression test"
     assert result.authorized_write is True
     assert result.patch_executor is True
-    assert result.source_format == "claude-patch-alias"
+    assert result.source_format == "ollama-patch-alias"
     assert result.pull_request is True
+
+
+def test_patch_alias_requires_bounded_objective() -> None:
+    module = load_module()
+
+    result = module.parse_event(payload("@amosclaud patch"))
+
+    assert result.command == "fix"
+    assert result.objective == ""
+    assert result.authorized_write is True
+    assert result.patch_executor is False
 
 
 def test_structured_owner_task_uses_existing_native_fixer_path() -> None:

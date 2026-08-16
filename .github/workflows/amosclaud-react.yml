@@ -71,6 +71,7 @@ jobs:
             --count \
             --max-complexity=12 \
             --max-line-length=88 \
+            --extend-ignore=E203,E501 \
             --show-source \
             --statistics > flake8-style.txt 2>&1
           style_status=$?

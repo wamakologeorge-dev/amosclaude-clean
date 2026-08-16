@@ -19,6 +19,8 @@ _EXPECTED_SKIP_EVENTS: tuple[tuple[str, frozenset[str]], ...] = (
     ("*cmood Autonomous Agent Trigger*", frozenset({"issue_comment"})),
     ("Amosclaud Agent Main", frozenset({"workflow_run"})),
     ("Amosclaud Repair Results", frozenset({"workflow_run"})),
+    ("Amosclaud Autonomous Background Engineer", frozenset({"workflow_run"})),
+    ("Amosclaud Security Repair Bridge", frozenset({"workflow_run"})),
     (".github/workflows/main.yml", frozenset({"workflow_run"})),
     (".github/workflows/results.yml", frozenset({"workflow_run"})),
 )
