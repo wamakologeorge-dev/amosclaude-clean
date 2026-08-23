@@ -41,6 +41,25 @@ def test_chat_redacts_credentials() -> None:
     assert "[REDACTED]" in redacted
 
 
+def test_outbound_url_validation_blocks_non_http_schemes() -> None:
+    module = _load()
+    assert module.validate_http_url("https://example.com/api", label="test") == (
+        "https://example.com/api"
+    )
+    for unsafe in (
+        "file:///tmp/secret",
+        "ftp://example.com/resource",
+        "custom://example.com/resource",
+        "https://user:password@example.com/api",
+    ):
+        try:
+            module.validate_http_url(unsafe, label="test")
+        except module.ChatError:
+            pass
+        else:
+            raise AssertionError(f"unsafe outbound URL was accepted: {unsafe}")
+
+
 def test_chat_history_preserves_agent_role() -> None:
     module = _load()
     issue = {"body": "initial request"}
