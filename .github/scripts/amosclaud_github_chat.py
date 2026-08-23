@@ -60,6 +60,17 @@ def parse_trigger(body: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def validate_http_url(value: str, *, label: str) -> str:
+    """Allow only explicit HTTP(S) network destinations for outbound requests."""
+    candidate = (value or "").strip()
+    parsed = urllib.parse.urlsplit(candidate)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        raise ChatError(f"{label} must use an http:// or https:// URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ChatError(f"{label} must not contain embedded credentials")
+    return candidate
+
+
 def headers(token: str, *, json_body: bool = False) -> dict[str, str]:
     result = {
         "Accept": "application/vnd.github+json",
@@ -80,14 +91,15 @@ def api_json(
     payload: Mapping[str, Any] | None = None,
 ) -> Any:
     data = json.dumps(dict(payload)).encode("utf-8") if payload is not None else None
+    request_url = validate_http_url(f"{API_ROOT}{path}", label="GitHub API URL")
     request = urllib.request.Request(
-        f"{API_ROOT}{path}",
+        request_url,
         data=data,
         method=method,
         headers=headers(token, json_body=payload is not None),
     )
     try:
-        with urllib.request.urlopen(request, timeout=45) as response:
+        with urllib.request.urlopen(request, timeout=45) as response:  # nosec B310
             raw = response.read(MAX_REPLY * 8)
     except urllib.error.HTTPError as exc:
         detail = exc.read(4096).decode("utf-8", errors="replace")
@@ -195,6 +207,7 @@ def model_reply(
             "Amosclaud GitHub Chat is installed, but no model credential is configured. "
             "Configure OLLAMA_API_KEY or AMOSCLAUD_API_KEY in repository Actions secrets."
         )
+    base_url = validate_http_url(base_url, label="Amosclaud model gateway URL").rstrip("/")
     system = (
         "You are Amosclaud Agent running as the repository's GitHub-native chat. "
         f"Repository: {repository}. Thread: #{issue_number}. "
@@ -212,8 +225,11 @@ def model_reply(
         "messages": [{"role": "system", "content": system}] + messages,
         "stream": False,
     }
+    endpoint = validate_http_url(
+        f"{base_url}/v1/chat/completions", label="Amosclaud model gateway URL"
+    )
     request = urllib.request.Request(
-        f"{base_url}/v1/chat/completions",
+        endpoint,
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
         headers={
@@ -223,7 +239,7 @@ def model_reply(
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=180) as response:  # nosec B310
             result = json.loads(response.read(MAX_REPLY * 8).decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read(4096).decode("utf-8", errors="replace")
