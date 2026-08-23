@@ -113,6 +113,9 @@ def issue_context(
 
 
 def is_chat_issue(issue: Mapping[str, Any]) -> bool:
+    title = str(issue.get("title") or "")
+    if title.startswith("[Amosclaud Chat]"):
+        return True
     labels = issue.get("labels") or []
     names = {str(item.get("name") or "").lower() for item in labels if isinstance(item, Mapping)}
     return "amosclaud-chat" in names
