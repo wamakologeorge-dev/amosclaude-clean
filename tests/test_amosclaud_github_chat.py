@@ -80,9 +80,7 @@ def test_fix_dispatch_pins_exact_pr_sha(monkeypatch) -> None:
 
     monkeypatch.setattr(module, "api_json", fake_api)
     issue = {"number": 9, "pull_request": {"url": "x"}}
-    result = module.dispatch_fix(
-        "token", "o/r", issue, objective="fix tests", association="OWNER"
-    )
+    result = module.dispatch_fix("token", "o/r", issue, objective="fix tests", association="OWNER")
     dispatch = calls[-1]
     assert dispatch[0] == "POST"
     assert dispatch[2]["inputs"]["pull_request_number"] == "9"
