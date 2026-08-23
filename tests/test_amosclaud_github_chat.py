@@ -26,6 +26,12 @@ def test_chat_trigger_accepts_command_and_mention() -> None:
     assert module.parse_trigger("normal comment") is None
 
 
+def test_chat_issue_title_activates_without_label() -> None:
+    module = _load()
+    assert module.is_chat_issue({"title": "[Amosclaud Chat] Repository help", "labels": []})
+    assert not module.is_chat_issue({"title": "Normal issue", "labels": []})
+
+
 def test_chat_redacts_credentials() -> None:
     module = _load()
     text = "Authorization: Bearer abcdefghijklmnop token=github_pat_supersecretvalue"
