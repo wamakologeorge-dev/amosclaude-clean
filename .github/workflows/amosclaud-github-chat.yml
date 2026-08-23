@@ -22,7 +22,8 @@ jobs:
   chat:
     if: >-
       (github.event_name == 'issues' &&
-       contains(github.event.issue.labels.*.name, 'amosclaud-chat')) ||
+       (startsWith(github.event.issue.title, '[Amosclaud Chat]') ||
+        contains(github.event.issue.labels.*.name, 'amosclaud-chat'))) ||
       (github.event_name == 'issue_comment' &&
        github.event.comment.user.type != 'Bot' &&
        (startsWith(github.event.comment.body, '/amosclaud') ||
