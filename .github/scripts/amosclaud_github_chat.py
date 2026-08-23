@@ -28,8 +28,7 @@ MAX_REPLY = 16_000
 
 TRIGGER_RE = re.compile(r"^\s*(?:/amosclaud|@amosclaud)\b\s*(.*)$", re.IGNORECASE)
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(api[_-]?key|token|secret|password|passwd|private[_-]?key)"
-    r"(\s*[:=]\s*)([^\s,;]+)"
+    r"(?i)\b(api[_-]?key|token|secret|password|passwd|private[_-]?key)" r"(\s*[:=]\s*)([^\s,;]+)"
 )
 AUTHORIZATION_HEADER = re.compile(r"(?i)(authorization\s*:\s*)([^\r\n]+)")
 BEARER_VALUE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}")
@@ -105,21 +104,17 @@ def repository_default_branch(token: str, repository: str) -> str:
     return str(repo.get("default_branch") or "main")
 
 
-def issue_context(token: str, repository: str, issue_number: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def issue_context(
+    token: str, repository: str, issue_number: int
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     issue = api_json(token, f"/repos/{repository}/issues/{issue_number}")
-    comments = api_json(
-        token, f"/repos/{repository}/issues/{issue_number}/comments?per_page=100"
-    )
+    comments = api_json(token, f"/repos/{repository}/issues/{issue_number}/comments?per_page=100")
     return dict(issue), [dict(item) for item in comments][-MAX_CONTEXT_MESSAGES:]
 
 
 def is_chat_issue(issue: Mapping[str, Any]) -> bool:
     labels = issue.get("labels") or []
-    names = {
-        str(item.get("name") or "").lower()
-        for item in labels
-        if isinstance(item, Mapping)
-    }
+    names = {str(item.get("name") or "").lower() for item in labels if isinstance(item, Mapping)}
     return "amosclaud-chat" in names
 
 
@@ -350,13 +345,19 @@ def help_text() -> str:
     )
 
 
-def event_prompt(event_name: str, event: Mapping[str, Any], issue: Mapping[str, Any]) -> tuple[str | None, str]:
+def event_prompt(
+    event_name: str, event: Mapping[str, Any], issue: Mapping[str, Any]
+) -> tuple[str | None, str]:
     if event_name == "issue_comment":
         comment = event.get("comment") or {}
         user = comment.get("user") or {}
-        if str(user.get("type") or "").lower() == "bot" or str(user.get("login") or "").endswith("[bot]"):
+        if str(user.get("type") or "").lower() == "bot" or str(user.get("login") or "").endswith(
+            "[bot]"
+        ):
             return None, ""
-        return parse_trigger(str(comment.get("body") or "")), str(comment.get("author_association") or "")
+        return parse_trigger(str(comment.get("body") or "")), str(
+            comment.get("author_association") or ""
+        )
     if event_name == "issues" and is_chat_issue(issue):
         return clip(str(issue.get("body") or "")), str(issue.get("author_association") or "")
     return None, ""
