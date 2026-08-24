@@ -1,0 +1,28 @@
+name: "💬 Amosclaud Agent Chat"
+description: "Start a persistent GitHub-native conversation with Amosclaud Agent"
+title: "[Amosclaud Chat] "
+labels:
+  - amosclaud-chat
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Amosclaud Agent
+        This issue is your persistent Amosclaud chat inside GitHub.
+
+        Ask a question in the box below. After the thread is created, continue with:
+        - `/amosclaud <question>`
+        - `/amosclaud status`
+        - `/amosclaud fix <objective>` on pull-request threads
+        - `/amosclaud help`
+
+        Chat is read-only by default. Repair commands use the existing bounded Repair Control Plane.
+
+  - type: textarea
+    id: message
+    attributes:
+      label: What can Amosclaud do for you?
+      description: Ask about the repository, a failure, a pull request, or what you want to build.
+      placeholder: "Explain what is failing and what I should do next."
+    validations:
+      required: true
