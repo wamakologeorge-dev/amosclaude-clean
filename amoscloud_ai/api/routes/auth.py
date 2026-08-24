@@ -126,6 +126,11 @@ def _connect() -> sqlite3.Connection:
             FROM auth_codes_legacy;
             DROP TABLE auth_codes_legacy;
             """)
+    users_schema = db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+    ).fetchone()
+    if users_schema and "email_verified" not in str(users_schema["sql"] or ""):
+        db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 1")
     db.commit()
     return db
 
@@ -336,12 +341,32 @@ def _consume_code(db: sqlite3.Connection, email: str, purpose: str, code: str) -
 
 
 @router.post("/register/request-code", status_code=202)
-def request_registration_code(body: RegisterCodeRequest) -> dict:
+def request_registration_code(body: RegisterCodeRequest, response: Response) -> dict:
     email = _normalise_email(body.email)
+    name = body.name.strip()
+    password_hash = _hash_password(body.password)
     with _connect() as db:
         if db.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             raise HTTPException(status_code=409, detail="An account with this email already exists")
-        _create_code(db, email, "register", body.name.strip(), _hash_password(body.password))
+        try:
+            _create_code(db, email, "register", name, password_hash)
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            # Email delivery is down. Keep the door open: create the account
+            # immediately with the address marked unverified. Unverified
+            # accounts never receive admin rights.
+            cursor = db.execute(
+                "INSERT INTO users(name,email,password_hash,provider,is_admin,email_verified,created_at)"
+                " VALUES (?,?,?,'password',0,0,?)",
+                (name, email, password_hash, datetime.now(timezone.utc).isoformat()),
+            )
+            token = _create_session(db, cursor.lastrowid)
+            _set_session_cookie(response, token)
+            return {
+                "message": "Your account is ready — Amosclaud let you straight in.",
+                "verification": "deferred",
+            }
     return {"message": "Verification code sent by Amosclaud"}
 
 

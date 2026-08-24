@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from starlette.requests import Request
 
 from amoscloud_ai.api.routes import auth, public_developer_tools
@@ -57,31 +57,39 @@ def test_public_account_and_github_routes_precede_paid_platform() -> None:
     assert "<form" in login
     assert 'type="password"' in login
     assert "/static/login.js" in login
-    assert "Username" in login
+    assert "Email address" in login
     assert "Scan secure QR code" in login
     assert 'href="/auth/github/admin-login"' not in login
     assert "Sign in directly as platform owner" not in login
 
 
-def test_mail_failure_never_creates_an_unverified_account(monkeypatch, tmp_path) -> None:
+def test_mail_failure_still_lets_people_join_without_admin_rights(monkeypatch, tmp_path) -> None:
+    # Owner decision 2026-08-24: a broken mail service must never lock the
+    # front door. Signup falls back to an unverified, never-admin account.
     monkeypatch.setattr(auth, "DB_PATH", tmp_path / "mail-failure.db")
 
     def unavailable(_email: str, _code: str, _purpose: str) -> None:
         raise HTTPException(status_code=503, detail="mail unavailable")
 
     monkeypatch.setattr(auth, "_send_code", unavailable)
-    with pytest.raises(HTTPException) as error:
-        auth.request_registration_code(
-            auth.RegisterCodeRequest(
-                name="Developer",
-                email="developer@example.com",
-                password="developer-password-123",
-            )
-        )
+    result = auth.request_registration_code(
+        auth.RegisterCodeRequest(
+            name="Developer",
+            email="developer@example.com",
+            password="developer-password-123",
+        ),
+        Response(),
+    )
 
-    assert error.value.status_code == 503
+    assert result["verification"] == "deferred"
     with auth._connect() as db:
-        assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        row = db.execute(
+            "SELECT is_admin, email_verified FROM users WHERE email=?",
+            ("developer@example.com",),
+        ).fetchone()
+        assert row is not None
+        assert row["is_admin"] == 0
+        assert row["email_verified"] == 0
         assert db.execute("SELECT COUNT(*) FROM auth_codes").fetchone()[0] == 0
 
 

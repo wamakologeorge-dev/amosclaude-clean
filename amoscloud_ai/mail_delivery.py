@@ -12,7 +12,7 @@ from email.message import EmailMessage
 
 from amoscloud_ai.mail_http import HttpMailError, deliver_via_http, http_mail_configured
 
-MAIL_FROM = "no-reply@amosclaud.com"
+MAIL_FROM = "no-reply@amosclauds.com"
 
 
 class MailDeliveryError(RuntimeError):
@@ -34,9 +34,10 @@ def _security_sender() -> str:
         or MAIL_FROM
     )
     domain = sender.rsplit("@", 1)[-1].lower() if "@" in sender else ""
-    if domain != "amosclaud.com" and not domain.endswith(".amosclaud.com"):
+    allowed = ("amosclauds.com", "amosclaud.com")
+    if domain not in allowed and not domain.endswith(tuple("." + d for d in allowed)):
         raise MailDeliveryError(
-            "The security email sender must use amosclaud.com or an Amosclaud subdomain"
+            "The security email sender must use amosclauds.com or an Amosclaud subdomain"
         )
     return sender
 

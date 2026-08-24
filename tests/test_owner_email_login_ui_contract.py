@@ -7,14 +7,14 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_password_login_accepts_username_or_existing_email() -> None:
+def test_password_login_requires_full_email() -> None:
     login_html = _read("web/login.html")
     login_js = _read("web/login.js")
 
-    assert "Username or owner email" in login_html
-    assert "yourname or owner@gmail.com" in login_html
+    assert "Email address" in login_html
+    assert 'placeholder="you@example.com"' in login_html
     assert "function accountAddress(value)" in login_js
-    assert "normalized.includes('@') ? normalized" in login_js
+    assert "Enter your full email address" in login_js
     assert "email: accountAddress(loginUsername.value)" in login_js
 
 
