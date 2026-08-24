@@ -79,4 +79,25 @@ def test_security_mail_prefers_https_when_configured(monkeypatch):
     monkeypatch.setattr(mail_delivery, "deliver_via_http", fake_deliver)
     mail_delivery.deliver_security_code("user@example.com", "123456", "register")
     assert sent["recipient"] == "user@example.com"
-    assert sent["sender"].lower().endswith("@amosclaud.com")
+    assert sent["sender"].lower().endswith("@amosclauds.com")
+
+
+def test_security_sender_accepts_canonical_and_legacy_domains(monkeypatch):
+    from amoscloud_ai import mail_delivery
+
+    monkeypatch.setenv("AMOSCLAUD_SECURITY_FROM", "codes@amosclauds.com")
+    assert mail_delivery._security_sender() == "codes@amosclauds.com"
+
+    monkeypatch.setenv("AMOSCLAUD_SECURITY_FROM", "no-reply@amosclaud.com")
+    assert mail_delivery._security_sender() == "no-reply@amosclaud.com"
+
+    monkeypatch.setenv("AMOSCLAUD_SECURITY_FROM", "codes@mail.amosclauds.com")
+    assert mail_delivery._security_sender() == "codes@mail.amosclauds.com"
+
+
+def test_security_sender_rejects_foreign_domains(monkeypatch):
+    from amoscloud_ai import mail_delivery
+
+    monkeypatch.setenv("AMOSCLAUD_SECURITY_FROM", "someone@gmail.com")
+    with pytest.raises(mail_delivery.MailDeliveryError):
+        mail_delivery._security_sender()
