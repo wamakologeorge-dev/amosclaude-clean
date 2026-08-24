@@ -3,6 +3,7 @@
 Railway blocks outbound SMTP ports, so account-security email must be able
 to travel over HTTPS (Resend API) when RESEND_API_KEY is configured.
 """
+
 import json
 
 import pytest
