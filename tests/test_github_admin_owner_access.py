@@ -87,7 +87,7 @@ def test_username_password_and_qr_access_are_primary() -> None:
     assert "<form" in login
     assert 'type="password"' in login
     assert "/static/login.js" in login
-    assert "Username" in login
+    assert "Email address" in login
     assert "Scan secure QR code" in login
     # Google sign-in is offered alongside, not instead of, owner access.
     assert "Continue with Google" in login

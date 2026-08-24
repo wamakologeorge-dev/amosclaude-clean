@@ -24,7 +24,7 @@
 
       <header class="portal-heading">
         <h1 id="portal-title">Welcome to Amosclaud</h1>
-        <p>Use your Amosclaud username or an existing owner email and password, or scan a one-time QR code with a trusted device.</p>
+        <p>Sign in with your email address and password, or scan a one-time QR code with a trusted device.</p>
       </header>
 
       <div class="tabs" role="tablist" aria-label="Account access">
@@ -34,12 +34,12 @@
 
       <section id="login-panel" aria-labelledby="login-title">
         <h2 id="login-title">Sign in</h2>
-        <p class="muted">Members can use their username. Existing owner and administrator accounts can use their full email address.</p>
+        <p class="muted">Use the email address and password you chose when you created your account.</p>
 
         <form id="password-login-form" autocomplete="on" novalidate>
-          <label>Username or owner email
+          <label>Email address
             <input id="login-username" name="account" autocomplete="username" inputmode="email"
-                   maxlength="254" placeholder="yourname or owner@gmail.com"
+                   maxlength="254" placeholder="you@example.com"
                    autocapitalize="none" spellcheck="false" required>
           </label>
           <label>Password
@@ -79,24 +79,28 @@
 
       <section id="register-panel" class="hidden" aria-labelledby="register-title">
         <h2 id="register-title">Create your account</h2>
-        <p class="muted">Every username is unique and case-insensitive. Amosclaud will reject a username that already exists or is being registered.</p>
+        <p class="muted">Sign up with your name, email address, and a password.</p>
         <form id="register-form" autocomplete="on" novalidate>
           <label>Full name
             <input id="register-name" name="name" autocomplete="name" minlength="2" maxlength="100" required>
           </label>
-          <label>Choose a username
-            <input id="register-username" name="username" autocomplete="username" inputmode="text"
-                   minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9._-]{1,30}[a-z0-9]"
-                   placeholder="yourname" autocapitalize="none" spellcheck="false" required>
-            <small>3–32 lowercase letters, numbers, dots, dashes, or underscores.</small>
+          <label>Email address
+            <input id="register-username" name="email" type="email" autocomplete="email" inputmode="email"
+                   minlength="5" maxlength="254"
+                   placeholder="you@example.com" autocapitalize="none" spellcheck="false" required>
+            <small>Use a real email address — it becomes your sign-in name.</small>
           </label>
           <label>Create password
             <input id="register-password" name="password" type="password" autocomplete="new-password"
                    minlength="10" maxlength="200" required>
             <small>Use at least 10 characters.</small>
           </label>
-          <p id="device-note" class="hint">Your device will ask for fingerprint, face, PIN, or security-key confirmation. This trusted device can approve future QR logins.</p>
-          <button id="register-button" class="primary-button" type="submit">Create account securely</button>
+          <label id="register-code-field" class="hidden">Email code
+            <input id="register-code" name="code" inputmode="numeric" autocomplete="one-time-code"
+                   minlength="6" maxlength="6" placeholder="123456">
+            <small>We emailed a 6-digit code. Type it here to finish.</small>
+          </label>
+          <button id="register-button" class="primary-button" type="submit">Create account</button>
         </form>
 
         <div id="google-register" class="google-block hidden">

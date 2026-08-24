@@ -33,7 +33,7 @@ def test_username_password_and_qr_portal_is_the_primary_entry() -> None:
     page = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     assert "Create account" in page
-    assert "Username" in page
+    assert "Email address" in page
     assert "Sign in with password" in page
     assert "Scan secure QR code" in page
     assert '<form id="password-login-form"' in page
