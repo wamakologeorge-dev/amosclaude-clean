@@ -7,4 +7,4 @@ passlib[bcrypt]==1.7.4
 python-dotenv==1.0.1
 SQLAlchemy>=2.0,<3
 aiosqlite>=0.20,<1
-asyncpg>=0.28,<1
+asyncpg>=0.31.0,<1
