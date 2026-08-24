@@ -127,3 +127,29 @@ def test_issue_form_creates_dedicated_chat_thread() -> None:
     assert "amosclaud-chat" in source
     assert "Amosclaud Agent Chat" in source
     assert "/amosclaud <question>" in source
+
+
+def test_gateway_settings_survive_blank_secret_injection(monkeypatch) -> None:
+    """GitHub Actions injects unset secrets as empty strings; defaults must survive."""
+    module = _load()
+    monkeypatch.setenv("OLLAMA_API_KEY", "ollama-key-123")
+    monkeypatch.setenv("OLLAMA_URL", "")
+    monkeypatch.setenv("OLLAMA_MODEL", "")
+    monkeypatch.setenv("AMOSCLAUD_MODEL", "")
+    base_url, key, model = module.gateway_settings()
+    assert base_url == "https://ollama.com"
+    assert key == "ollama-key-123"
+    assert model == "gpt-oss:120b"
+
+
+def test_gateway_settings_default_to_canonical_domain(monkeypatch) -> None:
+    """Without an ollama key, the fallback gateway must be the real amosclauds.com."""
+    module = _load()
+    monkeypatch.setenv("OLLAMA_API_KEY", "")
+    monkeypatch.setenv("AMOSCLAUD_API_URL", "")
+    monkeypatch.setenv("AMOSCLAUD_AGENT_MODEL", "")
+    monkeypatch.setenv("AMOSCLAUD_API_KEY", "amosclaud-key-123")
+    base_url, key, model = module.gateway_settings()
+    assert base_url == "https://amosclauds.com"
+    assert key == "amosclaud-key-123"
+    assert model == "amosclaud-agent"

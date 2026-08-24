@@ -178,19 +178,30 @@ def conversation_messages(
     return messages[-MAX_CONTEXT_MESSAGES:]
 
 
+def env_or(name: str, default: str = "") -> str:
+    """Read an environment variable, treating blank values as unset.
+
+    GitHub Actions injects unconfigured secrets and vars as empty strings.
+    A plain ``os.getenv(name, default)`` therefore returns ``""`` instead of
+    the default, which silently erased the gateway URL fallbacks.
+    """
+    value = os.getenv(name, "").strip()
+    return value if value else default
+
+
 def gateway_settings() -> tuple[str, str, str]:
-    ollama_key = os.getenv("OLLAMA_API_KEY", "").strip()
+    ollama_key = env_or("OLLAMA_API_KEY")
     if ollama_key:
         return (
-            os.getenv("OLLAMA_URL", "https://ollama.com").rstrip("/"),
+            env_or("OLLAMA_URL", "https://ollama.com").rstrip("/"),
             ollama_key,
-            os.getenv("OLLAMA_MODEL") or os.getenv("AMOSCLAUD_MODEL") or "gpt-oss:120b",
+            env_or("OLLAMA_MODEL", env_or("AMOSCLAUD_MODEL", "gpt-oss:120b")),
         )
-    key = os.getenv("AMOSCLAUD_API_KEY", "").strip()
+    key = env_or("AMOSCLAUD_API_KEY")
     return (
-        os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").rstrip("/"),
+        env_or("AMOSCLAUD_API_URL", "https://amosclauds.com").rstrip("/"),
         key,
-        os.getenv("AMOSCLAUD_AGENT_MODEL", "amosclaud-agent"),
+        env_or("AMOSCLAUD_AGENT_MODEL", "amosclaud-agent"),
     )
 
 
