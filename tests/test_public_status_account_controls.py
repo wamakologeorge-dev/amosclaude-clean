@@ -54,7 +54,7 @@ def test_login_exposes_username_password_and_trusted_qr() -> None:
     assert "<form" in login
     assert 'type="password"' in login
     assert "/static/login.js" in login
-    assert "Username" in login
+    assert "Email address" in login
     assert "Sign in with password" in login
     assert "Scan secure QR code" in login
     assert "Create account" in login

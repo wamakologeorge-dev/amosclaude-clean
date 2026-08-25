@@ -21,6 +21,8 @@
   const registerName = byId('register-name');
   const registerUsername = byId('register-username');
   const registerPassword = byId('register-password');
+  const registerCode = byId('register-code');
+  const registerCodeField = byId('register-code-field');
   const message = byId('message');
   const googleSignin = byId('google-signin');
   const googleRegister = byId('google-register');
@@ -50,7 +52,12 @@
 
   function accountAddress(value) {
     const normalized = username(value);
-    return normalized.includes('@') ? normalized : `${normalized}@amosclaud.com`;
+    if (!normalized.includes('@')) {
+      const error = new Error('Enter your full email address (like name@gmail.com).');
+      error.status = 0;
+      throw error;
+    }
+    return normalized;
   }
 
   function qrUsername(value) {
@@ -270,44 +277,58 @@
     }
   });
 
+  let signupCodeRequested = false;
+
   registerForm.addEventListener('submit', async event => {
     event.preventDefault();
     if (!registerForm.reportValidity()) return;
-    if (!passkeysAvailable) {
-      show(
-        `${passkeyHttpsMessage} Secure account creation also requires HTTPS and device confirmation.`,
-        'error'
-      );
-      return;
-    }
     registerButton.disabled = true;
-    show('Checking that the username is available…');
     try {
-      const selectedUsername = username(registerUsername.value);
-      const start = await request('/api/v1/auth/register/passkey/start', {
+      const address = accountAddress(registerUsername.value);
+      if (signupCodeRequested) {
+        show('Checking your code…');
+        await request('/api/v1/auth/register/verify', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: address,
+            password: registerPassword.value,
+            code: registerCode ? registerCode.value.trim() : '',
+          }),
+        });
+        await verifySession();
+        openWorkspace();
+        return;
+      }
+      show('Creating your account…');
+      const result = await request('/api/v1/auth/register/request-code', {
         method: 'POST',
         body: JSON.stringify({
           name: registerName.value.trim(),
-          username: selectedUsername,
+          email: address,
           password: registerPassword.value,
         }),
       });
-      const credential = await navigator.credentials.create({
-        publicKey: prepareCreationOptions(start.public_key),
-      });
-      if (!credential) throw new Error('Device confirmation was cancelled.');
-      await request('/api/v1/auth/register/passkey/finish', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: selectedUsername,
-          credential: serialiseRegistrationCredential(credential),
-        }),
-      });
-      await verifySession();
-      openWorkspace();
+      if (result && result.verification === 'deferred') {
+        show('Account created! Opening Amosclaud…', 'success');
+        await verifySession();
+        openWorkspace();
+        return;
+      }
+      signupCodeRequested = true;
+      if (registerCodeField) registerCodeField.classList.remove('hidden');
+      if (registerCode) {
+        registerCode.required = true;
+        registerCode.focus();
+      }
+      registerButton.textContent = 'Verify code and open Amosclaud';
+      show((result && result.message) || 'Enter the 6-digit code Amosclaud emailed you.', 'success');
     } catch (error) {
-      const cancelled = error?.name === 'NotAllowedError';
-      show(cancelled ? 'Device confirmation was cancelled or timed out.' : error.message, 'error');
+      show(
+        error.status === 409
+          ? 'An account with this email already exists. Try signing in instead.'
+          : error.message,
+        'error'
+      );
     } finally {
       if (!navigating) registerButton.disabled = false;
     }

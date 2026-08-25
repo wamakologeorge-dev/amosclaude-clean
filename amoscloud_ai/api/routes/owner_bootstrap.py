@@ -18,6 +18,7 @@ from amoscloud_ai.admin_bootstrap import (
     is_configured_github_admin,
 )
 from amoscloud_ai.api.routes import auth
+from amoscloud_ai.mail_http import http_mail_configured
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 GITHUB_ADMIN_STATE_COOKIE = "amos_github_admin_state"
@@ -70,8 +71,8 @@ def request_registration_or_bootstrap(
     available only when email delivery is absent, the database is empty, and the
     submitted address is explicitly listed in ``AMOSCLAUD_ADMIN_EMAILS``.
     """
-    if os.getenv("SMTP_HOST", "").strip():
-        return auth.request_registration_code(body)
+    if os.getenv("SMTP_HOST", "").strip() or http_mail_configured():
+        return auth.request_registration_code(body, response)
 
     email = auth._normalise_email(body.email)
     if email not in configured_admin_emails():

@@ -54,7 +54,7 @@ def test_login_page_uses_username_password_trusted_qr_and_google() -> None:
     html = (ROOT / "web/login.html").read_text(encoding="utf-8")
 
     for text in (
-        "Username",
+        "Email address",
         "Sign in with password",
         "Scan secure QR code",
         "Six-digit code from your trusted device",
@@ -79,7 +79,8 @@ def test_login_script_binds_qr_to_username_and_password_to_account_address() -> 
     script = (ROOT / "web/login.js").read_text(encoding="utf-8")
 
     assert "function accountAddress(value)" in script
-    assert "normalized.includes('@') ? normalized" in script
+    assert "Enter your full email address" in script
+    assert "@amosclaud.com`" not in script  # silent domain rewriting is retired
     assert "email: accountAddress(loginUsername.value)" in script
     assert "function qrUsername(value)" in script
     assert "username: requestedUsername" in script
