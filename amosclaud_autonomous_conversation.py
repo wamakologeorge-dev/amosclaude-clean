@@ -1,6 +1,5 @@
 """
 Amosclaud Autonomous Conversation Service
-=========================================
 
 A small FastAPI service that powers a single autonomous chat agent.
 
