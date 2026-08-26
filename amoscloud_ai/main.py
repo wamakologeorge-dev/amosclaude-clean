@@ -22,7 +22,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amosclaud_metrics.integration import install_metrics
+
+# These modules register the persistent project and operator surfaces on the
+# canonical task router. Import them before the router is mounted below.
 from amoscloud_ai import __version__, model_network
+from amoscloud_ai import operator as _operator  # noqa: F401, E402
 from amoscloud_ai.api.routes import (
     academy,
     account,
@@ -92,10 +96,6 @@ from amoscloud_ai.db_migrations import run_migrations
 from amoscloud_ai.logger import log
 from amoscloud_ai.security import SecurityMiddleware
 from amoscloud_ai.server.cb import router as amosclaud_cb_router
-
-# These modules register the persistent project and operator surfaces on the
-# canonical task router. Import them before the router is mounted below.
-from amoscloud_ai import operator as _operator  # noqa: F401, E402
 
 
 @asynccontextmanager

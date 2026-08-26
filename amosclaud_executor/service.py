@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 import shutil
+import sqlite3
 import tempfile
-import time
 import threading
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -33,8 +33,8 @@ import httpx
 from git import Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError
 
-from amoscloud_ai.github_git_auth import authenticated_git, git_auth_environment
 from amosclaud_os.agent.coding_runtime import AutonomousCodingRuntime
+from amoscloud_ai.github_git_auth import authenticated_git, git_auth_environment
 
 _BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 _GITHUB_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")

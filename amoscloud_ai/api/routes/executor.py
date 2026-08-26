@@ -12,7 +12,9 @@ from amosclaud_executor import ExecutorService, RepositoryTarget, SQLitePlanStor
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
 from amoscloud_ai.api.routes.github_repositories import (
     _connection,
-    _db as github_db,
+)
+from amoscloud_ai.api.routes.github_repositories import _db as github_db
+from amoscloud_ai.api.routes.github_repositories import (
     _decrypt_token,
 )
 from amoscloud_ai.api.routes.repositories import REPOSITORY_ROOT
