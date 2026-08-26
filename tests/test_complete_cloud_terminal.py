@@ -256,6 +256,8 @@ def test_shell_profile_and_amos_command_make_editing_and_debugging_simple() -> N
     assert "amos problems" in command
     assert "amos connectors" in command
     assert "amos network" in command
+    assert "amos markdown <command>" in command
+    assert "amosclaud-markdown" in command
     assert "python3 -m pdb" in command
     assert "NODE_OPTIONS=--inspect" in command
     assert "[Amosclaud Debug] Starting" in command
@@ -265,4 +267,5 @@ def test_shell_profile_and_amos_command_make_editing_and_debugging_simple() -> N
     assert "Sync & Push" in command
     assert "AMOSCLAUD_MANAGED_TERMINAL_ENABLED=true" in dockerfile
     assert "COPY services/workspace_runtime/workspace-image/amos" in dockerfile
+    assert "COPY services/workspace_runtime/workspace-image/amosclaud-markdown.py" in dockerfile
     assert "gdb" in dockerfile and "strace" in dockerfile

@@ -96,7 +96,8 @@ def test_runtime_source_enforces_container_isolation() -> None:
     assert "CPU_LIMIT = min(" in source and "), 2.0)" in source
     assert "4096" in source
     assert "_repository_path(body.repository_id)" in source
-    assert 'volumes={str(storage): {"bind": "/workspace", "mode": "rw"}}' in source
+    assert '"mode": "ro" if body.read_only else "rw"' in source
+    assert '"amosclaud.read_only": "true" if body.read_only else "false"' in source
     assert '"docker",' in source and '"exec",' in source
     assert "pty.openpty()" in source
     assert "_verify_origin(websocket)" in source

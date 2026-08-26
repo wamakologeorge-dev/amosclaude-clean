@@ -34,7 +34,7 @@ from amoscloud_ai.api.routes.repositories import (
     _access,
     _db,
     _repo_path,
-    _require_owner,
+    _require_write,
 )
 
 _TICKET_TTL_SECONDS = 120
@@ -378,7 +378,7 @@ async def websocket_session(
             raise HTTPException(status_code=401, detail="Terminal session mismatch")
         with _db() as db:
             repository = _access(db, repository_id, int(user["id"]))
-        _require_owner(repository)
+        _require_write(repository)
     except HTTPException as exc:
         await websocket.close(code=4401 if exc.status_code == 401 else 4403, reason=str(exc.detail)[:120])
         return

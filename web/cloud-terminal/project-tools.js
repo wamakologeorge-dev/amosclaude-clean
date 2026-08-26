@@ -28,7 +28,7 @@ export class ProjectToolbelt {
       <div class="terminal-project-tools-head">
         <div>
           <h3>Project tools</h3>
-          <p>Smart commands, run and debug, file editing, Git status, commit, pull, push, and one-click Sync &amp; Push.</p>
+          <p>Smart commands, run and debug, file editing, Markdown checks, Git status, commit, pull, push, and one-click Sync &amp; Push.</p>
         </div>
         <span class="terminal-project-source" data-project-source>Loading project…</span>
       </div>
@@ -42,6 +42,7 @@ export class ProjectToolbelt {
           <button data-project-debug class="debug" type="button">Debug</button>
           <button data-project-files type="button">Files</button>
           <button data-project-edit type="button">Edit file</button>
+          <button data-project-markdown type="button">Markdown check</button>
         </div>
         <div class="terminal-project-actions">
           <input data-project-message type="text" maxlength="200" value="Update from Amosclaud cloud terminal" aria-label="Commit message" />
@@ -62,11 +63,17 @@ export class ProjectToolbelt {
     this.runButton = this.root.querySelector('[data-project-run]');
     this.runAppButton = this.root.querySelector('[data-project-run-app]');
     this.debugButton = this.root.querySelector('[data-project-debug]');
+    this.filesButton = this.root.querySelector('[data-project-files]');
+    this.editButton = this.root.querySelector('[data-project-edit]');
+    this.markdownButton = this.root.querySelector('[data-project-markdown]');
     this.commitButton = this.root.querySelector('[data-project-commit]');
     this.syncPushButton = this.root.querySelector('[data-project-sync-push]');
     this.pullButton = this.root.querySelector('[data-project-pull]');
     this.pushButton = this.root.querySelector('[data-project-push]');
+    this.refreshButton = this.root.querySelector('[data-project-refresh]');
     this.result = this.root.querySelector('[data-project-result]');
+    this.canWrite = true;
+    this.workspaceRunning = false;
 
     this.runButton.addEventListener('click', () => this.run(this.commandInput.value));
     this.commandInput.addEventListener('keydown', event => {
@@ -77,20 +84,54 @@ export class ProjectToolbelt {
     });
     this.runAppButton.addEventListener('click', () => this.runDetected('run'));
     this.debugButton.addEventListener('click', () => this.runDetected('debug'));
-    this.root.querySelector('[data-project-files]').addEventListener('click', () => {
+    this.filesButton.addEventListener('click', () => {
       this.run("find . -path './.git' -prune -o -type f -maxdepth 4 -print | sort | sed 's#^./##' | head -300");
     });
-    this.root.querySelector('[data-project-edit]').addEventListener('click', () => this.editFile());
+    this.editButton.addEventListener('click', () => this.editFile());
+    this.markdownButton.addEventListener('click', () => this.run('amosclaud-markdown check README.md'));
     this.commitButton.addEventListener('click', () => this.commit());
     this.syncPushButton.addEventListener('click', () => this.sync('sync-push'));
     this.pullButton.addEventListener('click', () => this.sync('pull'));
     this.pushButton.addEventListener('click', () => this.sync('push'));
-    this.root.querySelector('[data-project-refresh]').addEventListener('click', () => this.load());
+    this.refreshButton.addEventListener('click', () => this.load());
   }
 
   setBusy(busy) {
     this.busy = busy;
     this.root.querySelectorAll('button').forEach(button => { button.disabled = busy; });
+    if (!busy) this.updateActionAvailability();
+  }
+
+  setWorkspaceRunning(value) {
+    this.workspaceRunning = Boolean(value);
+    this.updateActionAvailability();
+  }
+
+  setCanWrite(value) {
+    this.canWrite = value !== false;
+    this.updateActionAvailability();
+  }
+
+  updateActionAvailability() {
+    if (this.busy) return;
+    const actions = this.payload?.actions || {};
+    const terminalReady = this.workspaceRunning;
+    this.commandInput.disabled = !terminalReady;
+    this.runButton.disabled = !terminalReady;
+    this.runAppButton.disabled = !terminalReady;
+    this.debugButton.disabled = !terminalReady;
+    this.filesButton.disabled = !terminalReady;
+    this.markdownButton.disabled = !terminalReady;
+    this.commands.querySelectorAll('button').forEach(button => {
+      button.disabled = !terminalReady;
+    });
+    this.commitButton.disabled = !this.canWrite || actions.commit === false;
+    this.syncPushButton.disabled = !this.canWrite || actions.sync_push === false;
+    this.pullButton.disabled = !this.canWrite || actions.pull === false;
+    this.pushButton.disabled = !this.canWrite || actions.push === false;
+    this.editButton.disabled = !terminalReady || !this.canWrite;
+    this.messageInput.disabled = !this.canWrite || actions.commit === false;
+    this.refreshButton.disabled = false;
   }
 
   setResult(message, kind = '') {
@@ -102,6 +143,7 @@ export class ProjectToolbelt {
     try {
       const payload = await apiRequest(terminalApi(this.repositoryId, '/tools'));
       this.payload = payload;
+      this.canWrite = payload.actions?.commit !== false;
       this.render(payload);
       this.setResult('Project tools are ready.', 'success');
       return payload;
@@ -154,6 +196,7 @@ export class ProjectToolbelt {
     this.commitButton.title = github
       ? 'Commit changes locally, then push them to GitHub.'
       : 'Commit changes to the Amosclaud-native repository.';
+    this.updateActionAvailability();
   }
 
   async terminal() {
@@ -196,6 +239,10 @@ export class ProjectToolbelt {
   }
 
   async editFile() {
+    if (!this.canWrite) {
+      this.setResult('Editing requires developer access to this repository.', 'error');
+      return;
+    }
     const suggested = window.prompt('File path inside this repository:', 'README.md');
     if (suggested === null) return;
     try {
@@ -207,7 +254,7 @@ export class ProjectToolbelt {
   }
 
   async commit() {
-    if (this.busy) return;
+    if (this.busy || !this.canWrite) return;
     const message = this.messageInput.value.trim();
     if (!message) {
       this.setResult('Enter a commit message.', 'error');
@@ -231,7 +278,7 @@ export class ProjectToolbelt {
   }
 
   async sync(action) {
-    if (this.busy) return;
+    if (this.busy || !this.canWrite) return;
     this.setBusy(true);
     const labels = {
       pull: 'Pulling from GitHub…',

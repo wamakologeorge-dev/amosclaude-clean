@@ -51,6 +51,7 @@ def ensure_workspace_table() -> None:
                 owner_id INTEGER NOT NULL,
                 runtime_status TEXT NOT NULL DEFAULT 'not_started',
                 runtime_detail TEXT,
+                runtime_access TEXT NOT NULL DEFAULT 'writable',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 last_started_at TEXT,
@@ -66,6 +67,7 @@ def ensure_workspace_table() -> None:
         additions = {
             "runtime_status": "TEXT NOT NULL DEFAULT 'not_started'",
             "runtime_detail": "TEXT",
+            "runtime_access": "TEXT NOT NULL DEFAULT 'writable'",
             "created_at": "TEXT",
             "updated_at": "TEXT",
             "last_started_at": "TEXT",
@@ -138,8 +140,15 @@ def _record(
 ) -> None:
     ensure_workspace_table()
     now = _now()
+    clean_detail = (detail or "")[:1000] or None
     assignments = ["runtime_status=?", "runtime_detail=?", "updated_at=?"]
-    values: list[Any] = [status[:80], (detail or "")[:1000] or None, now]
+    values: list[Any] = [status[:80], clean_detail, now]
+    if clean_detail and "access=read-only" in clean_detail:
+        assignments.append("runtime_access=?")
+        values.append("read-only")
+    elif clean_detail and "access=writable" in clean_detail:
+        assignments.append("runtime_access=?")
+        values.append("writable")
     if started:
         assignments.append("last_started_at=?")
         values.append(now)
@@ -221,7 +230,7 @@ def runtime_health() -> dict[str, Any]:
     try:
         payload = _request("GET", "/health")
         return {"configured": True, **payload}
-    except RuntimeError:
+    except (RuntimeError, httpx.HTTPError, ValueError):
         return {
             "configured": True,
             "ok": False,
@@ -233,6 +242,7 @@ def start_workspace(
     workspace: dict[str, Any],
     *,
     environment: dict[str, str] | None = None,
+    read_only: bool = False,
 ) -> dict[str, Any]:
     try:
         result = _request(
@@ -243,6 +253,7 @@ def start_workspace(
                 "repository_id": int(workspace["repository_id"]),
                 "owner_id": int(workspace["owner_id"]),
                 "environment": environment or {},
+                "read_only": bool(read_only),
             },
         )
     except RuntimeError as exc:
@@ -251,7 +262,11 @@ def start_workspace(
     _record(
         workspace["id"],
         str(result.get("status") or "running"),
-        "provider=external",
+        (
+            "provider=external;access=read-only"
+            if bool(result.get("read_only", read_only))
+            else "provider=external;access=writable"
+        ),
         started=True,
     )
     return result
