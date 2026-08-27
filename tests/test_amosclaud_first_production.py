@@ -19,18 +19,14 @@ def test_ci_colors_are_product_truth_not_provider_truth() -> None:
 
 
 def test_merge_requires_green_ci_for_exact_head_sha() -> None:
-    assert first_production.merge_allowed(
-        ci_status="success", head_sha="abc", verified_sha="abc"
-    )
+    assert first_production.merge_allowed(ci_status="success", head_sha="abc", verified_sha="abc")
     assert not first_production.merge_allowed(
         ci_status="success", head_sha="new", verified_sha="old"
     )
     assert not first_production.merge_allowed(
         ci_status="failed", head_sha="abc", verified_sha="abc"
     )
-    assert not first_production.merge_allowed(
-        ci_status=None, head_sha="abc", verified_sha=None
-    )
+    assert not first_production.merge_allowed(ci_status=None, head_sha="abc", verified_sha=None)
 
 
 def test_external_provider_failure_does_not_change_amosclaud_ci_color() -> None:
@@ -69,8 +65,8 @@ def test_control_api_has_all_requested_pr_actions_and_ci_gate() -> None:
 
 def test_first_production_entrypoint_precedes_existing_platform() -> None:
     source = APP.read_text(encoding="utf-8")
-    assert "app.include_router(production_router, prefix=\"/api/v1\")" in source
-    assert "app.mount(\"/\", connected_production_app" in source
+    assert 'app.include_router(production_router, prefix="/api/v1")' in source
+    assert 'app.mount("/", connected_production_app' in source
     assert source.index("app.include_router") < source.index("app.mount")
 
 
