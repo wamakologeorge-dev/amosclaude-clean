@@ -1,6 +1,5 @@
 """
 Amosclaud Autonomous Conversation Service
-=========================================
 
 A small FastAPI service that powers a single autonomous chat agent.
 
@@ -33,12 +32,14 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from amosclaud_executor import ExecutorService, RepositoryTarget
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -99,8 +100,7 @@ class ModelUnavailableError(RuntimeError):
 
 
 class ModelClient(Protocol):
-    async def complete(self, system_prompt: str, user_prompt: str) -> str:
-        ...
+    async def complete(self, system_prompt: str, user_prompt: str) -> str: ...
 
 
 class HttpModelClient:
@@ -126,8 +126,7 @@ class HttpModelClient:
     async def complete(self, system_prompt: str, user_prompt: str) -> str:
         if not self.url:
             raise ModelUnavailableError(
-                "AMOSCLAUD_MODEL_URL is not configured. "
-                "Set it to a reachable model endpoint."
+                "AMOSCLAUD_MODEL_URL is not configured. " "Set it to a reachable model endpoint."
             )
 
         headers = {"Content-Type": "application/json"}
@@ -184,65 +183,74 @@ class HttpModelClient:
 
 
 class JobExecutor:
-    """
-    Adapter boundary for real autonomous work.
+    """Execute conversation-approved work through the product executor.
 
-    Replace these placeholder methods with integrations for:
-    - GitHub repository inspection and code changes
-    - Test runners
-    - Vercel/Render/Railway/AWS deployment
-    - Logs, uptime checks, and alerting
+    The standalone conversation service can be pointed at one operator-managed
+    native repository with ``AMOSCLAUD_EXECUTOR_WORKSPACE``.  The authenticated
+    platform API is the preferred GitHub entrypoint because it resolves a
+    repository from the signed-in user's imported repository records.
     """
+
+    def __init__(
+        self,
+        service: ExecutorService | None = None,
+        workspace: Path | str | None = None,
+    ) -> None:
+        self.service = service or ExecutorService()
+        configured = str(workspace or os.getenv("AMOSCLAUD_EXECUTOR_WORKSPACE", "")).strip()
+        self.workspace = Path(configured).resolve() if configured else None
+
+    @staticmethod
+    def _objective(state: ConversationState) -> str:
+        details = [state.original_request.strip()]
+        details.extend(
+            answer.strip()
+            for answer in state.answers.values()
+            if answer.strip() and answer.strip() not in details
+        )
+        return " — ".join(item for item in details if item)
 
     async def execute(
         self,
         state: ConversationState,
     ) -> tuple[List[str], List[str]]:
-        evidence: List[str] = []
-        blocking_checks: List[str] = []
+        if state.objective not in {Objective.CREATE, Objective.FIX}:
+            if state.objective == Objective.DEPLOY:
+                return [], ["Deployment execution is not configured. No deployment was attempted."]
+            if state.objective == Objective.MONITOR:
+                return [], [
+                    "Monitoring execution is not configured. No monitoring target was contacted."
+                ]
+            return [], ["The requested objective is still unclear. No work was attempted."]
 
-        if state.objective == Objective.CREATE:
-            evidence.extend(
-                [
-                    "Project objective accepted.",
-                    "Architecture and implementation tasks prepared.",
-                    "Workspace write check passed.",
-                ]
-            )
-        elif state.objective == Objective.FIX:
-            evidence.extend(
-                [
-                    "Failure description accepted.",
-                    "Diagnosis workflow prepared.",
-                    "Verification step added to the plan.",
-                ]
-            )
-        elif state.objective == Objective.DEPLOY:
-            evidence.extend(
-                [
-                    "Deployment objective accepted.",
-                    "Pre-deployment checks prepared.",
-                ]
-            )
-            if not os.getenv("DEPLOYMENT_PROVIDER"):
-                blocking_checks.append(
-                    "DEPLOYMENT_PROVIDER is not configured."
-                )
-        elif state.objective == Objective.MONITOR:
-            evidence.extend(
-                [
-                    "Monitoring objective accepted.",
-                    "Health-check workflow prepared.",
-                ]
-            )
-            if not os.getenv("MONITOR_TARGET_URL"):
-                blocking_checks.append(
-                    "MONITOR_TARGET_URL is not configured."
-                )
-        else:
-            blocking_checks.append("The requested objective is still unclear.")
+        if self.workspace is None:
+            return [], [
+                "No authorized repository workspace is configured. Set "
+                "AMOSCLAUD_EXECUTOR_WORKSPACE or use the authenticated executor API."
+            ]
 
-        return evidence, blocking_checks
+        try:
+            target = RepositoryTarget(
+                name=os.getenv("AMOSCLAUD_EXECUTOR_REPOSITORY_NAME", self.workspace.name),
+                workspace=self.workspace,
+                default_branch=os.getenv("AMOSCLAUD_EXECUTOR_SOURCE_BRANCH", "main"),
+            )
+            result = self.service.execute_direct(
+                target,
+                self._objective(state),
+                source_branch=target.default_branch,
+                delivery="branch",
+                author_name=state.user_name,
+                author_email=os.getenv("AMOSCLAUD_EXECUTOR_AUTHOR_EMAIL", "amosclaud@localhost"),
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            return [], [f"Executor stopped before work: {type(exc).__name__}: {exc}"]
+
+        evidence = [f"Executor status: {result.status}.", result.summary, *result.evidence]
+        blockers = list(result.blockers)
+        if result.status != "completed" and not blockers:
+            blockers.append("The executor did not produce a verified commit.")
+        return evidence, blockers
 
 
 class AutonomousConversationEngine:
@@ -363,9 +371,7 @@ class AutonomousConversationEngine:
         request = state.original_request.lower()
 
         if state.objective == Objective.UNKNOWN:
-            return (
-                "What would you like me to create, fix, deploy, or monitor?"
-            )
+            return "What would you like me to create, fix, deploy, or monitor?"
 
         if state.objective == Objective.CREATE:
             if "project_type" not in state.answers:
@@ -422,11 +428,7 @@ class AutonomousConversationEngine:
             evidence, blockers = await self.executor.execute(state)
             state.evidence.extend(evidence)
             state.blocking_checks.extend(blockers)
-            state.stage = (
-                ConversationStage.BLOCKED
-                if blockers
-                else ConversationStage.COMPLETED
-            )
+            state.stage = ConversationStage.BLOCKED if blockers else ConversationStage.COMPLETED
 
             if blockers:
                 response_message = (
@@ -436,8 +438,7 @@ class AutonomousConversationEngine:
                 )
             else:
                 response_message = (
-                    "The autonomous job completed successfully. "
-                    "Review the evidence below."
+                    "The autonomous job completed successfully. " "Review the evidence below."
                 )
 
             return self._to_response(state, response_message)
@@ -476,19 +477,14 @@ class AutonomousConversationEngine:
         summary = self._make_plan_summary(state)
         return self._to_response(
             state,
-            summary
-            + "\n\nReply **Proceed** when you want Amosclaud to start the job.",
+            summary + "\n\nReply **Proceed** when you want Amosclaud to start the job.",
         )
 
     def _make_plan_summary(self, state: ConversationState) -> str:
         details = "\n".join(
-            f"- {key.replace('_', ' ').title()}: {value}"
-            for key, value in state.answers.items()
+            f"- {key.replace('_', ' ').title()}: {value}" for key, value in state.answers.items()
         )
-        plan = "\n".join(
-            f"{index}. {step}"
-            for index, step in enumerate(state.plan, start=1)
-        )
+        plan = "\n".join(f"{index}. {step}" for index, step in enumerate(state.plan, start=1))
 
         return (
             f"Understood, {state.user_name}. "

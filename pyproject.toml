@@ -66,6 +66,7 @@ include = [
   "amosclaud_model*",
   "amosclaud_metrics*",
   "amosclaud_mcp*",
+  "amosclaud_executor*",
 ]
 
 [tool.setuptools.dynamic]
