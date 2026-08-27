@@ -321,8 +321,11 @@ def control_pull_request(
             except Exception as exc:
                 try:
                     repo.git.revert("--abort")
-                except Exception:
-                    pass
+                except Exception as abort_exc:
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Unmerge failed and repository cleanup could not complete",
+                    ) from abort_exc
                 raise HTTPException(status_code=409, detail="Unmerge revert failed") from exc
             reverted = repo.head.commit.hexsha
             _write_control(db, repository_id, pull_request_id, reverted_commit=reverted)
