@@ -3,6 +3,11 @@
 Amosclaud exposes an OpenAI-compatible API surface at your Amosclaud deployment
 URL.
 
+Amosclaud Desktop includes a **Gateway provider setup** window. Choose it from
+the Amosclaud menu, paste a scoped key, test the connection, and save. Provider
+metadata can also be discovered without credentials at
+`/.well-known/amosclaud-provider.json`.
+
 ## Important
 
 Amosclaud API keys are accepted by Amosclaud only. They are not valid
