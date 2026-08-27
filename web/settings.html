@@ -1,37 +1,55 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
   <title>Settings · Amosclaud</title>
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/static/style.css" />
-  <link rel="stylesheet" href="/static/repositories.css" />
-  <link rel="stylesheet" href="/static/repositories-page.css" />
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/amosclaud-app-icon.svg" type="image/svg+xml">
+  <style>
+    :root{color-scheme:light dark;--bg:#fff;--panel:#f6f8fa;--text:#1f2328;--muted:#656d76;--line:#d0d7de;--accent:#0969da;--good:#1a7f37;--chip:#ddf4ff}
+    @media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--text:#e6edf3;--muted:#8b949e;--line:#30363d;--accent:#58a6ff;--good:#238636;--chip:#13233a}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}.top{position:sticky;top:0;z-index:5;height:64px;display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid var(--line);background:var(--bg)}.brand{font-size:18px;font-weight:700}.context,.muted{color:var(--muted)}.layout{display:grid;grid-template-columns:300px minmax(0,1fr);max-width:1400px;margin:auto}.side{padding:26px 20px 80px;border-right:1px solid var(--line);min-height:calc(100vh - 64px)}.group{padding:0 8px 18px;margin:0 0 18px;border-bottom:1px solid var(--line)}.group h3{font-size:13px;color:var(--muted);margin:0 0 8px}.nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px}.nav:hover,.nav.active{background:var(--panel)}.nav.active{font-weight:600;border-left:3px solid var(--accent)}.ico{width:18px;text-align:center;color:var(--muted)}main{padding:32px clamp(20px,4vw,56px) 80px;max-width:1000px}.title-row{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:18px}.title-row h1{font-size:24px;margin:0 0 4px}.org-select{min-width:230px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}.section{padding:26px 0;border-bottom:1px solid var(--line)}.section h2{font-size:20px;margin:0 0 6px}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}.card{border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--bg)}.card h3{margin:0 0 6px;font-size:16px}.status{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 7px;color:var(--muted)}.status.active{color:var(--good)}.row{display:flex;gap:10px;align-items:center;justify-content:space-between}.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.chip{font:12px ui-monospace,SFMono-Regular,monospace;padding:3px 7px;border-radius:999px;background:var(--chip)}.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:6px;padding:7px 12px;font-weight:600;cursor:pointer}.btn.primary{background:var(--good);border-color:var(--good);color:white}.dialog{display:none;margin-top:16px;border:1px solid var(--line);border-radius:8px;padding:16px;background:var(--panel)}.dialog.open{display:block}.field{display:grid;gap:5px;margin:10px 0}.field input,.field select,.field textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text)}.scope-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:10px}.scope-grid label{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--bg)}.empty{padding:22px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);margin-top:14px}.notice{padding:10px 12px;border-left:3px solid var(--accent);background:var(--panel);margin-top:14px}.token{word-break:break-all;font-family:ui-monospace,SFMono-Regular,monospace}.mobile-head{display:none}.account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.account-grid .card a,.account-grid .card button{margin-top:8px}.danger{color:#cf222e}
+    @media(max-width:760px){.top{height:56px;padding:0 14px}.layout{display:block}.side{min-height:auto;border-right:0;border-bottom:1px solid var(--line);padding:14px}.mobile-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}.side.collapsed .group{display:none}.group{padding-bottom:10px;margin-bottom:10px}.nav{padding:9px 8px}main{padding:22px 16px 60px}.title-row{display:block}.org-select{width:100%;margin-top:14px}.cards,.scope-grid,.account-grid{grid-template-columns:1fr}}
+  </style>
 </head>
-<body class="repo-page-body">
-  <header class="repo-topbar">
-    <a class="repo-brand" href="/" aria-label="Home">A</a>
-    <div><strong>Account settings</strong><div id="settings-user" class="muted">Loading account…</div></div>
-    <a class="btn-ghost compact-button" href="/repositories">Repositories</a>
-  </header>
-  <main class="repo-shell" style="display:block;max-width:960px;margin:0 auto;padding:24px;">
-    <section class="repo-main">
-      <div class="repo-page-heading"><div><h1>Profile and account</h1><p>Live controls connected to your authenticated Amosclaud account.</p></div></div>
-      <div id="settings-message" class="repository-empty" hidden></div>
-      <div class="github-repository-list">
-        <article id="profile" class="repository-card"><h2>Profile</h2><p id="profile-summary">Loading…</p><a class="repo-new-button" href="/repositories">View account workspace</a></article>
-        <article id="visibility" class="repository-card"><h2>Repository visibility</h2><p>Choose public or private when creating a real repository.</p><a class="repo-new-button" href="/repositories">Create or manage repositories</a></article>
-        <article id="github" class="repository-card"><h2>GitHub connection</h2><p id="github-status">Checking connection availability…</p><a id="github-action" class="repo-new-button" href="/api/v1/github/connect">Connect GitHub</a></article>
-        <article id="api-keys" class="repository-card"><h2>API and service keys</h2><p id="keys-status">Checking access…</p><a id="keys-action" class="repo-new-button" href="/admin/service-keys">Open service keys</a></article>
-        <article id="billing" class="repository-card"><h2>Credits and billing</h2><p id="billing-status">Checking billing availability…</p><a id="billing-action" class="repo-new-button" href="/plans">Open plans and billing</a></article>
-        <article id="domains" class="repository-card"><h2>Domain verification</h2><p id="domain-status">Checking domain status…</p><button id="refresh-domains" class="repo-new-button" type="button">Refresh domain status</button></article>
-        <article id="admin" class="repository-card" hidden><h2>Admin Hub</h2><p>Manage platform-level operations and services.</p><a class="repo-new-button" href="/admin">Open Admin Hub</a></article>
-      </div>
+<body>
+<header class="top"><a class="brand" href="/cloud/agent">Amosclaud</a><span class="context">/ Settings</span><span id="settings-user" class="context" style="margin-left:auto">Loading account…</span></header>
+<div class="layout">
+  <aside class="side collapsed" id="sidebar">
+    <div class="mobile-head"><strong>Settings navigation</strong><button class="btn" id="navToggle">Show</button></div>
+    <div class="group"><h3>Access</h3><a class="nav" href="#access"><span class="ico">♙</span>Collaborators</a><a class="nav" href="#access"><span class="ico">◫</span>Teams</a><a class="nav" href="#access"><span class="ico">◇</span>Moderation</a></div>
+    <div class="group"><h3>Code, planning and automation</h3><a class="nav" href="#automation"><span class="ico">⌘</span>Rulesets</a><a class="nav" href="#automation"><span class="ico">◈</span>Tags</a><a class="nav" href="#automation"><span class="ico">▶</span>Amosclaud Actions</a><a class="nav" href="#automation"><span class="ico">⌁</span>Webhooks</a><a class="nav" href="#agent"><span class="ico">✦</span>Amosclaud Agent</a><a class="nav" href="#automation"><span class="ico">▦</span>Planning</a><a class="nav" href="#automation"><span class="ico">▤</span>Environments</a><a class="nav" href="#spacecodeme"><span class="ico">⌨</span>Amosclaud SpaceCodeMe</a><a class="nav" href="#automation"><span class="ico">▧</span>Pages</a></div>
+    <div class="group"><h3>Security and quality</h3><a class="nav" href="#security"><span class="ico">◉</span>Amosclaud Security</a><a class="nav" href="#security"><span class="ico">⌁</span>Deploy keys</a><a class="nav" href="#security"><span class="ico">✱</span>Secrets and variables</a><a class="nav" href="#security"><span class="ico">⊛</span>Access policies</a><a class="nav" href="#audit"><span class="ico">≡</span>Audit</a></div>
+    <div class="group"><h3>Integrations</h3><a class="nav active" href="#applications"><span class="ico">⬡</span>Developer Applications</a><a class="nav" href="#installed"><span class="ico">✓</span>Installed Applications</a><a class="nav" href="#installed"><span class="ico">⇄</span>Application Installations</a><a class="nav" href="#api"><span class="ico">{ }</span>Amosclaud API</a><a class="nav" href="#api"><span class="ico">⌁</span>API Keys &amp; Tokens</a><a class="nav" href="#api"><span class="ico">◎</span>OAuth Applications</a><a class="nav" href="#api"><span class="ico">♙</span>Service Accounts</a><a class="nav" href="#agent"><span class="ico">✦</span>Agent Connections</a><a class="nav" href="#marketplace"><span class="ico">◇</span>Marketplace</a></div>
+    <div class="group"><h3>Domain &amp; network</h3><a class="nav" href="#domains"><span class="ico">◎</span>Domains</a><a class="nav" href="#domains"><span class="ico">⌁</span>DNS</a><a class="nav" href="#domains"><span class="ico">🔒</span>SSL/TLS</a><a class="nav" href="#domains"><span class="ico">⇄</span>Gateway</a><a class="nav" href="#domains"><span class="ico">◌</span>CDN</a><a class="nav" href="#domains"><span class="ico">⬡</span>Firewall</a><a class="nav" href="#domains"><span class="ico">⌘</span>Networking</a></div>
+    <div class="group"><h3>Storage &amp; compute</h3><a class="nav" href="#compute"><span class="ico">▤</span>Storage</a><a class="nav" href="#compute"><span class="ico">◫</span>Databases</a><a class="nav" href="#compute"><span class="ico">▣</span>Buckets</a><a class="nav" href="#compute"><span class="ico">▶</span>Runners</a><a class="nav" href="#compute"><span class="ico">□</span>Containers</a><a class="nav" href="#compute"><span class="ico">▧</span>Images</a><a class="nav" href="#compute"><span class="ico">⚙</span>Compute</a></div>
+    <div class="group"><h3>Observability</h3><a class="nav" href="#observability"><span class="ico">≡</span>Logs</a><a class="nav" href="#observability"><span class="ico">↗</span>Analytics</a><a class="nav" href="#observability"><span class="ico">◔</span>Usage</a><a class="nav" href="#observability"><span class="ico">⌁</span>Traces</a><a class="nav" href="#observability"><span class="ico">!</span>Alerts</a><a class="nav" href="#observability"><span class="ico">♥</span>Health</a></div>
+  </aside>
+  <main>
+    <div class="title-row"><div><h1>Platform settings</h1><div class="muted">Manage your Amosclaud organization, developer applications, agents, domains, security and infrastructure from one control surface.</div></div><select class="org-select" id="orgSelect"><option>Loading organizations…</option></select></div>
+    <div id="settings-message" class="notice" hidden></div>
+
+    <section class="section" id="access"><h2>Account &amp; access</h2><div class="account-grid"><article class="card"><h3>Profile</h3><p id="profile-summary" class="muted">Loading…</p><a class="btn" href="/repositories">View workspace</a></article><article class="card"><h3>GitHub connector</h3><p id="github-status" class="muted">Checking…</p><a id="github-action" class="btn" href="/api/v1/github/connect">Connect GitHub</a></article><article class="card"><h3>Credits &amp; billing</h3><p id="billing-status" class="muted">Checking…</p><a id="billing-action" class="btn" href="/plans">Open plans</a></article><article id="admin" class="card" hidden><h3>Admin Hub</h3><p class="muted">Platform-level operations and services.</p><a class="btn" href="/admin">Open Admin Hub</a></article></div></section>
+
+    <section class="section" id="applications"><div class="row"><div><h2>Developer Applications</h2><div class="muted">Create an application once, then authorize it across Amosclaud organizations without making GitHub the control center.</div></div><button class="btn primary" id="newApp">New Amosclaud Application</button></div>
+      <div class="dialog" id="appForm"><div class="field"><label>Name</label><input id="appName" placeholder="Deployment Manager"></div><div class="field"><label>Description</label><textarea id="appDescription" rows="3" placeholder="What this application does"></textarea></div><div class="field"><label>Distribution</label><select id="appVisibility"><option value="private">Private — owner organization only</option><option value="shared">Shared — other organizations may install with approval</option><option value="public">Public — eligible for future Marketplace discovery</option></select></div><strong>Requested permissions</strong><div class="scope-grid" id="scopeGrid"></div><div style="margin-top:12px"><button class="btn primary" id="createApp">Create application</button></div></div>
+      <div id="appList" class="empty">Select an organization to load developer applications.</div>
     </section>
+
+    <section class="section" id="installed"><h2>Installed Applications</h2><div class="muted">Each organization installation receives its own granted scopes and credentials.</div><div id="installationList" class="empty">No installation data loaded.</div></section>
+
+    <section class="section" id="agent"><h2>Amosclaud Agent</h2><p>Agent connections use Amosclaud permissions instead of inheriting broad repository credentials. Grant <span class="chip">agent:invoke</span> plus only the workspace capabilities the connection needs.</p><div class="notice"><strong>Amosclaud-native name:</strong> this first-party engineering agent is Amosclaud Agent, not Copilot.</div></section>
+
+    <section class="section" id="spacecodeme"><h2>Amosclaud SpaceCodeMe</h2><p>SpaceCodeMe is the Amosclaud development space for files, terminal execution, runtimes and authorized agents. Applications require <span class="chip">spacecodeme:use</span> before they can operate it.</p></section>
+
+    <section class="section" id="api"><h2>Amosclaud API, keys &amp; tokens</h2><p>Application credentials belong to one installation. The raw token is shown once; Amosclaud stores only its cryptographic digest and display prefix.</p><div class="notice" id="tokenNotice">Choose an installed application above to create its scoped credential.</div><p id="keys-status" class="muted"></p><a id="keys-action" class="btn" href="/admin/service-keys">Service keys</a></section>
+
+    <section class="section" id="domains"><h2>Domain &amp; network</h2><p id="domain-status" class="muted">Checking domain status…</p><button id="refresh-domains" class="btn" type="button">Refresh domain status</button></section>
+
+    <section class="section" id="marketplace"><h2>Marketplace</h2><p>Public discovery remains <span class="status">planned</span>. Developer application identities, installations, scopes and credentials work independently of a future public marketplace.</p></section>
   </main>
-  <script src="/static/settings.js"></script>
-</body>
-</html>
+</div>
+<script src="/static/settings.js"></script>
+</body></html>
