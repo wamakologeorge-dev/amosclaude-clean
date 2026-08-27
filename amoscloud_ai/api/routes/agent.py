@@ -258,6 +258,48 @@ def _require_mode_scope(user, mode: str) -> None:
     # Cookie-authenticated users continue through the existing governed route.
 
 
+def _authority_principal(user) -> dict | None:
+    """Return the attached Amosclaud Authority principal when one is present."""
+
+    if isinstance(user, dict):
+        principal = user.get("_amosclaud_principal")
+        return principal if isinstance(principal, dict) else None
+    return None
+
+
+def _require_authority_scope(user, required_scope: str | None) -> None:
+    """Enforce a scope for Amosclaud Authority identities without breaking legacy auth."""
+
+    if not user or not required_scope:
+        return
+    principal = _authority_principal(user)
+    if principal is None:
+        return
+    if authority.scope_allowed(principal, required_scope):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "code": "scope_not_granted",
+            "required_scope": required_scope,
+            "scopes": principal.get("scopes") or [],
+        },
+    )
+
+
+def _require_mode_scope(user, mode: str) -> None:
+    """Map Autonomous execution modes onto the shared Amosclaud scope vocabulary."""
+
+    required_scope = {
+        "autonomous-check": "inspect",
+        "build": "build",
+        "fix": "fix",
+        "deploy": "deploy",
+        "monitor": "monitor",
+    }.get(mode)
+    _require_authority_scope(user, required_scope)
+
+
 def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
     if status == PipelineStatus.PENDING:
         return f"Queued {mode} task: {objective}"
@@ -283,7 +325,7 @@ def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
 
 
 def _display_name(request: Request) -> str:
-    user = _authenticated_user(request, required_scope=None)
+    user = _authenticated_user(request)
     if not user:
         return ""
     raw_name = str(user["name"] or "").strip()
