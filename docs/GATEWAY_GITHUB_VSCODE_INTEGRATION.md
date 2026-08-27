@@ -13,6 +13,8 @@ The canonical application already provides:
 - operation status and logs at `GET /api/v1/tasks/{task_id}` and
   `GET /api/v1/tasks/{task_id}/logs`;
 - OpenAI-compatible models, chat completions, and responses at `/v1`;
+- credential-free Desktop provider discovery at
+  `/.well-known/amosclaud-provider.json`;
 - remote MCP at `https://www.amosclaud.com/mcp/`;
 - the native VS Code extension and repository-scoped terminal;
 - cloud, GitHub, and self-hosted execution targets.
@@ -82,6 +84,10 @@ The gateway implements both:
 Both endpoints authenticate the Amosclaud key, enforce the allowed model list,
 reserve agent credits, refund failed upstream calls, and never forward the
 user's Amosclaud credential to an upstream model provider.
+
+Amosclaud Desktop uses the same contract. Its **Gateway provider setup** window
+stores the key with the operating system credential store and sends it from the
+Electron main process, so the hosted web renderer never receives the raw key.
 
 ## VS Code and MCP
 

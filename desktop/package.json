@@ -9,7 +9,9 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --publish never",
-    "release": "electron-builder --publish always"
+    "release": "electron-builder --publish always",
+    "check": "node --check main.js && node --check preload.js && node --check provider-config.js && node --check provider.js",
+    "test": "node --test"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -28,6 +30,10 @@
     "files": [
       "main.js",
       "preload.js",
+      "provider-config.js",
+      "provider.html",
+      "provider.css",
+      "provider.js",
       "package.json"
     ],
     "publish": [

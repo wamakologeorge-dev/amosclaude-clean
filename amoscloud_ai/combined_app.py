@@ -58,6 +58,7 @@ SUPPORT_EXEMPT_API_PREFIXES = (
     "/api/v1/open-source",
     "/api/v1/passkey",
     "/api/v1/amos-secure-code",
+    "/api/v1/desktop",
     "/api/v1/webhooks",
     "/api/v1/service-keys/verify",
 )

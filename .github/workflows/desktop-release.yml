@@ -29,6 +29,10 @@ jobs:
         with:
           node-version: '22'
       - run: npm install
+      - name: Check Desktop sources
+        run: npm run check
+      - name: Test Desktop provider contract
+        run: npm test
       - name: Build installers
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
