@@ -92,7 +92,9 @@ RUN python -m pip install --upgrade pip setuptools wheel \
 
 COPY . /app
 COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
-RUN chmod 0755 /usr/local/bin/amos /app/docker/otel-exec.sh /app/docker/production-entrypoint.sh
+COPY services/workspace_runtime/workspace-image/amosclaud-markdown.py /usr/local/libexec/amosclaud-markdown.py
+COPY services/workspace_runtime/workspace-image/amosclaud-markdown /usr/local/bin/amosclaud-markdown
+RUN chmod 0755 /usr/local/bin/amos /usr/local/bin/amosclaud-markdown /usr/local/libexec/amosclaud-markdown.py /app/docker/otel-exec.sh /app/docker/production-entrypoint.sh
 
 # Fail with an explicit source-context error instead of a misleading missing
 # dependency-file error.

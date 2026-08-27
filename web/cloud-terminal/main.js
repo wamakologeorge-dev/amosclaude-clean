@@ -45,7 +45,8 @@ panel.innerHTML = `
     </div>
   </div>
   <div data-boundary class="ws-full-editor-note"><strong>Runtime:</strong> checking the Amosclaud execution connection…</div>
-  <div class="ws-full-editor-note"><strong>Full developer terminal:</strong> writable repository · nano and vim · Git · Python · Node.js and npm · C/C++ · run and interactive debug tools · tmux · port and network diagnostics. Run <code>amos help</code> for built-in tools.</div>
+  <div data-terminal-access class="ws-full-editor-note"><strong>Access:</strong> checking repository permissions…</div>
+  <div class="ws-full-editor-note"><strong>Amosclaud terminal:</strong> nano and vim · Git · Python · Node.js and npm · C/C++ · run and interactive debug tools · tmux · port and network diagnostics · <code>amosclaud-markdown</code>. Run <code>amos help</code> for built-in tools.</div>
   <p data-state class="ws-status" role="status" aria-live="polite">Open this tab to connect to the Amosclaud runtime.</p>
   <div class="cloud-terminal-shell">
     <div class="cloud-terminal-toolbar">
@@ -89,7 +90,7 @@ main.appendChild(panel);
 
 const q = selector => panel.querySelector(selector);
 const ui = {
-  start: q('[data-start]'), stop: q('[data-stop]'), boundary: q('[data-boundary]'), state: q('[data-state]'),
+  start: q('[data-start]'), stop: q('[data-stop]'), boundary: q('[data-boundary]'), access: q('[data-terminal-access]'), state: q('[data-state]'),
   profile: q('[data-profile]'), newTerminal: q('[data-new]'), split: q('[data-split]'), reconnect: q('[data-reconnect]'),
   searchToggle: q('[data-search-toggle]'), copy: q('[data-copy]'), export: q('[data-export]'), clear: q('[data-clear]'),
   cloud: q('[data-cloud]'), tabs: q('[data-tabs]'), search: q('[data-search]'), searchInput: q('[data-search-input]'),
@@ -105,6 +106,8 @@ let loading = false;
 let runtimeAvailable = false;
 let runtimeProvider = '';
 let workspaceRunning = false;
+let canWrite = true;
+let startAllowed = true;
 let activeId = '';
 let splitId = '';
 let counter = 0;
@@ -183,13 +186,14 @@ function onTerminalActivity(session, activity) {
 
 function controls() {
   const has = Boolean(active());
-  ui.start.disabled = loading || !runtimeAvailable || workspaceRunning;
-  ui.stop.disabled = loading || !runtimeAvailable || !workspaceRunning;
+  ui.start.disabled = loading || !runtimeAvailable || !startAllowed || workspaceRunning;
+  ui.stop.disabled = loading || !runtimeAvailable || !workspaceRunning || !canWrite;
   ui.newTerminal.disabled = loading || !workspaceRunning || sessions.size >= maxSessions;
   ui.split.disabled = loading || !workspaceRunning || !has || sessions.size >= maxSessions;
   ui.reconnect.disabled = loading || !workspaceRunning || !has;
   for (const button of [ui.searchToggle, ui.copy, ui.export, ui.clear]) button.disabled = !has;
   projectTools?.setWorkspaceRunning?.(workspaceRunning);
+  projectTools?.setCanWrite?.(canWrite);
   featureCells?.updateAvailability?.();
 }
 
@@ -296,11 +300,14 @@ function stopAllSessions() {
   renderTabs(); renderPanes(); controls();
 }
 
-function describeBoundary(container, provider) {
+function describeBoundary(container, provider, access = {}) {
+  const mode = access.can_write === false || container.read_only
+    ? 'read-only repository mount'
+    : 'writable repository mount';
   if (provider === 'managed') {
-    return '<strong>Managed runtime:</strong> same Amosclaud deployment · non-root terminal process · scrubbed secrets · persistent repository · live WebSocket output.';
+    return `<strong>Managed runtime:</strong> same Amosclaud deployment · non-root terminal process · scrubbed secrets · persistent repository · live WebSocket output · ${mode}.`;
   }
-  return `<strong>Isolated runtime:</strong> ${container.user || 'developer'} · ${container.cpu_limit || 2} CPU · ${container.memory_mb || 4096} MB RAM · ${container.pids_limit || 512} processes · network ${container.network || 'none'}.`;
+  return `<strong>Isolated runtime:</strong> ${container.user || 'developer'} · ${container.cpu_limit || 2} CPU · ${container.memory_mb || 4096} MB RAM · ${container.pids_limit || 512} processes · network ${container.network || 'none'} · ${mode}.`;
 }
 
 async function refresh() {
@@ -308,12 +315,17 @@ async function refresh() {
   loading = true; controls(); setState('Checking the Amosclaud runtime…');
   try {
     const result = await apiRequest(terminalApi(repositoryId));
+    canWrite = result.access?.can_write !== false;
     runtimeAvailable = Boolean(result.runtime?.configured && result.runtime?.ok);
     runtimeProvider = result.container?.provider || result.provider || result.runtime?.provider || '';
     workspaceRunning = Boolean(result.container?.running);
+    startAllowed = canWrite || result.runtime?.provider === 'external';
     maxSessions = runtimeProvider === 'managed' ? 4 : 8;
     featureCells.setRuntime(result.container || { running: false, network: result.runtime?.network || 'unknown' });
-    ui.boundary.innerHTML = describeBoundary(result.container || {}, runtimeProvider || result.runtime?.provider);
+    ui.boundary.innerHTML = describeBoundary(result.container || {}, runtimeProvider || result.runtime?.provider, result.access || {});
+    ui.access.innerHTML = canWrite
+      ? '<strong>Access:</strong> developer access · repository edits, commits, and GitHub sync are available after authorization.'
+      : '<strong>Access:</strong> viewer access · the Docker workspace is read-only; Markdown, files, tests, and diagnostics remain available, while commits and pushes stay disabled.';
     if (!runtimeAvailable) {
       setState(result.runtime?.detail || 'The terminal runtime is not available.', 'error');
       setCloud('Runtime unavailable', 'error');
@@ -343,11 +355,16 @@ async function startWorkspace() {
   loading = true; controls(); setState('Starting the Amosclaud developer workspace…');
   try {
     const result = await apiRequest(terminalApi(repositoryId, '/start'), { method: 'POST' });
+    canWrite = result.access?.can_write !== false;
     runtimeProvider = result.provider || result.container?.provider || 'managed';
     workspaceRunning = Boolean(result.container?.running);
+    startAllowed = canWrite || runtimeProvider === 'external';
     maxSessions = runtimeProvider === 'managed' ? 4 : 8;
     featureCells.setRuntime(result.container || { running: workspaceRunning, network: 'unknown' });
-    ui.boundary.innerHTML = describeBoundary(result.container || {}, runtimeProvider);
+    ui.boundary.innerHTML = describeBoundary(result.container || {}, runtimeProvider, result.access || {});
+    ui.access.innerHTML = canWrite
+      ? '<strong>Access:</strong> developer access · repository edits, commits, and GitHub sync are available after authorization.'
+      : '<strong>Access:</strong> viewer access · this session is mounted read-only inside the Docker workspace.';
     setState('Workspace started. The terminal is connecting now; run and debug output will appear live.', 'ready');
     setCloud(`${runtimeProvider === 'managed' ? 'Managed' : 'Isolated'} runtime ready`, 'connected');
     if (!sessions.size) await createSession({ profile: 'bash' });

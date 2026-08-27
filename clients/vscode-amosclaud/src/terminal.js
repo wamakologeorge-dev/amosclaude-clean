@@ -82,7 +82,7 @@ async function selectRepository(context) {
   });
   const repositories = Array.isArray(response.repositories) ? response.repositories : [];
   if (!repositories.length) {
-    throw new Error('This Amosclaud account does not own a repository available to the self terminal');
+    throw new Error('This Amosclaud account has no repository available to the self terminal');
   }
   if (repositories.length === 1) return repositories[0];
   const picked = await vscode.window.showQuickPick(

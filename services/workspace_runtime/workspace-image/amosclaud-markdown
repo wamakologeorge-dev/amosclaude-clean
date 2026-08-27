@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -x /opt/amosclaud-markdown/bin/python ]; then
+  exec /opt/amosclaud-markdown/bin/python /usr/local/libexec/amosclaud-markdown.py "$@"
+fi
+
+exec python3 /usr/local/libexec/amosclaud-markdown.py "$@"

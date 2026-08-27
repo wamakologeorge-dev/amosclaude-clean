@@ -64,7 +64,12 @@ The runtime additionally drops every Linux capability, enables `no-new-privilege
 
 ## Editor choice
 
-Amosclaud keeps its existing custom repository file tree and full-screen editor because those components already use the native repository API and authorization model. Xterm.js is added only for terminal rendering. This avoids embedding a second authentication system through code-server while still providing a real browser shell.
+Amosclaud provides an authenticated browser editor, the Xterm.js cloud terminal,
+and a VS Code companion that opens a repository-scoped Pseudoterminal. All three
+surfaces use the same repository authorization and short-lived terminal tickets;
+the browser and VS Code clients do not need a local project checkout or a shared
+code-server password. The optional isolated runtime is the Docker host for code,
+tests, debuggers, and the `amosclaud-markdown` program.
 
 A future code-server deployment may be added behind the same workspace ticket and container boundary, but it must not bypass repository authorization or receive a permanent public URL.
 

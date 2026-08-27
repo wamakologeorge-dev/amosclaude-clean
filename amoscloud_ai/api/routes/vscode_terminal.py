@@ -19,10 +19,15 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from amoscloud_ai import managed_terminal, workspace_runtime
+from amoscloud_ai import managed_terminal, workspace_runtime, workspace_terminal
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.api.routes.autonomous_keys import authenticate_autonomous_key
-from amoscloud_ai.api.routes.repositories import _access, _db, _repo_path, _require_owner
+from amoscloud_ai.api.routes.repositories import (
+    _access,
+    _db,
+    _repo_path,
+    _require_write,
+)
 
 router = APIRouter(prefix="/vscode-terminal", tags=["vscode-terminal"])
 
@@ -59,15 +64,13 @@ def _user(request: Request):
     return user
 
 
-def _owned_repository(repository_id: int, user_id: int):
+def _accessible_repository(repository_id: int, user_id: int):
     with _db() as db:
-        repository = _access(db, repository_id, user_id)
-    _require_owner(repository)
-    return repository
+        return _access(db, repository_id, user_id)
 
 
 def _workspace(repository_id: int, user_id: int) -> dict[str, Any]:
-    repository = _owned_repository(repository_id, user_id)
+    repository = _accessible_repository(repository_id, user_id)
     return workspace_runtime.workspace_for_repository(
         int(repository["id"]),
         int(repository["owner_id"]),
@@ -139,13 +142,18 @@ def _consume_ticket(token: str) -> dict[str, Any]:
 
 @router.get("/repositories")
 def list_terminal_repositories(user=Depends(_user)) -> dict[str, Any]:
-    """List only repositories owned by the authenticated Amosclaud user."""
+    """List repositories the authenticated user may inspect or develop."""
 
     with _db() as db:
         rows = db.execute(
-            """SELECT id,name,description,default_branch,updated_at
-               FROM repositories WHERE owner_id=? ORDER BY updated_at DESC""",
-            (int(user["id"]),),
+            """SELECT r.id,r.name,r.description,r.default_branch,r.updated_at,
+                      CASE WHEN r.owner_id=? THEN 'owner' ELSE COALESCE(c.role, 'viewer') END AS role
+               FROM repositories r
+               LEFT JOIN repository_collaborators c
+                 ON c.repository_id=r.id AND c.user_id=?
+               WHERE r.owner_id=? OR c.user_id=? OR r.visibility='public'
+               ORDER BY r.updated_at DESC""",
+            (int(user["id"]), int(user["id"]), int(user["id"]), int(user["id"])),
         ).fetchall()
     return {
         "repositories": [dict(row) for row in rows],
@@ -160,9 +168,46 @@ def start_terminal_workspace(
     repository_id: int,
     user=Depends(_user),
 ) -> dict[str, Any]:
-    """Start the selected user's repository-scoped managed workspace."""
+    """Start an isolated workspace, using a managed developer fallback if needed."""
 
-    workspace = _workspace(repository_id, int(user["id"]))
+    repository = _accessible_repository(repository_id, int(user["id"]))
+    workspace = workspace_runtime.workspace_for_repository(
+        int(repository["id"]),
+        int(repository["owner_id"]),
+    )
+    can_write = str(repository["role"] or "viewer") in {"owner", "developer"}
+    external = workspace_runtime.runtime_health()
+    if external.get("ok"):
+        try:
+            container = workspace_runtime.start_workspace(
+                workspace,
+                environment={
+                    "AMOSCLAUD_PROJECT_REPOSITORY_ID": str(repository_id),
+                    "AMOSCLAUD_PROJECT_OWNER_ID": str(workspace["owner_id"]),
+                },
+                read_only=not can_write,
+            )
+            return {
+                "workspace": workspace,
+                "container": container,
+                "provider": "external",
+                "access": {
+                    "role": str(repository["role"] or "viewer"),
+                    "can_write": can_write,
+                    "terminal_mode": "writable" if can_write else "read-only",
+                },
+                "user_id": int(user["id"]),
+            }
+        except RuntimeError as exc:
+            if "different access mode" in str(exc).casefold():
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            if not can_write:
+                raise HTTPException(
+                    status_code=503,
+                    detail="A read-only Docker workspace could not be started.",
+                ) from exc
+
+    _require_write(repository)
     try:
         container = managed_terminal.start(workspace)
     except RuntimeError as exc:
@@ -171,6 +216,11 @@ def start_terminal_workspace(
         "workspace": workspace,
         "container": container,
         "provider": "managed",
+        "access": {
+            "role": str(repository["role"] or "viewer"),
+            "can_write": True,
+            "terminal_mode": "writable",
+        },
         "user_id": int(user["id"]),
     }
 
@@ -184,7 +234,39 @@ def create_terminal_ticket(
 ) -> dict[str, Any]:
     """Issue one browser WebSocket ticket for an already started workspace."""
 
-    workspace = _workspace(repository_id, int(user["id"]))
+    repository = _accessible_repository(repository_id, int(user["id"]))
+    workspace = workspace_runtime.workspace_for_repository(
+        int(repository["id"]),
+        int(repository["owner_id"]),
+    )
+    external = workspace_runtime.runtime_health()
+    if external.get("ok"):
+        try:
+            container = workspace_runtime.remote_status(workspace)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="The isolated workspace runtime is temporarily unreachable.",
+            ) from exc
+        if not container.get("running"):
+            raise HTTPException(status_code=409, detail="Start the Amosclaud workspace first")
+        can_write = str(repository["role"] or "viewer") in {"owner", "developer"}
+        if not can_write and not bool(container.get("read_only")):
+            raise HTTPException(
+                status_code=409,
+                detail="Restart the workspace in read-only mode before opening it as a viewer",
+            )
+        try:
+            return workspace_terminal.terminal_ticket(
+                workspace,
+                int(user["id"]),
+                terminal_id=body.terminal_id,
+                profile=body.profile,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="Workspace terminal is unavailable") from exc
+
+    _require_write(repository)
     if not managed_terminal.status(workspace).get("running"):
         raise HTTPException(status_code=409, detail="Start the Amosclaud workspace first")
     return _issue_ticket(
@@ -214,7 +296,8 @@ async def vscode_terminal_websocket(
             raise HTTPException(status_code=401, detail="Terminal repository mismatch")
         if str(claims["terminal_id"]) != terminal_id:
             raise HTTPException(status_code=401, detail="Terminal session mismatch")
-        repository = _owned_repository(repository_id, int(claims["user_id"]))
+        repository = _accessible_repository(repository_id, int(claims["user_id"]))
+        _require_write(repository)
     except HTTPException as exc:
         await websocket.close(
             code=4401 if exc.status_code == 401 else 4403,

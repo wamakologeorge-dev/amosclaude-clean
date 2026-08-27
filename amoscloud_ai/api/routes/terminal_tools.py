@@ -51,6 +51,11 @@ class ToolSyncRequest(BaseModel):
 def _repository(repository_id: int, user_id: int) -> sqlite3.Row:
     with _db() as db:
         row = _access(db, repository_id, user_id)
+    return row
+
+
+def _writable_repository(repository_id: int, user_id: int) -> sqlite3.Row:
+    row = _repository(repository_id, user_id)
     _require_write(row)
     return row
 
@@ -377,16 +382,17 @@ def project_tools(
         "status": status,
         "commands": _smart_commands(repository_id),
         "actions": {
-            "commit": True,
-            "pull": status["source"] == "github",
-            "push": status["source"] == "github",
-            "sync_push": status["source"] == "github",
+            "commit": row["role"] in {"owner", "developer"},
+            "pull": status["source"] == "github" and row["role"] in {"owner", "developer"},
+            "push": status["source"] == "github" and row["role"] in {"owner", "developer"},
+            "sync_push": status["source"] == "github" and row["role"] in {"owner", "developer"},
             "run": True,
             "debug": True,
             "ports": True,
             "problems": True,
             "connectors": True,
             "network": True,
+            "markdown": True,
             "native_saved_immediately": status["source"] == "amosclaud",
         },
     }
@@ -398,7 +404,7 @@ def commit_project_changes(
     body: ToolCommitRequest,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    row = _repository(repository_id, int(user["id"]))
+    row = _writable_repository(repository_id, int(user["id"]))
     with _repo_lock(repository_id):
         repo = _open_repository(repository_id)
         active = None if repo.head.is_detached else repo.active_branch.name
@@ -454,7 +460,7 @@ def pull_project_changes(
     body: ToolSyncRequest,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    row = _repository(repository_id, int(user["id"]))
+    row = _writable_repository(repository_id, int(user["id"]))
     if not _value(row, "github_full_name"):
         raise HTTPException(
             status_code=409,
@@ -481,7 +487,7 @@ def push_project_changes(
     body: ToolSyncRequest,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    row = _repository(repository_id, int(user["id"]))
+    row = _writable_repository(repository_id, int(user["id"]))
     if not _value(row, "github_full_name"):
         raise HTTPException(
             status_code=409,
@@ -514,7 +520,7 @@ def sync_push_project_changes(
     so no remote history or local conflict state is silently overwritten.
     """
 
-    row = _repository(repository_id, int(user["id"]))
+    row = _writable_repository(repository_id, int(user["id"]))
     if not _value(row, "github_full_name"):
         raise HTTPException(
             status_code=409,
