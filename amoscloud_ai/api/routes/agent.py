@@ -12,6 +12,7 @@ from amoscloud_ai.agent.assistant_system_template import ASSISTANT_SYSTEM_TEMPLA
 from amoscloud_ai.api.routes.auth import get_user_from_session
 from amoscloud_ai.api.routes.autonomous_keys import authenticate_autonomous_key
 from amoscloud_ai.autonomous_server import run_autonomous_server
+from amoscloud_ai.core import amosclaud_authority as authority
 from amoscloud_ai.logger import log
 from amoscloud_ai.models import (
     AutonomousAgentProfile,
@@ -156,7 +157,7 @@ def _agent_reply(status: PipelineStatus, mode: str, objective: str) -> str:
 
 
 def _display_name(request: Request) -> str:
-    user = _authenticated_user(request)
+    user = _authenticated_user(request, required_scope=None)
     if not user:
         return ""
     raw_name = str(user["name"] or "").strip()
@@ -403,6 +404,7 @@ async def run_agent(
         )
 
     mode = _select_autonomous_mode(mode, objective, body.metadata)
+    _require_mode_scope(user, mode)
 
     from amoscloud_ai.api.routes.pipelines import _save
 

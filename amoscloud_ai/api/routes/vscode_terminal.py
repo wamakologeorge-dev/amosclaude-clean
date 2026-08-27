@@ -28,6 +28,7 @@ from amoscloud_ai.api.routes.repositories import (
     _repo_path,
     _require_write,
 )
+from amoscloud_ai.core import amosclaud_authority as authority
 
 router = APIRouter(prefix="/vscode-terminal", tags=["vscode-terminal"])
 
@@ -55,7 +56,28 @@ def _user(request: Request):
     user = get_user_from_session(request.cookies.get("amos_session"))
     if user:
         return user
-    user = authenticate_autonomous_key(_bearer_token(request))
+    raw = _bearer_token(request)
+    user = authenticate_autonomous_key(raw)
+    if not user:
+        principal = authority.verify_credential(raw, required_scope="workspace:write")
+        if principal and not principal["scope_granted"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "scope_not_granted",
+                    "required_scope": "workspace:write",
+                    "scopes": principal["scopes"],
+                },
+            )
+        if principal:
+            return {
+                "id": principal["user_id"],
+                "name": principal["name"],
+                "email": principal["email"],
+                "is_admin": int(principal["is_admin"]),
+                "provider": principal["provider"],
+                "_amosclaud_principal": principal,
+            }
     if not user:
         raise HTTPException(
             status_code=401,

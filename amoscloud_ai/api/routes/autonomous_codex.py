@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from amoscloud_ai import codex_memory
-from amoscloud_ai.api.routes.agent import _authenticated_user
+from amoscloud_ai.api.routes.agent import _authenticated_user, _require_authority_scope
 from amoscloud_ai.autonomous_codex_config import (
     get_autonomous_codex_configuration,
     select_skill,

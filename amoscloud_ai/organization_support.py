@@ -250,7 +250,24 @@ def bearer_identity(raw: str) -> dict[str, Any] | None:
                    WHERE k.key_hash=? AND k.revoked_at IS NULL""",
                 (_key_hash(supplied),),
             ).fetchone()
-            return dict(row) if row else None
+            if row:
+                return dict(row)
+
+            # Amosclaud-owned API keys, tokens, Actions, and workspace-bound
+            # third-party grants share the central authority verifier. Hosted
+            # support time remains a separate billing/policy layer.
+            from amoscloud_ai.core import amosclaud_authority as authority
+
+            principal = authority.authenticate_credential(supplied)
+            if not principal:
+                return None
+            return {
+                "user_id": principal["user_id"],
+                "is_admin": principal["is_admin"],
+                "key_type": "amosclaud-authority",
+                "scopes": principal["scopes"],
+                "workspace_id": principal["workspace_id"],
+            }
         except sqlite3.Error:
             return None
 
