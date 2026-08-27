@@ -10,7 +10,7 @@
 [![Version 1.0.1](https://img.shields.io/badge/version-1.0.1-6f5bd3)](pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
 
-[Quickstart](docs/QUICKSTART.md) · [Cloud terminal](docs/AMOSCLAUD_TERMINAL.md) · [Pipeline architecture](docs/PIPELINE_ECOSYSTEM.md) · [GitHub automation](docs/GITHUB_ACTIONS.md) · [Demo](docs/DEMO.md) · [Contributing](CONTRIBUTING.md)
+[Quickstart](docs/QUICKSTART.md) · [Desktop gateway setup](docs/AMOSCLAUD_DESKTOP_GATEWAY.md) · [Pipeline architecture](docs/PIPELINE_ECOSYSTEM.md) · [GitHub automation](docs/GITHUB_ACTIONS.md) · [Demo](docs/DEMO.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -126,7 +126,7 @@ The small `amosclaud-quick` command remains the safest first experience: it perf
 ## Documentation
 
 - [Quickstart and self-hosting](docs/QUICKSTART.md)
-- [Browser/VM terminal and Amosclaud Markdown](docs/AMOSCLAUD_TERMINAL.md)
+- [Amosclaud Desktop gateway setup](docs/AMOSCLAUD_DESKTOP_GATEWAY.md)
 - [Pipeline ecosystem and file responsibilities](docs/PIPELINE_ECOSYSTEM.md)
 - [GitHub Actions and trigger behavior](docs/GITHUB_ACTIONS.md)
 - [Telemetry, node proposer, and PipeFail graphics](docs/PIPELINE_ECOSYSTEM.md#telemetry-data-layouts)

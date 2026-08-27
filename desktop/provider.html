@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'none';"
+    />
+    <title>Amosclaud Gateway Provider</title>
+    <link rel="stylesheet" href="provider.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <div class="eyebrow">AMOSCLAUD DESKTOP</div>
+      <h1>Gateway provider</h1>
+      <p class="intro">
+        Connect this Desktop client to Amosclaud’s OpenAI-compatible gateway.
+        Your key stays in the operating system’s secure credential store.
+      </p>
+
+      <form id="provider-form">
+        <label for="base-url">Amosclaud URL</label>
+        <input
+          id="base-url"
+          name="baseUrl"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          spellcheck="false"
+          required
+        />
+        <p class="hint">Use HTTPS for a hosted gateway. Exact localhost HTTP is allowed for development.</p>
+
+        <label for="model">Default model</label>
+        <input id="model" name="model" type="text" autocomplete="off" spellcheck="false" required />
+
+        <label for="api-key">Amosclaud API key</label>
+        <input
+          id="api-key"
+          name="apiKey"
+          type="password"
+          autocomplete="new-password"
+          spellcheck="false"
+          placeholder="amos_aut_… or another scoped Amosclaud key"
+        />
+        <p class="hint">
+          Leave this blank when updating an existing saved key. The key is never written to settings.json or sent to the web page.
+        </p>
+
+        <div class="actions">
+          <button id="test" type="button" class="secondary">Test connection</button>
+          <button id="save" type="submit">Save securely</button>
+        </div>
+        <button id="clear" type="button" class="link-button">Clear saved provider configuration</button>
+      </form>
+
+      <div id="status" class="status" role="status" aria-live="polite">Loading provider settings…</div>
+      <p class="footer-note">
+        Gateway requests remain subject to Amosclaud API-key scopes, paid credits, repository permissions, approvals, and verification gates.
+      </p>
+    </main>
+    <script src="provider.js"></script>
+  </body>
+</html>
