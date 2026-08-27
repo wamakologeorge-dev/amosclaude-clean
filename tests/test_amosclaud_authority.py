@@ -34,13 +34,11 @@ def _prepare_database(path, *, workspace_id: str = "ws_authority") -> None:
                 "2026-01-01T00:00:00+00:00",
             ),
         )
-        db.execute(
-            """CREATE TABLE workspaces (
+        db.execute("""CREATE TABLE workspaces (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'stopped'
-            )"""
-        )
+            )""")
         db.execute(
             "INSERT INTO workspaces(id,user_id,status) VALUES (?,?,?)",
             (workspace_id, 1, "stopped"),
@@ -135,7 +133,8 @@ def test_platform_credentials_share_verifier_and_never_expire(tmp_path):
             "SELECT secret_hash,expires_at FROM amosclaud_credentials WHERE id=?",
             (body["id"],),
         ).fetchone()
-    assert row["secret_hash"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert row["secret_hash"].startswith("pbkdf2_sha256$")
+    assert row["secret_hash"] != hashlib.sha256(raw.encode()).hexdigest()
     assert row["expires_at"] is None
 
     verified = client.get(
@@ -152,28 +151,36 @@ def test_platform_credentials_share_verifier_and_never_expire(tmp_path):
     )
     assert denied.status_code == 403
 
-    rotated = client.post(
-        f"/api/v1/amosclaud/authority/credentials/{body['id']}/rotate"
-    )
+    rotated = client.post(f"/api/v1/amosclaud/authority/credentials/{body['id']}/rotate")
     assert rotated.status_code == 201
     replacement = rotated.json()["secret"]
     assert replacement != raw
-    assert client.get(
-        "/api/v1/amosclaud/authority/verify",
-        headers={"Authorization": f"Bearer {raw}"},
-    ).status_code == 401
-    assert client.get(
-        "/api/v1/amosclaud/authority/verify",
-        headers={"Authorization": f"Bearer {replacement}"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/api/v1/amosclaud/authority/verify",
+            headers={"Authorization": f"Bearer {raw}"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.get(
+            "/api/v1/amosclaud/authority/verify",
+            headers={"Authorization": f"Bearer {replacement}"},
+        ).status_code
+        == 200
+    )
 
-    assert client.delete(
-        f"/api/v1/amosclaud/authority/credentials/{rotated.json()['id']}"
-    ).status_code == 204
-    assert client.get(
-        "/api/v1/amosclaud/authority/verify",
-        headers={"Authorization": f"Bearer {replacement}"},
-    ).status_code == 401
+    assert (
+        client.delete(f"/api/v1/amosclaud/authority/credentials/{rotated.json()['id']}").status_code
+        == 204
+    )
+    assert (
+        client.get(
+            "/api/v1/amosclaud/authority/verify",
+            headers={"Authorization": f"Bearer {replacement}"},
+        ).status_code
+        == 401
+    )
 
 
 def test_third_party_grants_require_workspace_owner_and_expire(tmp_path):
@@ -205,9 +212,7 @@ def test_third_party_grants_require_workspace_owner_and_expire(tmp_path):
     assert body["expires_at"]
     assert body["status"] == "active"
 
-    listing = client.get(
-        "/api/v1/amosclaud/authority/workspaces/ws_authority/third-party-grants"
-    )
+    listing = client.get("/api/v1/amosclaud/authority/workspaces/ws_authority/third-party-grants")
     assert listing.status_code == 200
     assert "secret" not in listing.json()["grants"][0]
 
@@ -237,7 +242,5 @@ def test_third_party_grants_require_workspace_owner_and_expire(tmp_path):
 
 def test_third_party_grant_cannot_be_managed_by_another_workspace_owner(tmp_path):
     client = _client(tmp_path / "ownership.db", user=_user(2))
-    response = client.get(
-        "/api/v1/amosclaud/authority/workspaces/ws_authority/third-party-grants"
-    )
+    response = client.get("/api/v1/amosclaud/authority/workspaces/ws_authority/third-party-grants")
     assert response.status_code == 403
