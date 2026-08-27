@@ -13,6 +13,7 @@ platform's 90-day minimum.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 import secrets
@@ -88,8 +89,33 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
+_PBKDF2_ROUNDS = 310_000
+_PBKDF2_SALT_BYTES = 16
+_PBKDF2_PREFIX = "pbkdf2_sha256"
+
+
 def _hash_secret(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+    salt = secrets.token_bytes(_PBKDF2_SALT_BYTES)
+    derived = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, _PBKDF2_ROUNDS)
+    return f"{_PBKDF2_PREFIX}${_PBKDF2_ROUNDS}${salt.hex()}${derived.hex()}"
+
+
+def _verify_secret(value: str, stored_hash: str) -> tuple[bool, bool]:
+    """Return (is_valid, needs_upgrade). Supports legacy SHA-256 hashes."""
+    if not stored_hash:
+        return False, False
+    parts = stored_hash.split("$")
+    if len(parts) == 4 and parts[0] == _PBKDF2_PREFIX:
+        try:
+            rounds = int(parts[1])
+            salt = bytes.fromhex(parts[2])
+            expected = bytes.fromhex(parts[3])
+        except (TypeError, ValueError):
+            return False, False
+        derived = hashlib.pbkdf2_hmac("sha256", value.encode("utf-8"), salt, rounds)
+        return hmac.compare_digest(derived, expected), False
+    legacy = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(legacy, stored_hash), True
 
 
 def _new_secret(prefix: str) -> str:
