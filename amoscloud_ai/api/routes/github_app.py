@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from amoscloud_ai import codex_memory, github_issue_commands
-from amoscloud_ai.api.routes.agent import _authenticated_user
+from amoscloud_ai.api.routes.agent import _authenticated_user, _require_authority_scope
 from amoscloud_ai.api.routes.github_repositories import _db as _repository_db
 from amoscloud_ai.cloud_configuration import load_cloud_configuration
 from amoscloud_ai.db_migrations import ensure_github_repository_schema
@@ -439,6 +439,7 @@ async def list_issue_commands(
     limit: int = 30,
 ) -> dict:
     user = _authenticated_user(request)
+    _require_authority_scope(user, "github:read")
     if not user:
         raise HTTPException(
             status_code=401,
