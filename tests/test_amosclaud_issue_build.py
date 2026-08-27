@@ -37,7 +37,7 @@ def test_issue_build_pins_exact_default_branch_revision() -> None:
     source = BUILD_WORKFLOW.read_text(encoding="utf-8")
     assert "base_sha = subprocess.check_output" in source
     assert "ref: ${{ steps.request.outputs.base_sha }}" in source
-    assert 'git -C target rev-parse HEAD' in source
+    assert "git -C target rev-parse HEAD" in source
     assert '!= "$BUILD_BASE_SHA"' in source
 
 
