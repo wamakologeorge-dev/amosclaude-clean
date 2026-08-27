@@ -19,18 +19,14 @@ def test_ci_colors_are_product_truth_not_provider_truth() -> None:
 
 
 def test_merge_requires_green_ci_for_exact_head_sha() -> None:
-    assert first_production.merge_allowed(
-        ci_status="success", head_sha="abc", verified_sha="abc"
-    )
+    assert first_production.merge_allowed(ci_status="success", head_sha="abc", verified_sha="abc")
     assert not first_production.merge_allowed(
         ci_status="success", head_sha="new", verified_sha="old"
     )
     assert not first_production.merge_allowed(
         ci_status="failed", head_sha="abc", verified_sha="abc"
     )
-    assert not first_production.merge_allowed(
-        ci_status=None, head_sha="abc", verified_sha=None
-    )
+    assert not first_production.merge_allowed(ci_status=None, head_sha="abc", verified_sha=None)
 
 
 def test_external_provider_failure_does_not_change_amosclaud_ci_color() -> None:
