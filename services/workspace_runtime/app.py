@@ -104,6 +104,7 @@ class WorkspaceStart(BaseModel):
     repository_id: int = Field(gt=0)
     owner_id: int = Field(gt=0)
     environment: dict[str, str] = Field(default_factory=dict)
+    read_only: bool = False
 
 
 class TerminalTicket(BaseModel):
@@ -282,6 +283,12 @@ def _public(container) -> dict[str, Any]:
         "network": WORKSPACE_NETWORK,
         "user": WORKSPACE_USER,
         "workspace_image": WORKSPACE_IMAGE,
+        "read_only": labels.get("amosclaud.read_only", "false").lower() == "true",
+        "access_mode": (
+            "read-only"
+            if labels.get("amosclaud.read_only", "false").lower() == "true"
+            else "writable"
+        ),
     }
 
 
@@ -390,6 +397,23 @@ def start_workspace(
                 ),
             )
         container.reload()
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        existing_read_only = (
+            labels.get("amosclaud.read_only", "false").lower() == "true"
+        )
+        if existing_read_only != bool(body.read_only):
+            if container.attrs.get("State", {}).get("Running"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Workspace is already running with a different access mode. "
+                        "Stop it before switching between read-only and writable access."
+                    ),
+                )
+            container.remove(force=False)
+            container = None
+        if container is None:
+            raise NotFound()
         if not container.attrs.get("State", {}).get("Running"):
             container.start()
         return _public(container)
@@ -407,7 +431,12 @@ def start_workspace(
             user=WORKSPACE_USER,
             working_dir="/workspace",
             environment=_safe_environment(body.environment),
-            volumes={str(storage): {"bind": "/workspace", "mode": "rw"}},
+            volumes={
+                str(storage): {
+                    "bind": "/workspace",
+                    "mode": "ro" if body.read_only else "rw",
+                }
+            },
             labels={
                 "amosclaud.managed": "true",
                 "amosclaud.workspace_id": workspace_id,
@@ -415,6 +444,7 @@ def start_workspace(
                 "amosclaud.owner_id": str(body.owner_id),
                 "amosclaud.storage_path": str(storage),
                 "amosclaud.workspace_image": WORKSPACE_IMAGE,
+                "amosclaud.read_only": "true" if body.read_only else "false",
             },
             nano_cpus=int(CPU_LIMIT * 1_000_000_000),
             mem_limit=f"{MEMORY_LIMIT}m",

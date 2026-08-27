@@ -23,6 +23,7 @@ Amosclaud terminal tools
   amos problems             Run safe repository problem checks
   amos connectors           Show repository connectors without credentials
   amos network              Diagnose interfaces, routes, DNS, and HTTPS
+  amos markdown <command>   Check, inspect, or render Markdown safely
   amos commit [message]     Commit current repository changes
   amos help                 Show this help
 
@@ -198,6 +199,9 @@ case "$command_name" in
     printf 'Agent connector: Amosclaud terminal agent hub\n'
     printf 'Repository connector: persistent repository storage\n'
     printf 'Terminal provider: %s\n' "${AMOSCLAUD_TERMINAL_PROVIDER:-isolated}"
+    ;;
+  markdown)
+    exec amosclaud-markdown "$@"
     ;;
   network)
     printf '=== Amosclaud network diagnostics ===\n'

@@ -16,26 +16,28 @@ Code, GitHub Codespaces, `vscode.dev`, and `insiders.vscode.dev`.
 
 ## Self terminal
 
-The self terminal is a VS Code Pseudoterminal connected to the managed Amosclaud
-runtime over a short-lived, single-use WebSocket ticket. It is not the local
-PowerShell terminal shown by `vscode.dev` when no compute environment is
-attached.
+The self terminal is a VS Code Pseudoterminal connected to the isolated Amosclaud
+Docker runtime over a short-lived, single-use WebSocket ticket. If the isolated
+runtime is unavailable, an authenticated managed fallback is used for developer
+accounts. It is not the local PowerShell terminal shown by `vscode.dev` when no
+compute environment is attached.
 
 When a terminal opens:
 
 1. The extension reads the current user's Autonomous key from VS Code Secret
    Storage.
-2. Amosclaud lists only repositories owned by that account.
+2. Amosclaud lists repositories that account may inspect or develop.
 3. The user selects a repository.
-4. The server starts that repository's managed workspace.
+4. The server starts that repository's isolated Docker workspace.
 5. A one-time ticket opens a Bash, `sh`, or Python terminal inside the selected
-   repository.
+   repository. Viewer sessions are mounted read-only.
 
 Each account has independent authentication, repository access checks, runtime
 identity, home directory, and active-session limits. A ticket is bound to one
 user, one repository, one terminal id, and one profile; it cannot be reused.
-Managed same-service terminals remain owner-only. Team developers can use the
-separate isolated workspace runtime when organization collaboration is enabled.
+Repository viewers cannot commit, push, or use the managed fallback. Team
+developers can use the same isolated workspace runtime with repository write
+access when collaboration is enabled.
 
 Configure the default terminal profile with `amosclaud.terminalProfile`:
 
@@ -78,7 +80,7 @@ For a test installation:
 3. Run **Amosclaud: Configure Autonomous Token** and store that user's personal
    key.
 4. Run **Amosclaud: Open Self Terminal**.
-5. Select a repository owned by that Amosclaud account.
+5. Select a repository that account owns or is allowed to inspect.
 
 Browser-only VS Code should use the published Marketplace version when the
 `amosclaud` publisher release is available.
@@ -90,4 +92,4 @@ Browser-only VS Code should use the published Marketplace version when the
 3. Press `F5` for the desktop Extension Development Host, or use a VS Code web
    extension development host for browser testing.
 4. Run **Amosclaud: Configure Autonomous Token**.
-5. Run **Amosclaud: Open Self Terminal** and select an owned repository.
+5. Run **Amosclaud: Open Self Terminal** and select an available repository.

@@ -55,11 +55,11 @@ local PowerShell process or a Codespace merely to display the Amosclaud shell.
 The sequence is:
 
 1. VS Code reads that user's Autonomous key from Secret Storage.
-2. `GET /api/v1/vscode-terminal/repositories` returns only repositories owned by
-   the authenticated account.
+2. `GET /api/v1/vscode-terminal/repositories` returns repositories the
+   authenticated account can inspect or develop.
 3. The user chooses a repository.
-4. `POST /api/v1/vscode-terminal/repositories/{id}/start` starts its managed
-   workspace.
+4. `POST /api/v1/vscode-terminal/repositories/{id}/start` starts its isolated
+   Docker workspace, using a read-only mount for viewers.
 5. `POST /api/v1/vscode-terminal/repositories/{id}/ticket` creates a 120-second,
    single-use ticket.
 6. VS Code connects to the returned `wss://` address and streams the repository
@@ -74,10 +74,12 @@ Every ticket is bound to:
 - one runtime profile;
 - one expiration time.
 
-Tickets are removed on first use. The server rechecks repository ownership when
-the WebSocket opens. Managed terminals run with per-user runtime identities,
-private home directories, scrubbed environments, repository-scoped working
-directories, and per-user active-session limits.
+Tickets are removed on first use. The server rechecks repository access when the
+WebSocket opens. Isolated terminals run with a non-root identity, private home
+directories, scrubbed environments, repository-scoped working directories,
+resource limits, and per-user active-session limits. Viewer sessions cannot
+commit or push; developer and owner sessions may use the governed repository
+actions.
 
 The available profiles are:
 
@@ -85,9 +87,9 @@ The available profiles are:
 - `sh`
 - `python`
 
-Managed same-service terminals remain owner-only because they run in the public
-service fallback. Organization developers should use the separate isolated
-workspace runtime when collaborative terminal access is enabled.
+Managed same-service terminals remain restricted to developers and owners
+because they run in the public service fallback. Repository viewers need the
+separate isolated runtime for read-only terminal access.
 
 ## Opening the terminal
 
@@ -97,7 +99,7 @@ After installing the extension and configuring a personal Autonomous key:
 2. Run **Amosclaud: Open Self Terminal**; or
 3. Open **Terminal: Select Default Profile** and select **Amosclaud Self
    Terminal**.
-4. Choose one of the repositories owned by the current account.
+4. Choose one of the repositories available to the current account.
 
 ## Packaging
 

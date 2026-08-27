@@ -119,11 +119,34 @@ def _repository(repository_id: int, user_id: int) -> sqlite3.Row:
 
 def _workspace(repository_id: int, user: sqlite3.Row) -> dict[str, Any]:
     repository = _repository(repository_id, int(user["id"]))
-    _require_write(repository)
     return workspace_runtime.workspace_for_repository(
         int(repository["id"]),
         int(repository["owner_id"]),
     )
+
+
+def _workspace_context(
+    repository_id: int,
+    user: sqlite3.Row,
+) -> tuple[dict[str, Any], sqlite3.Row]:
+    """Resolve a workspace for any authorized repository reader.
+
+    Repository writes remain protected by ``_require_write`` at the mutation
+    boundary. This helper only establishes read access so status, diagnostics,
+    Markdown, and read-only Docker terminals work for collaborators and public
+    repository readers.
+    """
+
+    repository = _repository(repository_id, int(user["id"]))
+    workspace = workspace_runtime.workspace_for_repository(
+        int(repository["id"]),
+        int(repository["owner_id"]),
+    )
+    return workspace, repository
+
+
+def _can_write(repository: sqlite3.Row) -> bool:
+    return str(repository["role"] or "viewer") in {"owner", "developer"}
 
 
 def _external_health() -> dict[str, Any]:
@@ -158,7 +181,7 @@ def _running_workspace(
     repository_id: int,
     user: sqlite3.Row,
 ) -> tuple[dict[str, Any], str]:
-    workspace = _workspace(repository_id, user)
+    workspace, repository = _workspace_context(repository_id, user)
     provider = _workspace_provider(workspace)
     if provider == "external":
         external = _external_health()
@@ -171,11 +194,18 @@ def _running_workspace(
                     detail="The isolated workspace runtime is temporarily unreachable.",
                 ) from exc
             if container.get("running"):
+                if not _can_write(repository) and not bool(container.get("read_only")):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "This workspace is writable for a developer. Stop it and "
+                            "restart it in read-only mode before opening it as a viewer."
+                        ),
+                    )
                 return workspace, "external"
     managed = managed_terminal.status(workspace)
     if managed.get("running"):
-        repository = _repository(repository_id, int(user["id"]))
-        _require_owner(repository)
+        _require_write(repository)
         return workspace, "managed"
     raise HTTPException(status_code=409, detail="Start the workspace first")
 
@@ -272,7 +302,7 @@ def repository_workspace_status(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    workspace = _workspace(repository_id, user)
+    workspace, repository = _workspace_context(repository_id, user)
     health = _effective_health()
     provider = _workspace_provider(workspace)
     payload: dict[str, Any] = {
@@ -280,6 +310,11 @@ def repository_workspace_status(
         "runtime": health,
         "persistent_repository": True,
         "provider": provider,
+        "access": {
+            "role": str(repository["role"] or "viewer"),
+            "can_write": _can_write(repository),
+            "terminal_mode": "writable" if _can_write(repository) else "read-only",
+        },
     }
     if provider == "external" and health.get("external_runtime", {}).get("ok"):
         if workspace["runtime_status"] != "not_started":
@@ -299,7 +334,8 @@ def start_repository_workspace(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    workspace = _workspace(repository_id, user)
+    workspace, repository = _workspace_context(repository_id, user)
+    can_write = _can_write(repository)
     external = _external_health()
     if external.get("ok"):
         try:
@@ -309,19 +345,33 @@ def start_repository_workspace(
                     "AMOSCLAUD_PROJECT_REPOSITORY_ID": str(repository_id),
                     "AMOSCLAUD_PROJECT_OWNER_ID": str(workspace["owner_id"]),
                 },
+                read_only=not can_write,
             )
             return {
                 "workspace": workspace,
                 "container": container,
                 "provider": "external",
+                "access": {
+                    "role": str(repository["role"] or "viewer"),
+                    "can_write": can_write,
+                    "terminal_mode": "writable" if can_write else "read-only",
+                },
             }
-        except RuntimeError:
+        except RuntimeError as exc:
+            if "different access mode" in str(exc).casefold():
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
             # Fall through to the same-service runtime rather than presenting the
             # user with another dead end.
-            pass
+            if not can_write:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "The read-only Docker workspace could not start. "
+                        "The managed fallback is available only to developers."
+                    ),
+                )
 
-    repository = _repository(repository_id, int(user["id"]))
-    _require_owner(repository)
+    _require_write(repository)
     try:
         container = managed_terminal.start(workspace)
     except RuntimeError as exc:
@@ -333,6 +383,11 @@ def start_repository_workspace(
         "workspace": workspace,
         "container": container,
         "provider": "managed",
+        "access": {
+            "role": str(repository["role"] or "viewer"),
+            "can_write": True,
+            "terminal_mode": "writable",
+        },
         "fallback_reason": external.get("detail"),
     }
 
@@ -342,11 +397,10 @@ def stop_repository_workspace(
     repository_id: int,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    workspace = _workspace(repository_id, user)
+    workspace, repository = _workspace_context(repository_id, user)
+    _require_write(repository)
     provider = _workspace_provider(workspace)
     if provider == "managed":
-        repository = _repository(repository_id, int(user["id"]))
-        _require_owner(repository)
         container = managed_terminal.stop(workspace)
         return {"workspace": workspace, "container": container, "provider": "managed"}
     try:

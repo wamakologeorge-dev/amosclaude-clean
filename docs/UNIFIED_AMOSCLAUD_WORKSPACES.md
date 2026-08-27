@@ -94,15 +94,18 @@ Docker socket into the public platform container.
 
 ## Editor and terminal
 
-The workspace image runs code-server. Its integrated terminal is powered by the
-browser editor and executes as the same restricted non-root user inside the
-workspace container.
+The canonical runtime image contains the Amosclaud developer toolchain,
+`amos`, and `amosclaud-markdown`. The authenticated Amosclaud browser editor and
+Xterm.js terminal run commands in the same non-root Docker container. The VS
+Code companion opens the same repository-scoped terminal over a short-lived
+ticket, so users do not need a local checkout or local runtime.
 
-The worker does not publish code-server directly. Production must place an
-authenticated Amosclaud gateway in front of editor and terminal traffic. The
-configured editor URL must use HTTPS and terminal WebSocket URLs must use WSS.
-The gateway must verify the Amosclaud session and workspace ownership on every
-connection before proxying to the isolated workspace.
+The runtime does not publish a container port. Production exposes only the
+authenticated Amosclaud terminal gateway through HTTPS/WSS. The gateway must
+verify the user, repository role, workspace id, ticket, and origin on every
+connection. Viewer sessions request a read-only repository mount; commits,
+pushes, and managed fallback terminals remain restricted to developers and
+owners.
 
 ## Repository convergence sequence
 
