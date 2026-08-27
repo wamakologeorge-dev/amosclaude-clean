@@ -22,7 +22,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from amosclaud_metrics.integration import install_metrics
+
+# These modules register the persistent project and operator surfaces on the
+# canonical task router. Import them before the router is mounted below.
 from amoscloud_ai import __version__, model_network
+from amoscloud_ai import operator as _operator  # noqa: F401, E402
 from amoscloud_ai.api.routes import (
     academy,
     account,
@@ -48,6 +52,7 @@ from amoscloud_ai.api.routes import (
     doctor_medical,
     doctor_travel,
     downloads,
+    executor,
     feed,
     first_party_chat,
     github_app,
@@ -196,6 +201,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_chain.router, prefix="/api/v1")
     app.include_router(metadata_dashboard.router, prefix="/api/v1/agent-chain")
     app.include_router(agent.router, prefix="/api/v1")
+    app.include_router(executor.router, prefix="/api/v1")
     app.include_router(agent_buddies.router, prefix="/api/v1")
     app.include_router(agent_readiness.router, prefix="/api/v1")
     app.include_router(amo_runtime.router, prefix="/api/v1")

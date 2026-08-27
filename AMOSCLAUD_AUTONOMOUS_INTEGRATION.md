@@ -17,6 +17,8 @@ The agent then asks only the questions required to understand the objective, sum
 ## Files
 
 - `amosclaud_autonomous_conversation.py` — FastAPI conversation service.
+- `amosclaud_executor/` — governed plan/execute/verify/commit/pull-request product facade.
+- `amoscloud_ai/api/routes/executor.py` — authenticated platform API for the executor.
 - `requirements.txt` — Python dependencies.
 - `.env.example` — environment configuration example.
 
@@ -38,7 +40,8 @@ The agent then asks only the questions required to understand the objective, sum
    Do not execute until the user replies `Proceed`.
 
 6. **Controlled execution**
-   Send the plan to the appropriate repository, coding, deployment, or monitoring adapter.
+   Send the approved plan to Amosclaud-executor. Repository work uses the existing
+   bounded coding runtime; GitHub delivery uses a fresh authenticated clone.
 
 7. **Verification**
    Run tests, health checks, build checks, or endpoint checks.
@@ -157,37 +160,64 @@ monitorButton.onclick = () => sendToAmosclaud("Monitor");
 proceedButton.onclick = () => sendToAmosclaud("Proceed");
 ```
 
-## Integrating real autonomous tools
+## Amosclaud-executor API
 
-`JobExecutor.execute()` is the integration boundary. Replace its placeholder logic with service adapters.
-
-Recommended adapters:
+The authenticated main application exposes three product endpoints:
 
 ```text
-JobExecutor
-├── RepositoryAdapter
-│   ├── inspect repository
-│   ├── create branch
-│   ├── edit files
-│   ├── commit changes
-│   └── open pull request
-├── VerificationAdapter
-│   ├── run pytest
-│   ├── run lint
-│   ├── run build
-│   └── collect logs
-├── DeploymentAdapter
-│   ├── deploy
-│   ├── read deployment status
-│   └── verify public URL
-└── MonitoringAdapter
-    ├── health checks
-    ├── uptime
-    ├── logs
-    └── alert conditions
+GET  /api/v1/executor/capabilities
+POST /api/v1/executor/plan
+POST /api/v1/executor/execute
 ```
 
-Each adapter should return structured evidence instead of only text:
+`repository_id` must refer to a repository owned by the signed-in user. A plan
+never writes files. Execution requires the returned `plan_id` and the exact
+confirmation `Proceed`; the service consumes the plan once and checks that the
+objective, target, and source branch have not changed.
+
+For a GitHub repository, execution clones the selected base branch, asks the
+configured model for a complete-file proposal, applies protected-path checks,
+runs verification, commits only after verification passes, checks that the base
+branch is unchanged, pushes a new branch, and opens a draft pull request. It
+does not merge. For a native Amosclaud repository, use `delivery: "branch"` to
+create a verified local branch commit.
+
+Example plan request:
+
+```json
+{
+  "repository_id": 7,
+  "objective": "Fix the failing GitHub Actions tests",
+  "source_branch": "main"
+}
+```
+
+Example execute request:
+
+```json
+{
+  "repository_id": 7,
+  "objective": "Fix the failing GitHub Actions tests",
+  "source_branch": "main",
+  "plan_id": "plan_returned_by_the_plan_endpoint",
+  "confirmation": "Proceed",
+  "delivery": "pull_request",
+  "draft": true
+}
+```
+
+The result includes `status`, `changed_files`, `checks`, `commit`,
+`pull_request_url`, `evidence`, and `blockers`. A completed result always has a
+commit and verification evidence. Missing model configuration, a stale base
+branch, failed tests, unsafe paths, or GitHub permission failures remain
+explicit blockers.
+
+The standalone conversation service uses the same facade for a trusted local
+workspace when `AMOSCLAUD_EXECUTOR_WORKSPACE` is configured. Without that
+operator-managed workspace it returns a blocker instead of claiming that a
+write occurred.
+
+Each execution result is structured evidence rather than only text:
 
 ```python
 {

@@ -151,6 +151,7 @@ class AutonomousCodingRuntime:
         source_branch: str,
         author_name: str,
         author_email: str,
+        branch_prefix: str | None = None,
     ) -> CodingRuntimeResult:
         clean_objective = " ".join((objective or "").strip().split())
         clean_source = (source_branch or "main").strip()
@@ -187,7 +188,12 @@ class AutonomousCodingRuntime:
             if not effective_changes:
                 raise ValueError("The model did not produce any real file changes")
 
-            branch_name = self._available_branch(repo, clean_objective, base_commit)
+            branch_name = self._available_branch(
+                repo,
+                clean_objective,
+                base_commit,
+                branch_prefix=branch_prefix,
+            )
             repo.create_head(branch_name, repo.head.commit)
             repo.git.checkout(branch_name)
             result.branch = branch_name
@@ -400,10 +406,17 @@ class AutonomousCodingRuntime:
             effective.append(CodingChange(relative, change.content, change.reason))
         return effective
 
-    def _available_branch(self, repo: Repo, objective: str, base_commit: str) -> str:
+    def _available_branch(
+        self,
+        repo: Repo,
+        objective: str,
+        base_commit: str,
+        *,
+        branch_prefix: str | None = None,
+    ) -> str:
         words = _BRANCH_TOKEN.sub(
             "-",
-            objective.lower(),
+            (branch_prefix or objective).lower(),
         ).strip("-")
         words = "-".join(words.split("-")[:6])[:48] or "change"
         digest = hashlib.sha256(f"{objective}\0{base_commit}".encode("utf-8")).hexdigest()[:8]
@@ -438,9 +451,7 @@ class AutonomousCodingRuntime:
                             "name": f"python-syntax:{change.path}",
                             "passed": False,
                             "exit_code": 1,
-                            "summary": (
-                                f"Syntax error at line {exc.lineno}: {exc.msg}"
-                            ),
+                            "summary": (f"Syntax error at line {exc.lineno}: {exc.msg}"),
                             "output": str(exc),
                         }
                     )
@@ -489,9 +500,7 @@ class AutonomousCodingRuntime:
         for path in javascript_paths:
             if node:
                 checks.append(
-                    self._run_check(
-                        f"node-syntax:{path}", [node, "--check", path], timeout=60
-                    )
+                    self._run_check(f"node-syntax:{path}", [node, "--check", path], timeout=60)
                 )
 
         tests = list(self.workspace.glob("tests/test_*.py"))
