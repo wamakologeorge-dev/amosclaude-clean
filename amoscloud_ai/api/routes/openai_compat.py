@@ -25,6 +25,7 @@ from amoscloud_ai.agent_tokens import (
     now,
 )
 from amoscloud_ai.api.routes.auth import _connect
+from amoscloud_ai.core import amosclaud_authority as authority
 
 router = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
