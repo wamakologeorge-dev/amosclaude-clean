@@ -45,6 +45,7 @@ from amoscloud_ai.api.routes import (
     copilot,
     core,
     deployments,
+    desktop_gateway,
     doctor_medical,
     doctor_travel,
     downloads,
@@ -176,6 +177,8 @@ def create_app() -> FastAPI:
     # invisible to route discovery and prevented agent tools from executing.
     app.include_router(model_server_folder.router, prefix="/api/v1")
     app.include_router(openai_compat.router)
+    app.include_router(desktop_gateway.discovery_router)
+    app.include_router(desktop_gateway.router)
     app.include_router(mapping_bundles.api_router, prefix="/api/v1")
     app.include_router(mapping_bundles.dashboard_router)
     app.include_router(control_bus_dashboard.router)
