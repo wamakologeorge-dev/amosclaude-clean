@@ -78,7 +78,7 @@ def test_action_tool_catalog_is_allowlisted_and_scope_bound(tmp_path):
     assert {
         "workspace.start",
         "repository.write",
-        "ci.run",
+ "ci.run",
         "github.pull_request.create",
         "deployment.run",
         "model.invoke",
@@ -135,7 +135,8 @@ def test_platform_credentials_share_verifier_and_never_expire(tmp_path):
             "SELECT secret_hash,expires_at FROM amosclaud_credentials WHERE id=?",
             (body["id"],),
         ).fetchone()
-    assert row["secret_hash"] == hashlib.sha256(raw.encode()).hexdigest()
+    assert row["secret_hash"].startswith("pbkdf2_sha256$")
+    assert row["secret_hash"] != hashlib.sha256(raw.encode()).hexdigest()
     assert row["expires_at"] is None
 
     verified = client.get(
