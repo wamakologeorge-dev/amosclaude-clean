@@ -42,8 +42,8 @@ class CopilotRequest(BaseModel):
     context: CopilotContext = Field(default_factory=CopilotContext)
 
 
-def _require_user(request: Request) -> Any:
-    user = _authenticated_user(request)
+def _require_user(request: Request, *, required_scope: str | None = "action:run") -> Any:
+    user = _authenticated_user(request, required_scope=required_scope)
     if not user:
         raise HTTPException(
             status_code=401,
@@ -112,7 +112,7 @@ async def delegate_to_copilot(
 ) -> CopilotDelegationResponse:
     """Preserve the original endpoint while using the real agent coordinator."""
 
-    _require_user(request)
+    _require_user(request, required_scope=None)
     metadata = dict(body.metadata or {})
     try:
         context = CopilotContext(

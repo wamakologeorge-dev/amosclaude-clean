@@ -10,6 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import _connect, get_user_from_session
+from amoscloud_ai.core import amosclaud_authority as authority
 from amoscloud_ai.autonomous_api_chain import AutonomousChainRequest, execute_autonomous_chain
 from amoscloud_ai.model_services import readiness
 
@@ -27,6 +28,7 @@ class ConnectorRunRequest(BaseModel):
     conversation_id: str | None = Field(default=None, max_length=128)
     use_model: bool = False
     apply_changes: bool = False
+    workspace_id: str | None = Field(default=None, max_length=200)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -67,10 +69,39 @@ def _connector_key(authorization: str | None, x_api_key: str | None) -> str:
     return ""
 
 
-def _connector_user(authorization: str | None, x_api_key: str | None) -> dict[str, Any]:
+def _connector_user(
+    authorization: str | None,
+    x_api_key: str | None,
+    *,
+    workspace_id: str | None = None,
+) -> dict[str, Any]:
     raw = _connector_key(authorization, x_api_key)
     if not raw:
         raise HTTPException(status_code=401, detail="Provide an Amosclaud Autonomous API key")
+    authority_principal = authority.verify_credential(
+        raw,
+        required_scope="action:run",
+        workspace_id=workspace_id,
+    )
+    if authority_principal:
+        if not authority_principal["scope_granted"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "scope_not_granted",
+                    "required_scope": "action:run",
+                    "scopes": authority_principal["scopes"],
+                },
+            )
+        return {
+            "id": authority_principal["user_id"],
+            "name": authority_principal["name"],
+            "email": authority_principal["email"],
+            "is_admin": int(authority_principal["is_admin"]),
+            "provider": authority_principal["provider"],
+            "key_id": authority_principal["credential_id"],
+            "_amosclaud_principal": authority_principal,
+        }
     now = datetime.now(timezone.utc).isoformat()
     with _connect() as db:
         _key_schema(db)
@@ -179,7 +210,21 @@ async def run_connector_task(
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> dict:
-    user = _connector_user(authorization, x_api_key)
+    user = _connector_user(
+        authorization,
+        x_api_key,
+        workspace_id=body.workspace_id,
+    )
+    principal = user.get("_amosclaud_principal")
+    if principal and body.use_model and not authority.scope_allowed(principal, "model:invoke"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "scope_not_granted",
+                "required_scope": "model:invoke",
+                "scopes": principal["scopes"],
+            },
+        )
     try:
         result = execute_autonomous_chain(
             AutonomousChainRequest(

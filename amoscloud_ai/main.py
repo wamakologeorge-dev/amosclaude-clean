@@ -38,6 +38,7 @@ from amoscloud_ai.api.routes import (
     agent_readiness,
     amo_runtime,
     amo_tokens,
+    amosclaud_authority,
     amos_mail,
     amos_secure_code,
     auth,
