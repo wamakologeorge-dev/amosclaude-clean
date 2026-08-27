@@ -34,9 +34,7 @@ def validate_build_patch(
     effective_policy = copy.deepcopy(policy)
     regular = effective_policy.setdefault("regular_patch", {})
     regular["max_changed_files"] = max(int(regular.get("max_changed_files", 12)), 30)
-    regular["max_patch_bytes"] = max(
-        int(regular.get("max_patch_bytes", 250000)), 750000
-    )
+    regular["max_patch_bytes"] = max(int(regular.get("max_patch_bytes", 250000)), 750000)
     return guarded.validate_patch(patch, effective_policy, mode)
 
 
