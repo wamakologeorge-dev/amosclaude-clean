@@ -45,6 +45,13 @@ def _current_user(amos_session: str | None = Cookie(default=None)):
     return user
 
 
+def _safe_repository_segment(repository_id: int) -> str:
+    segment = str(int(repository_id))
+    if not segment.isdigit():
+        raise HTTPException(status_code=422, detail="Invalid repository id")
+    return segment
+
+
 def _owned_target(repository_id: int, user: sqlite3.Row) -> RepositoryTarget:
     with github_db() as db:
         row = db.execute(
@@ -54,7 +61,8 @@ def _owned_target(repository_id: int, user: sqlite3.Row) -> RepositoryTarget:
         if not row:
             raise HTTPException(status_code=404, detail="Repository not found")
 
-        root = (REPOSITORY_ROOT / str(repository_id)).resolve()
+        repository_segment = _safe_repository_segment(repository_id)
+        root = (REPOSITORY_ROOT / repository_segment).resolve()
         storage_root = REPOSITORY_ROOT.resolve()
         try:
             root.relative_to(storage_root)
