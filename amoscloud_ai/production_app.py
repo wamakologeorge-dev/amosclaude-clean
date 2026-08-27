@@ -21,7 +21,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 
-from amoscloud_ai.api.routes import autonomous_keys, owner_access_gateway
+from amoscloud_ai.api.routes import amosclaud_authority, autonomous_keys, owner_access_gateway
 from amoscloud_ai.connected_app import app as connected_platform
 from amoscloud_ai.copilot import build_copilot_plan
 from amoscloud_ai.ollama_compat import apply_ollama_environment
