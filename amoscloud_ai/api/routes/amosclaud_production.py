@@ -43,8 +43,7 @@ def _now() -> str:
 
 def _ensure_control_tables(db: sqlite3.Connection) -> None:
     solo_development._ensure_tables(db)
-    db.executescript(
-        """
+    db.executescript("""
         CREATE TABLE IF NOT EXISTS amosclaud_pr_controls (
             repository_id INTEGER NOT NULL,
             pull_request_id INTEGER NOT NULL,
@@ -54,8 +53,7 @@ def _ensure_control_tables(db: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL,
             PRIMARY KEY(repository_id, pull_request_id)
         );
-        """
-    )
+        """)
     db.commit()
 
 
@@ -105,14 +103,18 @@ def _control(db: sqlite3.Connection, repository_id: int, pull_request_id: int) -
         "SELECT * FROM amosclaud_pr_controls WHERE repository_id=? AND pull_request_id=?",
         (repository_id, pull_request_id),
     ).fetchone()
-    return dict(row) if row else {
-        "repository_id": repository_id,
-        "pull_request_id": pull_request_id,
-        "deleted_at": None,
-        "restored_at": None,
-        "reverted_commit": None,
-        "updated_at": None,
-    }
+    return (
+        dict(row)
+        if row
+        else {
+            "repository_id": repository_id,
+            "pull_request_id": pull_request_id,
+            "deleted_at": None,
+            "restored_at": None,
+            "reverted_commit": None,
+            "updated_at": None,
+        }
+    )
 
 
 def _write_control(
@@ -266,7 +268,9 @@ def control_pull_request(
 
         if action == "close":
             if row["state"] != "open":
-                raise HTTPException(status_code=409, detail="Only an open pull request can be closed")
+                raise HTTPException(
+                    status_code=409, detail="Only an open pull request can be closed"
+                )
             db.execute(
                 "UPDATE native_pull_requests SET state='closed',updated_at=? WHERE id=?",
                 (_now(), pull_request_id),
@@ -274,7 +278,9 @@ def control_pull_request(
             db.commit()
         elif action == "reopen":
             if row["state"] != "closed":
-                raise HTTPException(status_code=409, detail="Only a closed pull request can be reopened")
+                raise HTTPException(
+                    status_code=409, detail="Only a closed pull request can be reopened"
+                )
             db.execute(
                 "UPDATE native_pull_requests SET state='open',updated_at=? WHERE id=?",
                 (_now(), pull_request_id),
@@ -305,7 +311,9 @@ def control_pull_request(
             return solo_development.merge_pull_request(repository_id, pull_request_id, user)
         elif action == "unmerge":
             if row["state"] != "merged" or not row["merge_commit"]:
-                raise HTTPException(status_code=409, detail="Only a merged pull request can be unmerged")
+                raise HTTPException(
+                    status_code=409, detail="Only a merged pull request can be unmerged"
+                )
             repo = _open(repository_id)
             _checkout(repo, row["base_branch"])
             try:
