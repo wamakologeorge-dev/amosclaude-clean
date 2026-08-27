@@ -1,0 +1,277 @@
+name: Amosclaud Issue Build
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: amosclaud-issue-build-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.comment.user.type != 'Bot' &&
+      (startsWith(github.event.comment.body, '/amosclaud build') ||
+       startsWith(github.event.comment.body, '@amosclaud build') ||
+       startsWith(github.event.comment.body, '/amosclaud fix') ||
+       startsWith(github.event.comment.body, '@amosclaud fix'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+
+    steps:
+      - name: Check out trusted Amosclaud build controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up trusted Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: trusted/pyproject.toml
+
+      - name: Parse and authorize issue build request
+        id: request
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'))
+          issue = event.get('issue') or {}
+          comment = event.get('comment') or {}
+          association = str(comment.get('author_association') or '').upper()
+          if association not in {'OWNER', 'MEMBER', 'COLLABORATOR'}:
+              raise SystemExit('Amosclaud build is restricted to repository owners, members, and collaborators')
+          if issue.get('pull_request'):
+              raise SystemExit('Issue build lane only accepts issue threads; PR repairs stay on /amosclaud fix')
+
+          body = str(comment.get('body') or '')
+          match = re.match(r'^\s*(?:/amosclaud|@amosclaud)\s+(build|fix)\b\s*(.*)$', body, re.I | re.S)
+          if not match:
+              raise SystemExit('comment is not an Amosclaud build/fix request')
+          command = match.group(1).lower()
+          objective = match.group(2).strip() or str(issue.get('body') or '').strip()
+          if not objective:
+              raise SystemExit('Amosclaud build requires an objective')
+
+          base_sha = subprocess.check_output(
+              ['git', '-C', 'trusted', 'rev-parse', 'HEAD'], text=True
+          ).strip()
+          issue_number = int(issue.get('number') or 0)
+          request_path = Path(os.environ['RUNNER_TEMP']) / 'amosclaud-issue-build-request.txt'
+          request_path.write_text(
+              'Amosclaud issue build request\n'
+              f'Issue: #{issue_number}\n'
+              f'Title: {issue.get("title") or ""}\n'
+              f'Command: {command}\n'
+              f'Base revision: {base_sha}\n\n'
+              'Issue body:\n'
+              f'{issue.get("body") or ""}\n\n'
+              'Requested objective:\n'
+              f'{objective}\n',
+              encoding='utf-8',
+          )
+
+          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as handle:
+              handle.write(f'base_sha={base_sha}\n')
+              handle.write(f'issue_number={issue_number}\n')
+              handle.write(f'command={command}\n')
+          with Path(os.environ['GITHUB_ENV']).open('a', encoding='utf-8') as handle:
+              handle.write(f'BUILD_REQUEST_FILE={request_path}\n')
+              handle.write(f'BUILD_ISSUE_NUMBER={issue_number}\n')
+              handle.write(f'BUILD_BASE_SHA={base_sha}\n')
+          PY
+
+      - name: Acknowledge accepted build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue comment "$BUILD_ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "<!-- amosclaud-github-chat -->
+          ### Amosclaud Agent
+
+          Build accepted from issue #${BUILD_ISSUE_NUMBER} at exact base revision \`${BUILD_BASE_SHA}\`.
+
+          Amosclaud is generating a bounded implementation, verifying it without model/GitHub credentials, and will open a review PR only if verification passes."
+
+      - name: Check out exact build base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.request.outputs.base_sha }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install trusted verification tools
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --upgrade pip setuptools wheel
+          python -m pip install --disable-pip-version-check flake8 pytest pytest-asyncio
+
+      - name: Generate bounded build candidate
+        id: candidate
+        env:
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+          OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+          AMOSCLAUD_MODEL: ${{ vars.AMOSCLAUD_MODEL }}
+          AMOSCLAUD_GATEWAY_API_KEY: ${{ secrets.AMOSCLAUD_API_KEY }}
+          AMOSCLAUD_GATEWAY_API_URL: ${{ vars.AMOSCLAUD_API_URL }}
+          AMOSCLAUD_GATEWAY_BUILD_MODEL: ${{ vars.AMOSCLAUD_AGENT_MODEL }}
+          PATCH_PATH: ${{ runner.temp }}/amosclaud-build.patch
+          CANDIDATE_REPORT: ${{ runner.temp }}/amosclaud-build-candidate.json
+        run: |
+          set +e
+          if [ -n "$OLLAMA_API_KEY" ]; then
+            export AMOSCLAUD_API_KEY="$OLLAMA_API_KEY"
+            export AMOSCLAUD_API_URL="${OLLAMA_URL:-https://ollama.com}"
+            export AMOSCLAUD_FIXER_MODEL="${OLLAMA_MODEL:-${AMOSCLAUD_MODEL:-gpt-oss:120b}}"
+            export AMOSCLAUD_REPAIR_PROVIDER="ollama-cloud"
+          else
+            export AMOSCLAUD_API_KEY="$AMOSCLAUD_GATEWAY_API_KEY"
+            export AMOSCLAUD_API_URL="${AMOSCLAUD_GATEWAY_API_URL:-https://amosclauds.com}"
+            export AMOSCLAUD_FIXER_MODEL="${AMOSCLAUD_GATEWAY_BUILD_MODEL:-amosclaud-agent}"
+            export AMOSCLAUD_REPAIR_PROVIDER="amosclaud-gateway"
+          fi
+          python trusted/.github/scripts/amosclaud_build_candidate.py \
+            --target target \
+            --instructions-root trusted \
+            --policy trusted/.amosclaud/repair-control-plane.json \
+            --evidence "$BUILD_REQUEST_FILE" \
+            --mode regular \
+            --source "Amosclaud issue build #${BUILD_ISSUE_NUMBER}" \
+            --patch-output "$PATCH_PATH" \
+            --report "$CANDIDATE_REPORT" \
+            2>&1 | tee "${RUNNER_TEMP}/amosclaud-build-candidate.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "applied=$([ "$status" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify candidate without credentials
+        if: steps.candidate.outputs.applied == 'true'
+        id: verify
+        env:
+          CANDIDATE_REPORT: ${{ runner.temp }}/amosclaud-build-candidate.json
+          VERIFY_REPORT: ${{ runner.temp }}/amosclaud-build-verification.json
+        run: |
+          set +e
+          python trusted/.github/scripts/amosclaud_repair_verify.py \
+            --target target \
+            --failure-source "Amosclaud issue build #${BUILD_ISSUE_NUMBER}" \
+            --candidate-report "$CANDIDATE_REPORT" \
+            --report "$VERIFY_REPORT" \
+            2>&1 | tee "${RUNNER_TEMP}/amosclaud-build-verification.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "verified=$([ "$status" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish verified build as a pull request
+        if: steps.verify.outputs.verified == 'true'
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_REPORT: ${{ runner.temp }}/amosclaud-build-candidate.json
+        run: |
+          set -euo pipefail
+          mapfile -t changed_files < <(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path(os.environ['CANDIDATE_REPORT']).read_text(encoding='utf-8'))
+          for item in report.get('changed_files', []):
+              if isinstance(item, str) and item:
+                  print(item)
+          PY
+          )
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "No verified changed files were reported."
+            exit 1
+          fi
+          if [ "$(git -C target rev-parse HEAD)" != "$BUILD_BASE_SHA" ]; then
+            echo "Build base revision changed unexpectedly."
+            exit 1
+          fi
+
+          git -C target config user.name "Amosclaud Builder"
+          git -C target config user.email "builder@amosclaud.internal"
+          git -C target add -A -- "${changed_files[@]}"
+          git -C target diff --cached --quiet && { echo "No verified changes were staged."; exit 1; }
+          git -C target commit -m "feat: Amosclaud issue build #${BUILD_ISSUE_NUMBER}"
+          build_sha="$(git -C target rev-parse HEAD)"
+          branch="amosclaud-build/issue-${BUILD_ISSUE_NUMBER}-${GITHUB_RUN_ID}"
+
+          gh auth setup-git
+          git -C target push origin "HEAD:refs/heads/${branch}"
+
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          ## Amosclaud Issue Build
+
+          - Request issue: #${BUILD_ISSUE_NUMBER}
+          - Base revision: \`${BUILD_BASE_SHA}\`
+          - Build revision: \`${build_sha}\`
+          - Verification: credential-free adaptive verification passed
+          - Direct default-branch write: no
+          - Force push: no
+
+          This PR was created from a trusted \`@Amosclaud build\` / \`/amosclaud build\` request. Normal required checks and review still apply.
+          EOF
+          pr_url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "feat: Amosclaud build request #${BUILD_ISSUE_NUMBER}" --body-file "$body_file")"
+          gh issue comment "$BUILD_ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "<!-- amosclaud-github-chat -->
+          ### Amosclaud Agent
+
+          ✅ Build verified and published for issue #${BUILD_ISSUE_NUMBER}.
+
+          Pull request: ${pr_url}
+          Build revision: \`${build_sha}\`
+
+          The PR is reviewable and normal CI still applies before merge."
+          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "build_sha=$build_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Report build that did not publish
+        if: always() && steps.request.outcome == 'success' && steps.publish.outputs.pr_url == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue comment "$BUILD_ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "<!-- amosclaud-github-chat -->
+          ### Amosclaud Agent
+
+          ❌ This build did not publish a PR because candidate generation or credential-free verification did not pass.
+
+          Workflow evidence: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          No direct write to the default branch was made."
+
+      - name: Upload build evidence
+        if: always() && steps.request.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: amosclaud-issue-build-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/amosclaud-build.patch
+            ${{ runner.temp }}/amosclaud-build-candidate.json
+            ${{ runner.temp }}/amosclaud-build-candidate.log
+            ${{ runner.temp }}/amosclaud-build-verification.json
+            ${{ runner.temp }}/amosclaud-build-verification.log
+          if-no-files-found: ignore
+          retention-days: 14
