@@ -251,3 +251,21 @@ def attach_repository(
 # Flatten the organization identity routes into this router so FastAPI exposes
 # them as first-class operations under the application's /api/v1 prefix.
 router.routes.extend(organization_identity.router.routes)
+
+# Amosclaud Applications are part of the organization authority surface. Import
+# them only after the organization access helpers above exist; the application
+# module reuses those helpers to enforce tenant isolation and admin approval.
+from amoscloud_ai.api.routes import applications as _applications  # noqa: E402
+
+_existing_application_keys = {
+    (getattr(route, "path", None), tuple(sorted(getattr(route, "methods", None) or ())))
+    for route in router.routes
+}
+for _route in _applications.router.routes:
+    _key = (
+        getattr(_route, "path", None),
+        tuple(sorted(getattr(_route, "methods", None) or ())),
+    )
+    if _key not in _existing_application_keys:
+        router.routes.append(_route)
+        _existing_application_keys.add(_key)

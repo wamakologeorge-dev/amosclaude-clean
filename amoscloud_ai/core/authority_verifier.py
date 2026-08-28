@@ -1,9 +1,9 @@
 """Credential lookup for salted Amosclaud Authority secrets.
 
 PBKDF2 hashes use a random salt, so a presented credential cannot be hashed
-again and compared directly in SQL. The stable public prefix narrows the
+again and compared directly in SQL.  The stable public prefix narrows the
 candidate set; the stored PBKDF2 value is then checked in constant time by the
-Authority module's verifier. Legacy SHA-256 rows are upgraded after a
+Authority module's verifier.  Legacy SHA-256 rows are upgraded after a
 successful authentication.
 """
 

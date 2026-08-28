@@ -10,7 +10,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 from amoscloud_ai.agent.assistant_system_template import ASSISTANT_SYSTEM_TEMPLATE
 from amoscloud_ai.api.routes.auth import get_user_from_session
-from amoscloud_ai.api.routes.autonomous_keys import authenticate_autonomous_key
+from amoscloud_ai.api.routes.autonomous_keys import (
+    authenticate_autonomous_key,
+    autonomous_key_skills,
+)
 from amoscloud_ai.autonomous_server import run_autonomous_server
 from amoscloud_ai.core import amosclaud_authority as authority
 from amoscloud_ai.logger import log
@@ -35,6 +38,13 @@ AGENT_MODE = "agent"
 AGENT_SCOPE = [AGENT_HOME, AGENT_PIPELINE]
 AGENT_DIRECTIVES = list(ASSISTANT_SYSTEM_TEMPLATE.principles)
 ALLOWED_MODES = {"autonomous-check", "build", "fix", "deploy", "monitor"}
+MODE_SCOPES = {
+    "autonomous-check": "inspect",
+    "build": "build",
+    "fix": "fix",
+    "deploy": "deploy",
+    "monitor": "monitor",
+}
 GREETING_WORDS = {
     "hi",
     "hello",
@@ -125,11 +135,127 @@ def _bearer_token(request: Request) -> str | None:
     return None
 
 
-def _authenticated_user(request: Request):
+def _user_value(user, key: str, default=None):
+    if user is None:
+        return default
+    try:
+        return user[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def _authority_user(principal: dict) -> dict:
+    return {
+        "id": principal["user_id"],
+        "name": principal.get("name") or "",
+        "email": principal.get("email") or "",
+        "is_admin": int(bool(principal.get("is_admin"))),
+        "provider": principal.get("provider") or "amosclaud",
+        "key_id": principal.get("credential_id"),
+        "_amosclaud_principal": principal,
+    }
+
+
+def _authenticated_user(request: Request, required_scope: str | None = None):
+    """Authenticate a session, Amosclaud Authority secret, or legacy Agent key."""
+
     user = get_user_from_session(request.cookies.get("amos_session"))
     if user:
         return user
-    return authenticate_autonomous_key(_bearer_token(request))
+
+    raw = _bearer_token(request)
+    if not raw:
+        return None
+
+    principal = authority.verify_credential(raw, required_scope=required_scope)
+    if principal is not None:
+        if required_scope and not principal["scope_granted"]:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "scope_not_granted",
+                    "required_scope": required_scope,
+                    "scopes": principal["scopes"],
+                },
+            )
+        return _authority_user(principal)
+
+    return authenticate_autonomous_key(raw)
+
+
+def _require_authority_scope(user, required_scope: str) -> None:
+    """Enforce a scoped Authority permission without breaking signed-in users."""
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in or provide a valid Amosclaud credential",
+        )
+    if bool(_user_value(user, "is_admin", False)):
+        return
+
+    principal = _user_value(user, "_amosclaud_principal")
+    if principal is not None:
+        if authority.scope_allowed(principal, required_scope):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "scope_not_granted",
+                "required_scope": required_scope,
+                "scopes": principal.get("scopes") or [],
+            },
+        )
+
+    if _user_value(user, "autonomous_skills") is not None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "authority_scope_required",
+                "required_scope": required_scope,
+            },
+        )
+
+    # A signed-in Amosclaud account is already governed by its normal account,
+    # repository, workspace, approval, and billing checks at the target route.
+
+
+def _require_mode_scope(user, mode: str) -> None:
+    """Require the selected Agent mode for credential-authenticated execution."""
+
+    required_scope = MODE_SCOPES.get(mode)
+    if required_scope is None:
+        raise HTTPException(status_code=422, detail="Unknown autonomous mode")
+    if bool(_user_value(user, "is_admin", False)):
+        return
+
+    principal = _user_value(user, "_amosclaud_principal")
+    if principal is not None:
+        if authority.scope_allowed(principal, required_scope):
+            return
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "scope_not_granted",
+                "required_scope": required_scope,
+                "scopes": principal.get("scopes") or [],
+            },
+        )
+
+    legacy_skills = autonomous_key_skills(user)
+    if legacy_skills:
+        if required_scope in legacy_skills:
+            return
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "autonomous_skill_not_granted",
+                "required_scope": required_scope,
+                "skills": sorted(legacy_skills),
+            },
+        )
+
+    # Cookie-authenticated users continue through the existing governed route.
 
 
 def _authority_principal(user) -> dict | None:
