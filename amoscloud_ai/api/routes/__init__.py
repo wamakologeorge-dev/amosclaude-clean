@@ -286,6 +286,18 @@ for _route in capability_memory_api.router.routes:
     provider_api.router.routes.append(_route)
     _provider_keys |= _keys
 
+# Amosclaud Domain Manager shares the authenticated provider surface. Its
+# verification chain records Vercel project attachment, access verification,
+# DNS configuration, public HTTPS response, and provider-edge evidence.
+from amoscloud_ai.api.routes import domain_manager_api as domain_manager_api
+
+for _route in domain_manager_api.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _provider_keys:
+        continue
+    provider_api.router.routes.append(_route)
+    _provider_keys |= _keys
+
 # Amosclaud Applications are first-class organization integrations. Mount their
 # routes through the canonical organization surface so main.py keeps one stable
 # router while applications can be installed independently in many orgs.
