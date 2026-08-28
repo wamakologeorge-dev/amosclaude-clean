@@ -2,73 +2,121 @@
 
 # Amosclaud
 
-**A self-hosted autonomous engineering control plane that turns repository requests into verified pipelines across agents, execution nodes, Java pods, tests, deployments, telemetry, and PipeFail recovery.**
+**An autonomous software programming platform for building, understanding, running, testing, debugging, repairing, verifying, and operating real software.**
 
-[![Fast PR Gate](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/fast-pr-gate.yml/badge.svg?branch=main)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/fast-pr-gate.yml)
-[![Amosclaud Native Pipeline](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-native-pipeline.yml/badge.svg?branch=main)](https://github.com/wamakologeorge-dev/amosclaude-clean/actions/workflows/amosclaud-native-pipeline.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version 1.0.1](https://img.shields.io/badge/version-1.0.1-6f5bd3)](pyproject.toml)
-[![MIT License](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
+Amosclaud combines a programming-language project, a self-agent programmer, a cloud development workspace, execution runtimes, repository automation, verification, and deployment controls into one developer system.
 
-[Quickstart](docs/QUICKSTART.md) · [Desktop gateway setup](docs/AMOSCLAUD_DESKTOP_GATEWAY.md) · [Pipeline architecture](docs/PIPELINE_ECOSYSTEM.md) · [GitHub automation](docs/GITHUB_ACTIONS.md) · [Demo](docs/DEMO.md) · [Contributing](CONTRIBUTING.md)
+[Quickstart](docs/QUICKSTART.md) · [Programming Language](docs/AMOSCLAUD_LANGUAGE.md) · [Self-Agent Programmer](docs/AMOSCLAUD_SELF_AGENT_PROGRAMMER.md) · [Terminal](docs/AMOSCLAUD_TERMINAL.md) · [Pipeline](docs/PIPELINE_ECOSYSTEM.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
-![Amosclaud pipeline architecture](docs/assets/amosclaud-pipeline-architecture.svg)
+## What Amosclaud is
 
-## What Amosclaud solves
+Amosclaud is being built as a complete computer-programming ecosystem rather than only a chat assistant or CI wrapper. The long-term product contract is simple: a developer should be able to describe or write a program, give Amosclaud an authorized workspace, and receive real files, execution, tests, diagnostics, verified changes, applications, and deployment evidence.
 
-Software work is usually split across chat tools, CI systems, model providers, local machines, cloud runners, logs, and deployment dashboards. Amosclaud brings those systems into one auditable ecosystem:
+The ecosystem has four primary layers:
 
-- one request becomes one durable cooperation pipeline;
-- specialized workers keep their own responsibilities while sharing tasks, events, artifacts, approvals, and capacity;
-- execution nodes lend bounded CPU, memory, disk, GPU, and runtime capabilities through resource leases;
-- Java work runs inside an isolated, non-root Java pod with Maven, Gradle-wrapper, or `javac` support;
-- PipeFail records failure evidence, releases resources, retries bounded work, and can reassign it to a healthy node;
-- protected repository writes, merges, and production deployments remain behind explicit policy and approval gates.
+1. **Amosclaud Programming Language** — the `.amos` language, language specification, parser/runtime project, modules, tooling, and interoperability contract.
+2. **Amosclaud Self-Agent Programmer** — the autonomous engineering agent that plans work, reads and edits repositories, uses terminals, runs tests, debugs failures, verifies results, and can prepare governed repository or deployment actions.
+3. **Amosclaud SpaceCodeMe** — the cloud development workspace for files, editors, terminals, ports, problems, connectors, builds, debugging, and agent collaboration.
+4. **Amosclaud Control Plane** — identity, organizations, repositories, applications, integrations, tokens, execution nodes, pipelines, storage, observability, approvals, and policy.
 
-Amosclaud does not treat a process start as success. A pipeline result is complete only when the configured verification stages return evidence.
+These layers are designed to work together without pretending unfinished functionality is already production-ready. Documentation distinguishes implemented foundations from active development and planned capabilities.
 
-## Platform surfaces
+## Programming with Amosclaud
 
-The Control Plane is designed to unify Flags, Agent, AI Gateway, Sandboxes, Workflows, Images, Usage, Support, Settings, Logs, Analytics, Speed Insights, Observability, Firewall, CDN, Environment Variables, Domains, Connect, Integrations, and Storage.
+The Amosclaud language project uses `.amos` as its source-file identity. Its goal is to support ordinary deterministic programs and first-class software-engineering automation through the same language family.
 
-Some modules are active today, some have a backend foundation, and others remain planned. The interface reports those states truthfully rather than displaying fabricated health.
+A representative target syntax is:
+
+```text
+program HelloAmosclaud
+
+let name = "developer"
+print("Hello, " + name)
+
+agent programmer {
+    objective "Build and verify this project"
+    workspace "."
+    verify tests
+}
+```
+
+This syntax is a language contract under development, not a claim that every construct above is already implemented. The language roadmap includes lexical analysis, parsing, an executable runtime, functions, modules, packages, types, async tasks, process and filesystem APIs, tests, formatting, diagnostics, debugging, language-server support, package management, and controlled agent instructions.
+
+See [docs/AMOSCLAUD_LANGUAGE.md](docs/AMOSCLAUD_LANGUAGE.md).
+
+## Amosclaud Self-Agent Programmer
+
+The Self-Agent Programmer is the engineering execution layer. Instead of stopping at generated text, its intended work cycle is:
+
+```text
+Developer request
+      ↓
+Understand + plan
+      ↓
+Inspect repository/workspace
+      ↓
+Create or edit files
+      ↓
+Run / build / test / lint / debug
+      ↓
+Diagnose failures and repair
+      ↓
+Verify evidence
+      ↓
+Return files, patch, application, PR, deployment, or report
+```
+
+Consequential operations remain permission-aware. Repository writes, credentials, production deployment, protected branches, organization resources, and other sensitive operations must stay within the authority granted to the agent.
+
+See [docs/AMOSCLAUD_SELF_AGENT_PROGRAMMER.md](docs/AMOSCLAUD_SELF_AGENT_PROGRAMMER.md).
+
+## SpaceCodeMe development computer
+
+The repository already contains the foundation for a browser-accessible development workspace with persistent terminal sessions, project tools, execution isolation, debugging, ports, problems, connectors, network diagnostics, Git operations, and agent collaboration.
+
+The product direction is a desktop-style programming environment where a developer can move between projects, repositories, files, terminals, Amosclaud Agent, applications, integrations, deployments, logs, and settings without treating GitHub or a hosting provider as the Amosclaud user interface.
+
+## Existing engineering foundation
+
+Amosclaud already contains substantial platform infrastructure, including repository APIs, autonomous-agent services, cloud-terminal code, software creation and code-analysis services, verification and repair workflows, Docker/self-hosting support, GitHub integration, pipeline orchestration, execution-node concepts, telemetry, and deployment tooling.
+
+Some capabilities require external infrastructure or configuration to operate fully. A merged source implementation also does not by itself prove that a hosted deployment is healthy. Runtime status must be established from real verification and deployment evidence.
 
 ## Five-minute local quickstart
 
 ### Prerequisites
 
-- Python 3.11 or newer
+- Python 3.11+
 - Git
-- Docker with Docker Compose for the full self-hosted stack or Java pod runtime
+- Docker with Docker Compose for the complete self-hosted runtime
 
 ```bash
 git clone https://github.com/wamakologeorge-dev/amosclaude-clean.git
 cd amosclaude-clean
-
 python3 -m venv .venv
-source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1
+source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 pip install -e .
 ```
 
-Get immediate, offline repository evidence without an account, API key, hosted model, or network request:
+Run deterministic repository inspection:
 
 ```bash
-amosclaud-quick . --objective "Find the cause of the failing login tests"
+amosclaud-quick . --objective "Inspect this project and identify the most important failure"
 ```
 
-Run the local API and web application:
+Start the local API/application:
 
 ```bash
 python -m amoscloud_ai.main
 ```
 
-Then open `http://127.0.0.1:8000`. In a development environment, the OpenAPI interface is available at `http://127.0.0.1:8000/docs`.
+Then open `http://127.0.0.1:8000`.
 
-Run the repository validation contract:
+Validate the repository:
 
 ```bash
 make test
@@ -76,69 +124,51 @@ make quality
 make build
 ```
 
-See [the complete quickstart](docs/QUICKSTART.md) for Docker self-hosting, the Java pod image, connected runners, GitHub-native triggers, and safe configuration.
-
-## Self-hosted stack
-
-The source checkout includes a local compose stack with Amosclaud, Ollama, persistent storage, and an optional connected runner:
+## Self-hosted runtime
 
 ```bash
 cp .env.example .env
 mkdir -p AmosclaudWorkspace
-
 docker compose -f docker-compose.selfhost.yml up -d
 curl --fail http://127.0.0.1:8000/health
 ```
 
-Build the Java execution image used by cooperation pipelines:
+Amosclaud is designed so execution can ultimately live on Amosclaud-controlled infrastructure or a developer-authorized machine. External providers may be integrations or execution targets; they do not define the Amosclaud product architecture.
 
-```bash
-docker build -t amosclaud-java-pod:21 services/java-pod-runtime
-```
+## Verification-first engineering
 
-The runtime launch contract applies non-root execution, a read-only root filesystem, dropped Linux capabilities, no-new-privileges, bounded resources, controlled mounts, and an explicit network policy.
+Amosclaud should never equate generated code with completed software. Work is considered complete only when the requested result has appropriate evidence: files exist, commands execute, builds complete, tests or checks run, failures are surfaced, and consequential actions report their real state.
 
-## GitHub-native automation
+That verification principle applies equally to human-written code, `.amos` programs, Self-Agent Programmer changes, pull requests, deployments, and autonomous repair.
 
-`.github/workflows/amosclaud-native-pipeline.yml` routes these events into the same cooperation contract while preserving the repository's existing specialized workflows:
+## Repository automation
 
-- pushes;
-- pull requests opened, reopened, synchronized, or marked ready for review;
-- issues opened, reopened, or labeled;
-- a scheduled full-repository inspection;
-- manual workflow dispatches;
-- repository dispatches for inspect, build, fix, deploy, or monitor.
+GitHub remains a supported repository integration. Amosclaud can use repository events and workflows while the native platform evolves toward its own application, action, token, workspace, agent, and execution contracts.
 
-Automatic events never grant repository-write or deployment approval. See [GitHub Actions and required secrets](docs/GITHUB_ACTIONS.md).
-
-## Verified flow
-
-![Amosclaud verified pipeline demo](docs/assets/amosclaud-pipeline-demo.svg)
-
-The diagram reflects the implemented contract: pipeline creation, worker and node selection, bounded leases, Java pod execution, evidence collection, verification, and PipeFail recovery. It is an architectural demo, not a fabricated production screenshot. Reproducible commands and expected evidence are documented in [docs/DEMO.md](docs/DEMO.md).
+Protected writes and deployments remain governed operations. The model or agent should not receive unrestricted credentials merely because it can generate a patch.
 
 ## Project status
 
-Amosclaud is under active development. `main` is the only canonical product and deployment branch. Feature branches are temporary review lanes, and changes are not part of the product until required checks pass and the repository owner merges them. The badges above intentionally report `main`, so a newly added workflow badge becomes authoritative only after its workflow file reaches `main` and runs there.
+Amosclaud is under active development. `main` is the canonical repository product branch. Feature branches and pull requests represent proposed work until merged and verified.
 
-The small `amosclaud-quick` command remains the safest first experience: it performs deterministic local inspection and never claims that an unfinished hosted capability is available.
+The programming-language layer described here is now an explicit product direction and specification effort. It must be implemented and tested incrementally before Amosclaud can truthfully be described as a mature general-purpose programming language.
 
 ## Documentation
 
-- [Quickstart and self-hosting](docs/QUICKSTART.md)
-- [Amosclaud Desktop gateway setup](docs/AMOSCLAUD_DESKTOP_GATEWAY.md)
-- [Pipeline ecosystem and file responsibilities](docs/PIPELINE_ECOSYSTEM.md)
-- [GitHub Actions and trigger behavior](docs/GITHUB_ACTIONS.md)
-- [Telemetry, node proposer, and PipeFail graphics](docs/PIPELINE_ECOSYSTEM.md#telemetry-data-layouts)
-- [Label taxonomy](docs/LABELS.md)
-- [Reproducible demo](docs/DEMO.md)
+- [Programming Language](docs/AMOSCLAUD_LANGUAGE.md)
+- [Self-Agent Programmer](docs/AMOSCLAUD_SELF_AGENT_PROGRAMMER.md)
+- [Quickstart](docs/QUICKSTART.md)
+- [Amosclaud Terminal](docs/AMOSCLAUD_TERMINAL.md)
+- [Desktop gateway](docs/AMOSCLAUD_DESKTOP_GATEWAY.md)
+- [Pipeline ecosystem](docs/PIPELINE_ECOSYSTEM.md)
 - [Developer fast path](docs/DEVELOPER_FAST_PATH.md)
-- [Production Docker deployment](DEPLOYMENT.md)
+- [Production deployment](DEPLOYMENT.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Contributing
 
-Issues, tests, documentation, design work, runtime adapters, and infrastructure improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Contributions should be focused, tested, evidence-backed, and compatible with the shared pipeline ecosystem rather than disabling another service to make one feature pass.
+Contributions are welcome across the language, runtime, agent, editor/workspace, APIs, verification, testing, infrastructure, documentation, security, and developer experience. Changes should produce evidence and strengthen the shared Amosclaud architecture rather than advertise capabilities that cannot yet be demonstrated.
 
 ## License
 
-Repository source code is available under the [MIT License](LICENSE). Separate [commercial service terms](LICENSE-COMMERCIAL.txt) apply only to paid, hosted, managed, supported, or enterprise Amosclaud offerings and do not remove rights already granted for MIT-licensed source code.
+Repository source code is available under the [MIT License](LICENSE). Separate [commercial service terms](LICENSE-COMMERCIAL.txt) apply to paid, hosted, managed, supported, or enterprise Amosclaud offerings without removing rights already granted for MIT-licensed source code.
