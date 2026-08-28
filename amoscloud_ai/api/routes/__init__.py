@@ -285,3 +285,19 @@ for _route in capability_memory_api.router.routes:
         continue
     provider_api.router.routes.append(_route)
     _provider_keys |= _keys
+
+# Amosclaud Applications are first-class organization integrations. Mount their
+# routes through the canonical organization surface so main.py keeps one stable
+# router while applications can be installed independently in many orgs.
+from amoscloud_ai.api.routes import applications as applications
+from amoscloud_ai.api.routes import organizations as organizations
+
+_organization_keys = set()
+for _route in organizations.router.routes:
+    _organization_keys |= _route_keys(_route)
+for _route in applications.router.routes:
+    _keys = _route_keys(_route)
+    if _keys & _organization_keys:
+        continue
+    organizations.router.routes.append(_route)
+    _organization_keys |= _keys
