@@ -76,6 +76,7 @@ def deliver_via_http(sender: str, recipient: str, subject: str, body: str) -> No
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "Amosclaud-Mail/1.0 (+https://amosclauds.com)",
         },
         method="POST",
     )
