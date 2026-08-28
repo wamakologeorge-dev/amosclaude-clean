@@ -1,0 +1,44 @@
+{
+  "schema": "amosclaud.first-production/v1",
+  "enabled": true,
+  "canonical_domain": "https://amosclauds.com",
+  "production_authority": "amosclaud",
+  "ci_authority": "amosclaud-ci",
+  "merge_gate": {
+    "require_green_amosclaud_ci": true,
+    "require_exact_head_sha": true,
+    "require_github_checks": false,
+    "require_circleci_checks": false,
+    "require_railway_health": false,
+    "require_vercel_deployment": false
+  },
+  "native_workflow": {
+    "issues": true,
+    "pull_requests": true,
+    "close_pull_request": true,
+    "reopen_pull_request": true,
+    "soft_delete_pull_request": true,
+    "restore_pull_request": true,
+    "merge_pull_request": true,
+    "unmerge_by_revert": true,
+    "ci_green_red_status": true
+  },
+  "providers": {
+    "github": "optional_adapter",
+    "circleci": "optional_adapter",
+    "railway": "optional_runtime_adapter",
+    "vercel": "optional_front_door_or_runtime_adapter"
+  },
+  "packages": {
+    "first_party": "amosclaud_registry",
+    "third_party": "authority_scoped_adapter",
+    "third_party_minimum_grant_days": 90
+  },
+  "domain": {
+    "dns_is_external_infrastructure": true,
+    "domain_itself_runs_compute": false,
+    "railway_verification_required": false,
+    "github_verification_required": false,
+    "vercel_serverless_requires_durable_external_state": true
+  }
+}
