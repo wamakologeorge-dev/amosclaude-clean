@@ -13,7 +13,26 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
-from amoscloud_ai.api.routes.organizations import _membership, _require_admin
+
+def _membership(*args, **kwargs):
+    """Proxy to organizations._membership, imported lazily to avoid a circular import.
+
+    routes/__init__ imports this module before organizations, while
+    organizations imports this module at its tail to merge application routes.
+    A module-level import here would therefore hand organizations a partially
+    initialized module. Deferring to call time makes every import order safe.
+    """
+    from amoscloud_ai.api.routes.organizations import _membership as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def _require_admin(*args, **kwargs):
+    """Proxy to organizations._require_admin (lazy for the same reason as above)."""
+    from amoscloud_ai.api.routes.organizations import _require_admin as _impl
+
+    return _impl(*args, **kwargs)
+
 
 router = APIRouter(tags=["applications", "integrations"])
 
