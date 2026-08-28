@@ -1,4 +1,4 @@
-"""Amosclaud-native developer applications and organization installations."""
+"""First-party Amosclaud developer applications and organization installations."""
 
 from __future__ import annotations
 
@@ -6,131 +6,142 @@ import hashlib
 import json
 import secrets
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Cookie, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from amoscloud_ai.api.routes import organizations
+from amoscloud_ai.api.routes.auth import DB_PATH, get_user_from_session
+from amoscloud_ai.api.routes.organizations import _membership, _require_admin
 
 router = APIRouter(tags=["applications", "integrations"])
 
-SCOPES = {
-    "repository:read": "Read repositories available to the installation.",
-    "repository:write": "Create and modify repository content within approved workspaces.",
-    "workspace:read": "Inspect files, tasks, and workspace metadata.",
-    "workspace:execute": "Run commands in an approved Amosclaud workspace.",
-    "agent:invoke": "Invoke Amosclaud Agent for approved organization work.",
-    "spacecodeme:use": "Open and operate Amosclaud SpaceCodeMe workspaces.",
-    "actions:execute": "Run Amosclaud Actions approved for the organization.",
-    "deployment:staging": "Deploy to approved non-production environments.",
-    "deployment:production": "Request or perform production deployment when policy also permits it.",
-    "storage:read": "Read approved application storage.",
-    "storage:write": "Write approved application storage.",
-    "webhooks:manage": "Create and manage application webhooks.",
+SCOPE_CATALOG: dict[str, str] = {
+    "repositories:read": "Read organization repositories and source metadata",
+    "repositories:write": "Create or update repository content through guarded Amosclaud tools",
+    "terminal:execute": "Run bounded commands in an authorized workspace terminal",
+    "agent:invoke": "Invoke Amosclaud Agent for approved engineering tasks",
+    "spacecodeme:use": "Open and operate an Amosclaud SpaceCodeMe development workspace",
+    "actions:run": "Run approved Amosclaud Actions",
+    "deployments:staging": "Deploy to authorized staging environments",
+    "deployments:production": "Deploy to authorized production environments",
+    "storage:read": "Read authorized Amosclaud storage resources",
+    "storage:write": "Write authorized Amosclaud storage resources",
+    "models:invoke": "Invoke models exposed by the Amosclaud model gateway",
+    "audit:read": "Read application audit evidence for the installation",
 }
 
 
 class ApplicationCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
-    description: str = Field(default="", max_length=500)
-    visibility: Literal["private", "selected", "public"] = "private"
-    requested_scopes: list[str] = Field(default_factory=list, max_length=30)
+    description: str = Field(default="", max_length=1000)
+    visibility: Literal["private", "shared", "public"] = "private"
+    requested_scopes: list[str] = Field(default_factory=list, max_length=32)
     homepage_url: str | None = Field(default=None, max_length=500)
+    callback_url: str | None = Field(default=None, max_length=500)
 
 
-class ApplicationInstall(BaseModel):
-    scopes: list[str] = Field(default_factory=list, max_length=30)
+class InstallationCreate(BaseModel):
+    organization_id: int
+    granted_scopes: list[str] = Field(default_factory=list, max_length=32)
 
 
-class CredentialCreate(BaseModel):
-    expires_in_days: int = Field(default=90, ge=1, le=365)
+class TokenCreate(BaseModel):
+    name: str = Field(default="default", min_length=2, max_length=80)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _json(value: list[str]) -> str:
-    return json.dumps(sorted(set(value)), separators=(",", ":"))
-
-
-def _scopes(raw: str | None) -> list[str]:
-    try:
-        value = json.loads(raw or "[]")
-    except json.JSONDecodeError:
-        return []
-    return [item for item in value if isinstance(item, str)]
-
-
-def _validate_scopes(values: list[str]) -> list[str]:
-    unknown = sorted(set(values) - SCOPES.keys())
+def _normalize_scopes(scopes: list[str]) -> list[str]:
+    normalized = sorted({scope.strip().lower() for scope in scopes if scope.strip()})
+    unknown = [scope for scope in normalized if scope not in SCOPE_CATALOG]
     if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown application scopes: {', '.join(unknown)}")
-    return sorted(set(values))
+        raise HTTPException(status_code=422, detail={"unknown_scopes": unknown})
+    return normalized
 
 
-def _ensure_tables(db: sqlite3.Connection) -> None:
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _current_user(amos_session: str | None = Cookie(default=None)) -> sqlite3.Row:
+    user = get_user_from_session(amos_session)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def _db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA foreign_keys = ON")
     db.executescript(
         """
         CREATE TABLE IF NOT EXISTS developer_applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_id INTEGER NOT NULL,
+            owner_organization_id INTEGER NOT NULL,
+            created_by INTEGER NOT NULL,
             name TEXT NOT NULL,
-            client_id TEXT NOT NULL UNIQUE,
             description TEXT NOT NULL DEFAULT '',
-            visibility TEXT NOT NULL DEFAULT 'private',
-            requested_scopes TEXT NOT NULL DEFAULT '[]',
+            visibility TEXT NOT NULL CHECK(visibility IN ('private','shared','public')),
+            requested_scopes TEXT NOT NULL,
             homepage_url TEXT,
+            callback_url TEXT,
             status TEXT NOT NULL DEFAULT 'active',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE
+            FOREIGN KEY(owner_organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+            FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS application_installations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             application_id INTEGER NOT NULL,
             organization_id INTEGER NOT NULL,
+            granted_scopes TEXT NOT NULL,
             installed_by INTEGER NOT NULL,
-            scopes TEXT NOT NULL DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'active',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
-            revoked_at TEXT,
             UNIQUE(application_id, organization_id),
             FOREIGN KEY(application_id) REFERENCES developer_applications(id) ON DELETE CASCADE,
             FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
             FOREIGN KEY(installed_by) REFERENCES users(id) ON DELETE CASCADE
         );
-        CREATE TABLE IF NOT EXISTS application_credentials (
+        CREATE TABLE IF NOT EXISTS application_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             installation_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
             token_prefix TEXT NOT NULL,
             token_hash TEXT NOT NULL UNIQUE,
+            created_by INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
             revoked_at TEXT,
-            FOREIGN KEY(installation_id) REFERENCES application_installations(id) ON DELETE CASCADE
+            FOREIGN KEY(installation_id) REFERENCES application_installations(id) ON DELETE CASCADE,
+            FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
         );
-        CREATE TABLE IF NOT EXISTS application_audit_log (
+        CREATE TABLE IF NOT EXISTS application_audit_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            application_id INTEGER NOT NULL,
+            organization_id INTEGER NOT NULL,
+            application_id INTEGER,
             installation_id INTEGER,
-            organization_id INTEGER,
-            actor_user_id INTEGER,
+            actor_user_id INTEGER NOT NULL,
             action TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}',
             created_at TEXT NOT NULL,
-            FOREIGN KEY(application_id) REFERENCES developer_applications(id) ON DELETE CASCADE
+            FOREIGN KEY(organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+            FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+        CREATE INDEX IF NOT EXISTS idx_application_installations_org
+            ON application_installations(organization_id, status);
+        CREATE INDEX IF NOT EXISTS idx_application_audit_org
+            ON application_audit_events(organization_id, created_at);
         """
     )
-
-
-def _db() -> sqlite3.Connection:
-    db = organizations._db()
-    _ensure_tables(db)
     db.commit()
     return db
 
@@ -138,252 +149,291 @@ def _db() -> sqlite3.Connection:
 def _audit(
     db: sqlite3.Connection,
     *,
-    application_id: int,
-    action: str,
+    organization_id: int,
     actor_user_id: int,
+    action: str,
+    application_id: int | None = None,
     installation_id: int | None = None,
-    organization_id: int | None = None,
+    metadata: dict | None = None,
 ) -> None:
     db.execute(
-        """INSERT INTO application_audit_log(
-               application_id,installation_id,organization_id,actor_user_id,action,created_at
-           ) VALUES (?,?,?,?,?,?)""",
-        (application_id, installation_id, organization_id, actor_user_id, action, _now()),
+        """INSERT INTO application_audit_events(
+               organization_id,application_id,installation_id,actor_user_id,
+               action,metadata,created_at
+           ) VALUES (?,?,?,?,?,?,?)""",
+        (
+            organization_id,
+            application_id,
+            installation_id,
+            actor_user_id,
+            action,
+            json.dumps(metadata or {}, sort_keys=True),
+            _now(),
+        ),
     )
 
 
-def _application_dict(row: sqlite3.Row) -> dict:
-    result = dict(row)
-    result["requested_scopes"] = _scopes(result.get("requested_scopes"))
-    return result
+def _installation_for_admin(
+    db: sqlite3.Connection, installation_id: int, user_id: int
+) -> sqlite3.Row:
+    row = db.execute(
+        """SELECT i.*, a.name AS application_name
+           FROM application_installations i
+           JOIN developer_applications a ON a.id=i.application_id
+           WHERE i.id=? AND i.status='active'""",
+        (installation_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Application installation not found")
+    membership = _membership(db, int(row["organization_id"]), user_id)
+    _require_admin(membership)
+    return row
 
 
-def _installation_dict(row: sqlite3.Row) -> dict:
-    result = dict(row)
-    result["scopes"] = _scopes(result.get("scopes"))
-    return result
+@router.get("/integrations/scopes")
+def list_application_scopes(user: sqlite3.Row = Depends(_current_user)) -> list[dict]:
+    del user
+    return [{"scope": scope, "description": description} for scope, description in SCOPE_CATALOG.items()]
 
 
-@router.get("/applications/scopes")
-def list_application_scopes(
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> dict:
-    return {"scopes": [{"name": name, "description": description} for name, description in SCOPES.items()]}
-
-
-@router.post("/applications", status_code=201)
+@router.post("/organizations/{organization_id}/applications", status_code=201)
 def create_application(
+    organization_id: int,
     body: ApplicationCreate,
-    user: sqlite3.Row = Depends(organizations._current_user),
+    user: sqlite3.Row = Depends(_current_user),
 ) -> dict:
-    requested = _validate_scopes(body.requested_scopes)
+    scopes = _normalize_scopes(body.requested_scopes)
     now = _now()
-    client_id = f"amosapp_{secrets.token_urlsafe(18).replace('-', '').replace('_', '')}"
     with _db() as db:
+        membership = _membership(db, organization_id, int(user["id"]))
+        _require_admin(membership)
         cursor = db.execute(
             """INSERT INTO developer_applications(
-                   owner_id,name,client_id,description,visibility,requested_scopes,
-                   homepage_url,status,created_at,updated_at
-               ) VALUES (?,?,?,?,?,?,?,'active',?,?)""",
+                   owner_organization_id,created_by,name,description,visibility,
+                   requested_scopes,homepage_url,callback_url,created_at,updated_at
+               ) VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
-                user["id"], body.name.strip(), client_id, body.description.strip(),
-                body.visibility, _json(requested), body.homepage_url, now, now,
+                organization_id,
+                user["id"],
+                body.name.strip(),
+                body.description.strip(),
+                body.visibility,
+                json.dumps(scopes),
+                body.homepage_url,
+                body.callback_url,
+                now,
+                now,
             ),
         )
         application_id = int(cursor.lastrowid)
-        _audit(db, application_id=application_id, action="application.created", actor_user_id=user["id"])
-        db.commit()
-        row = db.execute("SELECT * FROM developer_applications WHERE id=?", (application_id,)).fetchone()
-    return _application_dict(row)
-
-
-@router.get("/applications")
-def list_developer_applications(
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> list[dict]:
-    with _db() as db:
-        rows = db.execute(
-            "SELECT * FROM developer_applications WHERE owner_id=? AND status='active' ORDER BY created_at DESC",
-            (user["id"],),
-        ).fetchall()
-    return [_application_dict(row) for row in rows]
-
-
-@router.get("/applications/{application_id}")
-def get_application(
-    application_id: int,
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> dict:
-    with _db() as db:
-        row = db.execute("SELECT * FROM developer_applications WHERE id=? AND status='active'", (application_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Application not found")
-        if row["owner_id"] != user["id"] and row["visibility"] != "public":
-            raise HTTPException(status_code=404, detail="Application not found")
-    return _application_dict(row)
-
-
-@router.post("/organizations/{organization_id}/applications/{application_id}/install", status_code=201)
-def install_application(
-    organization_id: int,
-    application_id: int,
-    body: ApplicationInstall,
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> dict:
-    approved = _validate_scopes(body.scopes)
-    now = _now()
-    with _db() as db:
-        membership = organizations._membership(db, organization_id, user["id"])
-        organizations._require_admin(membership)
-        application = db.execute("SELECT * FROM developer_applications WHERE id=? AND status='active'", (application_id,)).fetchone()
-        if not application:
-            raise HTTPException(status_code=404, detail="Application not found")
-        requested = set(_scopes(application["requested_scopes"]))
-        if not set(approved).issubset(requested):
-            raise HTTPException(status_code=422, detail="An installation can only grant scopes requested by the application")
-        if application["visibility"] == "private" and application["owner_id"] != user["id"]:
-            raise HTTPException(status_code=403, detail="This application is private")
-        existing = db.execute(
-            "SELECT id,status FROM application_installations WHERE application_id=? AND organization_id=?",
-            (application_id, organization_id),
-        ).fetchone()
-        if existing and existing["status"] == "active":
-            raise HTTPException(status_code=409, detail="Application is already installed")
-        if existing:
-            installation_id = existing["id"]
-            db.execute(
-                """UPDATE application_installations SET installed_by=?,scopes=?,status='active',
-                   updated_at=?,revoked_at=NULL WHERE id=?""",
-                (user["id"], _json(approved), now, installation_id),
-            )
-        else:
-            cursor = db.execute(
-                """INSERT INTO application_installations(
-                       application_id,organization_id,installed_by,scopes,status,created_at,updated_at
-                   ) VALUES (?,?,?,?,'active',?,?)""",
-                (application_id, organization_id, user["id"], _json(approved), now, now),
-            )
-            installation_id = int(cursor.lastrowid)
         _audit(
-            db, application_id=application_id, installation_id=installation_id,
-            organization_id=organization_id, action="installation.installed", actor_user_id=user["id"],
-        )
-        db.commit()
-        row = db.execute(
-            """SELECT i.*,a.name AS application_name,a.client_id FROM application_installations i
-               JOIN developer_applications a ON a.id=i.application_id WHERE i.id=?""",
-            (installation_id,),
-        ).fetchone()
-    return _installation_dict(row)
-
-
-@router.get("/organizations/{organization_id}/applications")
-def list_installed_applications(
-    organization_id: int,
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> list[dict]:
-    with _db() as db:
-        organizations._membership(db, organization_id, user["id"])
-        rows = db.execute(
-            """SELECT i.*,a.name AS application_name,a.client_id,a.description
-               FROM application_installations i JOIN developer_applications a ON a.id=i.application_id
-               WHERE i.organization_id=? AND i.status='active' ORDER BY i.created_at DESC""",
-            (organization_id,),
-        ).fetchall()
-    return [_installation_dict(row) for row in rows]
-
-
-@router.post("/organizations/{organization_id}/application-installations/{installation_id}/credentials", status_code=201)
-def create_installation_credential(
-    organization_id: int,
-    installation_id: int,
-    body: CredentialCreate,
-    user: sqlite3.Row = Depends(organizations._current_user),
-) -> dict:
-    now_dt = datetime.now(timezone.utc)
-    expires = now_dt + timedelta(days=body.expires_in_days)
-    raw_token = f"amos_install_{secrets.token_urlsafe(32)}"
-    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    token_prefix = raw_token[:18]
-    with _db() as db:
-        membership = organizations._membership(db, organization_id, user["id"])
-        organizations._require_admin(membership)
-        installation = db.execute(
-            """SELECT * FROM application_installations
-               WHERE id=? AND organization_id=? AND status='active'""",
-            (installation_id, organization_id),
-        ).fetchone()
-        if not installation:
-            raise HTTPException(status_code=404, detail="Application installation not found")
-        cursor = db.execute(
-            """INSERT INTO application_credentials(
-                   installation_id,token_prefix,token_hash,status,created_at,expires_at
-               ) VALUES (?,?,?,'active',?,?)""",
-            (installation_id, token_prefix, token_hash, now_dt.isoformat(), expires.isoformat()),
-        )
-        credential_id = int(cursor.lastrowid)
-        _audit(
-            db, application_id=installation["application_id"], installation_id=installation_id,
-            organization_id=organization_id, action="credential.created", actor_user_id=user["id"],
+            db,
+            organization_id=organization_id,
+            actor_user_id=int(user["id"]),
+            action="application.created",
+            application_id=application_id,
+            metadata={"visibility": body.visibility, "requested_scopes": scopes},
         )
         db.commit()
     return {
-        "id": credential_id,
-        "installation_id": installation_id,
-        "token": raw_token,
-        "token_prefix": token_prefix,
-        "expires_at": expires.isoformat(),
-        "warning": "Copy this token now. Amosclaud stores only its SHA-256 hash and cannot show it again.",
+        "id": application_id,
+        "owner_organization_id": organization_id,
+        "name": body.name.strip(),
+        "visibility": body.visibility,
+        "requested_scopes": scopes,
     }
 
 
-@router.delete("/organizations/{organization_id}/application-installations/{installation_id}")
-def revoke_installation(
-    organization_id: int,
-    installation_id: int,
-    user: sqlite3.Row = Depends(organizations._current_user),
+@router.get("/organizations/{organization_id}/applications")
+def list_developer_applications(
+    organization_id: int, user: sqlite3.Row = Depends(_current_user)
+) -> list[dict]:
+    with _db() as db:
+        _membership(db, organization_id, int(user["id"]))
+        rows = db.execute(
+            """SELECT id,name,description,visibility,requested_scopes,
+                      homepage_url,callback_url,status,created_at,updated_at
+               FROM developer_applications
+               WHERE owner_organization_id=? AND status='active'
+               ORDER BY name""",
+            (organization_id,),
+        ).fetchall()
+    return [
+        {**dict(row), "requested_scopes": json.loads(row["requested_scopes"])}
+        for row in rows
+    ]
+
+
+@router.post("/applications/{application_id}/installations", status_code=201)
+def install_application(
+    application_id: int,
+    body: InstallationCreate,
+    user: sqlite3.Row = Depends(_current_user),
 ) -> dict:
+    granted = _normalize_scopes(body.granted_scopes)
     now = _now()
     with _db() as db:
-        membership = organizations._membership(db, organization_id, user["id"])
-        organizations._require_admin(membership)
-        installation = db.execute(
-            "SELECT * FROM application_installations WHERE id=? AND organization_id=? AND status='active'",
-            (installation_id, organization_id),
+        membership = _membership(db, body.organization_id, int(user["id"]))
+        _require_admin(membership)
+        application = db.execute(
+            """SELECT * FROM developer_applications
+               WHERE id=? AND status='active'""",
+            (application_id,),
         ).fetchone()
-        if not installation:
-            raise HTTPException(status_code=404, detail="Application installation not found")
-        db.execute(
-            "UPDATE application_installations SET status='revoked',updated_at=?,revoked_at=? WHERE id=?",
-            (now, now, installation_id),
-        )
-        db.execute(
-            "UPDATE application_credentials SET status='revoked',revoked_at=? WHERE installation_id=? AND status='active'",
-            (now, installation_id),
-        )
+        if not application:
+            raise HTTPException(status_code=404, detail="Developer application not found")
+        if application["visibility"] == "private" and int(application["owner_organization_id"]) != body.organization_id:
+            raise HTTPException(status_code=403, detail="Private application cannot be installed in this organization")
+        requested = set(json.loads(application["requested_scopes"]))
+        unauthorized = sorted(set(granted) - requested)
+        if unauthorized:
+            raise HTTPException(
+                status_code=422,
+                detail={"scopes_not_requested_by_application": unauthorized},
+            )
+        try:
+            cursor = db.execute(
+                """INSERT INTO application_installations(
+                       application_id,organization_id,granted_scopes,installed_by,
+                       created_at,updated_at
+                   ) VALUES (?,?,?,?,?,?)""",
+                (application_id, body.organization_id, json.dumps(granted), user["id"], now, now),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Application is already installed") from exc
+        installation_id = int(cursor.lastrowid)
         _audit(
-            db, application_id=installation["application_id"], installation_id=installation_id,
-            organization_id=organization_id, action="installation.revoked", actor_user_id=user["id"],
+            db,
+            organization_id=body.organization_id,
+            actor_user_id=int(user["id"]),
+            action="application.installed",
+            application_id=application_id,
+            installation_id=installation_id,
+            metadata={"granted_scopes": granted},
         )
         db.commit()
-    return {"installation_id": installation_id, "status": "revoked"}
+    return {
+        "id": installation_id,
+        "application_id": application_id,
+        "organization_id": body.organization_id,
+        "granted_scopes": granted,
+        "status": "active",
+    }
 
 
-def authenticate_application_token(raw_token: str) -> dict | None:
-    """Resolve an active installation token without ever storing the raw credential."""
-    if not raw_token.startswith("amos_install_"):
-        return None
-    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    now = _now()
+@router.get("/organizations/{organization_id}/application-installations")
+def list_application_installations(
+    organization_id: int, user: sqlite3.Row = Depends(_current_user)
+) -> list[dict]:
     with _db() as db:
-        row = db.execute(
-            """SELECT c.id AS credential_id,i.id AS installation_id,i.organization_id,
-                      i.application_id,i.scopes,a.client_id,a.name AS application_name
-               FROM application_credentials c
-               JOIN application_installations i ON i.id=c.installation_id
+        _membership(db, organization_id, int(user["id"]))
+        rows = db.execute(
+            """SELECT i.id,i.application_id,i.organization_id,i.granted_scopes,
+                      i.status,i.created_at,i.updated_at,a.name,a.description,a.visibility
+               FROM application_installations i
                JOIN developer_applications a ON a.id=i.application_id
-               WHERE c.token_hash=? AND c.status='active' AND i.status='active'
-                 AND a.status='active' AND c.expires_at>?""",
-            (token_hash, now),
+               WHERE i.organization_id=? AND i.status='active'
+               ORDER BY a.name""",
+            (organization_id,),
+        ).fetchall()
+    return [{**dict(row), "granted_scopes": json.loads(row["granted_scopes"])} for row in rows]
+
+
+@router.post("/installations/{installation_id}/tokens", status_code=201)
+def create_installation_token(
+    installation_id: int,
+    body: TokenCreate,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict:
+    raw_token = "amos_app_" + secrets.token_urlsafe(32)
+    prefix = raw_token[:18]
+    with _db() as db:
+        installation = _installation_for_admin(db, installation_id, int(user["id"]))
+        cursor = db.execute(
+            """INSERT INTO application_tokens(
+                   installation_id,name,token_prefix,token_hash,created_by,created_at
+               ) VALUES (?,?,?,?,?,?)""",
+            (installation_id, body.name.strip(), prefix, _hash_token(raw_token), user["id"], _now()),
+        )
+        token_id = int(cursor.lastrowid)
+        _audit(
+            db,
+            organization_id=int(installation["organization_id"]),
+            actor_user_id=int(user["id"]),
+            action="application.token_created",
+            application_id=int(installation["application_id"]),
+            installation_id=installation_id,
+            metadata={"token_id": token_id, "prefix": prefix},
+        )
+        db.commit()
+    return {
+        "id": token_id,
+        "installation_id": installation_id,
+        "name": body.name.strip(),
+        "token": raw_token,
+        "token_prefix": prefix,
+        "warning": "Store this token now. Amosclaud will not display the raw value again.",
+    }
+
+
+@router.get("/installations/{installation_id}/tokens")
+def list_installation_tokens(
+    installation_id: int, user: sqlite3.Row = Depends(_current_user)
+) -> list[dict]:
+    with _db() as db:
+        _installation_for_admin(db, installation_id, int(user["id"]))
+        rows = db.execute(
+            """SELECT id,name,token_prefix,status,created_at,revoked_at
+               FROM application_tokens WHERE installation_id=? ORDER BY id DESC""",
+            (installation_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@router.delete("/installations/{installation_id}/tokens/{token_id}", status_code=204)
+def revoke_installation_token(
+    installation_id: int,
+    token_id: int,
+    user: sqlite3.Row = Depends(_current_user),
+) -> None:
+    with _db() as db:
+        installation = _installation_for_admin(db, installation_id, int(user["id"]))
+        token = db.execute(
+            "SELECT id,status FROM application_tokens WHERE id=? AND installation_id=?",
+            (token_id, installation_id),
         ).fetchone()
-    return _installation_dict(row) if row else None
+        if not token:
+            raise HTTPException(status_code=404, detail="Application token not found")
+        db.execute(
+            "UPDATE application_tokens SET status='revoked', revoked_at=? WHERE id=?",
+            (_now(), token_id),
+        )
+        _audit(
+            db,
+            organization_id=int(installation["organization_id"]),
+            actor_user_id=int(user["id"]),
+            action="application.token_revoked",
+            application_id=int(installation["application_id"]),
+            installation_id=installation_id,
+            metadata={"token_id": token_id},
+        )
+        db.commit()
+
+
+@router.get("/organizations/{organization_id}/application-audit")
+def application_audit(
+    organization_id: int,
+    user: sqlite3.Row = Depends(_current_user),
+    limit: int = 100,
+) -> list[dict]:
+    limit = max(1, min(limit, 250))
+    with _db() as db:
+        membership = _membership(db, organization_id, int(user["id"]))
+        _require_admin(membership)
+        rows = db.execute(
+            """SELECT id,application_id,installation_id,actor_user_id,action,metadata,created_at
+               FROM application_audit_events
+               WHERE organization_id=? ORDER BY id DESC LIMIT ?""",
+            (organization_id, limit),
+        ).fetchall()
+    return [{**dict(row), "metadata": json.loads(row["metadata"])} for row in rows]
