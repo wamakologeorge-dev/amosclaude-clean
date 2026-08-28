@@ -154,6 +154,10 @@ async def run_issue_action(
 
     from amoscloud_ai.api.routes.agent import run_agent
 
+    # Pressing Run Amosclaud Action is the user's explicit execution request.
+    # Preserve the conversation gate for ordinary chat, but do not ask for the
+    # same authorization a second time after this governed first-party action.
+    explicit_action = body.mode in {"build", "fix"}
     result = await run_agent(
         AutonomousAgentRunRequest(
             mode=body.mode,
@@ -165,6 +169,13 @@ async def run_issue_action(
                 "source": "native-platform-issue",
                 "use_agent": True,
                 "apply_changes": body.mode == "fix",
+                "original_follow_up": (
+                    "Proceed with the requested repository changes, execute the work, and verify the result."
+                    if explicit_action
+                    else body.instructions.strip()
+                ),
+                "previous_objective": objective,
+                "explicit_action": explicit_action,
             },
         ),
         request,
