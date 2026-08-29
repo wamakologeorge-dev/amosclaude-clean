@@ -95,6 +95,12 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "pytest-cov>=5,<8"
 
 COPY . /app
+# The self-host compose file must not exist inside the production image: the
+# Action worker's process sandbox shares this filesystem, and a workspace
+# marker at /app makes repositories' workspace-discovery tests find a
+# workspace where a clean CI machine has none. Self-hosting reads this file
+# from the repository checkout on the host, never from inside this image.
+RUN rm -f /app/docker-compose.selfhost.yml
 COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
 COPY services/workspace_runtime/workspace-image/amosclaud-markdown.py /usr/local/libexec/amosclaud-markdown.py
 COPY services/workspace_runtime/workspace-image/amosclaud-markdown /usr/local/bin/amosclaud-markdown

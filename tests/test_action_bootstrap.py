@@ -181,6 +181,74 @@ def test_bespoke_layouts_fall_back_to_every_discovered_manifest(tmp_path) -> Non
     assert skipped == []
 
 
+def test_action_checkout_is_a_real_clone_not_a_worktree(tmp_path, monkeypatch) -> None:
+    """The disposable checkout must look exactly like a fresh clone: ``.git``
+    is a real directory a repository may legitimately use (George's suite
+    stores state under ``.git/amosclaud-brain`` and failed with
+    NotADirectoryError on a worktree's pointer file)."""
+
+    from git import Actor, Repo
+
+    source = tmp_path / "source"
+    source.mkdir()
+    repo = Repo.init(source)
+    (source / "hello.py").write_text("VALUE = 1\n", encoding="utf-8")
+    repo.index.add(["hello.py"])
+    author = Actor("Amosclaud Tests", "tests@amosclauds.com")
+    commit = repo.index.commit("init", author=author, committer=author)
+    ref = "refs/amosclaud/actions/test-checkout"
+    repo.git.update_ref(ref, commit.hexsha)
+
+    monkeypatch.setattr(native_actions, "_repo_path", lambda _rid: source)
+    result = native_actions._detached_checkout(1, ref, commit.hexsha.lower())
+    _repo, checkout, _ref, temp_root = result
+    try:
+        git_dir = checkout / ".git"
+        assert git_dir.is_dir(), ".git must be a real directory, not a worktree pointer file"
+        assert Repo(checkout).head.commit.hexsha == commit.hexsha
+        assert (checkout / "hello.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+        assert (checkout / ".amosclaud-bootstrap.py").is_file()
+        # A repository may write under .git exactly like on a real clone.
+        (git_dir / "amosclaud-brain").mkdir()
+    finally:
+        native_actions._remove_checkout(_repo, checkout, _ref, temp_root)
+    assert not checkout.exists()
+    assert not temp_root.exists()
+
+
+def test_bootstrap_sweeps_compile_step_bytecode(tmp_path, monkeypatch, capsys) -> None:
+    """The compile step's bytecode byproduct is removed before testing so a
+    repository asserting a pristine tree (no generated .pyc) stays green."""
+
+    (tmp_path / "requirements.txt").write_text("# nothing\n", encoding="utf-8")
+    package = tmp_path / "pkg" / "__pycache__"
+    package.mkdir(parents=True)
+    (package / "module.cpython-312.pyc").write_bytes(b"\x00")
+    stray = tmp_path / "legacy.pyc"
+    stray.write_bytes(b"\x00")
+    git_cache = tmp_path / ".git" / "__pycache__"
+    git_cache.mkdir(parents=True)
+    (git_cache / "keep.pyc").write_bytes(b"\x00")
+
+    monkeypatch.chdir(tmp_path)
+    assert action_bootstrap.main() == 0
+    output = capsys.readouterr().out
+    assert "bytecode byproduct" in output
+    assert not package.exists()
+    assert not stray.exists()
+    assert git_cache.exists(), "nothing under .git is ever touched"
+
+
+def test_production_image_carries_no_workspace_marker() -> None:
+    """The production image must not ship /app/docker-compose.selfhost.yml:
+    the process-sandbox worker shares the image filesystem, and a workspace
+    marker at /app makes repositories' workspace-discovery tests find a
+    workspace where a clean CI machine has none."""
+
+    dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "rm -f /app/docker-compose.selfhost.yml" in dockerfile
+
+
 def test_deps_step_gets_a_larger_file_allowance(monkeypatch, tmp_path) -> None:
     """Installing declared dependencies writes real wheels, so the deps step
     passes a one-gigabyte per-file allowance through to the sandbox while the

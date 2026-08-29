@@ -346,7 +346,15 @@ def _detached_checkout(
     temp_root = Path(tempfile.mkdtemp(prefix="amosclaud-action-"))
     checkout = temp_root / "checkout"
     try:
-        repo.git.worktree("add", "--detach", str(checkout), action_ref)
+        # A real clone, never a worktree. A worktree's ``.git`` is a pointer
+        # file, and real repositories legitimately treat ``.git`` as the
+        # directory every genuine clone provides — George's suite stores its
+        # brain state under ``.git/amosclaud-brain`` and failed with
+        # NotADirectoryError on the worktree shape. A local clone shares
+        # objects cheaply and the detached checkout pins the exact
+        # queue-time commit.
+        clone = Repo.clone_from(str(source), str(checkout), no_checkout=True)
+        clone.git.checkout("--detach", sha)
         # The bootstrap is code-owned platform source copied in after checkout,
         # so repository content can never substitute its own version.
         shutil.copyfile(
@@ -356,26 +364,19 @@ def _detached_checkout(
     except Exception:
         # The ref has durable ownership and is released only after the caller
         # records a terminal result in its cleanup path.
-        try:
-            repo.git.worktree("remove", "--force", str(checkout))
-        except Exception:  # noqa: BLE001 — cleanup is best effort
-            pass
         shutil.rmtree(temp_root, ignore_errors=True)
         raise
     return repo, checkout, action_ref, temp_root
 
 
 def _remove_checkout(
-    repo: Repo | None, checkout: Path | None, _ref: str | None, temp_root: Path | None
+    _repo: Repo | None, checkout: Path | None, _ref: str | None, temp_root: Path | None
 ) -> None:
-    """Remove transient worktree state without releasing the durable Action ref."""
-    if repo is not None and checkout is not None:
-        try:
-            repo.git.worktree("remove", "--force", str(checkout))
-        except Exception as exc:
-            _LOGGER.warning("Could not remove Action checkout (%s).", type(exc).__name__)
+    """Remove the disposable clone without releasing the durable Action ref."""
     if temp_root is not None:
         shutil.rmtree(temp_root, ignore_errors=True)
+    elif checkout is not None:
+        shutil.rmtree(checkout, ignore_errors=True)
 
 
 def _claim_queued_action(action_id: str) -> sqlite3.Row | None:

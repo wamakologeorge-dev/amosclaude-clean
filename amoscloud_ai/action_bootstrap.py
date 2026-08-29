@@ -150,6 +150,26 @@ def main() -> int:
         print(f"Removing a committed {VENV_DIR} directory; the Action always builds a fresh one.")
         shutil.rmtree(venv_path)
 
+    swept = False
+    for pycache in list(root.rglob("__pycache__")):
+        if VENV_DIR in pycache.parts or ".git" in pycache.parts:
+            continue
+        shutil.rmtree(pycache, ignore_errors=True)
+        swept = True
+    for stray in list(root.rglob("*.pyc")):
+        if VENV_DIR in stray.parts or ".git" in stray.parts:
+            continue
+        try:
+            stray.unlink()
+            swept = True
+        except OSError:
+            pass
+    if swept:
+        print(
+            "Removed the compile step's bytecode byproduct so the tests see the "
+            "same pristine tree a fresh clone provides."
+        )
+
     print(
         f"Creating the Action environment at {VENV_DIR} "
         "(worker toolkit visible; repository packages take precedence)."
