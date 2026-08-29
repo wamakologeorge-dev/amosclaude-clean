@@ -86,3 +86,21 @@ def test_workspace_image_contains_practical_developer_toolchain() -> None:
     ):
         assert package in dockerfile
     assert "USER developer" in dockerfile
+
+
+def test_native_pull_request_actions_routes_are_registered() -> None:
+    paths = {getattr(route, "path", "") for route in create_app().routes}
+    ci_path = (
+        "/api/v1/amosclaud/production/repositories/{repository_id}"
+        "/pull-requests/{pull_request_id}/ci"
+    )
+    assert ci_path in paths
+
+
+def test_workspace_renders_openable_pr_details_and_actions() -> None:
+    source = Path("web/workspace.js").read_text(encoding="utf-8")
+    assert 'data-pr-toggle' in source
+    assert 'data-pr-detail' in source
+    assert 'Amosclaud Actions' in source
+    assert '/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci' in source
+    assert 'Run checks' in source

@@ -311,15 +311,90 @@
     }
   }
 
+  const prCi = new Map();
+
+  function actionState(pipeline) {
+    return pipeline?.status ? String(pipeline.status).toLowerCase() : 'not-run';
+  }
+
+  function renderAction(pipeline) {
+    const state = actionState(pipeline);
+    if (!pipeline) return '<p class="ws-pr-action-copy">No Amosclaud Action has run for this pull request yet.</p>';
+    const message = pipeline.error_detail || pipeline.message || 'Action result recorded.';
+    const jobLogs = (pipeline.jobs || []).flatMap(job => job.logs || []).filter(Boolean);
+    return `<div class="ws-pr-action-result">
+      <div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(pipeline.id || 'Action recorded')}</code></div>
+      <p>${escapeHtml(message)}</p>
+      ${jobLogs.length ? `<details><summary>Execution log (${jobLogs.length})</summary><pre>${escapeHtml(jobLogs.join('\n'))}</pre></details>` : ''}
+    </div>`;
+  }
+
+  function renderPullRequest(pr) {
+    const ci = prCi.get(String(pr.id));
+    return `<article class="ws-pr-card" data-pr-card="${pr.id}">
+      <button type="button" class="ws-pr-summary" aria-expanded="false" data-pr-toggle="${pr.id}">
+        <span><strong>#${pr.id} ${escapeHtml(pr.title)}</strong><small>${escapeHtml(pr.state)} · ${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)}</small></span><span aria-hidden="true">⌄</span>
+      </button>
+      <section class="ws-pr-detail" hidden data-pr-detail="${pr.id}">
+        <p class="ws-pr-description">${escapeHtml(pr.body || 'No description was provided.').replace(/\n/g, '<br>')}</p>
+        <div class="ws-pr-actions-head"><div><h3>Amosclaud Actions</h3><p>Authoritative checks for this pull request’s exact head branch.</p></div><button type="button" data-pr-run="${pr.id}">Run checks</button></div>
+        <div class="ws-pr-action-state" data-pr-ci="${pr.id}">${renderAction(ci?.pipeline)}</div>
+      </section>
+    </article>`;
+  }
+
+  async function loadPullRequestCi(id) {
+    const result = await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci`);
+    prCi.set(String(id), result);
+    return result;
+  }
+
+  async function togglePullRequest(id) {
+    const card = document.querySelector(`[data-pr-card="${id}"]`);
+    const detail = card?.querySelector('[data-pr-detail]');
+    const toggle = card?.querySelector('[data-pr-toggle]');
+    if (!card || !detail || !toggle) return;
+    const opening = detail.hidden;
+    detail.hidden = !opening;
+    toggle.setAttribute('aria-expanded', String(opening));
+    card.classList.toggle('open', opening);
+    if (!opening) return;
+    const state = card.querySelector('[data-pr-ci]');
+    state.textContent = 'Loading Amosclaud Action history…';
+    try {
+      const result = await loadPullRequestCi(id);
+      state.innerHTML = renderAction(result.pipeline);
+    } catch (error) {
+      state.innerHTML = `<p class="ws-pr-action-copy ws-error-row">Actions unavailable: ${escapeHtml(error.message)}</p>`;
+    }
+  }
+
+  async function runPullRequestCi(id, button) {
+    button.disabled = true;
+    const state = document.querySelector(`[data-pr-ci="${id}"]`);
+    state.textContent = 'Amosclaud Action queued…';
+    try {
+      const result = await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci`, {
+        method: 'POST', body: JSON.stringify({ reason: `Amosclaud Action requested for pull request #${id}` }),
+      });
+      const pipeline = result.pipeline;
+      prCi.set(String(id), { pipeline });
+      state.innerHTML = renderAction(pipeline);
+      setStatus(`Amosclaud Action ${actionState(pipeline)} for pull request #${id}.`);
+    } catch (error) {
+      state.innerHTML = `<p class="ws-pr-action-copy ws-error-row">Checks could not start: ${escapeHtml(error.message)}</p>`;
+      setStatus(`Amosclaud Action could not start: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function loadPullRequests() {
     const container = document.getElementById('ws-pull-requests');
     container.innerHTML = '<div class="ws-empty-row">Loading pull requests…</div>';
     try {
       const prs = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
-      container.innerHTML = prs.length ? prs.map(pr => `<div class="ws-tool-item">
-        <strong>#${pr.id} ${escapeHtml(pr.title)}</strong>
-        <span>${escapeHtml(pr.state)} · ${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)}</span>
-      </div>`).join('') : '<div class="ws-empty-row">No pull requests yet.</div>';
+      container.innerHTML = prs.length ? prs.map(renderPullRequest).join('') : '<div class="ws-empty-row">No pull requests yet.</div>';
     } catch (error) {
       container.innerHTML = `<div class="ws-empty-row ws-error-row">Could not load pull requests: ${escapeHtml(error.message)}</div>`;
     }
@@ -584,6 +659,12 @@
   document.getElementById('ws-new-branch').addEventListener('click', () => newBranch().catch(error => setStatus(error.message)));
   document.getElementById('ws-refresh-issues')?.addEventListener('click', () => refreshTab('issues'));
   document.getElementById('ws-refresh-prs')?.addEventListener('click', () => refreshTab('pull-requests'));
+  document.getElementById('ws-pull-requests')?.addEventListener('click', event => {
+    const run = event.target.closest('[data-pr-run]');
+    if (run) { runPullRequestCi(run.dataset.prRun, run); return; }
+    const toggle = event.target.closest('[data-pr-toggle]');
+    if (toggle) togglePullRequest(toggle.dataset.prToggle);
+  });
   // These listeners used to be attached to hidden placeholder nodes
   // (#ws-build and friends), so the Autonomous tab's visible buttons did
   // nothing at all. Bind the real controls the user can actually see.

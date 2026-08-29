@@ -252,6 +252,51 @@ def production_pull_requests(
         return result
 
 
+@router.get("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci")
+def pull_request_ci_status(
+    repository_id: int,
+    pull_request_id: int,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Return the latest authoritative Amosclaud Action for one native PR."""
+    with _db() as db:
+        _access(db, repository_id, int(user["id"]))
+        row = _pull_request(db, repository_id, pull_request_id)
+        branch = str(row["head_branch"])
+    repo = _open(repository_id)
+    head_sha = repo.commit(branch).hexsha
+    return {
+        "authority": "amosclaud",
+        "pull_request_id": pull_request_id,
+        "branch": branch,
+        "commit_sha": head_sha,
+        "pipeline": _latest_ci(repository_id, branch),
+    }
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci", status_code=201)
+async def run_pull_request_ci(
+    repository_id: int,
+    pull_request_id: int,
+    body: CIRunRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Run Amosclaud's authoritative checks for this PR's exact head branch."""
+    with _db() as db:
+        _access(db, repository_id, int(user["id"]))
+        row = _pull_request(db, repository_id, pull_request_id)
+        branch = str(row["head_branch"])
+    return await run_amosclaud_ci(
+        repository_id,
+        CIRunRequest(
+            branch=branch,
+            commit_sha=body.commit_sha,
+            reason=body.reason or f"Amosclaud Action for pull request #{pull_request_id}",
+        ),
+        user,
+    )
+
+
 @router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/action")
 def control_pull_request(
     repository_id: int,
