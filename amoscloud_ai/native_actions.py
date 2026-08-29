@@ -26,6 +26,7 @@ from git import Repo
 from amoscloud_ai.api.routes import pipelines
 from amoscloud_ai.api.routes.repositories import _db, _repo_path
 from amoscloud_ai.isolated_runner import IsolatedRunResult, redact_output, run_in_isolated_container
+from amoscloud_ai.station_hygiene import station_hygiene_log_lines
 from amoscloud_ai.models import PipelineJob, PipelineResponse, PipelineStatus
 from amoscloud_ai.task_dispatch import dispatch_task
 
@@ -483,6 +484,10 @@ def execute_action(action_id: str) -> PipelineResponse | None:
         repo, checkout, ref, temp_root = _detached_checkout(
             int(row["repository_id"]), row["action_ref"], row["head_sha"]
         )
+        # The station must look like a clean CI machine before anything runs:
+        # its own installation leaking into the shared filesystem inverts
+        # repositories' legitimate workspace-rejection tests.
+        pipeline.jobs[0].logs.extend(station_hygiene_log_lines())
         for job, (plan_id, _, command) in zip(pipeline.jobs, ACTION_PLAN):
             if _was_cancelled(action_id):
                 return pipelines._get(action_id)
