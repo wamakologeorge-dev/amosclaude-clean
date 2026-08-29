@@ -13,7 +13,9 @@ def test_spacecodeme_is_a_registered_authenticated_platform_route():
     source = Path("amoscloud_ai/main.py").read_text(encoding="utf-8")
 
     assert "/spacecodeme" in paths
-    route = source.split('@app.get("/spacecodeme"', 1)[1].split('@app.get("/workspace/{repository_id}"', 1)[0]
+    route = source.split('@app.get("/spacecodeme"', 1)[1].split(
+        '@app.get("/workspace/{repository_id}"', 1
+    )[0]
     assert "get_user_from_session" in route
     assert 'RedirectResponse("/login", status_code=302)' in route
     assert 'FileResponse(web_dir / "spacecodeme.html")' in route
@@ -22,7 +24,9 @@ def test_spacecodeme_is_a_registered_authenticated_platform_route():
 def test_spacecodeme_redirects_anonymous_visitors_to_login():
     async def request():
         transport = httpx.ASGITransport(app=create_app())
-        async with httpx.AsyncClient(transport=transport, base_url="http://test", follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", follow_redirects=False
+        ) as client:
             return await client.get("/spacecodeme")
 
     response = asyncio.run(request())
