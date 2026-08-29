@@ -151,7 +151,36 @@
   }
 
   async function loadRepository() {
-    repository = await api(`/api/v1/repositories/${repositoryId}`);
+    try {
+      repository = await api(`/api/v1/repositories/${repositoryId}`);
+    } catch (error) {
+      // Repository metadata and native PRs may be served by separate compatible
+      // services during a rolling deployment. A populated native PR response is
+      // positive repository evidence, so never show a contradictory 404 banner.
+      if (error.status !== 403 && error.status !== 404) throw error;
+      let pullRequests;
+      try {
+        pullRequests = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
+      } catch {
+        throw error;
+      }
+      if (!Array.isArray(pullRequests)) throw error;
+      const firstPullRequest = pullRequests[0] || {};
+      repository = {
+        owner_name: 'Connected',
+        name: 'repository',
+        visibility: 'private',
+        role: 'viewer',
+        default_branch: firstPullRequest.base_branch || 'main',
+        metadata_unavailable: true,
+      };
+      document.getElementById('ws-repo-name').textContent = 'Connected repository';
+      document.getElementById('ws-repo-meta').textContent = 'Pull requests available';
+      renderVisibility();
+      hideNotFound();
+      setStatus('Repository metadata is temporarily unavailable. Connected pull requests remain available.');
+      return;
+    }
     document.getElementById('ws-repo-name').textContent = `${repository.owner_name}/${repository.name}`;
     document.getElementById('ws-repo-meta').textContent = `${repository.visibility} · ${repository.role}`;
     renderVisibility();

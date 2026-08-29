@@ -366,16 +366,18 @@ def test_tabs_autoload_once_and_cache():
         assert loader in js
 
 
-def test_not_found_banner_is_only_driven_by_metadata_request():
-    """Regression: the banner must not fire from tree/tab loads."""
+def test_not_found_banner_requires_no_repository_evidence():
+    """Regression: a visible native PR must suppress the contradictory 404 banner."""
     js = (WEB / "workspace.js").read_text(encoding="utf-8")
-    # showNotFound is defined once and called exactly once, from the
-    # repository-metadata failure path.
     assert js.count("function showNotFound()") == 1
     assert js.count("showNotFound();") == 1
-    guard = "if (error.status === 404 || error.status === 403) { showNotFound(); return; }"
-    assert guard in js
-    # Successful metadata always clears it.
+    assert "connected pull requests remain available" in js.lower()
+    assert "Pull requests available" in js
+    assert "metadata_unavailable: true" in js
+    # The compatibility PR endpoint is deliberately checked before surfacing a
+    # repository-not-found state, because it is authoritative positive evidence.
+    assert "/api/v1/repositories/${repositoryId}/pull-requests" in js
+    assert "if (!Array.isArray(pullRequests)) throw error;" in js
     assert "hideNotFound();" in js
     for loader in ("loadTree", "loadCommits", "loadIssues", "loadPullRequests"):
         body = js.split(f"async function {loader}(")[1].split("\n  }")[0]
