@@ -101,9 +101,11 @@ def test_bootstrap_rebuilds_a_committed_environment_directory(tmp_path, monkeypa
     assert b"hijacked" not in content
 
 
-def test_requirement_manifest_discovery_covers_standard_layouts(tmp_path) -> None:
-    """Canonical root, one-level subdirectory, and requirements/ manifests are
-    installed; optional lanes are skipped; the Action environment is ignored."""
+def test_root_manifests_alone_define_the_environment(tmp_path) -> None:
+    """When root-level manifests exist they are installed exclusively: nested
+    service manifests (which can reference paths that only exist in their own
+    context, or downgrade root pins) and optional variant lanes are skipped,
+    and anything inside the Action environment is ignored."""
 
     (tmp_path / "requirements.txt").write_text("# root\n", encoding="utf-8")
     (tmp_path / "dev-requirements.txt").write_text("# dev\n", encoding="utf-8")
@@ -112,7 +114,7 @@ def test_requirement_manifest_discovery_covers_standard_layouts(tmp_path) -> Non
     )
     gateway = tmp_path / "api-gateway"
     gateway.mkdir()
-    (gateway / "requirements.txt").write_text("# subdir\n", encoding="utf-8")
+    (gateway / "requirements.txt").write_text("-e ..\n", encoding="utf-8")
     conventional = tmp_path / "requirements"
     conventional.mkdir()
     (conventional / "test.txt").write_text("# conventional\n", encoding="utf-8")
@@ -125,12 +127,32 @@ def test_requirement_manifest_discovery_covers_standard_layouts(tmp_path) -> Non
     assert names == {
         "requirements.txt",
         "dev-requirements.txt",
-        os.path.join("api-gateway", "requirements.txt"),
         os.path.join("requirements", "test.txt"),
     }
     assert install[0].name == "requirements.txt"
+    assert {str(path.relative_to(tmp_path)) for path in skipped} == {
+        "requirements-model-server.txt",
+        os.path.join("api-gateway", "requirements.txt"),
+    }
+
+
+def test_monorepos_without_root_manifests_use_service_manifests(tmp_path) -> None:
+    """A monorepo of services with no root-level declaration falls back to
+    the canonical names one directory down, still skipping variant lanes."""
+
+    gateway = tmp_path / "api-gateway"
+    gateway.mkdir()
+    (gateway / "requirements.txt").write_text("# service\n", encoding="utf-8")
+    worker = tmp_path / "worker"
+    worker.mkdir()
+    (worker / "requirements-gpu.txt").write_text("torch>=2\n", encoding="utf-8")
+
+    install, skipped = action_bootstrap._discover_manifests(tmp_path)
+    assert [str(path.relative_to(tmp_path)) for path in install] == [
+        os.path.join("api-gateway", "requirements.txt")
+    ]
     assert [str(path.relative_to(tmp_path)) for path in skipped] == [
-        "requirements-model-server.txt"
+        os.path.join("worker", "requirements-gpu.txt")
     ]
 
 
@@ -147,7 +169,7 @@ def test_optional_requirements_lanes_never_break_the_run(tmp_path, monkeypatch, 
     assert action_bootstrap.main() == 0
     output = capsys.readouterr().out
     assert "Skipping requirements-model-server.txt" in output
-    assert "optional requirements lanes" in output
+    assert "separate lanes" in output
 
 
 def test_bespoke_layouts_fall_back_to_every_discovered_manifest(tmp_path) -> None:

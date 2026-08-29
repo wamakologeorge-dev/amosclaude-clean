@@ -12,20 +12,25 @@ What it does, truthfully and in order:
    first, so repository content can never impersonate the environment. The
    environment can see the worker station's baseline toolkit (pytest and its
    canonical plugins), while packages installed here take precedence.
-2. Installs the repository's canonical requirements manifests — the root
-   ``requirements.txt``, the well-known dev/test manifests, the conventional
-   ``requirements/`` folder, and the same names one directory down for
-   monorepo services. Real repositories need their own dependencies — an api
-   gateway needs its database driver — and pytest cannot even start when
-   conftest imports are missing. This is the same contract every mainstream
-   CI provides. Other ``*requirements*.txt`` variants are optional lanes a
-   repository documents for special deployments (model servers, GPU images);
-   they are skipped with a plain log line so a heavyweight optional lane can
-   never break or bloat the test run. Tests that need an optional lane are
-   expected to skip themselves when its packages are absent, which is exactly
-   what ``pytest.importorskip`` is for. If a repository declares nothing
-   canonical, every discovered manifest is installed so bespoke layouts still
-   get an environment.
+2. Installs the repository's canonical requirements manifests. Real
+   repositories need their own dependencies — an api gateway needs its
+   database driver — and pytest cannot even start when conftest imports are
+   missing. This is the same contract every mainstream CI provides, and like
+   mainstream CI the plan installs the *authoritative* declaration rather
+   than every requirements file in sight: root-level manifests (the root
+   ``requirements.txt``, well-known dev/test names, the conventional
+   ``requirements/`` folder) alone define the test environment when they
+   exist. Nested service manifests and optional variant lanes (model
+   servers, GPU images, deployment bundles) are separate lanes — installing
+   them can pull gigabyte-scale packages the tests never import, reference
+   paths that only exist in that service's own context, or silently
+   downgrade the root environment's pins — so they are skipped with a plain
+   log line. Tests that need an optional lane are expected to skip
+   themselves when its packages are absent, which is exactly what
+   ``pytest.importorskip`` is for. A repository with no root-level manifests
+   falls back to canonical names one directory down, and one with nothing
+   canonical at all falls back to every discovered manifest, so bespoke
+   layouts still get an environment.
 3. Optionally installs the repository package itself (editable) when the
    repository declares a build (``pyproject.toml`` or ``setup.py``). A failure
    here is reported but not fatal: the authoritative verdict belongs to the
@@ -65,17 +70,19 @@ CANONICAL_MANIFEST_NAMES = (
 
 
 def _discover_manifests(root: Path) -> tuple[list[Path], list[Path]]:
-    """Partition discovered manifests into (install, skipped optional lanes).
+    """Partition discovered manifests into (install, skipped separate lanes).
 
-    The fixed test environment installs what every mainstream CI installs:
-    the canonical manifests (root ``requirements.txt``, the well-known
-    dev/test names, the conventional ``requirements/`` folder, and the same
-    canonical names one directory down for monorepo services). Any other
-    ``*requirements*.txt`` variant is an optional lane the repository keeps
-    separate on purpose — model servers, GPU builds, deployment bundles —
-    and installing those can pull gigabyte-scale packages the tests never
-    import. They are skipped, plainly logged. If nothing canonical exists,
-    every discovered manifest is installed so bespoke layouts still work.
+    Tier 1 — root-level declarations: the root canonical names plus the
+    conventional ``requirements/`` folder. When any exist they alone define
+    the test environment, exactly like the manifests a mainstream CI workflow
+    names explicitly. Tier 2 — canonical names one directory down, used only
+    when the root declares nothing (a monorepo of services without a root
+    manifest). Tier 3 — every discovered ``*requirements*.txt``, used only
+    when nothing canonical exists anywhere. Everything outside the selected
+    tier is skipped and plainly logged: nested service manifests can
+    reference paths that only exist in their own context or downgrade the
+    root environment's pins, and optional variant lanes (model servers, GPU
+    builds) can pull gigabyte-scale packages the tests never import.
     """
 
     candidates: list[Path] = []
@@ -97,22 +104,26 @@ def _discover_manifests(root: Path) -> tuple[list[Path], list[Path]]:
         for path in sorted(requirements_dir.glob("*.txt")):
             _add(path)
 
-    canonical: list[Path] = []
-    extras: list[Path] = []
-    for path in candidates:
+    def _tier(path: Path) -> int:
+        at_root = path.parent == root
         conventional_folder = (
             path.parent.name == "requirements" and path.parent.parent == root
         )
-        if path.name in CANONICAL_MANIFEST_NAMES or conventional_folder:
-            canonical.append(path)
-        else:
-            extras.append(path)
-    if not canonical:
+        if conventional_folder or (at_root and path.name in CANONICAL_MANIFEST_NAMES):
+            return 1
+        if not at_root and path.name in CANONICAL_MANIFEST_NAMES:
+            return 2
+        return 3
+
+    best = min((_tier(path) for path in candidates), default=3)
+    if best == 3:
         return candidates, []
-    canonical.sort(
+    install = [path for path in candidates if _tier(path) == best]
+    skipped = [path for path in candidates if _tier(path) != best]
+    install.sort(
         key=lambda path: (len(path.parts), path.name != "requirements.txt", str(path))
     )
-    return canonical, extras
+    return install, skipped
 
 
 def _requirement_files(root: Path) -> list[Path]:
@@ -152,9 +163,10 @@ def main() -> int:
     manifests, skipped = _discover_manifests(root)
     for extra in skipped:
         print(
-            f"Skipping {extra.relative_to(root)}: optional requirements lanes are not "
-            "part of the fixed test environment. Tests that need them should skip "
-            "themselves when their packages are absent."
+            f"Skipping {extra.relative_to(root)}: the repository's canonical manifests "
+            "define the Action environment and other requirements files are separate "
+            "lanes. Tests that need them should skip themselves when their packages "
+            "are absent."
         )
     if not manifests:
         print("No requirements manifests found; the worker toolkit alone will run the tests.")
