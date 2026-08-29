@@ -33,6 +33,31 @@ ACTION_PLAN: tuple[tuple[str, str, str], ...] = (
     ("pytest", "Run pytest", "python -m pytest -q"),
 )
 
+# Plain-language meanings for pytest's documented exit codes so a failed
+# Amosclaud Action tells a normal user what actually happened instead of a
+# bare integer. https://docs.pytest.org/en/stable/reference/exit-codes.html
+PYTEST_EXIT_MEANINGS: dict[int, str] = {
+    1: "tests ran and at least one test failed",
+    2: "test collection or execution was interrupted before it finished",
+    3: "pytest itself hit an internal error",
+    4: (
+        "pytest could not start because the repository's test configuration "
+        "needs a dependency or option the worker station does not provide"
+    ),
+    5: "pytest started but found no tests to run",
+}
+
+
+def _failure_detail(job: PipelineJob, result: IsolatedRunResult) -> str:
+    """Concise, truthful failure summary for the stored incident record."""
+    detail = f"{job.name} returned {result.returncode}"
+    if result.timed_out:
+        return detail + " (timed out)"
+    meaning = PYTEST_EXIT_MEANINGS.get(result.returncode) if job.id == "pytest" else None
+    if meaning is not None:
+        detail += f" — {meaning}. The execution log records the exact cause."
+    return detail
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -458,9 +483,7 @@ def execute_action(action_id: str) -> PipelineResponse | None:
                 pipeline.finished_at = job.finished_at
                 pipeline.message = f"Amosclaud Action failed during {job.name}."
                 pipeline.copilot_reply = pipeline.message
-                detail = f"{job.name} returned {result.returncode}" + (
-                    " (timed out)" if result.timed_out else ""
-                )
+                detail = _failure_detail(job, result)
                 _update_action(
                     action_id,
                     status=PipelineStatus.FAILED,

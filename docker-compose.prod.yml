@@ -50,6 +50,8 @@ services:
       ALLOWED_HOSTS: '["https://amosclauds.com"]'
       AMOSCLAUD_PUBLIC_URL: https://amosclauds.com
       AMOSCLAUD_API_URL: https://amosclauds.com
+      AMOSCLAUD_RUNNER_TIMEOUT_SECONDS: "1800"
+      AMOSCLAUD_RUNNER_MEMORY: 2g
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,6 +82,8 @@ services:
       ALLOWED_HOSTS: '["https://amosclauds.com"]'
       AMOSCLAUD_PUBLIC_URL: https://amosclauds.com
       AMOSCLAUD_API_URL: https://amosclauds.com
+      AMOSCLAUD_RUNNER_TIMEOUT_SECONDS: "1800"
+      AMOSCLAUD_RUNNER_MEMORY: 2g
     depends_on:
       postgres:
         condition: service_healthy

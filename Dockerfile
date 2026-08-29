@@ -88,7 +88,9 @@ RUN python -m pip install --upgrade pip setuptools wheel \
         "opentelemetry-instrumentation-logging==0.65b0" \
         "opentelemetry-instrumentation-sqlalchemy==0.65b0" \
         "opentelemetry-instrumentation-redis==0.65b0" \
-        "pytest>=8,<10"
+        "pytest>=8,<10" \
+        "pytest-asyncio>=0.23,<2" \
+        "pytest-cov>=5,<8"
 
 COPY . /app
 COPY services/workspace_runtime/workspace-image/amos /usr/local/bin/amos
