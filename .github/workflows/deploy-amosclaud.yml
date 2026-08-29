@@ -34,8 +34,7 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s
-' "${{ secrets.AMOSCLAUD_SSH_KEY }}" > ~/.ssh/amosclaud
+          printf '%s\n' "${{ secrets.AMOSCLAUD_SSH_KEY }}" > ~/.ssh/amosclaud
           chmod 600 ~/.ssh/amosclaud
           ssh-keyscan -H "${{ secrets.AMOSCLAUD_SSH_HOST }}" >> ~/.ssh/known_hosts
 
