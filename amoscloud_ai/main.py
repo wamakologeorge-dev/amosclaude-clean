@@ -393,6 +393,13 @@ def create_app() -> FastAPI:
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "mail.html")
 
+    @app.get("/spacecodeme", include_in_schema=False)
+    async def spacecodeme_page(request: Request):
+        """Open the authenticated SpaceCodeMe repository-workspace launcher."""
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "spacecodeme.html")
+
     @app.get("/workspace/{repository_id}", include_in_schema=False)
     async def repository_workspace(repository_id: int, request: Request):
         if not get_user_from_session(request.cookies.get("amos_session")):

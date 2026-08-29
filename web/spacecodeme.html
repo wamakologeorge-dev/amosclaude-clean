@@ -1,2 +1,76 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Amosclaud SpaceCodeMe</title><style>body{margin:0;font:15px/1.5 system-ui;background:#0d1117;color:#e6edf3}.top{padding:18px 24px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between}.wrap{max-width:1000px;margin:0 auto;padding:40px 24px}.hero{border:1px solid #30363d;border-radius:14px;padding:28px;background:#161b22}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}.card{border:1px solid #30363d;border-radius:10px;padding:18px}.muted{color:#8b949e}a,button{color:#58a6ff}button{background:#238636;color:white;border:0;border-radius:7px;padding:9px 13px;cursor:pointer}select{width:100%;padding:9px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:7px;margin:8px 0 12px}</style></head><body><header class="top"><strong>Amosclaud SpaceCodeMe</strong><a href="/static/settings-integrations.html">Settings</a></header><main class="wrap"><section class="hero"><h1>Cloud coding space, powered by Amosclaud</h1><p class="muted">Open a repository workspace with files, terminal execution and Amosclaud Agent working through Amosclaud permissions rather than treating GitHub as the workspace provider.</p><label for="repo">Repository workspace</label><select id="repo"><option>Loading repositories…</option></select><button id="open">Open SpaceCodeMe workspace</button><div class="grid"><div class="card"><h3>Files</h3><p class="muted">Use the existing Amosclaud workspace explorer and repository storage.</p></div><div class="card"><h3>Terminal</h3><p class="muted">Workspace execution stays bounded by Amosclaud execution policy.</p></div><div class="card"><h3>Amosclaud Agent</h3><p class="muted">Agent access follows the workspace and application scopes granted by the organization.</p></div></div></section></main><script>const repo=document.querySelector('#repo');fetch('/api/v1/repositories',{credentials:'include'}).then(r=>{if(r.status===401){location.href='/login';return []}return r.json()}).then(data=>{const items=Array.isArray(data)?data:(data.repositories||[]);repo.innerHTML=items.length?items.map(x=>`<option value="${x.id}">${String(x.name||x.path||('Repository '+x.id)).replace(/[&<>]/g,'')}</option>`).join(''):'<option value="">No repositories available</option>'});document.querySelector('#open').onclick=()=>{if(repo.value)location.href='/workspace/'+encodeURIComponent(repo.value)};</script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Amosclaud SpaceCodeMe</title>
+  <style>
+    body{margin:0;font:15px/1.5 system-ui;background:#0d1117;color:#e6edf3}.top{padding:18px 24px;border-bottom:1px solid #30363d;display:flex;justify-content:space-between}.wrap{max-width:1000px;margin:0 auto;padding:40px 24px}.hero{border:1px solid #30363d;border-radius:14px;padding:28px;background:#161b22}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:20px}.card{border:1px solid #30363d;border-radius:10px;padding:18px}.muted{color:#8b949e}a,button{color:#58a6ff}button{background:#238636;color:white;border:0;border-radius:7px;padding:9px 13px;cursor:pointer}button:disabled{cursor:not-allowed;opacity:.6}select{width:100%;padding:9px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;border-radius:7px;margin:8px 0 6px}.status{min-height:1.5em;color:#8b949e}.status.error{color:#ff7b72}
+  </style>
+</head>
+<body>
+  <header class="top"><strong>Amosclaud SpaceCodeMe</strong><a href="/static/settings-integrations.html">Settings</a></header>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Cloud coding space, powered by Amosclaud</h1>
+      <p class="muted">Open a repository workspace with files, terminal execution, and Amosclaud Agent tools.</p>
+      <label for="repo">Repository workspace</label>
+      <select id="repo" disabled><option>Loading repositories…</option></select>
+      <p id="status" class="status" role="status" aria-live="polite">Loading your repositories…</p>
+      <button id="open" type="button" disabled>Open SpaceCodeMe workspace</button>
+      <div class="grid"><div class="card"><h3>Files</h3><p class="muted">Use the existing Amosclaud workspace explorer and repository storage.</p></div><div class="card"><h3>Terminal</h3><p class="muted">Workspace execution stays bounded by Amosclaud execution policy.</p></div><div class="card"><h3>Amosclaud Agent</h3><p class="muted">Agent access follows the workspace and application scopes granted by the organization.</p></div></div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      if (location.pathname.startsWith('/static/')) {
+        location.replace('/spacecodeme');
+        return;
+      }
+      const repo = document.querySelector('#repo');
+      const open = document.querySelector('#open');
+      const status = document.querySelector('#status');
+      const setStatus = (message, isError = false) => {
+        status.textContent = message;
+        status.classList.toggle('error', isError);
+      };
+      const option = (value, label) => {
+        const node = document.createElement('option');
+        node.value = String(value);
+        node.textContent = label;
+        return node;
+      };
+      async function loadRepositories() {
+        try {
+          const response = await fetch('/api/v1/repositories', {credentials: 'include'});
+          if (response.status === 401) {
+            location.replace('/login');
+            return;
+          }
+          if (!response.ok) throw new Error(`Repository request failed (${response.status})`);
+          const data = await response.json();
+          const items = Array.isArray(data) ? data : (data.repositories || []);
+          repo.replaceChildren();
+          if (!items.length) {
+            repo.append(option('', 'No repositories available'));
+            setStatus('Create or connect a repository, then return here to open a workspace.');
+            return;
+          }
+          for (const item of items) repo.append(option(item.id, item.name || item.path || `Repository ${item.id}`));
+          repo.disabled = false;
+          open.disabled = false;
+          setStatus('Choose a repository and open its SpaceCodeMe workspace.');
+        } catch (error) {
+          repo.replaceChildren(option('', 'Repositories could not be loaded'));
+          setStatus('SpaceCodeMe could not load your repositories. Please refresh and try again.', true);
+        }
+      }
+      open.addEventListener('click', () => {
+        if (!repo.value) return;
+        location.assign(`/workspace/${encodeURIComponent(repo.value)}`);
+      });
+      loadRepositories();
+    })();
+  </script>
+</body>
+</html>
