@@ -31,8 +31,8 @@ from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
     router as byte_metadata_router,
 )
 from amoscloud_ai.config import settings
+from amoscloud_ai.deployment_health import status as deployment_health_status
 from amoscloud_ai.models import HealthResponse
-from amoscloud_ai.railway_health import status as railway_health_status
 from amoscloud_ai.server.cb.Amosclaud import server_identity
 
 router = APIRouter(tags=["health"])
@@ -206,7 +206,7 @@ async def readiness() -> dict[str, object]:
             "authentication": ["session", "Authorization: Bearer <autonomous-key>"],
         },
         "provider": state,
-        "railway": railway_health_status(),
+        "deployment": deployment_health_status(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

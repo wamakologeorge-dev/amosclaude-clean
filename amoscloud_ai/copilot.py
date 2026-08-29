@@ -436,6 +436,9 @@ def build_copilot_plan(
 
 PIPELINE_REPLIES = {
     PipelineStatus.PENDING: (
+        f"{PIPELINE_SERVER_NAME}: autonomous pipeline run is pending for {COPILOT_HOME}."
+    ),
+    PipelineStatus.QUEUED: (
         f"{PIPELINE_SERVER_NAME}: autonomous pipeline run queued for {COPILOT_HOME}."
     ),
     PipelineStatus.RUNNING: (

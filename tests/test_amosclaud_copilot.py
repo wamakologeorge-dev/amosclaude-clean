@@ -32,9 +32,7 @@ def test_bug_request_routes_to_fixer_and_autonomous_support():
 
     assert plan["primary_agent"]["name"] == "amosclaud-fixer"
     assert plan["execution_mode"] == "fix"
-    assert "amosclaud-autonomous" in {
-        agent["name"] for agent in plan["supporting_agents"]
-    }
+    assert "amosclaud-autonomous" in {agent["name"] for agent in plan["supporting_agents"]}
     assert plan["handoff"]["payload"]["metadata"]["copilot_primary_agent"] == "amosclaud-fixer"
 
 
@@ -63,3 +61,4 @@ def test_repository_path_cannot_escape_workspace():
 
 def test_existing_pipeline_reply_contract_remains_compatible():
     assert pipeline_reply(PipelineStatus.PENDING).startswith("Amosclaud Autonomous Server:")
+    assert "queued" in pipeline_reply(PipelineStatus.QUEUED).lower()

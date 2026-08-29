@@ -7,36 +7,34 @@ from amoscloud_ai import db_migrations
 
 def test_migrations_are_idempotent(tmp_path):
     path = tmp_path / "auth.db"
-    assert db_migrations.run_migrations(path) == [1, 2, 3, 4]
+    assert db_migrations.run_migrations(path) == [1, 2, 3, 4, 5, 6]
     assert db_migrations.run_migrations(path) == []
     with sqlite3.connect(path) as db:
         applied = db.execute(
             "SELECT version,name FROM schema_migrations ORDER BY version"
         ).fetchall()
-        tables = {
-            row[0]
-            for row in db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         repository_columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(repositories)").fetchall()
+            row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
         }
-        indexes = {
-            row[1]
-            for row in db.execute("PRAGMA index_list(repositories)").fetchall()
-        }
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(repositories)").fetchall()}
         workspace_indexes = {
-            row[1]
-            for row in db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
+            row[1] for row in db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
         }
+        native_action_columns = {
+            row[1] for row in db.execute("PRAGMA table_info(native_action_runs)").fetchall()
+        }
+        native_action_schema = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='native_action_runs'"
+        ).fetchone()[0]
 
     assert applied == [
         (1, "developer_webhooks"),
         (2, "native_repository_base_schema"),
         (3, "github_repository_sync_schema"),
         (4, "cloud_workspaces"),
+        (5, "native_actions"),
+        (6, "native_actions_queued_ref"),
     ]
     assert {
         "developer_webhooks",
@@ -44,6 +42,7 @@ def test_migrations_are_idempotent(tmp_path):
         "repositories",
         "repository_collaborators",
         "cloud_workspaces",
+        "native_action_runs",
     } <= tables
     assert {
         "id",
@@ -67,13 +66,41 @@ def test_migrations_are_idempotent(tmp_path):
     assert "idx_repositories_github_repository_id" in indexes
     assert "idx_repositories_github_full_name" in indexes
     assert "idx_cloud_workspaces_owner" in workspace_indexes
+    assert "action_ref" in native_action_columns
+    assert "'queued'" in native_action_schema
+
+
+def test_native_action_upgrade_preserves_legacy_pending_rows(tmp_path, monkeypatch):
+    path = tmp_path / "auth.db"
+    all_migrations = db_migrations.MIGRATIONS
+    monkeypatch.setattr(db_migrations, "MIGRATIONS", all_migrations[:5])
+    assert db_migrations.run_migrations(path) == [1, 2, 3, 4, 5]
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "INSERT INTO repositories(id,owner_id,name,created_at,updated_at) VALUES (1,1,'demo','now','now')"
+        )
+        db.execute(
+            """INSERT INTO native_action_runs(
+                id,repository_id,pull_request_id,head_sha,branch,requested_by,
+                reason,status,created_at
+            ) VALUES ('legacy',1,1,?,'feature',1,'','pending','now')""",
+            ("a" * 40,),
+        )
+        db.commit()
+    monkeypatch.setattr(db_migrations, "MIGRATIONS", all_migrations)
+
+    assert db_migrations.run_migrations(path) == [6]
+    with sqlite3.connect(path) as db:
+        row = db.execute(
+            "SELECT status,action_ref FROM native_action_runs WHERE id='legacy'"
+        ).fetchone()
+    assert row == ("pending", None)
 
 
 def test_github_schema_helper_is_idempotent(tmp_path):
     path = tmp_path / "isolated.db"
     with sqlite3.connect(path) as db:
-        db.execute(
-            """CREATE TABLE repositories (
+        db.execute("""CREATE TABLE repositories (
                 id INTEGER PRIMARY KEY,
                 owner_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
@@ -82,17 +109,42 @@ def test_github_schema_helper_is_idempotent(tmp_path):
                 default_branch TEXT NOT NULL DEFAULT 'main',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
-            )"""
-        )
+            )""")
         db_migrations.ensure_github_repository_schema(db)
         db_migrations.ensure_github_repository_schema(db)
         db.commit()
-        columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(repositories)").fetchall()
-        }
+        columns = {row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()}
     assert "github_repository_id" in columns
     assert "github_last_sync_attempt_at" in columns
+
+
+def test_github_schema_helper_rebuilds_legacy_connection_rows(tmp_path):
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        db.execute("INSERT INTO users(id) VALUES (7)")
+        db.execute("CREATE TABLE repositories (id INTEGER PRIMARY KEY)")
+        db.execute("""CREATE TABLE github_connections (
+                user_id INTEGER NOT NULL,
+                github_user_id INTEGER PRIMARY KEY,
+                github_login TEXT NOT NULL,
+                avatar_url TEXT,
+                access_token_ciphertext TEXT NOT NULL,
+                scopes TEXT NOT NULL DEFAULT '',
+                connected_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""")
+        db.execute("""INSERT INTO github_connections(
+                user_id,github_user_id,github_login,avatar_url,
+                access_token_ciphertext,scopes,connected_at,updated_at
+            ) VALUES (7,42,'octo',NULL,'cipher','repo','then','now')""")
+
+        db_migrations.ensure_github_repository_schema(db)
+        row = db.execute("""SELECT user_id,github_user_id,github_id,github_login,
+                      access_token_ciphertext,scopes,connected_at,updated_at
+               FROM github_connections""").fetchone()
+
+    assert row == (7, 42, "42", "octo", "cipher", "repo", "then", "now")
 
 
 def test_migrations_reject_checksum_drift(tmp_path, monkeypatch):

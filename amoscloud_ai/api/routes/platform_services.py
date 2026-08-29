@@ -11,6 +11,7 @@ and reported as that single service's problem, and never fails the whole
 response. No secret value (token, key, connection string) is ever included in
 an entry; only environment-variable *names* and safe, redacted diagnostics.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 
-from amoscloud_ai import github_issue_commands, model_runtime, railway_health
+from amoscloud_ai import deployment_health, github_issue_commands, model_runtime
 from amoscloud_ai.api.routes import (
     auth,
     github_app,
@@ -118,8 +119,7 @@ def _check_repository_store() -> dict:
             UNREACHABLE,
             "The repository storage root rejected a write probe.",
             "Write probe under REPOSITORY_STORAGE_PATH",
-            "Point REPOSITORY_STORAGE_PATH at a writable volume "
-            f"({type(exc).__name__}).",
+            "Point REPOSITORY_STORAGE_PATH at a writable volume " f"({type(exc).__name__}).",
         )
     return _entry(
         "repository-store",
@@ -140,8 +140,7 @@ def _check_object_storage() -> dict:
             UNREACHABLE,
             "The object storage root rejected a write probe.",
             "Write probe under the storage root",
-            "Point the storage root at a writable volume "
-            f"({type(exc).__name__}).",
+            "Point the storage root at a writable volume " f"({type(exc).__name__}).",
         )
     return _entry(
         "object-storage",
@@ -238,9 +237,7 @@ def _candidate_entry(sid: str, name: str, key: str) -> dict:
 def _self_hosted_reachable() -> bool:
     cand = _find_candidate("self-hosted")
     return bool(
-        cand is not None
-        and cand.configured
-        and model_runtime.candidate_health(cand).reachable
+        cand is not None and cand.configured and model_runtime.candidate_health(cand).reachable
     )
 
 
@@ -270,8 +267,7 @@ def _check_amosclaud_provider() -> dict:
             f"{stations} first-party model station(s) are registered and online, "
             "so the Amosclaud provider path can serve inference even if the "
             "direct self-hosted endpoint is unavailable.",
-            "amoscloud_ai.model_network.network_status() and the model-runtime "
-            "resolution order",
+            "amoscloud_ai.model_network.network_status() and the model-runtime " "resolution order",
         )
 
     cand = _find_candidate("amosclaud-api")
@@ -302,8 +298,7 @@ def _check_amosclaud_provider() -> dict:
         "No model station is ready, the remote-hosted Amosclaud API is not "
         "configured, and no self-hosted runtime is reachable, so the "
         "first-party provider path cannot serve traffic.",
-        "model_runtime candidates 'model-network', 'amosclaud-api', and "
-        "'self-hosted'",
+        "model_runtime candidates 'model-network', 'amosclaud-api', and " "'self-hosted'",
         "Connect an online model station, configure a reachable self-hosted "
         "AMOSCLAUD_MODEL_URL, or set AMOSCLAUD_PROVIDER_API_URL + "
         "AMOSCLAUD_API_KEY for the remote API.",
@@ -330,8 +325,7 @@ def _check_model_network() -> dict:
             "intentionally not enabled; the self-hosted runtime already serves "
             "all inference traffic. This is not required for operation.",
             evidence,
-            "Set AMOSCLAUD_NETWORK_OWNER_USER_ID to enable optional station "
-            "pooling.",
+            "Set AMOSCLAUD_NETWORK_OWNER_USER_ID to enable optional station " "pooling.",
         )
     stations = int(state.get("ready_stations") or 0)
     if state.get("ready") and stations > 0:
@@ -392,9 +386,7 @@ def _check_external_adapters() -> dict:
 
 
 def _check_github_webhook() -> dict:
-    evidence = (
-        "GITHUB_APP_WEBHOOK_SECRET and the mounted GitHub App webhook route"
-    )
+    evidence = "GITHUB_APP_WEBHOOK_SECRET and the mounted GitHub App webhook route"
     if not github_app._webhook_secret():
         return _entry(
             "github-webhook",
@@ -441,38 +433,37 @@ def _check_issue_command() -> dict:
         "issue-command",
         name,
         OPERATIONAL,
-        f"Webhook secret set and {len(allowlist)} sender(s) allowlisted; "
-        f"commands: {commands}.",
+        f"Webhook secret set and {len(allowlist)} sender(s) allowlisted; " f"commands: {commands}.",
         "github_issue_commands.COMMANDS and the command allowlist",
     )
 
 
-def _check_railway() -> dict:
-    state = railway_health.status()
-    evidence = "amoscloud_ai.railway_health.status()"
+def _check_deployment_health() -> dict:
+    state = deployment_health.status()
+    evidence = "amoscloud_ai.deployment_health.status()"
     if not state.get("enabled"):
         return _entry(
-            "railway",
-            "Optional Railway healthcheck",
+            "deployment-health",
+            "Optional deployment healthcheck",
             DISABLED,
-            "The Railway healthcheck is intentionally disabled.",
+            "The deployment healthcheck is intentionally disabled.",
             evidence,
         )
     if state.get("reachable"):
         return _entry(
-            "railway",
-            "Optional Railway healthcheck",
+            "deployment-health",
+            "Optional deployment healthcheck",
             OPERATIONAL,
-            f"The configured Railway endpoint responded ({state.get('detail')}).",
+            f"The configured public deployment endpoint responded ({state.get('detail')}).",
             evidence,
         )
     return _entry(
-        "railway",
-        "Optional Railway healthcheck",
+        "deployment-health",
+        "Optional deployment healthcheck",
         UNREACHABLE,
-        f"The Railway healthcheck failed ({state.get('detail')}).",
+        f"The deployment healthcheck failed ({state.get('detail')}).",
         evidence,
-        "Confirm AMOSCLAUD_RAILWAY_HEALTH_URL points at a reachable endpoint.",
+        "Confirm AMOSCLAUD_DEPLOYMENT_HEALTH_URL points at a reachable endpoint.",
     )
 
 
@@ -537,9 +528,7 @@ def _probe_pipeline_self_test() -> tuple[bool, bool, str]:
         pipeline.finished_at = datetime.now(timezone.utc)
         pipelines._save(pipeline, {"self_test": True})
         final = pipelines._get(probe_id)
-        transitioned = (
-            final is not None and final.status == PipelineStatus.SUCCESS
-        )
+        transitioned = final is not None and final.status == PipelineStatus.SUCCESS
         detail = (
             "store read/write and PENDING->RUNNING->SUCCESS transition verified"
             if transitioned
@@ -610,9 +599,7 @@ def _workflow_definition_count() -> int | None:
     if not workflows.is_dir():
         return None
     return sum(
-        1
-        for entry in workflows.iterdir()
-        if entry.is_file() and entry.suffix in {".yml", ".yaml"}
+        1 for entry in workflows.iterdir() if entry.is_file() and entry.suffix in {".yml", ".yaml"}
     )
 
 
@@ -650,9 +637,7 @@ def _check_cicd() -> dict:
             "presence cannot be determined here (they live in the repository)"
         )
     else:
-        workflow_fact = (
-            f"{workflow_count} workflow definition(s) are discoverable on disk"
-        )
+        workflow_fact = f"{workflow_count} workflow definition(s) are discoverable on disk"
 
     if not store_ok:
         return _entry(
@@ -713,7 +698,7 @@ _CHECKS = (
     ),
     ("github-webhook", "GitHub App webhook receiver", _check_github_webhook),
     ("issue-command", "GitHub issue-command integration", _check_issue_command),
-    ("railway", "Optional Railway healthcheck", _check_railway),
+    ("deployment-health", "Optional deployment healthcheck", _check_deployment_health),
     (
         "autonomous-pipeline",
         "Autonomous agent & task pipeline",
@@ -745,9 +730,7 @@ def _collect() -> list[dict]:
 def _require_session(amos_session: str | None = Cookie(default=None)):
     user = auth.get_user_from_session(amos_session)
     if not user:
-        raise HTTPException(
-            status_code=401, detail="Sign in to view platform service status"
-        )
+        raise HTTPException(status_code=401, detail="Sign in to view platform service status")
     return user
 
 

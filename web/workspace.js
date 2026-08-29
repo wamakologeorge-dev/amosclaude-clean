@@ -151,7 +151,36 @@
   }
 
   async function loadRepository() {
-    repository = await api(`/api/v1/repositories/${repositoryId}`);
+    try {
+      repository = await api(`/api/v1/repositories/${repositoryId}`);
+    } catch (error) {
+      // Repository metadata and native PRs may be served by separate compatible
+      // services during a rolling deployment. A populated native PR response is
+      // positive repository evidence, so never show a contradictory 404 banner.
+      if (error.status !== 403 && error.status !== 404) throw error;
+      let pullRequests;
+      try {
+        pullRequests = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
+      } catch {
+        throw error;
+      }
+      if (!Array.isArray(pullRequests)) throw error;
+      const firstPullRequest = pullRequests[0] || {};
+      repository = {
+        owner_name: 'Connected',
+        name: 'repository',
+        visibility: 'private',
+        role: 'viewer',
+        default_branch: firstPullRequest.base_branch || 'main',
+        metadata_unavailable: true,
+      };
+      document.getElementById('ws-repo-name').textContent = 'Connected repository';
+      document.getElementById('ws-repo-meta').textContent = 'Pull requests available';
+      renderVisibility();
+      hideNotFound();
+      setStatus('Repository metadata is temporarily unavailable. Connected pull requests remain available.');
+      return;
+    }
     document.getElementById('ws-repo-name').textContent = `${repository.owner_name}/${repository.name}`;
     document.getElementById('ws-repo-meta').textContent = `${repository.visibility} · ${repository.role}`;
     renderVisibility();
@@ -209,19 +238,65 @@
     setStatus('Issue created');
   }
 
-  async function createPullRequest() {
-    const title = prompt('Pull request title');
-    if (!title?.trim()) return;
-    const head = prompt('Merge from branch', branch());
-    if (!head?.trim()) return;
-    const base = prompt('Merge into branch', repository?.default_branch || 'main');
-    if (!base?.trim()) return;
-    await api(`/api/v1/repositories/${repositoryId}/pull-requests`, {
-      method: 'POST',
-      body: JSON.stringify({ title: title.trim(), body: '', head_branch: head.trim(), base_branch: base.trim() }),
-    });
-    await refreshTab('pull-requests');
-    setStatus('Pull request created');
+  function pullRequestComposer() {
+    return document.getElementById('ws-pr-compose');
+  }
+
+  function setPullRequestComposerError(message = '') {
+    const error = document.getElementById('ws-pr-compose-error');
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
+  function openPullRequestComposer() {
+    const dialog = pullRequestComposer();
+    const branches = [...branchSelect.options].map(option => option.value).filter(Boolean);
+    const head = document.getElementById('ws-pr-head');
+    const base = document.getElementById('ws-pr-base');
+    const options = branches.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    head.innerHTML = options;
+    base.innerHTML = options;
+    head.value = branches.includes(branch()) ? branch() : (branches[0] || '');
+    base.value = branches.includes(repository?.default_branch) ? repository.default_branch : (branches[0] || '');
+    document.getElementById('ws-pr-compose-form').reset();
+    // reset() preserves no useful branch values when options were inserted first.
+    head.value = branches.includes(branch()) ? branch() : (branches[0] || '');
+    base.value = branches.includes(repository?.default_branch) ? repository.default_branch : (branches[0] || '');
+    setPullRequestComposerError();
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    document.getElementById('ws-pr-title').focus();
+  }
+
+  function closePullRequestComposer() {
+    const dialog = pullRequestComposer();
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  async function createPullRequest(event) {
+    event?.preventDefault();
+    const form = document.getElementById('ws-pr-compose-form');
+    if (!form.reportValidity()) return;
+    const submit = document.getElementById('ws-pr-submit');
+    const title = document.getElementById('ws-pr-title').value.trim();
+    const body = document.getElementById('ws-pr-description').value.trim();
+    const head = document.getElementById('ws-pr-head').value.trim();
+    const base = document.getElementById('ws-pr-base').value.trim();
+    submit.disabled = true;
+    setPullRequestComposerError();
+    try {
+      await api(`/api/v1/repositories/${repositoryId}/pull-requests`, {
+        method: 'POST', body: JSON.stringify({ title, body, head_branch: head, base_branch: base }),
+      });
+      closePullRequestComposer();
+      await refreshTab('pull-requests');
+      setStatus('Pull request created with its description.');
+    } catch (error) {
+      setPullRequestComposerError(error.message || 'Could not create this pull request.');
+    } finally {
+      submit.disabled = false;
+    }
   }
 
   async function loadBranches() {
@@ -311,15 +386,166 @@
     }
   }
 
+  const prCi = new Map();
+
+  function actionState(pipeline) {
+    return pipeline?.status ? String(pipeline.status).toLowerCase() : 'not-run';
+  }
+
+  function renderPostRunIncident(incident) {
+    if (!incident) return '';
+    const step = incident.step?.name ? ` · Step: ${incident.step.name}` : '';
+    const revision = incident.head_sha ? `<code>${escapeHtml(incident.head_sha)}</code>` : '';
+    const occurredAt = incident.occurred_at ? ` · Recorded: ${incident.occurred_at}` : '';
+    return `<section class="ws-pr-action-incident" aria-label="Post-run incident record">
+      <strong>Post-run incident record</strong>
+      <p>${escapeHtml(incident.summary || 'No additional incident detail was recorded.')}</p>
+      <small>Outcome: ${escapeHtml(incident.outcome || 'unknown')}${escapeHtml(step)}${escapeHtml(occurredAt)} ${revision}</small>
+    </section>`;
+  }
+
+  function renderAction(pipeline, action = {}) {
+    const state = actionState(pipeline || action);
+    if (!pipeline) {
+      if (!action.incident) return '<p class="ws-pr-action-copy">No Amosclaud Action has run for this pull request yet.</p>';
+      return `<div class="ws-pr-action-result"><div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(action.head_sha || '')}</code><code>${escapeHtml(action.id || 'Action recorded')}</code></div>${renderPostRunIncident(action.incident)}</div>`;
+    }
+    const message = pipeline.error_detail || action.error_detail || pipeline.message || 'Action result recorded.';
+    const jobLogs = (pipeline.jobs || []).flatMap(job => job.logs || []).filter(Boolean);
+    return `<div class="ws-pr-action-result">
+      <div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(action.head_sha || '')}</code><code>${escapeHtml(pipeline.id || action.id || 'Action recorded')}</code></div>
+      <p>${escapeHtml(message)}</p>
+      ${renderPostRunIncident(action.incident)}
+      ${['queued', 'running'].includes(state) ? `<button type="button" data-pr-cancel="${escapeHtml(pipeline.id || action.id || '')}">Cancel Action</button>` : ''}
+      ${jobLogs.length ? `<details><summary>Execution log (${jobLogs.length})</summary><pre>${escapeHtml(jobLogs.join('\n'))}</pre></details>` : ''}
+    </div>`;
+  }
+
+  function renderActionHistory(ci) {
+    const actions = ci?.actions || (ci?.pipeline ? [{ pipeline: ci.pipeline }] : []);
+    if (!actions.length) return renderAction(null);
+    return `<div class="ws-pr-action-history">${actions.map(action => renderAction(action.pipeline, action)).join('')}</div>`;
+  }
+
+  function renderPullRequest(pr) {
+    const ci = prCi.get(String(pr.id));
+    const controls = pr.state === 'open'
+      ? `<button type="button" data-pr-control="close" data-pr-id="${pr.id}">Close</button><button type="button" data-pr-control="merge" data-pr-id="${pr.id}">Merge</button>`
+      : pr.state === 'closed' ? `<button type="button" data-pr-control="reopen" data-pr-id="${pr.id}">Reopen</button>` : '';
+    return `<article class="ws-pr-card" data-pr-card="${pr.id}">
+      <button type="button" class="ws-pr-summary" aria-expanded="false" data-pr-toggle="${pr.id}">
+        <span><strong>#${pr.id} ${escapeHtml(pr.title)}</strong><small>${escapeHtml(pr.state)} · ${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)}</small></span><span aria-hidden="true">⌄</span>
+      </button>
+      <section class="ws-pr-detail" hidden data-pr-detail="${pr.id}">
+        <p class="ws-pr-description">${escapeHtml(pr.body || 'No description was provided.').replace(/\n/g, '<br>')}</p>
+        <div class="ws-pr-actions-head"><div><h3>Amosclaud Actions</h3><p>Authoritative fixed compileall and pytest checks for this exact PR head.</p></div><button type="button" data-pr-run="${pr.id}">Run checks</button></div>
+        <div class="ws-pr-action-state" data-pr-ci="${pr.id}">${renderActionHistory(ci)}</div>
+        <div class="ws-pr-control-bar">${controls}</div>
+      </section>
+    </article>`;
+  }
+
+  async function loadPullRequestCi(id) {
+    const result = await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci`);
+    prCi.set(String(id), result);
+    return result;
+  }
+
+  async function togglePullRequest(id) {
+    const card = document.querySelector(`[data-pr-card="${id}"]`);
+    const detail = card?.querySelector('[data-pr-detail]');
+    const toggle = card?.querySelector('[data-pr-toggle]');
+    if (!card || !detail || !toggle) return;
+    const opening = detail.hidden;
+    detail.hidden = !opening;
+    toggle.setAttribute('aria-expanded', String(opening));
+    card.classList.toggle('open', opening);
+    if (!opening) return;
+    const state = card.querySelector('[data-pr-ci]');
+    state.textContent = 'Loading Amosclaud Action history…';
+    try {
+      const result = await loadPullRequestCi(id);
+      state.innerHTML = renderActionHistory(result);
+      pollPullRequestCi(id);
+    } catch (error) {
+      state.innerHTML = `<p class="ws-pr-action-copy ws-error-row">Actions unavailable: ${escapeHtml(error.message)}</p>`;
+    }
+  }
+
+  async function pollPullRequestCi(id) {
+    // Poll only open details and only while an action can still transition.
+    const snapshot = prCi.get(String(id));
+    const latest = snapshot?.actions?.[0]?.pipeline || snapshot?.pipeline;
+    if (!latest || !['pending', 'queued', 'running'].includes(actionState(latest))) return;
+    window.setTimeout(async () => {
+      const state = document.querySelector(`[data-pr-ci="${id}"]`);
+      if (!state) return;
+      try {
+        const result = await loadPullRequestCi(id);
+        state.innerHTML = renderActionHistory(result);
+        pollPullRequestCi(id);
+      } catch { /* The next manual open/refresh can retry without overwriting the UI. */ }
+    }, 2000);
+  }
+
+  async function controlPullRequest(id, action, button) {
+    const destructive = action === 'close' || action === 'merge';
+    if (destructive && !confirm(`${action === 'merge' ? 'Merge' : 'Close'} pull request #${id}?`)) return;
+    button.disabled = true;
+    try {
+      await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/action`, {
+        method: 'POST', body: JSON.stringify({ action }),
+      });
+      prCi.delete(String(id));
+      await refreshTab('pull-requests');
+      setStatus(`Pull request #${id} ${action}d.`);
+    } catch (error) {
+      setStatus(`Pull request action failed: ${error.message}`);
+      button.disabled = false;
+    }
+  }
+
+  async function cancelPullRequestCi(id, actionId, button) {
+    button.disabled = true;
+    try {
+      await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci/${actionId}/cancel`, { method: 'POST' });
+      const result = await loadPullRequestCi(id);
+      const state = document.querySelector(`[data-pr-ci="${id}"]`);
+      if (state) state.innerHTML = renderActionHistory(result);
+      setStatus(`Amosclaud Action cancelled for pull request #${id}.`);
+    } catch (error) {
+      setStatus(`Amosclaud Action could not be cancelled: ${error.message}`);
+      button.disabled = false;
+    }
+  }
+
+  async function runPullRequestCi(id, button) {
+    button.disabled = true;
+    const state = document.querySelector(`[data-pr-ci="${id}"]`);
+    state.textContent = 'Amosclaud Action queued…';
+    try {
+      const result = await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci`, {
+        method: 'POST', body: JSON.stringify({ reason: `Amosclaud Action requested for pull request #${id}` }),
+      });
+      const pipeline = result.pipeline;
+      prCi.set(String(id), { pipeline, actions: [{ id: pipeline.id, status: pipeline.status, head_sha: result.commit_sha, pipeline }] });
+      state.innerHTML = renderActionHistory(prCi.get(String(id)));
+      pollPullRequestCi(id);
+      setStatus(`Amosclaud Action ${actionState(pipeline)} for pull request #${id}.`);
+    } catch (error) {
+      state.innerHTML = `<p class="ws-pr-action-copy ws-error-row">Checks could not start: ${escapeHtml(error.message)}</p>`;
+      setStatus(`Amosclaud Action could not start: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function loadPullRequests() {
     const container = document.getElementById('ws-pull-requests');
     container.innerHTML = '<div class="ws-empty-row">Loading pull requests…</div>';
     try {
-      const prs = await api(`/api/v1/repositories/${repositoryId}/pull-requests`);
-      container.innerHTML = prs.length ? prs.map(pr => `<div class="ws-tool-item">
-        <strong>#${pr.id} ${escapeHtml(pr.title)}</strong>
-        <span>${escapeHtml(pr.state)} · ${escapeHtml(pr.head_branch)} → ${escapeHtml(pr.base_branch)}</span>
-      </div>`).join('') : '<div class="ws-empty-row">No pull requests yet.</div>';
+      const prs = await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests`);
+      container.innerHTML = prs.length ? prs.map(renderPullRequest).join('') : '<div class="ws-empty-row">No pull requests yet.</div>';
     } catch (error) {
       container.innerHTML = `<div class="ws-empty-row ws-error-row">Could not load pull requests: ${escapeHtml(error.message)}</div>`;
     }
@@ -584,6 +810,19 @@
   document.getElementById('ws-new-branch').addEventListener('click', () => newBranch().catch(error => setStatus(error.message)));
   document.getElementById('ws-refresh-issues')?.addEventListener('click', () => refreshTab('issues'));
   document.getElementById('ws-refresh-prs')?.addEventListener('click', () => refreshTab('pull-requests'));
+  document.getElementById('ws-new-pr')?.addEventListener('click', openPullRequestComposer);
+  document.getElementById('ws-pr-compose-form')?.addEventListener('submit', createPullRequest);
+  document.querySelectorAll('[data-pr-compose-close]').forEach(button => button.addEventListener('click', closePullRequestComposer));
+  document.getElementById('ws-pull-requests')?.addEventListener('click', event => {
+    const run = event.target.closest('[data-pr-run]');
+    if (run) { runPullRequestCi(run.dataset.prRun, run); return; }
+    const cancel = event.target.closest('[data-pr-cancel]');
+    if (cancel) { const card = cancel.closest('[data-pr-card]'); cancelPullRequestCi(card?.dataset.prCard, cancel.dataset.prCancel, cancel); return; }
+    const control = event.target.closest('[data-pr-control]');
+    if (control) { controlPullRequest(control.dataset.prId, control.dataset.prControl, control); return; }
+    const toggle = event.target.closest('[data-pr-toggle]');
+    if (toggle) togglePullRequest(toggle.dataset.prToggle);
+  });
   // These listeners used to be attached to hidden placeholder nodes
   // (#ws-build and friends), so the Autonomous tab's visible buttons did
   // nothing at all. Bind the real controls the user can actually see.

@@ -110,6 +110,70 @@ MIGRATIONS = (
             ON cloud_workspaces(owner_id, updated_at);
         """,
     ),
+    Migration(
+        5,
+        "native_actions",
+        """
+        CREATE TABLE IF NOT EXISTS native_action_runs (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL,
+            pull_request_id INTEGER NOT NULL,
+            head_sha TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            requested_by INTEGER NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL CHECK(status IN ('pending','running','success','failed','cancelled')),
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            error_detail TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_native_action_pr_history
+            ON native_action_runs(repository_id, pull_request_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_native_action_recovery
+            ON native_action_runs(status, created_at);
+        """,
+    ),
+    Migration(
+        6,
+        "native_actions_queued_ref",
+        """
+        -- SQLite cannot extend an existing CHECK constraint. Rebuild the
+        -- native Action table atomically while preserving legacy pending rows.
+        BEGIN IMMEDIATE;
+        CREATE TABLE native_action_runs_v6 (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL,
+            pull_request_id INTEGER NOT NULL,
+            head_sha TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            requested_by INTEGER NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            action_ref TEXT,
+            status TEXT NOT NULL CHECK(status IN ('pending','queued','running','success','failed','cancelled')),
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            error_detail TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+        );
+        INSERT INTO native_action_runs_v6(
+            id,repository_id,pull_request_id,head_sha,branch,requested_by,
+            reason,action_ref,status,created_at,started_at,finished_at,error_detail
+        ) SELECT
+            id,repository_id,pull_request_id,head_sha,branch,requested_by,
+            reason,NULL,status,created_at,started_at,finished_at,error_detail
+          FROM native_action_runs;
+        DROP TABLE native_action_runs;
+        ALTER TABLE native_action_runs_v6 RENAME TO native_action_runs;
+        CREATE INDEX idx_native_action_pr_history
+            ON native_action_runs(repository_id, pull_request_id, created_at DESC);
+        CREATE INDEX idx_native_action_recovery
+            ON native_action_runs(status, created_at);
+        COMMIT;
+        """,
+    ),
 )
 
 _GITHUB_REPOSITORY_COLUMNS = {
@@ -122,6 +186,28 @@ _GITHUB_REPOSITORY_COLUMNS = {
     "github_sync_detail": "TEXT",
     "github_last_remote_sha": "TEXT",
     "github_repository_id": "INTEGER",
+}
+
+# Each statement is static so legacy column detection cannot become executable SQL.
+_GITHUB_CONNECTION_COPY_SQL = {
+    (True, True): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,github_user_id,github_id,github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
+    (True, False): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,github_user_id,CAST(github_user_id AS TEXT),github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
+    (False, True): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,CAST(github_id AS INTEGER),github_id,github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
 }
 
 
@@ -139,8 +225,7 @@ def _create_github_connections(
         if include_user_foreign_key
         else ""
     )
-    db.execute(
-        f"""CREATE TABLE IF NOT EXISTS github_connections (
+    db.execute(f"""CREATE TABLE IF NOT EXISTS github_connections (
             user_id INTEGER PRIMARY KEY,
             github_user_id INTEGER,
             github_id TEXT,
@@ -150,8 +235,7 @@ def _create_github_connections(
             scopes TEXT NOT NULL DEFAULT '',
             connected_at TEXT NOT NULL,
             updated_at TEXT NOT NULL{foreign_key}
-        )"""
-    )
+        )""")
 
 
 def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
@@ -163,104 +247,62 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
     """
 
     users_table_exists = bool(
-        db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'"
-        ).fetchone()
+        db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
     )
     _create_github_connections(
         db,
         include_user_foreign_key=users_table_exists,
     )
-    info = {
-        row[1]: row
-        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
-    }
+    info = {row[1]: row for row in db.execute("PRAGMA table_info(github_connections)").fetchall()}
     if "github_user_id" not in info:
         db.execute("ALTER TABLE github_connections ADD COLUMN github_user_id INTEGER")
     if "github_id" not in info:
         db.execute("ALTER TABLE github_connections ADD COLUMN github_id TEXT")
 
-    info = {
-        row[1]: row
-        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
-    }
-    table_empty = (
-        db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
-    )
+    info = {row[1]: row for row in db.execute("PRAGMA table_info(github_connections)").fetchall()}
+    table_empty = db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
     current_id = info.get("github_user_id")
-    should_rebuild = bool(
-        current_id
-        and current_id[3] == 1
-        and (users_table_exists or table_empty)
-    )
+    should_rebuild = bool(current_id and current_id[3] == 1 and (users_table_exists or table_empty))
     if should_rebuild:
-        db.execute(
-            "ALTER TABLE github_connections RENAME TO github_connections_legacy"
-        )
+        db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
         _create_github_connections(
             db,
             include_user_foreign_key=users_table_exists,
         )
         legacy = {
-            row[1]
-            for row in db.execute(
-                "PRAGMA table_info(github_connections_legacy)"
-            ).fetchall()
+            row[1] for row in db.execute("PRAGMA table_info(github_connections_legacy)").fetchall()
         }
         if not table_empty:
-            github_user_expr = (
-                "github_user_id"
-                if "github_user_id" in legacy
-                else "CAST(github_id AS INTEGER)"
-            )
-            github_id_expr = (
-                "github_id"
-                if "github_id" in legacy
-                else "CAST(github_user_id AS TEXT)"
-            )
-            db.execute(
-                f"""INSERT INTO github_connections
-                    (user_id,github_user_id,github_id,github_login,avatar_url,
-                     access_token_ciphertext,scopes,connected_at,updated_at)
-                    SELECT user_id,{github_user_expr},{github_id_expr},github_login,
-                           avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
-                    FROM github_connections_legacy"""
-            )
+            has_github_user_id = "github_user_id" in legacy
+            has_github_id = "github_id" in legacy
+            if not (has_github_user_id or has_github_id):
+                raise RuntimeError("Legacy GitHub connection schema has no GitHub identity column")
+            db.execute(_GITHUB_CONNECTION_COPY_SQL[(has_github_user_id, has_github_id)])
         db.execute("DROP TABLE github_connections_legacy")
 
-    db.execute(
-        """UPDATE github_connections
+    db.execute("""UPDATE github_connections
            SET github_user_id=CAST(github_id AS INTEGER)
            WHERE github_user_id IS NULL
              AND github_id IS NOT NULL
-             AND TRIM(github_id) <> ''"""
-    )
-    db.execute(
-        """UPDATE github_connections
+             AND TRIM(github_id) <> ''""")
+    db.execute("""UPDATE github_connections
            SET github_id=CAST(github_user_id AS TEXT)
            WHERE github_id IS NULL
-             AND github_user_id IS NOT NULL"""
-    )
+             AND github_user_id IS NOT NULL""")
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
     """Idempotently add GitHub account and repository synchronization schema."""
 
     _ensure_github_connections_schema(db)
-    columns = {
-        row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
-    }
+    columns = {row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()}
     for name, sql_type in _GITHUB_REPOSITORY_COLUMNS.items():
         if name not in columns:
             db.execute(f"ALTER TABLE repositories ADD COLUMN {name} {sql_type}")
-    db.execute(
-        """CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
-           ON repositories(github_repository_id)"""
-    )
-    db.execute(
-        """CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
-           ON repositories(github_full_name COLLATE NOCASE)"""
-    )
+    db.execute("""CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
+           ON repositories(github_repository_id)""")
+    db.execute("""CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
+           ON repositories(github_full_name COLLATE NOCASE)""")
 
 
 def run_migrations(path: str | Path) -> list[int]:
@@ -271,14 +313,12 @@ def run_migrations(path: str | Path) -> list[int]:
     applied: list[int] = []
     with sqlite3.connect(db_path) as db:
         db.execute("PRAGMA foreign_keys = ON")
-        db.execute(
-            """CREATE TABLE IF NOT EXISTS schema_migrations (
+        db.execute("""CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 checksum TEXT NOT NULL,
                 applied_at TEXT NOT NULL
-            )"""
-        )
+            )""")
         for migration in MIGRATIONS:
             existing = db.execute(
                 "SELECT checksum FROM schema_migrations WHERE version=?",

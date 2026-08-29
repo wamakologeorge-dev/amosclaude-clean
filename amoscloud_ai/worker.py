@@ -60,21 +60,22 @@ def recover_durable_operations(**_kwargs) -> None:
     try:
         from amoscloud_ai.cloud_task_runner import recover_cloud_tasks
         from amoscloud_ai.github_relay_recovery import retry_pending_relays
+        from amoscloud_ai.native_actions import recover_actions as recover_native_actions
         from amoscloud_ai.storage_capacity import recover_jobs as recover_storage_resizes
-        from amoscloud_ai.storage_provisioning import (
-            recover_jobs as recover_storage_provisions,
-        )
+        from amoscloud_ai.storage_provisioning import recover_jobs as recover_storage_provisions
 
         tasks = recover_cloud_tasks()
+        native_actions = recover_native_actions()
         relays = retry_pending_relays()
         storage_resizes = recover_storage_resizes()
         storage_provisions = recover_storage_provisions()
         log.info(
             (
-                "Recovered durable operations: tasks=%s relays=%s "
+                "Recovered durable operations: tasks=%s native_actions=%s relays=%s "
                 "storage_resizes=%s storage_provisions=%s"
             ),
             tasks,
+            native_actions,
             relays,
             storage_resizes,
             storage_provisions,
@@ -104,9 +105,7 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         job.status = PipelineStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
         job.logs.append("Task received by the execution worker.")
-        job.logs.append(
-            "Execution started: understand → inspect → plan → act → verify → report."
-        )
+        job.logs.append("Execution started: understand → inspect → plan → act → verify → report.")
     _save(pipeline, payload)
 
     try:
@@ -133,9 +132,7 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
             successful = asyncio.run(
                 orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
             )
-            pipeline.status = (
-                PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
-            )
+            pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
             pipeline.message = (
                 "Amosclaud Autonomous Agent: pipeline completed with verified evidence."
                 if successful
@@ -184,6 +181,22 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         raise self.retry(exc=exc, countdown=5)
 
 
+@celery_app.task(name="amoscloud_ai.run_native_action", bind=True, max_retries=0)
+def run_native_action_task(self, action_id: str) -> Dict[str, Any]:
+    """Execute one persisted fixed-plan native Action.
+
+    ``execute_action`` captures every failure in the durable Action and pipeline
+    rows, so this task intentionally does not retry or leave a false pending
+    state after an isolation failure.
+    """
+    from amoscloud_ai.native_actions import execute_action
+
+    pipeline = execute_action(action_id)
+    if pipeline is None:
+        return {"action_id": action_id, "status": "missing"}
+    return {"action_id": action_id, "status": pipeline.status.value}
+
+
 @celery_app.task(name="amoscloud_ai.run_deployment", bind=True, max_retries=3)
 def run_deployment_task(
     self,
@@ -230,9 +243,7 @@ def run_deployment_task(
             dep.message = deployment_reply(dep.status)
             dep.copilot_reply = dep.message
 
-        result_status = (
-            dep.status.value if dep else ("completed" if success else "failed")
-        )
+        result_status = dep.status.value if dep else ("completed" if success else "failed")
         return {"deployment_id": deployment_id, "status": result_status}
     except Exception as exc:
         log.exception("[worker] Deployment %s failed", deployment_id)
@@ -374,9 +385,7 @@ def run_daily_autonomous_builder_task(self) -> dict[str, Any]:
 
 def main() -> None:
     """Start the Celery worker when invoked as a module."""
-    celery_app.worker_main(
-        argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"]
-    )
+    celery_app.worker_main(argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"])
 
 
 if __name__ == "__main__":

@@ -38,9 +38,10 @@ from amoscloud_ai.api.routes import (
     agent_readiness,
     amo_runtime,
     amo_tokens,
-    amosclaud_authority,
     amos_mail,
     amos_secure_code,
+    amosclaud_authority,
+    amosclaud_production,
     auth,
     billing,
     bundles_api_host,
@@ -214,6 +215,7 @@ def create_app() -> FastAPI:
     app.include_router(pr_tasks.router, prefix="/api/v1")
     app.include_router(github_travel.router, prefix="/api/v1")
     app.include_router(pipelines.router, prefix="/api/v1")
+    app.include_router(amosclaud_production.router, prefix="/api/v1")
     app.include_router(platform_services.router, prefix="/api/v1")
     app.include_router(reviews.router, prefix="/api/v1")
     app.include_router(deployments.router, prefix="/api/v1")
@@ -392,6 +394,13 @@ def create_app() -> FastAPI:
         if not get_user_from_session(request.cookies.get("amos_session")):
             return RedirectResponse("/login", status_code=302)
         return FileResponse(web_dir / "mail.html")
+
+    @app.get("/spacecodeme", include_in_schema=False)
+    async def spacecodeme_page(request: Request):
+        """Open the authenticated SpaceCodeMe repository-workspace launcher."""
+        if not get_user_from_session(request.cookies.get("amos_session")):
+            return RedirectResponse("/login", status_code=302)
+        return FileResponse(web_dir / "spacecodeme.html")
 
     @app.get("/workspace/{repository_id}", include_in_schema=False)
     async def repository_workspace(repository_id: int, request: Request):

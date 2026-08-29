@@ -22,7 +22,9 @@ class BuildStatus(str, Enum):
 class BuildRequest(BaseModel):
     mode: BuildMode
     instructions: Optional[str] = Field(default=None, description="Text instructions for the build")
-    context: Optional[str] = Field(default=None, description="Additional context or project details")
+    context: Optional[str] = Field(
+        default=None, description="Additional context or project details"
+    )
 
 
 class BuildResult(BaseModel):
@@ -48,7 +50,10 @@ class HealthResponse(BaseModel):
 
 
 class PipelineStatus(str, Enum):
+    # Retained for compatibility with older, non-native pipeline records.
     PENDING = "pending"
+    # Native Actions use this explicit pre-dispatch state rather than pending.
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"

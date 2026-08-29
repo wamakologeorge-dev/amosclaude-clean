@@ -10,7 +10,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from amoscloud_ai import first_production
+from amoscloud_ai import first_production, native_actions
 from amoscloud_ai.api.routes import pipelines, solo_development
 from amoscloud_ai.api.routes.repositories import (
     _access,
@@ -22,7 +22,6 @@ from amoscloud_ai.api.routes.repositories import (
     _require_write,
     _safe_branch,
 )
-from amoscloud_ai.models import PipelineTrigger
 
 router = APIRouter(prefix="/amosclaud/production", tags=["amosclaud-production"])
 
@@ -43,6 +42,7 @@ def _now() -> str:
 
 def _ensure_control_tables(db: sqlite3.Connection) -> None:
     solo_development._ensure_tables(db)
+    native_actions.ensure_schema(db)
     db.executescript("""
         CREATE TABLE IF NOT EXISTS amosclaud_pr_controls (
             repository_id INTEGER NOT NULL,
@@ -207,26 +207,23 @@ async def run_amosclaud_ci(
         if body.commit_sha and body.commit_sha != head_sha:
             raise HTTPException(status_code=409, detail="Requested CI revision is stale")
 
-    result = await pipelines.trigger_pipeline(
-        PipelineTrigger(
-            trigger="amosclaud-ci",
-            branch=branch,
-            commit_sha=head_sha,
-            payload={
-                "repository_id": repository_id,
-                "authoritative": True,
-                "commit_sha": head_sha,
-                "requested_by": int(user["id"]),
-                "reason": body.reason,
-            },
+    # A native Action must have PR attribution. Refuse the historical generic
+    # pipeline path rather than reporting its no-op success as authoritative CI.
+    with _db() as db:
+        _ensure_control_tables(db)
+        pr = db.execute(
+            """SELECT id FROM native_pull_requests WHERE repository_id=?
+               AND head_branch=? AND state='open' ORDER BY id DESC LIMIT 1""",
+            (repository_id, branch),
+        ).fetchone()
+    if not pr:
+        raise HTTPException(
+            status_code=409,
+            detail="Amosclaud Actions must be run from an open pull request for durable attribution",
         )
+    return await _queue_pull_request_action(
+        repository_id, int(pr["id"]), branch, head_sha, body.reason, user
     )
-    return {
-        "authority": "amosclaud",
-        "pipeline": result.model_dump(mode="json"),
-        "color": first_production.ci_color(result.status.value),
-        "commit_sha": head_sha,
-    }
 
 
 @router.get("/repositories/{repository_id}/pull-requests")
@@ -250,6 +247,112 @@ def production_pull_requests(
             item["control"] = control
             result.append(item)
         return result
+
+
+async def _queue_pull_request_action(
+    repository_id: int,
+    pull_request_id: int,
+    branch: str,
+    head_sha: str,
+    reason: str,
+    user: sqlite3.Row,
+) -> dict[str, Any]:
+    # Keep the compatibility trigger label explicit: trigger="amosclaud-ci".
+    pipeline = native_actions.queue_action(
+        repository_id=repository_id,
+        pull_request_id=pull_request_id,
+        branch=branch,
+        head_sha=head_sha,
+        requested_by=int(user["id"]),
+        reason=reason or f"Amosclaud Action for pull request #{pull_request_id}",
+    )
+    return {
+        "authority": "amosclaud",
+        "authoritative": True,
+        "pull_request_id": pull_request_id,
+        "pipeline": pipeline.model_dump(mode="json"),
+        "color": first_production.ci_color(pipeline.status.value),
+        "commit_sha": head_sha,
+    }
+
+
+@router.get("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci")
+def pull_request_ci_status(
+    repository_id: int,
+    pull_request_id: int,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Return the latest authoritative Amosclaud Action for one native PR."""
+    with _db() as db:
+        _access(db, repository_id, int(user["id"]))
+        row = _pull_request(db, repository_id, pull_request_id)
+        branch = str(row["head_branch"])
+    repo = _open(repository_id)
+    head_sha = repo.commit(branch).hexsha
+    history = native_actions.action_history(repository_id, pull_request_id)
+    latest = history[0] if history else None
+    return {
+        "authority": "amosclaud",
+        "authoritative": True,
+        "pull_request_id": pull_request_id,
+        "branch": branch,
+        "commit_sha": head_sha,
+        "pipeline": latest["pipeline"] if latest else None,
+        "actions": history,
+    }
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci", status_code=201)
+async def run_pull_request_ci(
+    repository_id: int,
+    pull_request_id: int,
+    body: CIRunRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Run Amosclaud's authoritative checks for this PR's exact head branch."""
+    with _repo_lock(repository_id), _db() as db:
+        access = _access(db, repository_id, int(user["id"]))
+        _require_write(access)
+        row = _pull_request(db, repository_id, pull_request_id)
+        if row["state"] != "open":
+            raise HTTPException(
+                status_code=409, detail="Amosclaud Actions require an open pull request"
+            )
+        branch = str(row["head_branch"])
+        repo = _open(repository_id)
+        head_sha = repo.commit(branch).hexsha
+        if body.commit_sha and body.commit_sha.lower() != head_sha.lower():
+            raise HTTPException(status_code=409, detail="Requested CI revision is stale")
+    return await _queue_pull_request_action(
+        repository_id, pull_request_id, branch, head_sha, body.reason, user
+    )
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci/{action_id}/cancel")
+def cancel_pull_request_ci(
+    repository_id: int,
+    pull_request_id: int,
+    action_id: str,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Cancel one active Action belonging to this PR; terminal history is immutable."""
+    with _db() as db:
+        _access(db, repository_id, int(user["id"]))
+        _pull_request(db, repository_id, pull_request_id)
+    action = native_actions.latest_action(repository_id, pull_request_id)
+    if action is None or action["id"] != action_id:
+        raise HTTPException(
+            status_code=404, detail="Amosclaud Action not found for this pull request"
+        )
+    pipeline = native_actions.cancel_action(action_id)
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="Amosclaud Action not found")
+    return {
+        "authority": "amosclaud",
+        "authoritative": True,
+        "pull_request_id": pull_request_id,
+        "pipeline": pipeline.model_dump(mode="json"),
+    }
 
 
 @router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/action")
@@ -298,11 +401,13 @@ def control_pull_request(
                 raise HTTPException(status_code=409, detail="Pull request is not open")
             repo = _open(repository_id)
             head_sha = repo.commit(row["head_branch"]).hexsha
-            ci = _latest_ci(repository_id, row["head_branch"])
+            action = native_actions.latest_action(repository_id, pull_request_id)
+            # Only the latest Action for *this PR* may authorize a merge, and
+            # its immutable checked-out SHA must equal the current PR head.
             if not first_production.merge_allowed(
-                ci_status=ci["status"] if ci else None,
+                ci_status=action["status"] if action else None,
                 head_sha=head_sha,
-                verified_sha=ci["commit_sha"] if ci else None,
+                verified_sha=action["head_sha"] if action else None,
             ):
                 raise HTTPException(
                     status_code=409,
