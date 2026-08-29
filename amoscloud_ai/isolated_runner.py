@@ -298,14 +298,30 @@ def _parse_memory_limit_bytes(raw: str) -> int:
     return max(64 * 1024**2, int(amount * multiplier))
 
 
-def _process_sandbox_limits(timeout: int, memory_bytes: int):
+DEFAULT_FILE_SIZE_LIMIT_BYTES = 128 * 1024 * 1024
+
+
+def _resolve_file_size_limit(explicit: int | None) -> int:
+    """File-size ceiling for a sandboxed step.
+
+    Steps that legitimately write large files — installing a repository's
+    declared dependencies downloads real wheels — pass a larger explicit
+    allowance; every other step keeps the strict default.
+    """
+
+    if explicit is None:
+        return DEFAULT_FILE_SIZE_LIMIT_BYTES
+    return max(16 * 1024**2, min(int(explicit), 4 * 1024**3))
+
+
+def _process_sandbox_limits(timeout: int, memory_bytes: int, file_size_bytes: int):
     def apply() -> None:
         if resource is None:  # pragma: no cover - non-POSIX platforms
             return
         for limit, value in (
             (resource.RLIMIT_CPU, timeout),
             (resource.RLIMIT_AS, memory_bytes),
-            (resource.RLIMIT_FSIZE, 128 * 1024 * 1024),
+            (resource.RLIMIT_FSIZE, file_size_bytes),
             (resource.RLIMIT_CORE, 0),
         ):
             try:
@@ -334,6 +350,7 @@ def _run_in_process_sandbox(
     workspace: Path,
     environment: Mapping[str, str],
     timeout_seconds: int | None = None,
+    file_size_limit_bytes: int | None = None,
 ) -> IsolatedRunResult:
     """Run an allowlisted command as a locked-down worker subprocess.
 
@@ -361,6 +378,7 @@ def _run_in_process_sandbox(
     timeout = timeout_seconds or int(os.getenv("AMOSCLAUD_RUNNER_TIMEOUT_SECONDS", "600"))
     timeout = max(1, min(timeout, 3600))
     memory_bytes = _parse_memory_limit_bytes(os.getenv("AMOSCLAUD_RUNNER_MEMORY", "768m"))
+    file_size_bytes = _resolve_file_size_limit(file_size_limit_bytes)
 
     sandbox_home = Path(tempfile.mkdtemp(prefix="amosclaud-sandbox-home-"))
     env: dict[str, str] = {
@@ -384,7 +402,7 @@ def _run_in_process_sandbox(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             start_new_session=True,
-            preexec_fn=_process_sandbox_limits(timeout, memory_bytes),
+            preexec_fn=_process_sandbox_limits(timeout, memory_bytes, file_size_bytes),
         )
         assert process.stdout is not None
         drain = threading.Thread(target=_drain_output, args=(process.stdout, buffer), daemon=True)
@@ -433,6 +451,7 @@ def run_in_isolated_container(
     workspace: Path,
     environment: Mapping[str, str],
     timeout_seconds: int | None = None,
+    file_size_limit_bytes: int | None = None,
 ) -> IsolatedRunResult:
     """Run an allowlisted command in a locked-down worker container.
 
@@ -451,6 +470,7 @@ def run_in_isolated_container(
                 workspace=workspace,
                 environment=environment,
                 timeout_seconds=timeout_seconds,
+                file_size_limit_bytes=file_size_limit_bytes,
             )
         if not docker:
             raise RunnerConfigurationError("Docker is required on the isolated worker station")

@@ -102,11 +102,14 @@ def test_bootstrap_rebuilds_a_committed_environment_directory(tmp_path, monkeypa
 
 
 def test_requirement_manifest_discovery_covers_standard_layouts(tmp_path) -> None:
-    """Root, one-level subdirectory, and requirements/ manifests are found;
-    anything inside the Action environment is ignored."""
+    """Canonical root, one-level subdirectory, and requirements/ manifests are
+    installed; optional lanes are skipped; the Action environment is ignored."""
 
     (tmp_path / "requirements.txt").write_text("# root\n", encoding="utf-8")
     (tmp_path / "dev-requirements.txt").write_text("# dev\n", encoding="utf-8")
+    (tmp_path / "requirements-model-server.txt").write_text(
+        "torch>=2\n", encoding="utf-8"
+    )
     gateway = tmp_path / "api-gateway"
     gateway.mkdir()
     (gateway / "requirements.txt").write_text("# subdir\n", encoding="utf-8")
@@ -117,14 +120,80 @@ def test_requirement_manifest_discovery_covers_standard_layouts(tmp_path) -> Non
     decoy.mkdir()
     (decoy / "requirements.txt").write_text("# decoy\n", encoding="utf-8")
 
-    found = action_bootstrap._requirement_files(tmp_path)
-    names = {str(path.relative_to(tmp_path)) for path in found}
+    install, skipped = action_bootstrap._discover_manifests(tmp_path)
+    names = {str(path.relative_to(tmp_path)) for path in install}
     assert names == {
         "requirements.txt",
         "dev-requirements.txt",
         os.path.join("api-gateway", "requirements.txt"),
         os.path.join("requirements", "test.txt"),
     }
+    assert install[0].name == "requirements.txt"
+    assert [str(path.relative_to(tmp_path)) for path in skipped] == [
+        "requirements-model-server.txt"
+    ]
+
+
+def test_optional_requirements_lanes_never_break_the_run(tmp_path, monkeypatch, capsys) -> None:
+    """A heavyweight optional lane (a model server needing gigabyte-scale
+    packages) is skipped with a plain explanation instead of failing the
+    Action, exactly like every mainstream CI that installs named manifests."""
+
+    (tmp_path / "requirements.txt").write_text("# nothing needed\n", encoding="utf-8")
+    (tmp_path / "requirements-model-server.txt").write_text(
+        "definitely-not-a-real-package-amosclaud-test\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    assert action_bootstrap.main() == 0
+    output = capsys.readouterr().out
+    assert "Skipping requirements-model-server.txt" in output
+    assert "optional requirements lanes" in output
+
+
+def test_bespoke_layouts_fall_back_to_every_discovered_manifest(tmp_path) -> None:
+    """A repository with only variant manifests still gets an environment."""
+
+    (tmp_path / "requirements-ci.txt").write_text("# ci\n", encoding="utf-8")
+    install, skipped = action_bootstrap._discover_manifests(tmp_path)
+    assert [path.name for path in install] == ["requirements-ci.txt"]
+    assert skipped == []
+
+
+def test_deps_step_gets_a_larger_file_allowance(monkeypatch, tmp_path) -> None:
+    """Installing declared dependencies writes real wheels, so the deps step
+    passes a one-gigabyte per-file allowance through to the sandbox while the
+    other fixed steps keep the strict default."""
+
+    from amoscloud_ai import isolated_runner
+
+    assert native_actions.DEPS_FILE_SIZE_LIMIT_BYTES == 1024**3
+    assert isolated_runner._resolve_file_size_limit(None) == 128 * 1024**2
+    assert (
+        isolated_runner._resolve_file_size_limit(
+            native_actions.DEPS_FILE_SIZE_LIMIT_BYTES
+        )
+        == 1024**3
+    )
+    # Absurd values are clamped to a sane range.
+    assert isolated_runner._resolve_file_size_limit(1) == 16 * 1024**2
+    assert isolated_runner._resolve_file_size_limit(10**18) == 4 * 1024**3
+
+    captured: dict[str, object] = {}
+
+    def _capture(command, **kwargs):
+        captured.update(kwargs)
+        return isolated_runner.IsolatedRunResult(returncode=0, output="", timed_out=False)
+
+    monkeypatch.setattr(isolated_runner, "_run_in_process_sandbox", _capture)
+    monkeypatch.setattr(isolated_runner.shutil, "which", lambda *_: None)
+    monkeypatch.delenv("AMOSCLAUD_REQUIRE_CONTAINER", raising=False)
+    isolated_runner.run_in_isolated_container(
+        "python -m pytest -q",
+        workspace=tmp_path,
+        environment=SANDBOX_ENV,
+        file_size_limit_bytes=native_actions.DEPS_FILE_SIZE_LIMIT_BYTES,
+    )
+    assert captured["file_size_limit_bytes"] == native_actions.DEPS_FILE_SIZE_LIMIT_BYTES
 
 
 def test_plan_commands_stay_code_owned_and_parseable() -> None:

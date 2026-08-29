@@ -12,10 +12,20 @@ What it does, truthfully and in order:
    first, so repository content can never impersonate the environment. The
    environment can see the worker station's baseline toolkit (pytest and its
    canonical plugins), while packages installed here take precedence.
-2. Installs the repository's declared requirements files. Real repositories
-   need their own dependencies — an api gateway needs its database driver —
-   and pytest cannot even start when conftest imports are missing. This is
-   the same contract every mainstream CI provides.
+2. Installs the repository's canonical requirements manifests — the root
+   ``requirements.txt``, the well-known dev/test manifests, the conventional
+   ``requirements/`` folder, and the same names one directory down for
+   monorepo services. Real repositories need their own dependencies — an api
+   gateway needs its database driver — and pytest cannot even start when
+   conftest imports are missing. This is the same contract every mainstream
+   CI provides. Other ``*requirements*.txt`` variants are optional lanes a
+   repository documents for special deployments (model servers, GPU images);
+   they are skipped with a plain log line so a heavyweight optional lane can
+   never break or bloat the test run. Tests that need an optional lane are
+   expected to skip themselves when its packages are absent, which is exactly
+   what ``pytest.importorskip`` is for. If a repository declares nothing
+   canonical, every discovered manifest is installed so bespoke layouts still
+   get an environment.
 3. Optionally installs the repository package itself (editable) when the
    repository declares a build (``pyproject.toml`` or ``setup.py``). A failure
    here is reported but not fatal: the authoritative verdict belongs to the
@@ -38,24 +48,44 @@ VENV_DIR = ".amosclaud-venv"
 
 _PIP_ENV = {
     "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "PIP_NO_CACHE_DIR": "1",
     "PIP_NO_INPUT": "1",
     "PIP_ROOT_USER_ACTION": "ignore",
     "PYTHONDONTWRITEBYTECODE": "1",
 }
 
+CANONICAL_MANIFEST_NAMES = (
+    "requirements.txt",
+    "requirements-dev.txt",
+    "requirements-test.txt",
+    "requirements-tests.txt",
+    "dev-requirements.txt",
+    "test-requirements.txt",
+)
 
-def _requirement_files(root: Path) -> list[Path]:
-    """Standard requirements manifests at the root, one directory down, and
-    inside a conventional ``requirements/`` folder — nothing else."""
 
-    found: list[Path] = []
+def _discover_manifests(root: Path) -> tuple[list[Path], list[Path]]:
+    """Partition discovered manifests into (install, skipped optional lanes).
+
+    The fixed test environment installs what every mainstream CI installs:
+    the canonical manifests (root ``requirements.txt``, the well-known
+    dev/test names, the conventional ``requirements/`` folder, and the same
+    canonical names one directory down for monorepo services). Any other
+    ``*requirements*.txt`` variant is an optional lane the repository keeps
+    separate on purpose — model servers, GPU builds, deployment bundles —
+    and installing those can pull gigabyte-scale packages the tests never
+    import. They are skipped, plainly logged. If nothing canonical exists,
+    every discovered manifest is installed so bespoke layouts still work.
+    """
+
+    candidates: list[Path] = []
     seen: set[Path] = set()
 
     def _add(path: Path) -> None:
         resolved = path.resolve()
         if resolved not in seen and path.is_file():
             seen.add(resolved)
-            found.append(path)
+            candidates.append(path)
 
     for pattern in ("*requirements*.txt", "*/*requirements*.txt"):
         for path in sorted(root.glob(pattern)):
@@ -66,7 +96,29 @@ def _requirement_files(root: Path) -> list[Path]:
     if requirements_dir.is_dir():
         for path in sorted(requirements_dir.glob("*.txt")):
             _add(path)
-    return found
+
+    canonical: list[Path] = []
+    extras: list[Path] = []
+    for path in candidates:
+        conventional_folder = (
+            path.parent.name == "requirements" and path.parent.parent == root
+        )
+        if path.name in CANONICAL_MANIFEST_NAMES or conventional_folder:
+            canonical.append(path)
+        else:
+            extras.append(path)
+    if not canonical:
+        return candidates, []
+    canonical.sort(
+        key=lambda path: (len(path.parts), path.name != "requirements.txt", str(path))
+    )
+    return canonical, extras
+
+
+def _requirement_files(root: Path) -> list[Path]:
+    """The manifests the fixed plan installs (see ``_discover_manifests``)."""
+
+    return _discover_manifests(root)[0]
 
 
 def _run_pip(python: Path, arguments: list[str]) -> int:
@@ -97,7 +149,13 @@ def main() -> int:
         print("The Action environment has no python executable; the worker station is misconfigured.")
         return 1
 
-    manifests = _requirement_files(root)
+    manifests, skipped = _discover_manifests(root)
+    for extra in skipped:
+        print(
+            f"Skipping {extra.relative_to(root)}: optional requirements lanes are not "
+            "part of the fixed test environment. Tests that need them should skip "
+            "themselves when their packages are absent."
+        )
     if not manifests:
         print("No requirements manifests found; the worker toolkit alone will run the tests.")
     for manifest in manifests:

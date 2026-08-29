@@ -32,6 +32,11 @@ from amoscloud_ai.task_dispatch import dispatch_task
 _LOGGER = logging.getLogger(__name__)
 _ACTION_SHA = re.compile(r"^[0-9a-f]{40}$")
 # This plan is intentionally code-owned. Do not replace it with repository input.
+DEPS_FILE_SIZE_LIMIT_BYTES = 1024**3
+"""Installing a repository's declared requirements downloads real wheels, so
+the deps step gets a one-gigabyte per-file allowance instead of the runner's
+strict default. Compile and pytest steps keep the strict cap."""
+
 ACTION_PLAN: tuple[tuple[str, str, str], ...] = (
     ("compileall", "Compile Python sources", "python -m compileall -q -x [.]amosclaud-venv ."),
     ("deps", "Install repository requirements", "python .amosclaud-bootstrap.py"),
@@ -477,7 +482,7 @@ def execute_action(action_id: str) -> PipelineResponse | None:
         repo, checkout, ref, temp_root = _detached_checkout(
             int(row["repository_id"]), row["action_ref"], row["head_sha"]
         )
-        for job, (_, _, command) in zip(pipeline.jobs, ACTION_PLAN):
+        for job, (plan_id, _, command) in zip(pipeline.jobs, ACTION_PLAN):
             if _was_cancelled(action_id):
                 return pipelines._get(action_id)
             job.status = PipelineStatus.RUNNING
@@ -488,6 +493,11 @@ def execute_action(action_id: str) -> PipelineResponse | None:
                 command,
                 workspace=checkout,
                 environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"},
+                # Installing declared dependencies legitimately writes large
+                # wheels; every other fixed step keeps the strict default cap.
+                file_size_limit_bytes=(
+                    DEPS_FILE_SIZE_LIMIT_BYTES if plan_id == "deps" else None
+                ),
             )
             job.logs.append(_safe_log(result.output))
             job.finished_at = _now()
