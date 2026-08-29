@@ -382,3 +382,17 @@ def test_not_found_banner_requires_no_repository_evidence():
     for loader in ("loadTree", "loadCommits", "loadIssues", "loadPullRequests"):
         body = js.split(f"async function {loader}(")[1].split("\n  }")[0]
         assert "showNotFound" not in body, f"{loader} must not raise the banner"
+
+
+def test_pull_request_composer_collects_a_plain_language_description():
+    """Creating a native PR must give every user a clear place to explain it."""
+    html = (WEB / "workspace.html").read_text(encoding="utf-8")
+    js = (WEB / "workspace.js").read_text(encoding="utf-8")
+
+    assert 'id="ws-pr-compose"' in html
+    assert 'What is this pull request about?' in html
+    assert 'id="ws-pr-description"' in html
+    assert 'placeholder="Explain what changed, why it matters, and anything a reviewer should check."' in html
+    assert 'id="ws-pr-head"' in html and 'id="ws-pr-base"' in html
+    assert 'body, head_branch: head, base_branch: base' in js
+    assert "prompt('Pull request title')" not in js

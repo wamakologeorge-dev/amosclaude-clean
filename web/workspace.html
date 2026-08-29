@@ -93,6 +93,28 @@
     <section class="ws-panel" data-panel="pull-requests"><div class="ws-section-head"><div><h2>Pull requests</h2><p>Create and merge changes between repository branches.</p></div><div class="ws-tool-form"><button id="ws-new-pr" type="button">New pull request</button><button id="ws-refresh-prs" type="button">Refresh</button></div></div><div id="ws-pull-requests" class="ws-tool-list"><div class="ws-empty-row">Open this tab to load pull requests.</div></div></section>
   </main>
 
+  <dialog id="ws-pr-compose" class="ws-compose-dialog" aria-labelledby="ws-pr-compose-title">
+    <form id="ws-pr-compose-form" method="dialog" class="ws-compose-form">
+      <div class="ws-compose-head">
+        <div><h2 id="ws-pr-compose-title">Open a pull request</h2><p>Describe the change in plain language so reviewers know what to look for.</p></div>
+        <button class="ws-compose-close" type="button" data-pr-compose-close aria-label="Close pull request form">×</button>
+      </div>
+      <label for="ws-pr-title">Title</label>
+      <input id="ws-pr-title" name="title" maxlength="200" required autocomplete="off" placeholder="Add a short, clear title">
+      <label for="ws-pr-description">What is this pull request about?</label>
+      <textarea id="ws-pr-description" name="description" maxlength="50000" required placeholder="Explain what changed, why it matters, and anything a reviewer should check."></textarea>
+      <p class="ws-compose-help">A helpful description makes the pull request easier for anyone to understand.</p>
+      <div class="ws-compose-branches">
+        <label for="ws-pr-head">Changes from</label>
+        <select id="ws-pr-head" name="head_branch" required></select>
+        <label for="ws-pr-base">Merge into</label>
+        <select id="ws-pr-base" name="base_branch" required></select>
+      </div>
+      <p id="ws-pr-compose-error" class="ws-compose-error" role="alert" hidden></p>
+      <div class="ws-compose-actions"><button type="button" data-pr-compose-close>Cancel</button><button id="ws-pr-submit" type="submit">Create pull request</button></div>
+    </form>
+  </dialog>
+
   <footer class="ws-powered-by"><span>Powered by</span><a href="/" aria-label="Amosclaud home">Amosclaud</a></footer>
   <script>
     (() => {

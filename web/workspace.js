@@ -238,19 +238,65 @@
     setStatus('Issue created');
   }
 
-  async function createPullRequest() {
-    const title = prompt('Pull request title');
-    if (!title?.trim()) return;
-    const head = prompt('Merge from branch', branch());
-    if (!head?.trim()) return;
-    const base = prompt('Merge into branch', repository?.default_branch || 'main');
-    if (!base?.trim()) return;
-    await api(`/api/v1/repositories/${repositoryId}/pull-requests`, {
-      method: 'POST',
-      body: JSON.stringify({ title: title.trim(), body: '', head_branch: head.trim(), base_branch: base.trim() }),
-    });
-    await refreshTab('pull-requests');
-    setStatus('Pull request created');
+  function pullRequestComposer() {
+    return document.getElementById('ws-pr-compose');
+  }
+
+  function setPullRequestComposerError(message = '') {
+    const error = document.getElementById('ws-pr-compose-error');
+    error.textContent = message;
+    error.hidden = !message;
+  }
+
+  function openPullRequestComposer() {
+    const dialog = pullRequestComposer();
+    const branches = [...branchSelect.options].map(option => option.value).filter(Boolean);
+    const head = document.getElementById('ws-pr-head');
+    const base = document.getElementById('ws-pr-base');
+    const options = branches.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    head.innerHTML = options;
+    base.innerHTML = options;
+    head.value = branches.includes(branch()) ? branch() : (branches[0] || '');
+    base.value = branches.includes(repository?.default_branch) ? repository.default_branch : (branches[0] || '');
+    document.getElementById('ws-pr-compose-form').reset();
+    // reset() preserves no useful branch values when options were inserted first.
+    head.value = branches.includes(branch()) ? branch() : (branches[0] || '');
+    base.value = branches.includes(repository?.default_branch) ? repository.default_branch : (branches[0] || '');
+    setPullRequestComposerError();
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', '');
+    document.getElementById('ws-pr-title').focus();
+  }
+
+  function closePullRequestComposer() {
+    const dialog = pullRequestComposer();
+    if (typeof dialog.close === 'function') dialog.close();
+    else dialog.removeAttribute('open');
+  }
+
+  async function createPullRequest(event) {
+    event?.preventDefault();
+    const form = document.getElementById('ws-pr-compose-form');
+    if (!form.reportValidity()) return;
+    const submit = document.getElementById('ws-pr-submit');
+    const title = document.getElementById('ws-pr-title').value.trim();
+    const body = document.getElementById('ws-pr-description').value.trim();
+    const head = document.getElementById('ws-pr-head').value.trim();
+    const base = document.getElementById('ws-pr-base').value.trim();
+    submit.disabled = true;
+    setPullRequestComposerError();
+    try {
+      await api(`/api/v1/repositories/${repositoryId}/pull-requests`, {
+        method: 'POST', body: JSON.stringify({ title, body, head_branch: head, base_branch: base }),
+      });
+      closePullRequestComposer();
+      await refreshTab('pull-requests');
+      setStatus('Pull request created with its description.');
+    } catch (error) {
+      setPullRequestComposerError(error.message || 'Could not create this pull request.');
+    } finally {
+      submit.disabled = false;
+    }
   }
 
   async function loadBranches() {
@@ -764,6 +810,9 @@
   document.getElementById('ws-new-branch').addEventListener('click', () => newBranch().catch(error => setStatus(error.message)));
   document.getElementById('ws-refresh-issues')?.addEventListener('click', () => refreshTab('issues'));
   document.getElementById('ws-refresh-prs')?.addEventListener('click', () => refreshTab('pull-requests'));
+  document.getElementById('ws-new-pr')?.addEventListener('click', openPullRequestComposer);
+  document.getElementById('ws-pr-compose-form')?.addEventListener('submit', createPullRequest);
+  document.querySelectorAll('[data-pr-compose-close]').forEach(button => button.addEventListener('click', closePullRequestComposer));
   document.getElementById('ws-pull-requests')?.addEventListener('click', event => {
     const run = event.target.closest('[data-pr-run]');
     if (run) { runPullRequestCi(run.dataset.prRun, run); return; }
