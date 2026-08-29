@@ -299,6 +299,49 @@ def _claim_queued_action(action_id: str) -> sqlite3.Row | None:
         return row
 
 
+def cancel_action(action_id: str) -> PipelineResponse | None:
+    """Cancel a queued or running Action and preserve a durable user-visible result.
+
+    Running isolated commands finish their current non-interruptible process safely;
+    no later fixed-plan step is started after cancellation is recorded.
+    """
+    finished_at = _now()
+    with _db() as db:
+        _ensure_schema(db)
+        row = db.execute("SELECT * FROM native_action_runs WHERE id=?", (action_id,)).fetchone()
+        if row is None:
+            return None
+        changed = db.execute(
+            """UPDATE native_action_runs SET status='cancelled', finished_at=?,
+               error_detail='Cancelled by an authorized Amosclaud user'
+               WHERE id=? AND status IN ('queued','running')""",
+            (finished_at.isoformat(), action_id),
+        )
+        if changed.rowcount != 1:
+            db.rollback()
+            return pipelines._get(action_id)
+        db.commit()
+    pipeline = pipelines._get(action_id)
+    if pipeline is not None:
+        pipeline.status = PipelineStatus.CANCELLED
+        pipeline.finished_at = finished_at
+        pipeline.message = "Amosclaud Action was cancelled by an authorized user."
+        pipeline.copilot_reply = pipeline.message
+        for job in pipeline.jobs:
+            if job.status in {PipelineStatus.PENDING, PipelineStatus.QUEUED, PipelineStatus.RUNNING}:
+                job.status = PipelineStatus.CANCELLED
+                job.finished_at = finished_at
+                job.logs.append("Cancelled by an authorized Amosclaud user.")
+        _save_pipeline(pipeline, _payload_for_action(row), "Cancelled by an authorized Amosclaud user")
+    _cleanup_terminal_action_ref(action_id)
+    return pipeline
+
+
+def _was_cancelled(action_id: str) -> bool:
+    row = _action_row(action_id)
+    return row is not None and row["status"] == PipelineStatus.CANCELLED.value
+
+
 def execute_action(action_id: str) -> PipelineResponse | None:
     """Worker entry point. Only an atomically claimed queued Action can run."""
     row = _claim_queued_action(action_id)
@@ -320,6 +363,8 @@ def execute_action(action_id: str) -> PipelineResponse | None:
             int(row["repository_id"]), row["action_ref"], row["head_sha"]
         )
         for job, (_, _, command) in zip(pipeline.jobs, ACTION_PLAN):
+            if _was_cancelled(action_id):
+                return pipelines._get(action_id)
             job.status = PipelineStatus.RUNNING
             job.started_at = _now()
             job.logs.append(f"Started fixed Amosclaud Action step: {job.name}.")
@@ -329,6 +374,8 @@ def execute_action(action_id: str) -> PipelineResponse | None:
             )
             job.logs.append(_safe_log(result.output))
             job.finished_at = _now()
+            if _was_cancelled(action_id):
+                return pipelines._get(action_id)
             if result.returncode != 0 or result.timed_out:
                 job.status = PipelineStatus.FAILED
                 for remaining in pipeline.jobs[pipeline.jobs.index(job) + 1 :]:

@@ -248,3 +248,30 @@ def test_fixed_plan_never_uses_repository_workflow_commands() -> None:
         ("compileall", "Compile Python sources", "python -m compileall -q ."),
         ("pytest", "Run pytest", "python -m pytest -q"),
     )
+
+
+def test_cancelled_queued_action_never_claims_or_executes(tmp_path, monkeypatch) -> None:
+    _configure_store(tmp_path, monkeypatch)
+    stored = {}
+    monkeypatch.setattr(native_actions, "_pin_action_ref", lambda *_args: None)
+    monkeypatch.setattr(native_actions.pipelines, "_save", lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}))
+    monkeypatch.setattr(native_actions.pipelines, "_get", lambda action_id: stored.get(action_id))
+    monkeypatch.setattr(native_actions, "dispatch_task", lambda *_args: None)
+    queued = native_actions.queue_action(
+        repository_id=1, pull_request_id=12, branch="feature/test", head_sha="c" * 40, requested_by=1, reason="test"
+    )
+    cancelled = native_actions.cancel_action(queued.id)
+    assert cancelled is not None and cancelled.status is PipelineStatus.CANCELLED
+    assert native_actions.execute_action(queued.id).status is PipelineStatus.CANCELLED
+    history = native_actions.action_history(1, 12)
+    assert history[0]["incident"]["outcome"] == "cancelled"
+    assert "Cancelled by an authorized" in history[0]["incident"]["summary"]
+
+
+def test_route_and_workspace_offer_native_action_cancellation() -> None:
+    route = (Path(__file__).resolve().parents[1] / "amoscloud_ai/api/routes/amosclaud_production.py").read_text()
+    workspace = (Path(__file__).resolve().parents[1] / "web/workspace.js").read_text()
+    assert 'ci/{action_id}/cancel' in route
+    assert "native_actions.cancel_action(action_id)" in route
+    assert "Cancel Action" in workspace
+    assert "cancelPullRequestCi" in workspace

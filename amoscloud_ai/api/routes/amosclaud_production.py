@@ -323,6 +323,26 @@ async def run_pull_request_ci(
     )
 
 
+@router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/ci/{action_id}/cancel")
+def cancel_pull_request_ci(
+    repository_id: int,
+    pull_request_id: int,
+    action_id: str,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    """Cancel one active Action belonging to this PR; terminal history is immutable."""
+    with _db() as db:
+        _access(db, repository_id, int(user["id"]))
+        _pull_request(db, repository_id, pull_request_id)
+    action = native_actions.latest_action(repository_id, pull_request_id)
+    if action is None or action["id"] != action_id:
+        raise HTTPException(status_code=404, detail="Amosclaud Action not found for this pull request")
+    pipeline = native_actions.cancel_action(action_id)
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="Amosclaud Action not found")
+    return {"authority": "amosclaud", "pull_request_id": pull_request_id, "pipeline": pipeline.model_dump(mode="json")}
+
+
 @router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/action")
 def control_pull_request(
     repository_id: int,

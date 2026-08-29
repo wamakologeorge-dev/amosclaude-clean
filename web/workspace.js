@@ -370,6 +370,7 @@
       <div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(action.head_sha || '')}</code><code>${escapeHtml(pipeline.id || action.id || 'Action recorded')}</code></div>
       <p>${escapeHtml(message)}</p>
       ${renderPostRunIncident(action.incident)}
+      ${['queued', 'running'].includes(state) ? `<button type="button" data-pr-cancel="${escapeHtml(pipeline.id || action.id || '')}">Cancel Action</button>` : ''}
       ${jobLogs.length ? `<details><summary>Execution log (${jobLogs.length})</summary><pre>${escapeHtml(jobLogs.join('\n'))}</pre></details>` : ''}
     </div>`;
   }
@@ -454,6 +455,20 @@
       setStatus(`Pull request #${id} ${action}d.`);
     } catch (error) {
       setStatus(`Pull request action failed: ${error.message}`);
+      button.disabled = false;
+    }
+  }
+
+  async function cancelPullRequestCi(id, actionId, button) {
+    button.disabled = true;
+    try {
+      await api(`/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci/${actionId}/cancel`, { method: 'POST' });
+      const result = await loadPullRequestCi(id);
+      const state = document.querySelector(`[data-pr-ci="${id}"]`);
+      if (state) state.innerHTML = renderActionHistory(result);
+      setStatus(`Amosclaud Action cancelled for pull request #${id}.`);
+    } catch (error) {
+      setStatus(`Amosclaud Action could not be cancelled: ${error.message}`);
       button.disabled = false;
     }
   }
@@ -752,6 +767,8 @@
   document.getElementById('ws-pull-requests')?.addEventListener('click', event => {
     const run = event.target.closest('[data-pr-run]');
     if (run) { runPullRequestCi(run.dataset.prRun, run); return; }
+    const cancel = event.target.closest('[data-pr-cancel]');
+    if (cancel) { const card = cancel.closest('[data-pr-card]'); cancelPullRequestCi(card?.dataset.prCard, cancel.dataset.prCancel, cancel); return; }
     const control = event.target.closest('[data-pr-control]');
     if (control) { controlPullRequest(control.dataset.prId, control.dataset.prControl, control); return; }
     const toggle = event.target.closest('[data-pr-toggle]');
