@@ -110,6 +110,70 @@ MIGRATIONS = (
             ON cloud_workspaces(owner_id, updated_at);
         """,
     ),
+    Migration(
+        5,
+        "native_actions",
+        """
+        CREATE TABLE IF NOT EXISTS native_action_runs (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL,
+            pull_request_id INTEGER NOT NULL,
+            head_sha TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            requested_by INTEGER NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL CHECK(status IN ('pending','running','success','failed','cancelled')),
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            error_detail TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_native_action_pr_history
+            ON native_action_runs(repository_id, pull_request_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_native_action_recovery
+            ON native_action_runs(status, created_at);
+        """,
+    ),
+    Migration(
+        6,
+        "native_actions_queued_ref",
+        """
+        -- SQLite cannot extend an existing CHECK constraint. Rebuild the
+        -- native Action table atomically while preserving legacy pending rows.
+        BEGIN IMMEDIATE;
+        CREATE TABLE native_action_runs_v6 (
+            id TEXT PRIMARY KEY,
+            repository_id INTEGER NOT NULL,
+            pull_request_id INTEGER NOT NULL,
+            head_sha TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            requested_by INTEGER NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            action_ref TEXT,
+            status TEXT NOT NULL CHECK(status IN ('pending','queued','running','success','failed','cancelled')),
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            error_detail TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+        );
+        INSERT INTO native_action_runs_v6(
+            id,repository_id,pull_request_id,head_sha,branch,requested_by,
+            reason,action_ref,status,created_at,started_at,finished_at,error_detail
+        ) SELECT
+            id,repository_id,pull_request_id,head_sha,branch,requested_by,
+            reason,NULL,status,created_at,started_at,finished_at,error_detail
+          FROM native_action_runs;
+        DROP TABLE native_action_runs;
+        ALTER TABLE native_action_runs_v6 RENAME TO native_action_runs;
+        CREATE INDEX idx_native_action_pr_history
+            ON native_action_runs(repository_id, pull_request_id, created_at DESC);
+        CREATE INDEX idx_native_action_recovery
+            ON native_action_runs(status, created_at);
+        COMMIT;
+        """,
+    ),
 )
 
 _GITHUB_REPOSITORY_COLUMNS = {

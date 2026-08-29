@@ -63,3 +63,4 @@ def test_repository_path_cannot_escape_workspace():
 
 def test_existing_pipeline_reply_contract_remains_compatible():
     assert pipeline_reply(PipelineStatus.PENDING).startswith("Amosclaud Autonomous Server:")
+    assert "queued" in pipeline_reply(PipelineStatus.QUEUED).lower()

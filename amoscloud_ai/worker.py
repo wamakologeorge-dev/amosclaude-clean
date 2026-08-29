@@ -59,6 +59,7 @@ def recover_durable_operations(**_kwargs) -> None:
     """Resume persisted operations and outbound relays after worker restart."""
     try:
         from amoscloud_ai.cloud_task_runner import recover_cloud_tasks
+        from amoscloud_ai.native_actions import recover_actions as recover_native_actions
         from amoscloud_ai.github_relay_recovery import retry_pending_relays
         from amoscloud_ai.storage_capacity import recover_jobs as recover_storage_resizes
         from amoscloud_ai.storage_provisioning import (
@@ -66,15 +67,17 @@ def recover_durable_operations(**_kwargs) -> None:
         )
 
         tasks = recover_cloud_tasks()
+        native_actions = recover_native_actions()
         relays = retry_pending_relays()
         storage_resizes = recover_storage_resizes()
         storage_provisions = recover_storage_provisions()
         log.info(
             (
-                "Recovered durable operations: tasks=%s relays=%s "
+                "Recovered durable operations: tasks=%s native_actions=%s relays=%s "
                 "storage_resizes=%s storage_provisions=%s"
             ),
             tasks,
+            native_actions,
             relays,
             storage_resizes,
             storage_provisions,
@@ -182,6 +185,22 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
                 job.logs.append(f"Runtime error: {type(exc).__name__}: {exc}")
         _save(pipeline, payload, str(exc))
         raise self.retry(exc=exc, countdown=5)
+
+
+@celery_app.task(name="amoscloud_ai.run_native_action", bind=True, max_retries=0)
+def run_native_action_task(self, action_id: str) -> Dict[str, Any]:
+    """Execute one persisted fixed-plan native Action.
+
+    ``execute_action`` captures every failure in the durable Action and pipeline
+    rows, so this task intentionally does not retry or leave a false pending
+    state after an isolation failure.
+    """
+    from amoscloud_ai.native_actions import execute_action
+
+    pipeline = execute_action(action_id)
+    if pipeline is None:
+        return {"action_id": action_id, "status": "missing"}
+    return {"action_id": action_id, "status": pipeline.status.value}
 
 
 @celery_app.task(name="amoscloud_ai.run_deployment", bind=True, max_retries=3)

@@ -48,7 +48,10 @@ class HealthResponse(BaseModel):
 
 
 class PipelineStatus(str, Enum):
+    # Retained for compatibility with older, non-native pipeline records.
     PENDING = "pending"
+    # Native Actions use this explicit pre-dispatch state rather than pending.
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
