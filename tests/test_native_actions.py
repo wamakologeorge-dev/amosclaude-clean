@@ -190,7 +190,7 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
     pipeline = native_actions.execute_action(queued.id)
 
     assert checkout_calls == [(1, action_ref, "b" * 40)]
-    assert calls == ["python -m compileall -q ."]
+    assert calls == ["python -m compileall -q -x [.]amosclaud-venv ."]
     assert pipeline is not None and pipeline.status is PipelineStatus.FAILED
     assert pipeline.jobs[0].status is PipelineStatus.FAILED
     assert pipeline.jobs[1].status is PipelineStatus.CANCELLED
@@ -204,7 +204,7 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
         )
         db.commit()
     assert native_actions.execute_action("already-running") is None
-    assert calls == ["python -m compileall -q ."]
+    assert calls == ["python -m compileall -q -x [.]amosclaud-venv ."]
     history = native_actions.action_history(1, 9)
     assert history[0]["head_sha"] == "b" * 40
     assert history[0]["status"] == "failed"
@@ -298,8 +298,9 @@ def test_pr_action_detail_renders_post_run_incident_record() -> None:
 
 def test_fixed_plan_never_uses_repository_workflow_commands() -> None:
     assert native_actions.ACTION_PLAN == (
-        ("compileall", "Compile Python sources", "python -m compileall -q ."),
-        ("pytest", "Run pytest", "python -m pytest -q"),
+        ("compileall", "Compile Python sources", "python -m compileall -q -x [.]amosclaud-venv ."),
+        ("deps", "Install repository requirements", "python .amosclaud-bootstrap.py"),
+        ("pytest", "Run pytest", ".amosclaud-venv/bin/python -m pytest -q"),
     )
 
 

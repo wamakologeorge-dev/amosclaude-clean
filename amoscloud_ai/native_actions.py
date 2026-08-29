@@ -2,7 +2,11 @@
 
 This module deliberately does not inspect package scripts, workflow files, or any
 other repository-controlled command configuration.  The only executable plan is
-compileall followed by pytest, each run in the existing isolated runner.
+compileall, a code-owned bootstrap that installs the repository's declared
+requirements into a fresh per-run environment, then pytest — each run in the
+existing isolated runner. The bootstrap honors standard Python packaging
+manifests only (requirements files, pyproject/setup), never repository-chosen
+commands.
 """
 
 from __future__ import annotations
@@ -29,8 +33,9 @@ _LOGGER = logging.getLogger(__name__)
 _ACTION_SHA = re.compile(r"^[0-9a-f]{40}$")
 # This plan is intentionally code-owned. Do not replace it with repository input.
 ACTION_PLAN: tuple[tuple[str, str, str], ...] = (
-    ("compileall", "Compile Python sources", "python -m compileall -q ."),
-    ("pytest", "Run pytest", "python -m pytest -q"),
+    ("compileall", "Compile Python sources", "python -m compileall -q -x [.]amosclaud-venv ."),
+    ("deps", "Install repository requirements", "python .amosclaud-bootstrap.py"),
+    ("pytest", "Run pytest", ".amosclaud-venv/bin/python -m pytest -q"),
 )
 
 # Plain-language meanings for pytest's documented exit codes so a failed
@@ -56,6 +61,11 @@ def _failure_detail(job: PipelineJob, result: IsolatedRunResult) -> str:
     meaning = PYTEST_EXIT_MEANINGS.get(result.returncode) if job.id == "pytest" else None
     if meaning is not None:
         detail += f" — {meaning}. The execution log records the exact cause."
+    elif job.id == "deps":
+        detail += (
+            " — the repository's declared requirements could not be installed on the "
+            "worker station. The execution log records pip's exact message."
+        )
     return detail
 
 
@@ -332,9 +342,19 @@ def _detached_checkout(
     checkout = temp_root / "checkout"
     try:
         repo.git.worktree("add", "--detach", str(checkout), action_ref)
+        # The bootstrap is code-owned platform source copied in after checkout,
+        # so repository content can never substitute its own version.
+        shutil.copyfile(
+            Path(__file__).with_name("action_bootstrap.py"),
+            checkout / ".amosclaud-bootstrap.py",
+        )
     except Exception:
         # The ref has durable ownership and is released only after the caller
         # records a terminal result in its cleanup path.
+        try:
+            repo.git.worktree("remove", "--force", str(checkout))
+        except Exception:  # noqa: BLE001 — cleanup is best effort
+            pass
         shutil.rmtree(temp_root, ignore_errors=True)
         raise
     return repo, checkout, action_ref, temp_root
@@ -496,7 +516,10 @@ def execute_action(action_id: str) -> PipelineResponse | None:
             job.status = PipelineStatus.SUCCESS
         pipeline.status = PipelineStatus.SUCCESS
         pipeline.finished_at = _now()
-        pipeline.message = "Amosclaud Action passed the fixed isolated compileall and pytest plan."
+        pipeline.message = (
+            "Amosclaud Action passed the fixed isolated plan: sources compiled, "
+            "repository requirements installed, pytest green."
+        )
         pipeline.copilot_reply = pipeline.message
         _update_action(action_id, status=PipelineStatus.SUCCESS, finished_at=pipeline.finished_at)
         _cleanup_terminal_action_ref(action_id)

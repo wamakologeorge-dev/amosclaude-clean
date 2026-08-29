@@ -79,6 +79,8 @@ def test_pytest_usage_error_is_explained_in_plain_language(tmp_path, monkeypatch
     def runner(command, **_kwargs):
         if "compileall" in command:
             return IsolatedRunResult(returncode=0, output="compiled")
+        if ".amosclaud-bootstrap.py" in command:
+            return IsolatedRunResult(returncode=0, output="environment ready")
         return IsolatedRunResult(
             returncode=4,
             output="ImportError while loading conftest: No module named 'pytest_asyncio'",
@@ -98,7 +100,8 @@ def test_pytest_usage_error_is_explained_in_plain_language(tmp_path, monkeypatch
 
     assert pipeline is not None and pipeline.status is PipelineStatus.FAILED
     assert pipeline.jobs[0].status is PipelineStatus.SUCCESS
-    assert pipeline.jobs[1].status is PipelineStatus.FAILED
+    assert pipeline.jobs[1].status is PipelineStatus.SUCCESS
+    assert pipeline.jobs[2].status is PipelineStatus.FAILED
     with sqlite3.connect(database) as db:
         detail = db.execute(
             "SELECT error_detail FROM native_action_runs WHERE id=?", (queued.id,)
@@ -133,3 +136,12 @@ def test_plain_test_failures_keep_their_meaning_and_timeouts_stay_unembellished(
         compile_job, IsolatedRunResult(returncode=4, output="")
     )
     assert compile_failure == "Compile Python sources returned 4"
+
+    deps_job = native_actions.PipelineJob(
+        id="deps", name="Install repository requirements", status=PipelineStatus.RUNNING, logs=[]
+    )
+    deps_failure = native_actions._failure_detail(
+        deps_job, IsolatedRunResult(returncode=1, output="")
+    )
+    assert "could not be installed" in deps_failure
+    assert "pip" in deps_failure

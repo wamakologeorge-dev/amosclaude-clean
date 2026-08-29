@@ -352,7 +352,10 @@ def _run_in_process_sandbox(
         raise RunnerConfigurationError("runner workspace is not writable by the worker")
 
     argv = parse_allowed_command(command)
-    if Path(argv[0]).name in {"python", "python3"}:
+    if argv[0] in {"python", "python3"}:
+        # Only a bare interpreter name maps to the worker's interpreter. A
+        # path such as .amosclaud-venv/bin/python must keep pointing at the
+        # per-run environment the fixed bootstrap step built.
         argv[0] = sys.executable
 
     timeout = timeout_seconds or int(os.getenv("AMOSCLAUD_RUNNER_TIMEOUT_SECONDS", "600"))
