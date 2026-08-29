@@ -373,6 +373,41 @@ def execute_action(action_id: str) -> PipelineResponse | None:
         _remove_checkout(repo, checkout, ref, temp_root)
 
 
+def _post_run_incident(row: sqlite3.Row, pipeline: PipelineResponse | None) -> dict[str, Any] | None:
+    """Return concise, stored-evidence-only follow-up for terminal bad outcomes."""
+    outcome = str(row["status"])
+    if outcome not in {PipelineStatus.FAILED.value, PipelineStatus.CANCELLED.value}:
+        return None
+
+    step: dict[str, str] | None = None
+    if pipeline is not None:
+        failed_job = next(
+            (job for job in pipeline.jobs if job.status is PipelineStatus.FAILED),
+            None,
+        )
+        if failed_job is not None:
+            step = {"id": failed_job.id, "name": failed_job.name, "status": failed_job.status.value}
+    detail = str(row["error_detail"] or "").strip()
+    if detail:
+        # Keep the follow-up record scannable; full execution evidence remains
+        # in the existing pipeline log projection.
+        summary = detail[:500]
+    elif step is not None:
+        summary = f"{step['name']} did not complete successfully."
+    elif outcome == PipelineStatus.CANCELLED.value:
+        summary = "Action was cancelled before completion."
+    else:
+        summary = "Action failed without a recorded error detail."
+    return {
+        "type": "post_run_incident",
+        "outcome": outcome,
+        "summary": summary,
+        "occurred_at": row["finished_at"],
+        "head_sha": row["head_sha"],
+        "step": step,
+    }
+
+
 def action_history(repository_id: int, pull_request_id: int) -> list[dict[str, Any]]:
     with _db() as db:
         _ensure_schema(db)
@@ -388,6 +423,10 @@ def action_history(repository_id: int, pull_request_id: int) -> list[dict[str, A
         # This is an internal retention ref, not a client-facing branch name.
         item.pop("action_ref", None)
         item["pipeline"] = pipeline.model_dump(mode="json") if pipeline else None
+        # Failed or cancelled native Actions carry a compact, evidence-only
+        # incident record for the PR UI and API consumers. Successful runs do
+        # not receive a synthetic incident.
+        item["incident"] = _post_run_incident(row, pipeline)
         result.append(item)
     return result
 

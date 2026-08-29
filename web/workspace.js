@@ -317,14 +317,30 @@
     return pipeline?.status ? String(pipeline.status).toLowerCase() : 'not-run';
   }
 
+  function renderPostRunIncident(incident) {
+    if (!incident) return '';
+    const step = incident.step?.name ? ` · Step: ${incident.step.name}` : '';
+    const revision = incident.head_sha ? `<code>${escapeHtml(incident.head_sha)}</code>` : '';
+    const occurredAt = incident.occurred_at ? ` · Recorded: ${incident.occurred_at}` : '';
+    return `<section class="ws-pr-action-incident" aria-label="Post-run incident record">
+      <strong>Post-run incident record</strong>
+      <p>${escapeHtml(incident.summary || 'No additional incident detail was recorded.')}</p>
+      <small>Outcome: ${escapeHtml(incident.outcome || 'unknown')}${escapeHtml(step)}${escapeHtml(occurredAt)} ${revision}</small>
+    </section>`;
+  }
+
   function renderAction(pipeline, action = {}) {
     const state = actionState(pipeline || action);
-    if (!pipeline) return '<p class="ws-pr-action-copy">No Amosclaud Action has run for this pull request yet.</p>';
+    if (!pipeline) {
+      if (!action.incident) return '<p class="ws-pr-action-copy">No Amosclaud Action has run for this pull request yet.</p>';
+      return `<div class="ws-pr-action-result"><div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(action.head_sha || '')}</code><code>${escapeHtml(action.id || 'Action recorded')}</code></div>${renderPostRunIncident(action.incident)}</div>`;
+    }
     const message = pipeline.error_detail || action.error_detail || pipeline.message || 'Action result recorded.';
     const jobLogs = (pipeline.jobs || []).flatMap(job => job.logs || []).filter(Boolean);
     return `<div class="ws-pr-action-result">
       <div><span class="ws-pr-status ws-pr-status-${escapeHtml(state)}">${escapeHtml(state)}</span><code>${escapeHtml(action.head_sha || '')}</code><code>${escapeHtml(pipeline.id || action.id || 'Action recorded')}</code></div>
       <p>${escapeHtml(message)}</p>
+      ${renderPostRunIncident(action.incident)}
       ${jobLogs.length ? `<details><summary>Execution log (${jobLogs.length})</summary><pre>${escapeHtml(jobLogs.join('\n'))}</pre></details>` : ''}
     </div>`;
   }

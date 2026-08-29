@@ -165,6 +165,38 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
     history = native_actions.action_history(1, 9)
     assert history[0]["head_sha"] == "b" * 40
     assert history[0]["status"] == "failed"
+    assert history[0]["incident"] == {
+        "type": "post_run_incident",
+        "outcome": "failed",
+        "summary": "Compile Python sources returned 1",
+        "occurred_at": history[0]["finished_at"],
+        "head_sha": "b" * 40,
+        "step": {"id": "compileall", "name": "Compile Python sources", "status": "failed"},
+    }
+
+
+def test_action_history_adds_truthful_cancelled_incident_without_pipeline(tmp_path, monkeypatch) -> None:
+    database = _configure_store(tmp_path, monkeypatch)
+    native_actions.ensure_schema(sqlite3.connect(database))
+    with sqlite3.connect(database) as db:
+        db.execute(
+            """INSERT INTO native_action_runs(
+                id,repository_id,pull_request_id,head_sha,branch,requested_by,reason,
+                status,created_at,finished_at,error_detail
+            ) VALUES ('cancelled',1,11,?,'feature',1,'','cancelled','created','finished','')""",
+            ("f" * 40,),
+        )
+        db.commit()
+
+    incident = native_actions.action_history(1, 11)[0]["incident"]
+    assert incident == {
+        "type": "post_run_incident",
+        "outcome": "cancelled",
+        "summary": "Action was cancelled before completion.",
+        "occurred_at": "finished",
+        "head_sha": "f" * 40,
+        "step": None,
+    }
 
 
 def test_recovery_requeues_only_current_queued_rows_and_fails_legacy_pending(tmp_path, monkeypatch) -> None:
@@ -202,6 +234,13 @@ def test_route_contract_uses_pr_action_history_and_action_specific_merge_gate() 
     assert "native_actions.queue_action" in source
     assert "native_actions.latest_action(repository_id, pull_request_id)" in source
     assert "Amosclaud Actions must be run from an open pull request" in source
+
+
+def test_pr_action_detail_renders_post_run_incident_record() -> None:
+    source = (Path(__file__).resolve().parents[1] / "web/workspace.js").read_text()
+    assert "function renderPostRunIncident(incident)" in source
+    assert "Post-run incident record" in source
+    assert "renderPostRunIncident(action.incident)" in source
 
 
 def test_fixed_plan_never_uses_repository_workflow_commands() -> None:
