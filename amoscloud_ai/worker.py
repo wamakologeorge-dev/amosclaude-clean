@@ -59,12 +59,10 @@ def recover_durable_operations(**_kwargs) -> None:
     """Resume persisted operations and outbound relays after worker restart."""
     try:
         from amoscloud_ai.cloud_task_runner import recover_cloud_tasks
-        from amoscloud_ai.native_actions import recover_actions as recover_native_actions
         from amoscloud_ai.github_relay_recovery import retry_pending_relays
+        from amoscloud_ai.native_actions import recover_actions as recover_native_actions
         from amoscloud_ai.storage_capacity import recover_jobs as recover_storage_resizes
-        from amoscloud_ai.storage_provisioning import (
-            recover_jobs as recover_storage_provisions,
-        )
+        from amoscloud_ai.storage_provisioning import recover_jobs as recover_storage_provisions
 
         tasks = recover_cloud_tasks()
         native_actions = recover_native_actions()
@@ -107,9 +105,7 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
         job.status = PipelineStatus.RUNNING
         job.started_at = datetime.now(timezone.utc)
         job.logs.append("Task received by the execution worker.")
-        job.logs.append(
-            "Execution started: understand → inspect → plan → act → verify → report."
-        )
+        job.logs.append("Execution started: understand → inspect → plan → act → verify → report.")
     _save(pipeline, payload)
 
     try:
@@ -136,9 +132,7 @@ def run_pipeline_task(self, pipeline_id: str, payload: Dict[str, Any]) -> Dict[s
             successful = asyncio.run(
                 orchestrator.start_pipeline(payload.get("trigger", "manual"), payload)
             )
-            pipeline.status = (
-                PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
-            )
+            pipeline.status = PipelineStatus.SUCCESS if successful else PipelineStatus.FAILED
             pipeline.message = (
                 "Amosclaud Autonomous Agent: pipeline completed with verified evidence."
                 if successful
@@ -249,9 +243,7 @@ def run_deployment_task(
             dep.message = deployment_reply(dep.status)
             dep.copilot_reply = dep.message
 
-        result_status = (
-            dep.status.value if dep else ("completed" if success else "failed")
-        )
+        result_status = dep.status.value if dep else ("completed" if success else "failed")
         return {"deployment_id": deployment_id, "status": result_status}
     except Exception as exc:
         log.exception("[worker] Deployment %s failed", deployment_id)
@@ -393,9 +385,7 @@ def run_daily_autonomous_builder_task(self) -> dict[str, Any]:
 
 def main() -> None:
     """Start the Celery worker when invoked as a module."""
-    celery_app.worker_main(
-        argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"]
-    )
+    celery_app.worker_main(argv=["worker", "--loglevel", settings.log_level.lower(), "-c", "2"])
 
 
 if __name__ == "__main__":

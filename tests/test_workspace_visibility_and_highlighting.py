@@ -38,8 +38,7 @@ def _mkuser(email: str):
         )
         uid = cursor.lastrowid
         db.execute(
-            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at)"
-            " VALUES (?,?,?,?)",
+            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at)" " VALUES (?,?,?,?)",
             (
                 auth._token_hash(token),
                 uid,
@@ -80,9 +79,9 @@ def _get(token, url):
 
 def _visibility_of(rid: int) -> str:
     with repositories._db() as db:
-        return db.execute(
-            "SELECT visibility FROM repositories WHERE id=?", (rid,)
-        ).fetchone()["visibility"]
+        return db.execute("SELECT visibility FROM repositories WHERE id=?", (rid,)).fetchone()[
+            "visibility"
+        ]
 
 
 # --- route registration ------------------------------------------------------
@@ -247,7 +246,16 @@ def _code_without_comments(source: str) -> str:
 def test_highlighter_is_vendored_and_dependency_free():
     assert HIGHLIGHT_JS.exists(), "web/highlight.js must be vendored in the repo"
     code = _code_without_comments(HIGHLIGHT_JS.read_text(encoding="utf-8")).lower()
-    for forbidden in ("http://", "https://", "unpkg", "jsdelivr", "cdnjs", "import(", "require(", "fetch("):
+    for forbidden in (
+        "http://",
+        "https://",
+        "unpkg",
+        "jsdelivr",
+        "cdnjs",
+        "import(",
+        "require(",
+        "fetch(",
+    ):
         assert forbidden not in code, f"highlighter must not reference {forbidden}"
     assert "amosclaudhighlight" in code
 
@@ -280,13 +288,16 @@ def test_highlighter_escapes_hostile_file_content():
         "const out=langs.map(l=>H.highlight(src,l));"
         "console.log(JSON.stringify(out));"
     )
-    rendered = json.loads(subprocess.run(
-        [NODE, "-e", script], capture_output=True, text=True, check=True
-    ).stdout)
+    rendered = json.loads(
+        subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True).stdout
+    )
     assert rendered
     expected = (
-        payload.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        .replace('"', "&quot;").replace("'", "&#39;")
+        payload.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
     )
     for html in rendered:
         assert "<script" not in html
@@ -306,12 +317,12 @@ def test_highlighter_tokenizes_and_preserves_line_count():
         "r.js=H.highlight('const a = 1; // note','javascript');"
         "r.json=H.highlight('{\"k\": true}','json');"
         "r.lang=H.languageForPath('a/b/main.py');"
-        "r.docstring=H.highlightLines('\\\"\\\"\\\"doc\\nmore\\\"\\\"\\\"\\nx=1','python');"
+        'r.docstring=H.highlightLines(\'\\"\\"\\"doc\\nmore\\"\\"\\"\\nx=1\',\'python\');'
         "console.log(JSON.stringify(r));"
     )
-    result = json.loads(subprocess.run(
-        [NODE, "-e", script], capture_output=True, text=True, check=True
-    ).stdout)
+    result = json.loads(
+        subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True).stdout
+    )
 
     assert '<span class="tok-keyword">def</span>' in result["py"]
     assert '<span class="tok-comment">// note</span>' in result["js"]
@@ -390,9 +401,12 @@ def test_pull_request_composer_collects_a_plain_language_description():
     js = (WEB / "workspace.js").read_text(encoding="utf-8")
 
     assert 'id="ws-pr-compose"' in html
-    assert 'What is this pull request about?' in html
+    assert "What is this pull request about?" in html
     assert 'id="ws-pr-description"' in html
-    assert 'placeholder="Explain what changed, why it matters, and anything a reviewer should check."' in html
+    assert (
+        'placeholder="Explain what changed, why it matters, and anything a reviewer should check."'
+        in html
+    )
     assert 'id="ws-pr-head"' in html and 'id="ws-pr-base"' in html
-    assert 'body, head_branch: head, base_branch: base' in js
+    assert "body, head_branch: head, base_branch: base" in js
     assert "prompt('Pull request title')" not in js

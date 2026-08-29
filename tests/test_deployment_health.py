@@ -26,7 +26,11 @@ def test_deployment_health_uses_explicit_url_without_returning_url(monkeypatch):
 def test_deployment_health_reports_network_failure_safely(monkeypatch):
     monkeypatch.setenv("AMOSCLAUD_DEPLOYMENT_HEALTHCHECK_ENABLED", "true")
     monkeypatch.setenv("AMOSCLAUD_DEPLOYMENT_HEALTH_URL", "https://amosclaud.example/health")
-    monkeypatch.setattr(deployment_health.httpx, "get", lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("nope")))
+    monkeypatch.setattr(
+        deployment_health.httpx,
+        "get",
+        lambda *args, **kwargs: (_ for _ in ()).throw(httpx.ConnectError("nope")),
+    )
 
     result = deployment_health.status()
 

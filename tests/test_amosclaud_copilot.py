@@ -32,9 +32,7 @@ def test_bug_request_routes_to_fixer_and_autonomous_support():
 
     assert plan["primary_agent"]["name"] == "amosclaud-fixer"
     assert plan["execution_mode"] == "fix"
-    assert "amosclaud-autonomous" in {
-        agent["name"] for agent in plan["supporting_agents"]
-    }
+    assert "amosclaud-autonomous" in {agent["name"] for agent in plan["supporting_agents"]}
     assert plan["handoff"]["payload"]["metadata"]["copilot_primary_agent"] == "amosclaud-fixer"
 
 

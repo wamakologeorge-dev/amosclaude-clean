@@ -43,8 +43,16 @@ def test_queue_failure_is_persisted_failed_not_falsely_queued(tmp_path, monkeypa
     database = _configure_store(tmp_path, monkeypatch)
     saved = {}
     monkeypatch.setattr(native_actions, "_pin_action_ref", lambda *_args: None)
-    monkeypatch.setattr(native_actions.pipelines, "_save", lambda pipeline, *_args: saved.update({pipeline.id: pipeline}))
-    monkeypatch.setattr(native_actions, "dispatch_task", lambda *_args: (_ for _ in ()).throw(OSError("broker down")))
+    monkeypatch.setattr(
+        native_actions.pipelines,
+        "_save",
+        lambda pipeline, *_args: saved.update({pipeline.id: pipeline}),
+    )
+    monkeypatch.setattr(
+        native_actions,
+        "dispatch_task",
+        lambda *_args: (_ for _ in ()).throw(OSError("broker down")),
+    )
 
     pipeline = native_actions.queue_action(
         repository_id=1,
@@ -58,7 +66,9 @@ def test_queue_failure_is_persisted_failed_not_falsely_queued(tmp_path, monkeypa
     assert pipeline.status is PipelineStatus.FAILED
     assert all(job.status is PipelineStatus.FAILED for job in pipeline.jobs)
     with sqlite3.connect(database) as db:
-        row = db.execute("SELECT status,error_detail FROM native_action_runs WHERE id=?", (pipeline.id,)).fetchone()
+        row = db.execute(
+            "SELECT status,error_detail FROM native_action_runs WHERE id=?", (pipeline.id,)
+        ).fetchone()
     assert row[0] == "failed"
     assert "queue unavailable" in row[1].lower()
 
@@ -67,12 +77,19 @@ def test_database_failure_releases_unowned_pinned_ref(tmp_path, monkeypatch) -> 
     _configure_store(tmp_path, monkeypatch)
     repo, sha = _git_repository(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        native_actions, "_ensure_schema", lambda _db: (_ for _ in ()).throw(sqlite3.OperationalError("write failed"))
+        native_actions,
+        "_ensure_schema",
+        lambda _db: (_ for _ in ()).throw(sqlite3.OperationalError("write failed")),
     )
 
     try:
         native_actions.queue_action(
-            repository_id=1, pull_request_id=7, branch="feature/test", head_sha=sha, requested_by=1, reason="test"
+            repository_id=1,
+            pull_request_id=7,
+            branch="feature/test",
+            head_sha=sha,
+            requested_by=1,
+            reason="test",
         )
     except sqlite3.OperationalError:
         pass
@@ -82,11 +99,17 @@ def test_database_failure_releases_unowned_pinned_ref(tmp_path, monkeypatch) -> 
     assert repo.git.for_each_ref("--format=%(refname)", "refs/amosclaud/actions") == ""
 
 
-def test_queue_pins_ref_persists_queued_state_and_removes_ref_after_terminal_result(tmp_path, monkeypatch) -> None:
+def test_queue_pins_ref_persists_queued_state_and_removes_ref_after_terminal_result(
+    tmp_path, monkeypatch
+) -> None:
     database = _configure_store(tmp_path, monkeypatch)
     repo, sha = _git_repository(tmp_path, monkeypatch)
     stored = {}
-    monkeypatch.setattr(native_actions.pipelines, "_save", lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}))
+    monkeypatch.setattr(
+        native_actions.pipelines,
+        "_save",
+        lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}),
+    )
     monkeypatch.setattr(native_actions.pipelines, "_get", lambda action_id: stored.get(action_id))
     monkeypatch.setattr(native_actions, "dispatch_task", lambda *_args: None)
     monkeypatch.setattr(
@@ -96,12 +119,19 @@ def test_queue_pins_ref_persists_queued_state_and_removes_ref_after_terminal_res
     )
 
     queued = native_actions.queue_action(
-        repository_id=1, pull_request_id=8, branch="feature/test", head_sha=sha, requested_by=1, reason="test"
+        repository_id=1,
+        pull_request_id=8,
+        branch="feature/test",
+        head_sha=sha,
+        requested_by=1,
+        reason="test",
     )
     assert queued.status is PipelineStatus.QUEUED
     assert all(job.status is PipelineStatus.QUEUED for job in queued.jobs)
     with sqlite3.connect(database) as db:
-        row = db.execute("SELECT status,action_ref FROM native_action_runs WHERE id=?", (queued.id,)).fetchone()
+        row = db.execute(
+            "SELECT status,action_ref FROM native_action_runs WHERE id=?", (queued.id,)
+        ).fetchone()
     assert row[0] == "queued"
     action_ref = row[1]
     assert repo.commit(action_ref).hexsha == sha
@@ -124,13 +154,19 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
     checkout_calls = []
     calls = []
     monkeypatch.setattr(native_actions, "_pin_action_ref", lambda *_args: None)
-    monkeypatch.setattr(native_actions.pipelines, "_save", lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}))
+    monkeypatch.setattr(
+        native_actions.pipelines,
+        "_save",
+        lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}),
+    )
     monkeypatch.setattr(native_actions.pipelines, "_get", lambda action_id: stored.get(action_id))
     monkeypatch.setattr(native_actions, "dispatch_task", lambda *_args: None)
     monkeypatch.setattr(
         native_actions,
         "_detached_checkout",
-        lambda repository_id, action_ref, sha: (checkout_calls.append((repository_id, action_ref, sha)) or (None, checkout, None, None)),
+        lambda repository_id, action_ref, sha: (
+            checkout_calls.append((repository_id, action_ref, sha)) or (None, checkout, None, None)
+        ),
     )
     monkeypatch.setattr(native_actions, "_remove_checkout", lambda *_args: None)
 
@@ -140,10 +176,17 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
 
     monkeypatch.setattr(native_actions, "run_in_isolated_container", failed_compile)
     queued = native_actions.queue_action(
-        repository_id=1, pull_request_id=9, branch="feature/test", head_sha="b" * 40, requested_by=1, reason="test"
+        repository_id=1,
+        pull_request_id=9,
+        branch="feature/test",
+        head_sha="b" * 40,
+        requested_by=1,
+        reason="test",
     )
     with sqlite3.connect(database) as db:
-        action_ref = db.execute("SELECT action_ref FROM native_action_runs WHERE id=?", (queued.id,)).fetchone()[0]
+        action_ref = db.execute(
+            "SELECT action_ref FROM native_action_runs WHERE id=?", (queued.id,)
+        ).fetchone()[0]
     pipeline = native_actions.execute_action(queued.id)
 
     assert checkout_calls == [(1, action_ref, "b" * 40)]
@@ -175,7 +218,9 @@ def test_execute_claims_only_queued_row_and_uses_stored_action_ref(tmp_path, mon
     }
 
 
-def test_action_history_adds_truthful_cancelled_incident_without_pipeline(tmp_path, monkeypatch) -> None:
+def test_action_history_adds_truthful_cancelled_incident_without_pipeline(
+    tmp_path, monkeypatch
+) -> None:
     database = _configure_store(tmp_path, monkeypatch)
     native_actions.ensure_schema(sqlite3.connect(database))
     with sqlite3.connect(database) as db:
@@ -199,11 +244,15 @@ def test_action_history_adds_truthful_cancelled_incident_without_pipeline(tmp_pa
     }
 
 
-def test_recovery_requeues_only_current_queued_rows_and_fails_legacy_pending(tmp_path, monkeypatch) -> None:
+def test_recovery_requeues_only_current_queued_rows_and_fails_legacy_pending(
+    tmp_path, monkeypatch
+) -> None:
     database = _configure_store(tmp_path, monkeypatch)
     monkeypatch.setattr(native_actions.pipelines, "_get", lambda _action_id: None)
     dispatched = []
-    monkeypatch.setattr(native_actions, "dispatch_task", lambda _task, action_id: dispatched.append(action_id))
+    monkeypatch.setattr(
+        native_actions, "dispatch_task", lambda _task, action_id: dispatched.append(action_id)
+    )
     native_actions.ensure_schema(sqlite3.connect(database))
     with sqlite3.connect(database) as db:
         db.execute(
@@ -221,7 +270,9 @@ def test_recovery_requeues_only_current_queued_rows_and_fails_legacy_pending(tmp
     assert native_actions.recover_actions() == 1
     assert dispatched == ["queued"]
     with sqlite3.connect(database) as db:
-        legacy = db.execute("SELECT status,error_detail FROM native_action_runs WHERE id='legacy'").fetchone()
+        legacy = db.execute(
+            "SELECT status,error_detail FROM native_action_runs WHERE id='legacy'"
+        ).fetchone()
         queued = db.execute("SELECT status FROM native_action_runs WHERE id='queued'").fetchone()
     assert legacy[0] == "failed"
     assert "queue-time pinned ref" in legacy[1]
@@ -229,7 +280,9 @@ def test_recovery_requeues_only_current_queued_rows_and_fails_legacy_pending(tmp
 
 
 def test_route_contract_uses_pr_action_history_and_action_specific_merge_gate() -> None:
-    source = (Path(__file__).resolve().parents[1] / "amoscloud_ai/api/routes/amosclaud_production.py").read_text()
+    source = (
+        Path(__file__).resolve().parents[1] / "amoscloud_ai/api/routes/amosclaud_production.py"
+    ).read_text()
     assert '"actions": history' in source
     assert "native_actions.queue_action" in source
     assert "native_actions.latest_action(repository_id, pull_request_id)" in source
@@ -254,11 +307,20 @@ def test_cancelled_queued_action_never_claims_or_executes(tmp_path, monkeypatch)
     _configure_store(tmp_path, monkeypatch)
     stored = {}
     monkeypatch.setattr(native_actions, "_pin_action_ref", lambda *_args: None)
-    monkeypatch.setattr(native_actions.pipelines, "_save", lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}))
+    monkeypatch.setattr(
+        native_actions.pipelines,
+        "_save",
+        lambda pipeline, *_args: stored.update({pipeline.id: pipeline.model_copy(deep=True)}),
+    )
     monkeypatch.setattr(native_actions.pipelines, "_get", lambda action_id: stored.get(action_id))
     monkeypatch.setattr(native_actions, "dispatch_task", lambda *_args: None)
     queued = native_actions.queue_action(
-        repository_id=1, pull_request_id=12, branch="feature/test", head_sha="c" * 40, requested_by=1, reason="test"
+        repository_id=1,
+        pull_request_id=12,
+        branch="feature/test",
+        head_sha="c" * 40,
+        requested_by=1,
+        reason="test",
     )
     cancelled = native_actions.cancel_action(queued.id)
     assert cancelled is not None and cancelled.status is PipelineStatus.CANCELLED
@@ -269,9 +331,11 @@ def test_cancelled_queued_action_never_claims_or_executes(tmp_path, monkeypatch)
 
 
 def test_route_and_workspace_offer_native_action_cancellation() -> None:
-    route = (Path(__file__).resolve().parents[1] / "amoscloud_ai/api/routes/amosclaud_production.py").read_text()
+    route = (
+        Path(__file__).resolve().parents[1] / "amoscloud_ai/api/routes/amosclaud_production.py"
+    ).read_text()
     workspace = (Path(__file__).resolve().parents[1] / "web/workspace.js").read_text()
-    assert 'ci/{action_id}/cancel' in route
+    assert "ci/{action_id}/cancel" in route
     assert "native_actions.cancel_action(action_id)" in route
     assert "Cancel Action" in workspace
     assert "cancelPullRequestCi" in workspace

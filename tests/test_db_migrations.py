@@ -13,27 +13,16 @@ def test_migrations_are_idempotent(tmp_path):
         applied = db.execute(
             "SELECT version,name FROM schema_migrations ORDER BY version"
         ).fetchall()
-        tables = {
-            row[0]
-            for row in db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         repository_columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(repositories)").fetchall()
+            row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
         }
-        indexes = {
-            row[1]
-            for row in db.execute("PRAGMA index_list(repositories)").fetchall()
-        }
+        indexes = {row[1] for row in db.execute("PRAGMA index_list(repositories)").fetchall()}
         workspace_indexes = {
-            row[1]
-            for row in db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
+            row[1] for row in db.execute("PRAGMA index_list(cloud_workspaces)").fetchall()
         }
         native_action_columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(native_action_runs)").fetchall()
+            row[1] for row in db.execute("PRAGMA table_info(native_action_runs)").fetchall()
         }
         native_action_schema = db.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='native_action_runs'"
@@ -111,8 +100,7 @@ def test_native_action_upgrade_preserves_legacy_pending_rows(tmp_path, monkeypat
 def test_github_schema_helper_is_idempotent(tmp_path):
     path = tmp_path / "isolated.db"
     with sqlite3.connect(path) as db:
-        db.execute(
-            """CREATE TABLE repositories (
+        db.execute("""CREATE TABLE repositories (
                 id INTEGER PRIMARY KEY,
                 owner_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
@@ -121,15 +109,11 @@ def test_github_schema_helper_is_idempotent(tmp_path):
                 default_branch TEXT NOT NULL DEFAULT 'main',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
-            )"""
-        )
+            )""")
         db_migrations.ensure_github_repository_schema(db)
         db_migrations.ensure_github_repository_schema(db)
         db.commit()
-        columns = {
-            row[1]
-            for row in db.execute("PRAGMA table_info(repositories)").fetchall()
-        }
+        columns = {row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()}
     assert "github_repository_id" in columns
     assert "github_last_sync_attempt_at" in columns
 

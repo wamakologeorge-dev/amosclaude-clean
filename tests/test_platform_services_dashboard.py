@@ -1,4 +1,5 @@
 """Tests for the truthful all-services dashboard and the Task A 405 fix."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,9 @@ import httpx
 from amoscloud_ai.api.routes import (
     auth,
     pipelines,
-    platform_services as ps,
+)
+from amoscloud_ai.api.routes import platform_services as ps
+from amoscloud_ai.api.routes import (
     repositories,
     storage,
 )
@@ -52,29 +55,27 @@ def _make_session(email: str) -> tuple[str, object]:
         cursor = db.execute(
             "INSERT INTO users(name,email,password_hash,provider,is_admin,"
             "created_at) VALUES (?,?,?,'password',0,?)",
-            (email.split("@", 1)[0], email, auth._hash_password("pw"),
-             now.isoformat()),
+            (email.split("@", 1)[0], email, auth._hash_password("pw"), now.isoformat()),
         )
         user_id = cursor.lastrowid
         db.execute(
-            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at) "
-            "VALUES (?,?,?,?)",
-            (auth._token_hash(token), user_id,
-             (now + timedelta(hours=1)).isoformat(), now.isoformat()),
+            "INSERT INTO sessions(token_hash,user_id,expires_at,created_at) " "VALUES (?,?,?,?)",
+            (
+                auth._token_hash(token),
+                user_id,
+                (now + timedelta(hours=1)).isoformat(),
+                now.isoformat(),
+            ),
         )
         db.commit()
-        user = db.execute(
-            "SELECT * FROM users WHERE id=?", (user_id,)
-        ).fetchone()
+        user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
     return token, user
 
 
 def _get(path: str, token: str | None = None) -> httpx.Response:
     async def run() -> httpx.Response:
         transport = httpx.ASGITransport(app=create_app())
-        async with httpx.AsyncClient(
-            transport=transport, base_url="http://testserver"
-        ) as client:
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             if token:
                 client.cookies.set(auth.SESSION_COOKIE, token)
             return await client.get(path)
@@ -96,17 +97,13 @@ def test_repository_issue_listing_is_not_method_not_allowed(tmp_path, monkeypatc
     assert response.json() == []
 
 
-def test_repository_pull_request_listing_is_not_method_not_allowed(
-    tmp_path, monkeypatch
-):
+def test_repository_pull_request_listing_is_not_method_not_allowed(tmp_path, monkeypatch):
     _bind(tmp_path, monkeypatch)
     token, owner = _make_session("owner@example.com")
     repository = repositories.create_repository(
         repositories.RepositoryCreate(name="proj", visibility="private"), owner
     )
-    response = _get(
-        f"/api/v1/repositories/{repository.id}/pull-requests", token
-    )
+    response = _get(f"/api/v1/repositories/{repository.id}/pull-requests", token)
     assert response.status_code == 200
     assert response.json() == []
 
@@ -116,9 +113,7 @@ def test_issue_get_and_post_are_registered_with_both_methods():
     for route in create_app().routes:
         path = getattr(route, "path", "")
         if path == "/api/v1/repositories/{repository_id}/issues":
-            methods.setdefault(path, set()).update(
-                getattr(route, "methods", set()) or set()
-            )
+            methods.setdefault(path, set()).update(getattr(route, "methods", set()) or set())
     registered = methods.get("/api/v1/repositories/{repository_id}/issues", set())
     assert "GET" in registered
     assert "POST" in registered

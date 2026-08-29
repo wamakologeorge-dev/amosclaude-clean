@@ -1,4 +1,5 @@
 """Optional, provider-neutral deployment health evidence for readiness responses."""
+
 from __future__ import annotations
 
 import os
@@ -11,7 +12,10 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def _enabled() -> bool:
-    return os.getenv("AMOSCLAUD_DEPLOYMENT_HEALTHCHECK_ENABLED", "false").strip().lower() in _TRUE_VALUES
+    return (
+        os.getenv("AMOSCLAUD_DEPLOYMENT_HEALTHCHECK_ENABLED", "false").strip().lower()
+        in _TRUE_VALUES
+    )
 
 
 def _health_url() -> str:

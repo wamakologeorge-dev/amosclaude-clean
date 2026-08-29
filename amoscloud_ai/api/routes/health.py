@@ -31,8 +31,8 @@ from amoscloud_ai.autonomous.server.api.cb.router.byte.metadata import (
     router as byte_metadata_router,
 )
 from amoscloud_ai.config import settings
-from amoscloud_ai.models import HealthResponse
 from amoscloud_ai.deployment_health import status as deployment_health_status
+from amoscloud_ai.models import HealthResponse
 from amoscloud_ai.server.cb.Amosclaud import server_identity
 
 router = APIRouter(tags=["health"])

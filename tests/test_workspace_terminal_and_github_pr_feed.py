@@ -69,9 +69,9 @@ def test_terminal_auto_connects_and_describes_developer_tools() -> None:
 
 
 def test_workspace_image_contains_practical_developer_toolchain() -> None:
-    dockerfile = Path(
-        "services/workspace_runtime/workspace-image/Dockerfile"
-    ).read_text(encoding="utf-8")
+    dockerfile = Path("services/workspace_runtime/workspace-image/Dockerfile").read_text(
+        encoding="utf-8"
+    )
     for package in (
         "build-essential",
         "cmake",
@@ -103,7 +103,6 @@ def test_workspace_renders_openable_pr_details_and_actions() -> None:
     assert "data-pr-detail" in source
     assert "Amosclaud Actions" in source
     assert (
-        "/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci"
-        in source
+        "/api/v1/amosclaud/production/repositories/${repositoryId}/pull-requests/${id}/ci" in source
     )
     assert "Run checks" in source

@@ -22,6 +22,7 @@ from amoscloud_ai.api.routes.repositories import (
     _require_write,
     _safe_branch,
 )
+
 router = APIRouter(prefix="/amosclaud/production", tags=["amosclaud-production"])
 
 
@@ -312,7 +313,9 @@ async def run_pull_request_ci(
         _require_write(access)
         row = _pull_request(db, repository_id, pull_request_id)
         if row["state"] != "open":
-            raise HTTPException(status_code=409, detail="Amosclaud Actions require an open pull request")
+            raise HTTPException(
+                status_code=409, detail="Amosclaud Actions require an open pull request"
+            )
         branch = str(row["head_branch"])
         repo = _open(repository_id)
         head_sha = repo.commit(branch).hexsha
@@ -336,11 +339,17 @@ def cancel_pull_request_ci(
         _pull_request(db, repository_id, pull_request_id)
     action = native_actions.latest_action(repository_id, pull_request_id)
     if action is None or action["id"] != action_id:
-        raise HTTPException(status_code=404, detail="Amosclaud Action not found for this pull request")
+        raise HTTPException(
+            status_code=404, detail="Amosclaud Action not found for this pull request"
+        )
     pipeline = native_actions.cancel_action(action_id)
     if pipeline is None:
         raise HTTPException(status_code=404, detail="Amosclaud Action not found")
-    return {"authority": "amosclaud", "pull_request_id": pull_request_id, "pipeline": pipeline.model_dump(mode="json")}
+    return {
+        "authority": "amosclaud",
+        "pull_request_id": pull_request_id,
+        "pipeline": pipeline.model_dump(mode="json"),
+    }
 
 
 @router.post("/repositories/{repository_id}/pull-requests/{pull_request_id}/action")

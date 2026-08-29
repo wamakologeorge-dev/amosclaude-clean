@@ -203,8 +203,7 @@ def _create_github_connections(
         if include_user_foreign_key
         else ""
     )
-    db.execute(
-        f"""CREATE TABLE IF NOT EXISTS github_connections (
+    db.execute(f"""CREATE TABLE IF NOT EXISTS github_connections (
             user_id INTEGER PRIMARY KEY,
             github_user_id INTEGER,
             github_id TEXT,
@@ -214,8 +213,7 @@ def _create_github_connections(
             scopes TEXT NOT NULL DEFAULT '',
             connected_at TEXT NOT NULL,
             updated_at TEXT NOT NULL{foreign_key}
-        )"""
-    )
+        )""")
 
 
 def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
@@ -227,104 +225,69 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
     """
 
     users_table_exists = bool(
-        db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'"
-        ).fetchone()
+        db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
     )
     _create_github_connections(
         db,
         include_user_foreign_key=users_table_exists,
     )
-    info = {
-        row[1]: row
-        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
-    }
+    info = {row[1]: row for row in db.execute("PRAGMA table_info(github_connections)").fetchall()}
     if "github_user_id" not in info:
         db.execute("ALTER TABLE github_connections ADD COLUMN github_user_id INTEGER")
     if "github_id" not in info:
         db.execute("ALTER TABLE github_connections ADD COLUMN github_id TEXT")
 
-    info = {
-        row[1]: row
-        for row in db.execute("PRAGMA table_info(github_connections)").fetchall()
-    }
-    table_empty = (
-        db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
-    )
+    info = {row[1]: row for row in db.execute("PRAGMA table_info(github_connections)").fetchall()}
+    table_empty = db.execute("SELECT 1 FROM github_connections LIMIT 1").fetchone() is None
     current_id = info.get("github_user_id")
-    should_rebuild = bool(
-        current_id
-        and current_id[3] == 1
-        and (users_table_exists or table_empty)
-    )
+    should_rebuild = bool(current_id and current_id[3] == 1 and (users_table_exists or table_empty))
     if should_rebuild:
-        db.execute(
-            "ALTER TABLE github_connections RENAME TO github_connections_legacy"
-        )
+        db.execute("ALTER TABLE github_connections RENAME TO github_connections_legacy")
         _create_github_connections(
             db,
             include_user_foreign_key=users_table_exists,
         )
         legacy = {
-            row[1]
-            for row in db.execute(
-                "PRAGMA table_info(github_connections_legacy)"
-            ).fetchall()
+            row[1] for row in db.execute("PRAGMA table_info(github_connections_legacy)").fetchall()
         }
         if not table_empty:
             github_user_expr = (
-                "github_user_id"
-                if "github_user_id" in legacy
-                else "CAST(github_id AS INTEGER)"
+                "github_user_id" if "github_user_id" in legacy else "CAST(github_id AS INTEGER)"
             )
             github_id_expr = (
-                "github_id"
-                if "github_id" in legacy
-                else "CAST(github_user_id AS TEXT)"
+                "github_id" if "github_id" in legacy else "CAST(github_user_id AS TEXT)"
             )
-            db.execute(
-                f"""INSERT INTO github_connections
+            db.execute(f"""INSERT INTO github_connections
                     (user_id,github_user_id,github_id,github_login,avatar_url,
                      access_token_ciphertext,scopes,connected_at,updated_at)
                     SELECT user_id,{github_user_expr},{github_id_expr},github_login,
                            avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
-                    FROM github_connections_legacy"""
-            )
+                    FROM github_connections_legacy""")
         db.execute("DROP TABLE github_connections_legacy")
 
-    db.execute(
-        """UPDATE github_connections
+    db.execute("""UPDATE github_connections
            SET github_user_id=CAST(github_id AS INTEGER)
            WHERE github_user_id IS NULL
              AND github_id IS NOT NULL
-             AND TRIM(github_id) <> ''"""
-    )
-    db.execute(
-        """UPDATE github_connections
+             AND TRIM(github_id) <> ''""")
+    db.execute("""UPDATE github_connections
            SET github_id=CAST(github_user_id AS TEXT)
            WHERE github_id IS NULL
-             AND github_user_id IS NOT NULL"""
-    )
+             AND github_user_id IS NOT NULL""")
 
 
 def ensure_github_repository_schema(db: sqlite3.Connection) -> None:
     """Idempotently add GitHub account and repository synchronization schema."""
 
     _ensure_github_connections_schema(db)
-    columns = {
-        row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()
-    }
+    columns = {row[1] for row in db.execute("PRAGMA table_info(repositories)").fetchall()}
     for name, sql_type in _GITHUB_REPOSITORY_COLUMNS.items():
         if name not in columns:
             db.execute(f"ALTER TABLE repositories ADD COLUMN {name} {sql_type}")
-    db.execute(
-        """CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
-           ON repositories(github_repository_id)"""
-    )
-    db.execute(
-        """CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
-           ON repositories(github_full_name COLLATE NOCASE)"""
-    )
+    db.execute("""CREATE INDEX IF NOT EXISTS idx_repositories_github_repository_id
+           ON repositories(github_repository_id)""")
+    db.execute("""CREATE INDEX IF NOT EXISTS idx_repositories_github_full_name
+           ON repositories(github_full_name COLLATE NOCASE)""")
 
 
 def run_migrations(path: str | Path) -> list[int]:
@@ -335,14 +298,12 @@ def run_migrations(path: str | Path) -> list[int]:
     applied: list[int] = []
     with sqlite3.connect(db_path) as db:
         db.execute("PRAGMA foreign_keys = ON")
-        db.execute(
-            """CREATE TABLE IF NOT EXISTS schema_migrations (
+        db.execute("""CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 checksum TEXT NOT NULL,
                 applied_at TEXT NOT NULL
-            )"""
-        )
+            )""")
         for migration in MIGRATIONS:
             existing = db.execute(
                 "SELECT checksum FROM schema_migrations WHERE version=?",

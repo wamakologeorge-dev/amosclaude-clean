@@ -22,7 +22,9 @@ class BuildStatus(str, Enum):
 class BuildRequest(BaseModel):
     mode: BuildMode
     instructions: Optional[str] = Field(default=None, description="Text instructions for the build")
-    context: Optional[str] = Field(default=None, description="Additional context or project details")
+    context: Optional[str] = Field(
+        default=None, description="Additional context or project details"
+    )
 
 
 class BuildResult(BaseModel):
