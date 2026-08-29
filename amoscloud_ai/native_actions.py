@@ -7,6 +7,7 @@ compileall followed by pytest, each run in the existing isolated runner.
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import sqlite3
@@ -24,6 +25,7 @@ from amoscloud_ai.isolated_runner import IsolatedRunResult, redact_output, run_i
 from amoscloud_ai.models import PipelineJob, PipelineResponse, PipelineStatus
 from amoscloud_ai.task_dispatch import dispatch_task
 
+_LOGGER = logging.getLogger(__name__)
 _ACTION_SHA = re.compile(r"^[0-9a-f]{40}$")
 # This plan is intentionally code-owned. Do not replace it with repository input.
 ACTION_PLAN: tuple[tuple[str, str, str], ...] = (
@@ -170,8 +172,8 @@ def _delete_action_ref(repo: Repo | None, action_ref: str | None) -> None:
     if repo is not None and action_ref:
         try:
             repo.git.update_ref("-d", action_ref)
-        except Exception:
-            pass
+        except Exception as exc:
+            _LOGGER.warning("Could not release native Action ref (%s).", type(exc).__name__)
 
 
 def queue_action(
@@ -277,10 +279,10 @@ def _cleanup_terminal_action_ref(action_id: str) -> None:
         return
     try:
         _delete_action_ref(Repo(_repo_path(int(action["repository_id"]))), action["action_ref"])
-    except Exception:
+    except Exception as exc:
         # Failed cleanup must not turn an already recorded terminal outcome
         # into a misleading non-terminal Action. Recovery will retry it.
-        pass
+        _LOGGER.warning("Could not clean up terminal Action ref (%s).", type(exc).__name__)
 
 
 def _safe_log(output: str) -> str:
@@ -320,8 +322,8 @@ def _remove_checkout(
     if repo is not None and checkout is not None:
         try:
             repo.git.worktree("remove", "--force", str(checkout))
-        except Exception:
-            pass
+        except Exception as exc:
+            _LOGGER.warning("Could not remove Action checkout (%s).", type(exc).__name__)
     if temp_root is not None:
         shutil.rmtree(temp_root, ignore_errors=True)
 

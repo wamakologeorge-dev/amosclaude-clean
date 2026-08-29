@@ -188,6 +188,28 @@ _GITHUB_REPOSITORY_COLUMNS = {
     "github_repository_id": "INTEGER",
 }
 
+# Each statement is static so legacy column detection cannot become executable SQL.
+_GITHUB_CONNECTION_COPY_SQL = {
+    (True, True): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,github_user_id,github_id,github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
+    (True, False): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,github_user_id,CAST(github_user_id AS TEXT),github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
+    (False, True): """INSERT INTO github_connections
+        (user_id,github_user_id,github_id,github_login,avatar_url,
+         access_token_ciphertext,scopes,connected_at,updated_at)
+        SELECT user_id,CAST(github_id AS INTEGER),github_id,github_login,
+               avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
+        FROM github_connections_legacy""",
+}
+
 
 def _checksum(migration: Migration) -> str:
     return hashlib.sha256(migration.sql.encode()).hexdigest()
@@ -251,18 +273,11 @@ def _ensure_github_connections_schema(db: sqlite3.Connection) -> None:
             row[1] for row in db.execute("PRAGMA table_info(github_connections_legacy)").fetchall()
         }
         if not table_empty:
-            github_user_expr = (
-                "github_user_id" if "github_user_id" in legacy else "CAST(github_id AS INTEGER)"
-            )
-            github_id_expr = (
-                "github_id" if "github_id" in legacy else "CAST(github_user_id AS TEXT)"
-            )
-            db.execute(f"""INSERT INTO github_connections
-                    (user_id,github_user_id,github_id,github_login,avatar_url,
-                     access_token_ciphertext,scopes,connected_at,updated_at)
-                    SELECT user_id,{github_user_expr},{github_id_expr},github_login,
-                           avatar_url,access_token_ciphertext,scopes,connected_at,updated_at
-                    FROM github_connections_legacy""")
+            has_github_user_id = "github_user_id" in legacy
+            has_github_id = "github_id" in legacy
+            if not (has_github_user_id or has_github_id):
+                raise RuntimeError("Legacy GitHub connection schema has no GitHub identity column")
+            db.execute(_GITHUB_CONNECTION_COPY_SQL[(has_github_user_id, has_github_id)])
         db.execute("DROP TABLE github_connections_legacy")
 
     db.execute("""UPDATE github_connections

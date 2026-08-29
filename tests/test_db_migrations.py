@@ -118,6 +118,35 @@ def test_github_schema_helper_is_idempotent(tmp_path):
     assert "github_last_sync_attempt_at" in columns
 
 
+def test_github_schema_helper_rebuilds_legacy_connection_rows(tmp_path):
+    path = tmp_path / "legacy.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        db.execute("INSERT INTO users(id) VALUES (7)")
+        db.execute("CREATE TABLE repositories (id INTEGER PRIMARY KEY)")
+        db.execute("""CREATE TABLE github_connections (
+                user_id INTEGER NOT NULL,
+                github_user_id INTEGER PRIMARY KEY,
+                github_login TEXT NOT NULL,
+                avatar_url TEXT,
+                access_token_ciphertext TEXT NOT NULL,
+                scopes TEXT NOT NULL DEFAULT '',
+                connected_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""")
+        db.execute("""INSERT INTO github_connections(
+                user_id,github_user_id,github_login,avatar_url,
+                access_token_ciphertext,scopes,connected_at,updated_at
+            ) VALUES (7,42,'octo',NULL,'cipher','repo','then','now')""")
+
+        db_migrations.ensure_github_repository_schema(db)
+        row = db.execute("""SELECT user_id,github_user_id,github_id,github_login,
+                      access_token_ciphertext,scopes,connected_at,updated_at
+               FROM github_connections""").fetchone()
+
+    assert row == (7, 42, "42", "octo", "cipher", "repo", "then", "now")
+
+
 def test_migrations_reject_checksum_drift(tmp_path, monkeypatch):
     path = tmp_path / "auth.db"
     db_migrations.run_migrations(path)
