@@ -10,6 +10,7 @@ from amoscloud_ai.isolated_runner import (
     _parse_runner_user,
     parse_allowed_command,
     redact_output,
+    run_in_isolated_container,
 )
 
 
@@ -67,9 +68,7 @@ def test_runner_user_must_be_a_numeric_non_root_uid_and_gid() -> None:
 
 def test_runner_source_prepares_root_created_workspace_without_following_symlinks() -> None:
     source = (
-        Path(__file__).resolve().parents[1]
-        / "amoscloud_ai"
-        / "isolated_runner.py"
+        Path(__file__).resolve().parents[1] / "amoscloud_ai" / "isolated_runner.py"
     ).read_text(encoding="utf-8")
 
     assert "def _prepare_workspace_ownership" in source
@@ -81,9 +80,7 @@ def test_runner_source_prepares_root_created_workspace_without_following_symlink
 
 def test_runner_source_never_invokes_a_host_shell() -> None:
     source = (
-        Path(__file__).resolve().parents[1]
-        / "amoscloud_ai"
-        / "isolated_runner.py"
+        Path(__file__).resolve().parents[1] / "amoscloud_ai" / "isolated_runner.py"
     ).read_text(encoding="utf-8")
 
     assert "shell=True" not in source
@@ -95,3 +92,52 @@ def test_runner_source_never_invokes_a_host_shell() -> None:
     assert 'return f"{uid}:{gid}", uid, gid' in source
     assert "65532:65532" not in source
     assert "--cidfile" in source
+
+
+def test_process_sandbox_runs_when_container_station_is_missing(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("AMOSCLAUD_DOCKER_BINARY", "amosclaud-missing-docker-binary")
+    monkeypatch.delenv("AMOSCLAUD_RUNNER_IMAGE", raising=False)
+    monkeypatch.delenv("AMOSCLAUD_RUNNER_REQUIRE_CONTAINER", raising=False)
+    (tmp_path / "ok.py").write_text("print('sandbox ok')\n", encoding="utf-8")
+
+    result = run_in_isolated_container(
+        "python ok.py",
+        workspace=tmp_path,
+        environment={"PYTHONDONTWRITEBYTECODE": "1"},
+        timeout_seconds=60,
+    )
+
+    assert result.returncode == 0
+    assert result.timed_out is False
+    assert "sandbox ok" in result.output
+    assert "process sandbox" in result.output.lower()
+
+
+def test_process_sandbox_reports_failures_honestly(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("AMOSCLAUD_DOCKER_BINARY", "amosclaud-missing-docker-binary")
+    monkeypatch.delenv("AMOSCLAUD_RUNNER_IMAGE", raising=False)
+    monkeypatch.delenv("AMOSCLAUD_RUNNER_REQUIRE_CONTAINER", raising=False)
+    (tmp_path / "bad.py").write_text("raise SystemExit(3)\n", encoding="utf-8")
+
+    result = run_in_isolated_container(
+        "python bad.py",
+        workspace=tmp_path,
+        environment={},
+        timeout_seconds=60,
+    )
+
+    assert result.returncode == 3
+    assert result.timed_out is False
+
+
+def test_operator_can_require_container_isolation(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("AMOSCLAUD_DOCKER_BINARY", "amosclaud-missing-docker-binary")
+    monkeypatch.delenv("AMOSCLAUD_RUNNER_IMAGE", raising=False)
+    monkeypatch.setenv("AMOSCLAUD_RUNNER_REQUIRE_CONTAINER", "true")
+
+    with pytest.raises(RunnerConfigurationError):
+        run_in_isolated_container(
+            "python ok.py",
+            workspace=tmp_path,
+            environment={},
+        )

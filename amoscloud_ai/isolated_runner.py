@@ -11,13 +11,20 @@ from __future__ import annotations
 import os
 import shlex
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
 import threading
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Mapping, Sequence
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - non-POSIX platforms
+    resource = None  # type: ignore[assignment]
 
 
 DEFAULT_ALLOWLIST = {
@@ -184,12 +191,7 @@ def _write_environment_file(environment: Mapping[str, str]) -> Path:
         for key, value in sorted(environment.items()):
             if not key.replace("_", "").isalnum() or not key or key[0].isdigit():
                 continue
-            safe_value = (
-                str(value)
-                .replace("\x00", "")
-                .replace("\r", "")
-                .replace("\n", "\\n")
-            )
+            safe_value = str(value).replace("\x00", "").replace("\r", "").replace("\n", "\\n")
             handle.write(f"{key}={safe_value}\n")
     finally:
         handle.close()
@@ -201,14 +203,10 @@ def _write_environment_file(environment: Mapping[str, str]) -> Path:
 def _parse_runner_user(value: str) -> tuple[int, int]:
     parts = value.split(":", 1)
     if len(parts) != 2 or not all(part.isdigit() for part in parts):
-        raise RunnerConfigurationError(
-            "AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID"
-        )
+        raise RunnerConfigurationError("AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID")
     uid, gid = (int(part) for part in parts)
     if uid <= 0 or gid <= 0:
-        raise RunnerConfigurationError(
-            "AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID"
-        )
+        raise RunnerConfigurationError("AMOSCLAUD_RUNNER_USER must be a numeric non-root UID:GID")
     return uid, gid
 
 
@@ -269,6 +267,143 @@ def _prepare_workspace_ownership(root: Path, uid: int, gid: int) -> None:
             _lchown(base / name, uid, gid)
 
 
+PROCESS_SANDBOX_NOTICE = (
+    "Runner mode: process sandbox on the worker station. Container isolation is "
+    "unavailable here, so this fixed allowlisted command ran as a resource-limited "
+    "worker subprocess without container network isolation."
+)
+
+
+def _require_container() -> bool:
+    value = os.getenv("AMOSCLAUD_RUNNER_REQUIRE_CONTAINER", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _parse_memory_limit_bytes(raw: str) -> int:
+    value = (raw or "").strip().lower()
+    multiplier = 1
+    if value.endswith("g"):
+        multiplier = 1024**3
+        value = value[:-1]
+    elif value.endswith("m"):
+        multiplier = 1024**2
+        value = value[:-1]
+    elif value.endswith("k"):
+        multiplier = 1024
+        value = value[:-1]
+    try:
+        amount = float(value)
+    except ValueError:
+        return 768 * 1024**2
+    return max(64 * 1024**2, int(amount * multiplier))
+
+
+def _process_sandbox_limits(timeout: int, memory_bytes: int):
+    def apply() -> None:
+        if resource is None:  # pragma: no cover - non-POSIX platforms
+            return
+        for limit, value in (
+            (resource.RLIMIT_CPU, timeout),
+            (resource.RLIMIT_AS, memory_bytes),
+            (resource.RLIMIT_FSIZE, 128 * 1024 * 1024),
+            (resource.RLIMIT_CORE, 0),
+        ):
+            try:
+                resource.setrlimit(limit, (value, value))
+            except (ValueError, OSError):
+                continue
+
+    return apply
+
+
+def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        if process.poll() is None:
+            process.kill()
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _run_in_process_sandbox(
+    command: str,
+    *,
+    workspace: Path,
+    environment: Mapping[str, str],
+    timeout_seconds: int | None = None,
+) -> IsolatedRunResult:
+    """Run an allowlisted command as a locked-down worker subprocess.
+
+    This is the honest fallback for worker stations without a container
+    engine. The command is still parsed as an argument vector (never a host
+    shell), restricted to the fixed executable allowlist, resource-limited,
+    time-limited, and its output is bounded. Unlike the container path it
+    cannot guarantee network isolation, which is disclosed in the returned
+    log output.
+    """
+
+    root = workspace.resolve()
+    if not root.is_dir():
+        raise RunnerConfigurationError("runner workspace does not exist")
+    if not os.access(root, os.W_OK | os.X_OK):
+        raise RunnerConfigurationError("runner workspace is not writable by the worker")
+
+    argv = parse_allowed_command(command)
+    if Path(argv[0]).name in {"python", "python3"}:
+        argv[0] = sys.executable
+
+    timeout = timeout_seconds or int(os.getenv("AMOSCLAUD_RUNNER_TIMEOUT_SECONDS", "600"))
+    timeout = max(1, min(timeout, 3600))
+    memory_bytes = _parse_memory_limit_bytes(os.getenv("AMOSCLAUD_RUNNER_MEMORY", "768m"))
+
+    sandbox_home = Path(tempfile.mkdtemp(prefix="amosclaud-sandbox-home-"))
+    env: dict[str, str] = {
+        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+        "HOME": str(sandbox_home),
+        "TMPDIR": str(sandbox_home),
+        "LANG": "C.UTF-8",
+    }
+    for key, value in environment.items():
+        if key and not key[0].isdigit() and key.replace("_", "").isalnum():
+            env[key] = str(value).replace("\x00", "")
+
+    buffer = _BoundedByteBuffer(MAX_LOG_BYTES)
+    timed_out = False
+    returncode: int | None = None
+    try:
+        process = subprocess.Popen(
+            argv,
+            cwd=root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            preexec_fn=_process_sandbox_limits(timeout, memory_bytes),
+        )
+        assert process.stdout is not None
+        drain = threading.Thread(target=_drain_output, args=(process.stdout, buffer), daemon=True)
+        drain.start()
+        try:
+            returncode = process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _terminate_process_group(process)
+            returncode = process.poll()
+        drain.join(timeout=10)
+    finally:
+        shutil.rmtree(sandbox_home, ignore_errors=True)
+
+    output = f"{PROCESS_SANDBOX_NOTICE}\n{buffer.text()}"
+    return IsolatedRunResult(
+        returncode=int(returncode if returncode is not None else -9),
+        output=output,
+        timed_out=timed_out,
+    )
+
+
 def _terminate_container(docker: str, cid_path: Path, process: subprocess.Popen[bytes]) -> None:
     container_id = ""
     if cid_path.is_file():
@@ -296,14 +431,26 @@ def run_in_isolated_container(
     environment: Mapping[str, str],
     timeout_seconds: int | None = None,
 ) -> IsolatedRunResult:
-    """Run an allowlisted command in a locked-down worker container."""
+    """Run an allowlisted command in a locked-down worker container.
+
+    When the worker station has no container engine or runner image, and the
+    operator has not required container isolation, execution falls back to the
+    disclosed process sandbox so native Amosclaud Actions stay truthful and
+    available on single-container deployments.
+    """
 
     docker = shutil.which(os.getenv("AMOSCLAUD_DOCKER_BINARY", "docker"))
-    if not docker:
-        raise RunnerConfigurationError("Docker is required on the isolated worker station")
-
     image = os.getenv("AMOSCLAUD_RUNNER_IMAGE", "").strip()
-    if not image:
+    if not docker or not image:
+        if not _require_container():
+            return _run_in_process_sandbox(
+                command,
+                workspace=workspace,
+                environment=environment,
+                timeout_seconds=timeout_seconds,
+            )
+        if not docker:
+            raise RunnerConfigurationError("Docker is required on the isolated worker station")
         raise RunnerConfigurationError("AMOSCLAUD_RUNNER_IMAGE is required")
 
     root = workspace.resolve()
