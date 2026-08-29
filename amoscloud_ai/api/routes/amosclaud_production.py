@@ -268,6 +268,7 @@ async def _queue_pull_request_action(
     )
     return {
         "authority": "amosclaud",
+        "authoritative": True,
         "pull_request_id": pull_request_id,
         "pipeline": pipeline.model_dump(mode="json"),
         "color": first_production.ci_color(pipeline.status.value),
@@ -292,6 +293,7 @@ def pull_request_ci_status(
     latest = history[0] if history else None
     return {
         "authority": "amosclaud",
+        "authoritative": True,
         "pull_request_id": pull_request_id,
         "branch": branch,
         "commit_sha": head_sha,
@@ -347,6 +349,7 @@ def cancel_pull_request_ci(
         raise HTTPException(status_code=404, detail="Amosclaud Action not found")
     return {
         "authority": "amosclaud",
+        "authoritative": True,
         "pull_request_id": pull_request_id,
         "pipeline": pipeline.model_dump(mode="json"),
     }
