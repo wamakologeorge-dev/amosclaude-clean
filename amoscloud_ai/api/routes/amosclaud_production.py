@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from amoscloud_ai import first_production, native_actions
-from amoscloud_ai.api.routes import solo_development
+from amoscloud_ai.api.routes import pipelines, solo_development
 from amoscloud_ai.api.routes.repositories import (
     _access,
     _checkout,
