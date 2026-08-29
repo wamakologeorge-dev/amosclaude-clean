@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException
 
-from amoscloud_ai import github_issue_commands, model_runtime, railway_health
+from amoscloud_ai import deployment_health, github_issue_commands, model_runtime
 from amoscloud_ai.api.routes import (
     auth,
     github_app,
@@ -447,32 +447,32 @@ def _check_issue_command() -> dict:
     )
 
 
-def _check_railway() -> dict:
-    state = railway_health.status()
-    evidence = "amoscloud_ai.railway_health.status()"
+def _check_deployment_health() -> dict:
+    state = deployment_health.status()
+    evidence = "amoscloud_ai.deployment_health.status()"
     if not state.get("enabled"):
         return _entry(
-            "railway",
-            "Optional Railway healthcheck",
+            "deployment-health",
+            "Optional deployment healthcheck",
             DISABLED,
-            "The Railway healthcheck is intentionally disabled.",
+            "The deployment healthcheck is intentionally disabled.",
             evidence,
         )
     if state.get("reachable"):
         return _entry(
-            "railway",
-            "Optional Railway healthcheck",
+            "deployment-health",
+            "Optional deployment healthcheck",
             OPERATIONAL,
-            f"The configured Railway endpoint responded ({state.get('detail')}).",
+            f"The configured public deployment endpoint responded ({state.get('detail')}).",
             evidence,
         )
     return _entry(
-        "railway",
-        "Optional Railway healthcheck",
+        "deployment-health",
+        "Optional deployment healthcheck",
         UNREACHABLE,
-        f"The Railway healthcheck failed ({state.get('detail')}).",
+        f"The deployment healthcheck failed ({state.get('detail')}).",
         evidence,
-        "Confirm AMOSCLAUD_RAILWAY_HEALTH_URL points at a reachable endpoint.",
+        "Confirm AMOSCLAUD_DEPLOYMENT_HEALTH_URL points at a reachable endpoint.",
     )
 
 
@@ -713,7 +713,7 @@ _CHECKS = (
     ),
     ("github-webhook", "GitHub App webhook receiver", _check_github_webhook),
     ("issue-command", "GitHub issue-command integration", _check_issue_command),
-    ("railway", "Optional Railway healthcheck", _check_railway),
+    ("deployment-health", "Optional deployment healthcheck", _check_deployment_health),
     (
         "autonomous-pipeline",
         "Autonomous agent & task pipeline",

@@ -29,7 +29,7 @@ EXPECTED_SERVICE_IDS = {
     "external-adapters",
     "github-webhook",
     "issue-command",
-    "railway",
+    "deployment-health",
     "autonomous-pipeline",
     "cicd",
     "workspace-runtime",
