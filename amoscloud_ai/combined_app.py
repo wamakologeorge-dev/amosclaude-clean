@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from amosclaud_mcp.server import mcp as amosclaud_mcp
 from amoscloud_ai.api.routes import (
     github_access_gateway,
+    mcp_gateway,
     owner_access_gateway,
     public_developer_tools,
     vscode_terminal,
@@ -220,7 +221,11 @@ async def lifespan(_app: FastAPI):
         yield
 
 
+# These first-party integration routes are mounted on the platform itself so
+# the normal HostedToolSupportASGI policy remains authoritative. MCP clients do
+# not receive direct database, filesystem, GitHub, or provider credentials.
 platform_app.include_router(vscode_terminal.router, prefix="/api/v1")
+platform_app.include_router(mcp_gateway.router, prefix="/api/v1")
 
 app = FastAPI(
     title="Amosclaud Platform and MCP",
@@ -233,7 +238,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(EDITOR_ORIGINS),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Mcp-Session-Id", "MCP-Protocol-Version"],
     expose_headers=["Mcp-Session-Id", "X-Amosclaud-Support-Seconds-Remaining"],
 )
