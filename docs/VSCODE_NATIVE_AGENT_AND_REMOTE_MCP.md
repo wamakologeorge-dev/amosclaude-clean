@@ -32,19 +32,35 @@ not want to use the shared VS Code Chat interface.
 The combined production ASGI application serves the existing platform at `/`
 and the first-party Streamable HTTP MCP server at `/mcp/`.
 
-Remote MCP requests require a bearer key. Configure:
+Remote MCP requests require an Amosclaud bearer credential. Configure:
 
 ```text
 AMOSCLAUD_AUTONOMOUS_KEY=<protected Autonomous API key>
 AMOSCLAUD_MCP_ACCESS_KEY=<optional separate remote MCP key>
-AMOSCLAUD_API_URL=https://www.amosclaud.com
+AMOSCLAUD_API_URL=https://amosclauds.com
 ```
 
 When `AMOSCLAUD_MCP_ACCESS_KEY` is blank, the MCP endpoint accepts the configured
-Autonomous key. Never commit either key.
+Autonomous key. Never commit either key. Scoped Amosclaud authority credentials
+can additionally limit native repository access to `repository:read` and
+`repository:write`.
 
 The repository includes `.vscode/mcp.json`, which asks each VS Code user for the
 key through a protected input rather than storing it in the repository.
+
+The same remote MCP server is also the first-party connection point for other
+authorized MCP clients. See `docs/CHATGPT_AMOSCLAUD_MCP.md` for the direct
+ChatGPT/MCP architecture and the physical Amosclaud computer path.
+
+## Native Amosclaud repository tools
+
+The MCP server now exposes the native Amosclaud repository provider instead of
+requiring an MCP client to hold a GitHub token. Authorized clients can list
+repositories, read the tree and files, inspect branches and commits, create
+repositories and branches, and commit file changes through Amosclaud.
+
+External repository providers remain optional Amosclaud integrations behind the
+control plane. Their credentials are not part of the MCP client contract.
 
 ## Multi-user self terminal
 
@@ -120,20 +136,27 @@ publisher account and its protected publishing credential.
 
 ## Deployment
 
-The production Docker command runs:
+The production command runs:
 
 ```text
 uvicorn amoscloud_ai.combined_app:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
-After merge, Railway must deploy the new image before `/mcp/` and the VS Code
-terminal transport become available. Browser users must also install the built
-VSIX or the Marketplace release of the extension.
+The deployment target may be an Amosclaud-managed host, a physical Amosclaud
+computer, or a temporary external compute provider. `/mcp/` and the terminal
+transport are Amosclaud services and should not depend on a particular provider
+being the permanent control plane.
+
+After deployment, verify `/health`, the authenticated MCP connection, repository
+read/write scopes, and terminal isolation before reporting the deployment as
+healthy. Browser users must also install the built VSIX or Marketplace release
+of the extension.
 
 ## GitHub integration boundary
 
-Amosclaud performs approved GitHub operations through its GitHub App,
-repository-scoped Actions, webhooks, issues, branches, pull requests, checks,
-and protected Autonomous pipeline. GitHub's own chat interface remains a
-separate product surface. Amosclaud uses only the permissions granted by the
-repository owner.
+When GitHub is connected, Amosclaud performs approved GitHub operations through
+its GitHub App, repository-scoped Actions, webhooks, issues, branches, pull
+requests, checks, and protected Autonomous pipeline. GitHub is an optional
+provider integration rather than the MCP identity or control plane. Native
+Amosclaud repositories can be accessed through MCP without giving the client a
+GitHub credential.
