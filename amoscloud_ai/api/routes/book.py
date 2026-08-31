@@ -1,14 +1,17 @@
 """Native API router for the Amosclaud Word Book."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.book import AmosclaudBook, BookError
 
 router = APIRouter(prefix="/book", tags=["amosclaud-word-book"])
+WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 
 
 def _book() -> AmosclaudBook:
@@ -38,9 +41,9 @@ class ChangeReport(BaseModel):
     status: str = "implemented_verification_pending"
     files_changed: list[str]
     chapters_updated: list[str]
-    tests: list[Any] = []
+    tests: list[Any] = Field(default_factory=list)
     verification: dict[str, Any]
-    limitations: list[str] = []
+    limitations: list[str] = Field(default_factory=list)
     next_task: str | None = None
 
 
@@ -52,6 +55,11 @@ class GateRequest(BaseModel):
 @router.get("")
 def book_home() -> dict[str, Any]:
     return _safe(lambda: {"manifest": _book().manifest(), "status": _book().status()})
+
+
+@router.get("/reader", include_in_schema=False)
+def book_reader() -> FileResponse:
+    return FileResponse(WEB_DIR / "amosclaud-book.html")
 
 
 @router.get("/status")
