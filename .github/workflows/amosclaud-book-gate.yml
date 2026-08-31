@@ -1,0 +1,82 @@
+name: Amosclaud Book Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  book-gate:
+    name: Book change contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch origin "$BASE_REF" --depth=1
+            git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/amosclaud-changed-files.txt
+          elif [ -n "${BEFORE_SHA:-}" ] && ! printf '%s' "$BEFORE_SHA" | grep -Eq '^0+$'; then
+            git diff --name-only "$BEFORE_SHA" HEAD > /tmp/amosclaud-changed-files.txt
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > /tmp/amosclaud-changed-files.txt
+          else
+            git ls-files > /tmp/amosclaud-changed-files.txt
+          fi
+          cat /tmp/amosclaud-changed-files.txt
+
+      - name: Enforce Amosclaud Word Book update
+        shell: python
+        run: |
+          from pathlib import Path
+          import sys
+
+          changed = [line.strip() for line in Path('/tmp/amosclaud-changed-files.txt').read_text().splitlines() if line.strip()]
+          ignored_prefixes = (
+              '.Amosclaud/book/.runtime/',
+              '.github/dependabot',
+          )
+          ignored_exact = {
+              '.github/workflows/amosclaud-book-gate.yml',
+          }
+          meaningful = [
+              path for path in changed
+              if path not in ignored_exact and not path.startswith(ignored_prefixes)
+          ]
+          if not meaningful:
+              print('Book Gate: no meaningful Amosclaud change detected.')
+              raise SystemExit(0)
+
+          book_changes = [path for path in meaningful if path.startswith('.Amosclaud/book/')]
+          if not book_changes:
+              print('::error::Meaningful Amosclaud changes must update .Amosclaud/book before completion or merge.')
+              print('Changed files:')
+              for path in meaningful:
+                  print(f'  - {path}')
+              raise SystemExit(1)
+
+          ledger = Path('.Amosclaud/book/changes.jsonl')
+          if not ledger.exists() or not ledger.read_text(encoding='utf-8').strip():
+              print('::error::Book change ledger is missing or empty.')
+              raise SystemExit(1)
+
+          print('Book Gate passed. Book files changed:')
+          for path in book_changes:
+              print(f'  - {path}')
+
+      - name: Run Amosclaud Word Book tests
+        run: python -m pytest tests/test_amosclaud_book.py -q
