@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "book_id": "amosclaud-word-book",
+  "title": "Amosclaud Word Book",
+  "purpose": "Canonical human-and-agent engineering knowledge system for Amosclaud.",
+  "reading_target_minutes_per_chapter": 3,
+  "truth_statuses": [
+    "verified",
+    "implemented_verification_pending",
+    "in_progress",
+    "planned",
+    "blocked",
+    "not_available"
+  ],
+  "canonical_repository_path": ".Amosclaud/book",
+  "sync_contract": {
+    "github_native": true,
+    "amosclaud_native": true,
+    "mode": "bidirectional-repository-runtime",
+    "rule": "Every meaningful Amosclaud change must be represented in the Book before it is eligible for completion or merge."
+  },
+  "chapters": [
+    {"id": "01", "slug": "what-is-amosclaud", "title": "What Amosclaud Is", "reading_minutes": 3, "audience": "both"},
+    {"id": "02", "slug": "platform", "title": "Amosclaud Platform", "reading_minutes": 3, "audience": "both"},
+    {"id": "03", "slug": "agent", "title": "Self-Agent Programmer", "reading_minutes": 3, "audience": "both"},
+    {"id": "04", "slug": "model", "title": "Amosclaud Model", "reading_minutes": 3, "audience": "both"},
+    {"id": "05", "slug": "spacecodeme", "title": "SpaceCodeMe", "reading_minutes": 3, "audience": "both"},
+    {"id": "06", "slug": "postortores", "title": "Postortores Data System", "reading_minutes": 3, "audience": "both"},
+    {"id": "07", "slug": "actions-ci", "title": "Actions, CI and Verification", "reading_minutes": 3, "audience": "both"},
+    {"id": "08", "slug": "applications-connectors", "title": "Applications and Connectors", "reading_minutes": 3, "audience": "both"},
+    {"id": "09", "slug": "security-identity", "title": "Security and Identity", "reading_minutes": 3, "audience": "both"},
+    {"id": "10", "slug": "desktop", "title": "Amosclaud Desktop", "reading_minutes": 3, "audience": "both"},
+    {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"}
+  ],
+  "agent_contract": {
+    "copy_mode": "versioned-snapshot",
+    "must_read_before_work": ["01", "02"],
+    "must_report_change": true,
+    "completion_requires_book_update": true
+  }
+}
