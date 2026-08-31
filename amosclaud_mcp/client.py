@@ -12,6 +12,7 @@ import httpx
 from amoscloud_ai.public_url_policy import normalize_public_amosclaud_url
 
 TERMINAL_PIPELINE_STATES = {"success", "failed", "cancelled"}
+MCP_GATEWAY_PREFIX = "/api/v1/mcp-gateway"
 
 
 class AmosclaudMCPError(RuntimeError):
@@ -28,7 +29,7 @@ class AmosclaudClientConfig:
 
     @classmethod
     def from_environment(cls) -> "AmosclaudClientConfig":
-        raw_url = os.getenv("AMOSCLAUD_API_URL", "https://www.amosclaud.com").strip()
+        raw_url = os.getenv("AMOSCLAUD_API_URL", "https://amosclauds.com").strip()
         if not raw_url:
             raise AmosclaudMCPError("AMOSCLAUD_API_URL cannot be empty")
         try:
@@ -38,14 +39,17 @@ class AmosclaudClientConfig:
         return cls(
             base_url=normalize_public_amosclaud_url(raw_url),
             autonomous_key=(
-                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY") or os.getenv("AMOSCLAUD_MCP_API_KEY") or None
+                os.getenv("AMOSCLAUD_AUTONOMOUS_KEY")
+                or os.getenv("AMOSCLAUD_MCP_API_KEY")
+                or os.getenv("AMOSCLAUD_MCP_ACCESS_KEY")
+                or None
             ),
             timeout_seconds=timeout,
         )
 
 
 class AmosclaudClient:
-    """Small, testable client for the public Amosclaud Autonomous API."""
+    """Small, testable client for first-party Amosclaud APIs."""
 
     def __init__(
         self,
@@ -73,12 +77,12 @@ class AmosclaudClient:
     def _headers(self, *, protected: bool) -> dict[str, str]:
         headers = {
             "Accept": "application/json",
-            "User-Agent": "amosclaud-mcp/1.0",
+            "User-Agent": "amosclaud-mcp/1.1",
         }
         if protected:
             if not self.config.autonomous_key:
                 raise AmosclaudMCPError(
-                    "Set AMOSCLAUD_AUTONOMOUS_KEY before using protected Amosclaud MCP tools"
+                    "Set an Amosclaud MCP/API credential before using protected tools"
                 )
             headers["Authorization"] = f"Bearer {self.config.autonomous_key}"
         return headers
@@ -90,6 +94,7 @@ class AmosclaudClient:
         *,
         protected: bool = False,
         json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         try:
             response = self._client.request(
@@ -97,6 +102,7 @@ class AmosclaudClient:
                 path,
                 headers=self._headers(protected=protected),
                 json=json,
+                params=params,
             )
         except httpx.HTTPError as exc:
             raise AmosclaudMCPError(
@@ -131,8 +137,198 @@ class AmosclaudClient:
             "readiness": readiness,
         }
 
+    def mcp_identity(self) -> dict[str, Any]:
+        """Prove which Amosclaud account the MCP credential represents."""
+
+        return self._request("GET", f"{MCP_GATEWAY_PREFIX}/identity", protected=True)
+
     def agent_profile(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/agent")
+
+    # ------------------------------------------------------------------
+    # Native Amosclaud repository provider
+    # ------------------------------------------------------------------
+
+    def list_repositories(self) -> list[dict[str, Any]]:
+        payload = self._request("GET", f"{MCP_GATEWAY_PREFIX}/repositories", protected=True)
+        if not isinstance(payload, list):
+            raise AmosclaudMCPError("Amosclaud returned an invalid repository list")
+        return payload
+
+    def create_repository(
+        self,
+        *,
+        name: str,
+        description: str = "",
+        visibility: str = "private",
+        initialize_readme: bool = True,
+    ) -> dict[str, Any]:
+        cleaned = name.strip()
+        if not cleaned:
+            raise AmosclaudMCPError("repository name cannot be empty")
+        normalized_visibility = visibility.strip().lower() or "private"
+        if normalized_visibility not in {"private", "public"}:
+            raise AmosclaudMCPError("visibility must be private or public")
+        return self._request(
+            "POST",
+            f"{MCP_GATEWAY_PREFIX}/repositories",
+            protected=True,
+            json={
+                "name": cleaned,
+                "description": description.strip(),
+                "visibility": normalized_visibility,
+                "initialize_readme": bool(initialize_readme),
+            },
+        )
+
+    def get_repository(self, repository_id: int) -> dict[str, Any]:
+        self._require_repository_id(repository_id)
+        return self._request(
+            "GET",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}",
+            protected=True,
+        )
+
+    def list_repository_tree(self, repository_id: int, *, branch: str = "main") -> list[dict[str, Any]]:
+        self._require_repository_id(repository_id)
+        payload = self._request(
+            "GET",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/tree",
+            protected=True,
+            params={"branch": branch.strip() or "main"},
+        )
+        if not isinstance(payload, list):
+            raise AmosclaudMCPError("Amosclaud returned an invalid repository tree")
+        return payload
+
+    def read_repository_file(
+        self,
+        repository_id: int,
+        *,
+        path: str,
+        branch: str = "main",
+    ) -> dict[str, Any]:
+        self._require_repository_id(repository_id)
+        cleaned_path = path.strip()
+        if not cleaned_path:
+            raise AmosclaudMCPError("path cannot be empty")
+        return self._request(
+            "GET",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/files",
+            protected=True,
+            params={"path": cleaned_path, "branch": branch.strip() or "main"},
+        )
+
+    def write_repository_file(
+        self,
+        repository_id: int,
+        *,
+        path: str,
+        content: str,
+        branch: str = "main",
+        commit_message: str = "Update file through Amosclaud MCP",
+    ) -> dict[str, Any]:
+        self._require_repository_id(repository_id)
+        cleaned_path = path.strip()
+        if not cleaned_path:
+            raise AmosclaudMCPError("path cannot be empty")
+        cleaned_message = commit_message.strip()
+        if not cleaned_message:
+            raise AmosclaudMCPError("commit_message cannot be empty")
+        return self._request(
+            "PUT",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/files",
+            protected=True,
+            json={
+                "path": cleaned_path,
+                "content": content,
+                "branch": branch.strip() or "main",
+                "commit_message": cleaned_message,
+            },
+        )
+
+    def delete_repository_file(
+        self,
+        repository_id: int,
+        *,
+        path: str,
+        branch: str = "main",
+        commit_message: str = "Delete file through Amosclaud MCP",
+    ) -> dict[str, Any]:
+        self._require_repository_id(repository_id)
+        cleaned_path = path.strip()
+        if not cleaned_path:
+            raise AmosclaudMCPError("path cannot be empty")
+        return self._request(
+            "DELETE",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/files",
+            protected=True,
+            json={
+                "path": cleaned_path,
+                "branch": branch.strip() or "main",
+                "commit_message": commit_message.strip() or "Delete file through Amosclaud MCP",
+            },
+        )
+
+    def list_repository_branches(self, repository_id: int) -> list[str]:
+        self._require_repository_id(repository_id)
+        payload = self._request(
+            "GET",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/branches",
+            protected=True,
+        )
+        if not isinstance(payload, list):
+            raise AmosclaudMCPError("Amosclaud returned an invalid branch list")
+        return [str(item) for item in payload]
+
+    def create_repository_branch(
+        self,
+        repository_id: int,
+        *,
+        name: str,
+        source_branch: str = "main",
+    ) -> dict[str, Any]:
+        self._require_repository_id(repository_id)
+        cleaned_name = name.strip()
+        if not cleaned_name:
+            raise AmosclaudMCPError("branch name cannot be empty")
+        return self._request(
+            "POST",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/branches",
+            protected=True,
+            json={
+                "name": cleaned_name,
+                "source_branch": source_branch.strip() or "main",
+            },
+        )
+
+    def list_repository_commits(
+        self,
+        repository_id: int,
+        *,
+        branch: str = "main",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        self._require_repository_id(repository_id)
+        normalized_limit = min(max(int(limit), 1), 100)
+        payload = self._request(
+            "GET",
+            f"{MCP_GATEWAY_PREFIX}/repositories/{repository_id}/commits",
+            protected=True,
+            params={"branch": branch.strip() or "main", "limit": normalized_limit},
+        )
+        if not isinstance(payload, list):
+            raise AmosclaudMCPError("Amosclaud returned an invalid commit list")
+        return payload
+
+    @staticmethod
+    def _require_repository_id(repository_id: int) -> None:
+        if isinstance(repository_id, bool) or not isinstance(repository_id, int) or repository_id <= 0:
+            raise AmosclaudMCPError("repository_id must be a positive integer")
+
+    # ------------------------------------------------------------------
+    # Autonomous engineering and verification
+    # ------------------------------------------------------------------
 
     def run_autonomous(
         self,
@@ -158,8 +354,7 @@ class AmosclaudClient:
             "apply_changes": bool(apply_changes),
         }
         if repository_id is not None:
-            if repository_id <= 0:
-                raise AmosclaudMCPError("repository_id must be a positive integer")
+            self._require_repository_id(repository_id)
             metadata["repository_id"] = repository_id
         if extra_metadata:
             metadata.update(extra_metadata)
