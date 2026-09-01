@@ -117,27 +117,32 @@ class PostortoresEngine:
     def put(self, record: DataRecord) -> DataRecord:
         """Append a new immutable version of a namespace/key record."""
         with self._lock:
-            row = self._db.execute(
-                "SELECT MAX(version) AS version FROM state_records WHERE namespace=? AND key=?",
-                (record.namespace, record.key),
-            ).fetchone()
-            version = int(row["version"] or 0) + 1
-            now = time.time()
-            payload = record.value
-            self._db.execute(
-                "INSERT INTO state_records(namespace,key,version,value_json,tags_json,content_hash,created_at) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (
-                    record.namespace,
-                    record.key,
-                    version,
-                    self._json(payload),
-                    self._json(record.tags),
-                    self._hash(payload),
-                    now,
-                ),
-            )
-            self._db.commit()
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute(
+                    "SELECT MAX(version) AS version FROM state_records WHERE namespace=? AND key=?",
+                    (record.namespace, record.key),
+                ).fetchone()
+                version = int(row["version"] or 0) + 1
+                now = time.time()
+                payload = record.value
+                self._db.execute(
+                    "INSERT INTO state_records(namespace,key,version,value_json,tags_json,content_hash,created_at) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (
+                        record.namespace,
+                        record.key,
+                        version,
+                        self._json(payload),
+                        self._json(record.tags),
+                        self._hash(payload),
+                        now,
+                    ),
+                )
+                self._db.commit()
+            except BaseException:
+                self._db.rollback()
+                raise
         return DataRecord(record.namespace, record.key, record.value, version, list(record.tags))
 
     def get(self, namespace: str, key: str, version: int | None = None) -> DataRecord | None:
