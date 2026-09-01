@@ -15,6 +15,11 @@ from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from amoscloud_ai.book_watchdog import (
+    BookWatchdogError,
+    RepositoryBookWatchdog,
+    repository_root_from_request_path,
+)
 from amoscloud_ai.core.access import AccessMode, AccessPolicy
 
 REPOSITORY_OAUTH_STATE_COOKIE = "amos_github_oauth_state"
@@ -44,7 +49,7 @@ def _route_repository_oauth_callback(request: Request) -> None:
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """Apply network policy, headers, request limits, origin checks, and abuse protection."""
+    """Apply network, origin, abuse, and Amosclaud Book watchdog controls."""
 
     _lock = Lock()
     _attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -167,6 +172,59 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return self.trusted_origins | self.approval_origins
         return self.trusted_origins
 
+    async def _book_watchdog_preflight(self, request: Request) -> tuple[dict | None, JSONResponse | None]:
+        """Run Slapface before any existing Amosclaud repository endpoint.
+
+        This does not grant repository access. Authentication/authorization is
+        still enforced by the endpoint. The Book only decides whether the work
+        itself is safe and continuous enough to reach that endpoint.
+        """
+
+        repository_root = repository_root_from_request_path(request.url.path)
+        if repository_root is None or not repository_root.is_dir():
+            return None, None
+
+        proposed_text = ""
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            try:
+                body = await request.body()
+                proposed_text = body.decode("utf-8", errors="ignore")
+            except Exception:
+                proposed_text = ""
+
+        watchdog = RepositoryBookWatchdog(repository_root)
+        try:
+            verdict = watchdog.preflight(
+                actor="repository-request",
+                action=f"{request.method} {request.url.path}",
+                proposed_text=proposed_text,
+            )
+        except BookWatchdogError as exc:
+            return None, JSONResponse(
+                {
+                    "detail": "Amosclaud Book could not safely evaluate this repository request.",
+                    "error": "book_watchdog_error",
+                    "reason": type(exc).__name__,
+                },
+                status_code=409,
+            )
+
+        if verdict.get("work_allowed") is False:
+            return verdict, JSONResponse(
+                {
+                    "detail": verdict.get("message"),
+                    "error": "slapface_blocked",
+                    "slapface": {
+                        "reason": verdict.get("reason"),
+                        "handoff": verdict.get("handoff"),
+                        "secret_findings": verdict.get("secret_findings", []),
+                    },
+                },
+                status_code=409,
+                headers={"Cache-Control": "no-store", "X-Amosclaud-Book": "blocked"},
+            )
+        return verdict, None
+
     async def dispatch(self, request: Request, call_next):
         _route_repository_oauth_callback(request)
 
@@ -213,7 +271,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             if origin and origin.rstrip("/") not in allowed_origins:
                 return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
 
+        book_verdict, book_response = await self._book_watchdog_preflight(request)
+        if book_response is not None:
+            return book_response
+
         response = await call_next(request)
+        if book_verdict is not None:
+            findings = book_verdict.get("secret_findings") or []
+            warning = any(item.get("classification") == "suspicious" for item in findings)
+            response.headers.setdefault(
+                "X-Amosclaud-Book",
+                "allowed-with-warning" if warning else "allowed",
+            )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
