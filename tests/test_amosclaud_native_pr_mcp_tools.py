@@ -141,3 +141,101 @@ async def test_merge_tool_uses_verified_amosclaud_production_gate():
         "/api/v1/amosclaud/production/repositories/4/pull-requests/11/action"
     )
     assert calls[0]["body"] == {"action": "merge"}
+
+
+@pytest.mark.asyncio
+async def test_run_pull_request_checks_action_trigger():
+    calls: list[dict[str, Any]] = []
+    scopes_checked: list[str] = []
+
+    mcp = FakeMCP()
+
+    def require_scope(_ctx, scope):
+        scopes_checked.append(scope)
+        return 7, {}
+
+    async def request(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("body", {}).get("commit_sha") == "stale_sha":
+            return {
+                "ok": False,
+                "status_code": 409,
+                "body": {"detail": "Stale revision sha"},
+            }
+        return {
+            "ok": True,
+            "status_code": 200,
+            "body": {"action_run_id": 42, "status": "queued"},
+        }
+
+    register_native_pr_tools(
+        mcp=mcp,
+        require_scope=require_scope,
+        request_as_user=request,
+        read_annotations=None,
+        write_annotations=None,
+    )
+
+    result_omitted = await mcp.tools["amosclaud_run_pull_request_checks"](
+        repository_id=4,
+        pull_request_id=11,
+        ctx=object(),
+    )
+
+    assert scopes_checked[-1] == "repositories:write"
+    assert result_omitted["authority"] == "amosclaud"
+    assert result_omitted["authoritative"] is True
+    assert result_omitted["repository_id"] == 4
+    assert result_omitted["pull_request_id"] == 11
+    assert result_omitted["evidence"] == {
+        "action_run_id": 42,
+        "status": "queued",
+    }
+    assert calls[-1] == {
+        "user_id": 7,
+        "method": "POST",
+        "path": (
+            "/api/v1/amosclaud/production/repositories/4"
+            "/pull-requests/11/ci"
+        ),
+        "body": {
+            "branch": "main",
+            "reason": "Amosclaud MCP pull-request verification",
+        },
+    }
+    assert "commit_sha" not in calls[-1]["body"]
+
+    result_supplied = await mcp.tools["amosclaud_run_pull_request_checks"](
+        repository_id=4,
+        pull_request_id=11,
+        ctx=object(),
+        commit_sha="  commit_sha_123  ",
+        reason="Custom verification",
+    )
+
+    assert scopes_checked[-1] == "repositories:write"
+    assert result_supplied["evidence"] == {
+        "action_run_id": 42,
+        "status": "queued",
+    }
+    assert calls[-1] == {
+        "user_id": 7,
+        "method": "POST",
+        "path": (
+            "/api/v1/amosclaud/production/repositories/4"
+            "/pull-requests/11/ci"
+        ),
+        "body": {
+            "branch": "main",
+            "reason": "Custom verification",
+            "commit_sha": "commit_sha_123",
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="Stale revision sha"):
+        await mcp.tools["amosclaud_run_pull_request_checks"](
+            repository_id=4,
+            pull_request_id=11,
+            ctx=object(),
+            commit_sha="stale_sha",
+        )
