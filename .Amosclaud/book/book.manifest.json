@@ -21,15 +21,16 @@
   },
   "slapface_contract": {
     "enabled": true,
-    "intro_chapter": "00",
+    "position": "preface-before-chapters",
     "preflight_required_before_repository_work": true,
     "owner_bypass_allowed": false,
     "remediation_only_when_blocked": true,
     "resolution_requires_verified_change_report": true,
+    "high_confidence_secret_exposure_blocks": true,
+    "lower_confidence_secret_like_values_warn_only": true,
     "source_independent": ["amosclaud", "github", "local", "third-party"]
   },
   "chapters": [
-    {"id": "00", "slug": "slapface", "title": "Slapface", "reading_minutes": 2, "audience": "both"},
     {"id": "01", "slug": "what-is-amosclaud", "title": "What Amosclaud Is", "reading_minutes": 3, "audience": "both"},
     {"id": "02", "slug": "platform", "title": "Amosclaud Platform", "reading_minutes": 3, "audience": "both"},
     {"id": "03", "slug": "agent", "title": "Self-Agent Programmer", "reading_minutes": 3, "audience": "both"},
@@ -44,7 +45,7 @@
   ],
   "agent_contract": {
     "copy_mode": "versioned-snapshot",
-    "must_read_before_work": ["00", "01", "02"],
+    "must_read_before_work": ["01", "02"],
     "slapface_preflight_required": true,
     "must_report_change": true,
     "completion_requires_book_update": true
