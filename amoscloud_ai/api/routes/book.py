@@ -1,4 +1,4 @@
-"""Native API router for the Amosclaud Word Book and Slapface watchdog."""
+"""Native API router for the Amosclaud Word Book, Book Studio, and Slapface."""
 from __future__ import annotations
 
 import sqlite3
@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.book import AmosclaudBook, BookError
+from amoscloud_ai.book_studio import save_chapter, studio_tool_catalog
 from amoscloud_ai.book_watchdog import (
     BookWatchdogError,
     RepositoryBookWatchdog,
@@ -50,8 +51,26 @@ def _actor(user: sqlite3.Row) -> str:
     return f"account:{user['id']}"
 
 
+def _require_global_book_editor(user: sqlite3.Row) -> None:
+    """Keep the public Book readable while limiting canonical platform edits."""
+    if not bool(user["is_admin"]):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This Book Studio session can read and design drafts, but only an Amosclaud "
+                "platform owner/admin can publish the canonical platform Book. Repository owners "
+                "publish their own repository Book through repository-scoped controls."
+            ),
+        )
+
+
 class ChapterCompletion(BaseModel):
     reader: str = Field(min_length=1, max_length=128)
+
+
+class ChapterStudioSave(BaseModel):
+    content: str = Field(min_length=1, max_length=2_000_000)
+    summary: str = Field(default="Book Studio chapter update", min_length=1, max_length=500)
 
 
 class AgentContextRequest(BaseModel):
@@ -114,6 +133,18 @@ def slapface_page() -> FileResponse:
     return FileResponse(WEB_DIR / "amosclaud-book.html")
 
 
+@router.get("/studio", include_in_schema=False)
+def book_studio_page(user: sqlite3.Row = Depends(_current_user)) -> FileResponse:
+    """Open the authenticated Word-style authoring companion."""
+    return FileResponse(WEB_DIR / "amosclaud-book-studio.html")
+
+
+@router.get("/studio/tools")
+def book_studio_tools() -> dict[str, Any]:
+    """Machine-readable visual-authoring contract for humans and AI agents."""
+    return studio_tool_catalog()
+
+
 @router.get("/status")
 def book_status() -> dict[str, Any]:
     return _safe(lambda: _book().status())
@@ -127,6 +158,24 @@ def book_chapters() -> list[dict[str, Any]]:
 @router.get("/chapters/{chapter_id}")
 def book_chapter(chapter_id: str) -> dict[str, Any]:
     return _safe(lambda: _book().chapter(chapter_id))
+
+
+@router.put("/chapters/{chapter_id}")
+def save_book_chapter(
+    chapter_id: str,
+    request: ChapterStudioSave,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    _require_global_book_editor(user)
+    return _safe(
+        lambda: save_chapter(
+            _book(),
+            chapter_id=chapter_id,
+            content=request.content,
+            actor=_actor(user),
+            summary=request.summary,
+        )
+    )
 
 
 @router.post("/chapters/{chapter_id}/complete")
