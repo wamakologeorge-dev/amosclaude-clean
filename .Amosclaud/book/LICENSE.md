@@ -1,7 +1,7 @@
 # Amosclaud Book license
 
-**License:** `LicenseRef-Amosclaud-Book-Proprietary-1.0`  
-**Terms:** `LICENSES/Amosclaud-Book-Proprietary-1.0.txt`  
+**License:** `LicenseRef-Amosclaud-Book-Proprietary-1.0`
+**Terms:** `LICENSES/Amosclaud-Book-Proprietary-1.0.txt`
 **Status:** production draft; legal review recommended before material commercial enforcement.
 
 The repository root `LICENSE` remains MIT for material that is not expressly assigned another license. Amosclaud Book is intentionally a separately licensed product inside that repository.
