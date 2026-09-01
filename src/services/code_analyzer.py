@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
 from pathlib import Path
+
+from amoscloud_ai.book_watchdog import BookWatchdogError, RepositoryBookWatchdog
 
 
 class CodeAnalyzer:
@@ -12,6 +15,8 @@ class CodeAnalyzer:
 
     The collector is deliberately bounded and excludes credentials, generated
     content, dependency trees, and files outside the authorized workspace.
+    Amosclaud-managed repositories must also pass Slapface before the first
+    file scan begins.
     """
 
     SAFE_SUFFIXES = {
@@ -58,7 +63,38 @@ class CodeAnalyzer:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
 
+    def _is_amosclaud_repository(self) -> bool:
+        if (self.workspace / ".Amosclaud").exists() or (self.workspace / ".Amosclaud-workflow").exists():
+            return True
+        repository_root = Path(
+            os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
+        ).expanduser().resolve()
+        try:
+            self.workspace.relative_to(repository_root)
+            return True
+        except ValueError:
+            return False
+
+    def _book_preflight(self, objective: str) -> None:
+        if not self._is_amosclaud_repository():
+            return
+        verdict = RepositoryBookWatchdog(self.workspace).preflight(
+            actor="amosclaud-autonomous",
+            action="repository-scan",
+        )
+        if verdict.get("work_allowed") is False:
+            handoff = verdict.get("handoff") or {}
+            chapter = str(handoff.get("chapter_link") or ".Amosclaud/book/chapters/00-slapface.md")
+            summary = str(handoff.get("summary") or verdict.get("message") or "Slapface blocked repository work")
+            raise BookWatchdogError(
+                f"SLAPFACE blocked repository scan before file analysis. {summary} Read: {chapter}"
+            )
+
     def inspect(self, objective: str = "") -> list[str]:
+        # This is intentionally the first repository operation. Slapface must
+        # decide continuity before rglob/read_text touches source files.
+        self._book_preflight(objective)
+
         evidence: list[str] = []
         python_files = list(self.workspace.rglob("*.py"))
         evidence.append(f"Discovered {len(python_files)} Python source files")
