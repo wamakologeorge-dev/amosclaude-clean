@@ -52,7 +52,12 @@ class SnapshotManager:
         manifest_path = snapshot.with_suffix(snapshot.suffix + ".manifest.json")
         if not snapshot.exists() or not manifest_path.exists():
             return False
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(manifest, dict):
+            return False
         return (
             manifest.get("format") == "amosclaud-postortores-snapshot-v1"
             and manifest.get("sha256") == self._sha256(snapshot)
