@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "active",
+  "task": "Complete and verify the Amosclaud Word Book runtime integration.",
+  "why": "The Book must become the shared human/agent preparation and change-reporting system before later direct Amosclaud connectivity.",
+  "required_context": ["01"],
+  "acceptance": [
+    "Book runtime reads the repository-native manifest, chapters, capabilities and change ledger.",
+    "Book API exposes status, chapters, capabilities, changes, next task and agent context.",
+    "Human chapter completion can be recorded separately from engineering verification.",
+    "Agent snapshots identify the Book version they consumed.",
+    "Change gate rejects completion eligibility when a meaningful code change has no Book report/update.",
+    "Automated tests execute and verification evidence is recorded truthfully."
+  ]
+}
