@@ -55,22 +55,29 @@ class ArtifactStore:
         if path.exists():
             if self.digest(path.read_bytes()) != digest:
                 fd, tmp_name = tempfile.mkstemp(dir=path.parent)
+                fd_closed = False
                 try:
                     os.write(fd, data)
                     os.close(fd)
+                    fd_closed = True
                     os.replace(tmp_name, path)
                 except Exception:
-                    os.close(fd) if not os.get_inheritable(fd) else None
+                    if not fd_closed:
+                        os.close(fd)
                     if os.path.exists(tmp_name):
                         os.unlink(tmp_name)
                     raise
         else:
             fd, tmp_name = tempfile.mkstemp(dir=path.parent)
+            fd_closed = False
             try:
                 os.write(fd, data)
                 os.close(fd)
+                fd_closed = True
                 os.replace(tmp_name, path)
             except Exception:
+                if not fd_closed:
+                    os.close(fd)
                 if os.path.exists(tmp_name):
                     os.unlink(tmp_name)
                 raise

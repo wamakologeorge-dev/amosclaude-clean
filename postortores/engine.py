@@ -166,15 +166,20 @@ class PostortoresEngine:
             tags=json.loads(row["tags_json"]),
         )
 
-    def history(self, namespace: str, key: str) -> list[DataRecord]:
+    def history(self, namespace: str, key: str, *, offset: int = 0, limit: int = 100) -> list[DataRecord]:
         rows = self._db.execute(
-            "SELECT * FROM state_records WHERE namespace=? AND key=? ORDER BY version ASC",
-            (namespace, key),
+            "SELECT * FROM state_records WHERE namespace=? AND key=? ORDER BY version ASC LIMIT ? OFFSET ?",
+            (namespace, key, limit, offset),
         ).fetchall()
-        return [
-            DataRecord(r["namespace"], r["key"], json.loads(r["value_json"]), r["version"], json.loads(r["tags_json"]))
-            for r in rows
-        ]
+        results = []
+        for r in rows:
+            value = json.loads(r["value_json"])
+            if self._hash(value) != r["content_hash"]:
+                raise IOError("Postortores record integrity verification failed")
+            results.append(
+                DataRecord(r["namespace"], r["key"], value, r["version"], json.loads(r["tags_json"]))
+            )
+        return results
 
     def append_event(self, event: EventRecord) -> int:
         payload_hash = self._hash({"stream": event.stream, "type": event.event_type, "payload": event.payload})

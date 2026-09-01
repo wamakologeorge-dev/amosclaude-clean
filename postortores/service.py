@@ -49,8 +49,8 @@ class PostortoresService:
     def get_state(self, namespace: str, key: str, version: int | None = None) -> DataRecord | None:
         return self.engine.get(self._scope(namespace), key, version)
 
-    def state_history(self, namespace: str, key: str) -> list[DataRecord]:
-        return self.engine.history(self._scope(namespace), key)
+    def state_history(self, namespace: str, key: str, *, offset: int = 0, limit: int = 100) -> list[DataRecord]:
+        return self.engine.history(self._scope(namespace), key, offset=offset, limit=limit)
 
     def append_event(
         self,

@@ -185,8 +185,8 @@ def state_history(
     x_amosclaud_principal: str | None = Header(default=None),
 ) -> list[dict[str, Any]]:
     svc = service(authorization, x_amosclaud_principal)
-    records = svc.state_history(namespace, key)
-    return [svc.record_dict(record) for record in records[offset : offset + limit]]
+    records = svc.state_history(namespace, key, offset=offset, limit=limit)
+    return [svc.record_dict(record) for record in records]
 
 
 @router.post("/events", status_code=201)
