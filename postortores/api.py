@@ -51,7 +51,7 @@ class MemorySearch(BaseModel):
 class EvidenceWrite(BaseModel):
     subject: str = Field(min_length=1, max_length=500)
     claim: str = Field(min_length=1, max_length=10_000)
-    status: str
+    status: str = Field(pattern="^(?:planned|changed|executed|verified|blocked|failed)$")
     proof: dict[str, Any] = Field(default_factory=dict)
 
 
