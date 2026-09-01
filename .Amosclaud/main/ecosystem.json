@@ -154,7 +154,7 @@
     {
       "from": "platform_runtime",
       "to": "postortores_data_system",
-      "protocol": "native Postortores API"
+      "protocol": "planned native Postortores API"
     },
     {
       "from": "postortores_data_system",
