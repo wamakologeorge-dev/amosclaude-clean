@@ -26,6 +26,10 @@ htmlcov/
 .idea/
 .vscode/
 
+# External/generated development-tool state
+.aicode/
+/CircleCI-Public/
+
 # Environment and secret files
 .env
 .env.*
