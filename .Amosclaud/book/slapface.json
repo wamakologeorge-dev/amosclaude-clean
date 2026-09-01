@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "Slapface",
+  "description": "A fail-closed Amosclaud Book preflight that surfaces unfinished handoffs before repository work begins.",
+  "enforced": true,
+  "fail_closed": true,
+  "intro_chapter": "00",
+  "owner_bypass_allowed": false,
+  "auto_copy_last_chapter_link": true,
+  "remediation_requires_matching_handoff_id": true,
+  "resolution_requires_verified_change_report": true,
+  "clear_message": "No unfinished Slapface handoff is blocking this scope.",
+  "blocked_message": "Stop before repository work. Read the linked chapter and repair the missing pieces first."
+}
