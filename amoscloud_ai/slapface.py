@@ -113,8 +113,11 @@ class Slapface:
     @staticmethod
     def _scope_id(scope: str | None) -> str:
         prepared = (scope or DEFAULT_SCOPE).strip() or DEFAULT_SCOPE
-        safe = _SAFE_SCOPE.sub("-", prepared).strip("-._")
-        return (safe or DEFAULT_SCOPE)[:128]
+        safe = _SAFE_SCOPE.sub("-", prepared).strip("-._") or DEFAULT_SCOPE
+        if safe == prepared and len(safe) <= 128:
+            return safe
+        digest = hashlib.sha256(prepared.encode("utf-8")).hexdigest()[:16]
+        return f"{safe[:111]}-{digest}"
 
     def policy(self) -> dict[str, Any]:
         return self.book._load_json(self.policy_path)
