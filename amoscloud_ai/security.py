@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from threading import Lock
 
 import redis
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -173,15 +173,43 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         return self.trusted_origins
 
     async def _book_watchdog_preflight(self, request: Request) -> tuple[dict | None, JSONResponse | None]:
-        """Run Slapface before any existing Amosclaud repository endpoint.
+        """Run Slapface before authorized Amosclaud repository work.
 
-        This does not grant repository access. Authentication/authorization is
-        still enforced by the endpoint. The Book only decides whether the work
-        itself is safe and continuous enough to reach that endpoint.
+        The middleware must not expose repository-specific handoffs or create
+        watchdog events for anonymous users, public viewers, or users who only
+        guessed a repository id. Identity and repository write scope are proven
+        first; Slapface then decides whether the authorized work itself may
+        proceed to the endpoint.
         """
 
         repository_root = repository_root_from_request_path(request.url.path)
         if repository_root is None or not repository_root.is_dir():
+            return None, None
+
+        token = request.cookies.get("amos_session")
+        if not token:
+            return None, None
+
+        # Import lazily to avoid coupling middleware module import to route setup.
+        from amoscloud_ai.api.routes.auth import get_user_from_session
+        from amoscloud_ai.api.routes.repositories import _access, _db
+
+        user = get_user_from_session(token)
+        if not user:
+            return None, None
+        try:
+            repository_id = int(repository_root.name)
+        except ValueError:
+            return None, None
+
+        try:
+            with _db() as db:
+                access = _access(db, repository_id, user["id"])
+        except HTTPException:
+            return None, None
+        if access["role"] not in {"owner", "developer"}:
+            # Public/viewer reads stay readable, but private runtime watchdog
+            # state is never exposed to them and they cannot create events.
             return None, None
 
         proposed_text = ""
@@ -195,7 +223,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         watchdog = RepositoryBookWatchdog(repository_root)
         try:
             verdict = watchdog.preflight(
-                actor="repository-request",
+                actor=f"account:{user['id']}",
                 action=f"{request.method} {request.url.path}",
                 proposed_text=proposed_text,
             )
