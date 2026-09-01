@@ -10,17 +10,21 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
+import threading
 from pathlib import Path
 from typing import Any
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .engine import PostortoresEngine
 from .service import PostortoresService
 
 router = APIRouter(prefix="/v1", tags=["amosclaud-postortores"])
+
+_KEY_PATTERN = re.compile(r"^[^/]+$")
 
 
 class StateWrite(BaseModel):
@@ -28,6 +32,13 @@ class StateWrite(BaseModel):
     key: str = Field(min_length=1, max_length=500)
     value: dict[str, Any]
     tags: list[str] = Field(default_factory=list, max_length=50)
+
+    @field_validator("key")
+    @classmethod
+    def _reject_separators(cls, v: str) -> str:
+        if not _KEY_PATTERN.match(v):
+            raise ValueError("key must not contain '/'")
+        return v
 
 
 class EventWrite(BaseModel):
@@ -40,7 +51,7 @@ class EventWrite(BaseModel):
 class MemoryWrite(BaseModel):
     content: str = Field(min_length=1, max_length=500_000)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    embedding: list[float] | None = None
+    embedding: list[float] | None = Field(default=None, max_length=8192)
 
 
 class MemorySearch(BaseModel):
@@ -73,15 +84,19 @@ def _database_path() -> str:
 
 
 _engine: PostortoresEngine | None = None
+_engine_lock = threading.Lock()
 
 
 def engine() -> PostortoresEngine:
     global _engine
-    if _engine is None:
-        path = Path(_database_path())
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _engine = PostortoresEngine(path)
-    return _engine
+    if _engine is not None:
+        return _engine
+    with _engine_lock:
+        if _engine is None:
+            path = Path(_database_path())
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _engine = PostortoresEngine(path)
+        return _engine
 
 
 def _principal(
@@ -154,11 +169,14 @@ def get_state(
 def state_history(
     namespace: str,
     key: str,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=1000),
     authorization: str | None = Header(default=None),
     x_amosclaud_principal: str | None = Header(default=None),
 ) -> list[dict[str, Any]]:
     svc = service(authorization, x_amosclaud_principal)
-    return [svc.record_dict(record) for record in svc.state_history(namespace, key)]
+    records = svc.state_history(namespace, key)
+    return [svc.record_dict(record) for record in records[offset : offset + limit]]
 
 
 @router.post("/events", status_code=201)

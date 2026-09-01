@@ -26,6 +26,12 @@ class SnapshotManager:
 
     def create(self, destination: str | Path) -> dict[str, Any]:
         destination = Path(destination)
+        if not self.database_path.exists():
+            raise FileNotFoundError(
+                f"Postortores source database does not exist: {self.database_path}"
+            )
+        if destination.resolve() == self.database_path.resolve():
+            raise ValueError("Snapshot destination must differ from the source database")
         destination.parent.mkdir(parents=True, exist_ok=True)
         source = sqlite3.connect(str(self.database_path))
         target = sqlite3.connect(str(destination))

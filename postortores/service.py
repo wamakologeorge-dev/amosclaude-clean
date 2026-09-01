@@ -156,6 +156,11 @@ class PostortoresService:
             ],
         }
 
-    @staticmethod
-    def record_dict(record: DataRecord) -> dict[str, Any]:
-        return asdict(record)
+    def _unscope(self, value: str) -> str:
+        prefix = f"principal:{self.principal}:"
+        return value[len(prefix):] if value.startswith(prefix) else value
+
+    def record_dict(self, record: DataRecord) -> dict[str, Any]:
+        d = asdict(record)
+        d["namespace"] = self._unscope(d["namespace"])
+        return d

@@ -116,28 +116,33 @@ class PostortoresEngine:
 
     def put(self, record: DataRecord) -> DataRecord:
         """Append a new immutable version of a namespace/key record."""
+        now = time.time()
+        payload = record.value
         with self._lock:
-            row = self._db.execute(
-                "SELECT MAX(version) AS version FROM state_records WHERE namespace=? AND key=?",
-                (record.namespace, record.key),
-            ).fetchone()
-            version = int(row["version"] or 0) + 1
-            now = time.time()
-            payload = record.value
-            self._db.execute(
-                "INSERT INTO state_records(namespace,key,version,value_json,tags_json,content_hash,created_at) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (
-                    record.namespace,
-                    record.key,
-                    version,
-                    self._json(payload),
-                    self._json(record.tags),
-                    self._hash(payload),
-                    now,
-                ),
-            )
-            self._db.commit()
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute(
+                    "SELECT MAX(version) AS version FROM state_records WHERE namespace=? AND key=?",
+                    (record.namespace, record.key),
+                ).fetchone()
+                version = int(row["version"] or 0) + 1
+                self._db.execute(
+                    "INSERT INTO state_records(namespace,key,version,value_json,tags_json,content_hash,created_at) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (
+                        record.namespace,
+                        record.key,
+                        version,
+                        self._json(payload),
+                        self._json(record.tags),
+                        self._hash(payload),
+                        now,
+                    ),
+                )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
         return DataRecord(record.namespace, record.key, record.value, version, list(record.tags))
 
     def get(self, namespace: str, key: str, version: int | None = None) -> DataRecord | None:
@@ -150,10 +155,13 @@ class PostortoresEngine:
         row = self._db.execute(query, params).fetchone()
         if row is None:
             return None
+        value = json.loads(row["value_json"])
+        if self._hash(value) != row["content_hash"]:
+            raise IOError("Postortores record integrity verification failed")
         return DataRecord(
             namespace=row["namespace"],
             key=row["key"],
-            value=json.loads(row["value_json"]),
+            value=value,
             version=row["version"],
             tags=json.loads(row["tags_json"]),
         )
@@ -213,13 +221,16 @@ class PostortoresEngine:
             return int(cursor.lastrowid)
 
     @staticmethod
-    def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
+    def _cosine(a: Iterable[float], b: Iterable[float]) -> float | None:
         av, bv = list(a), list(b)
         if len(av) != len(bv) or not av:
-            return 0.0
+            return None
         dot = sum(x * y for x, y in zip(av, bv))
         denom = math.sqrt(sum(x * x for x in av)) * math.sqrt(sum(y * y for y in bv))
-        return dot / denom if denom else 0.0
+        if not math.isfinite(denom) or denom == 0.0:
+            return 0.0
+        result = dot / denom
+        return result if math.isfinite(result) else 0.0
 
     def search_memory(self, owner: str, query_embedding: list[float], limit: int = 10) -> list[dict[str, Any]]:
         rows = self._db.execute(
@@ -229,12 +240,15 @@ class PostortoresEngine:
         scored = []
         for row in rows:
             embedding = json.loads(row["embedding_json"])
+            score = self._cosine(query_embedding, embedding)
+            if score is None:
+                continue
             scored.append(
                 {
                     "id": row["id"],
                     "content": row["content"],
                     "metadata": json.loads(row["metadata_json"]),
-                    "score": self._cosine(query_embedding, embedding),
+                    "score": score,
                 }
             )
         scored.sort(key=lambda item: item["score"], reverse=True)
@@ -300,22 +314,38 @@ class PostortoresEngine:
         now = time.time()
         expires = now + ttl_seconds
         with self._lock:
-            row = self._db.execute("SELECT holder, expires_at FROM leases WHERE resource=?", (resource,)).fetchone()
-            if row and row["expires_at"] > now and row["holder"] != holder:
-                return False
-            self._db.execute(
-                "INSERT INTO leases(resource,holder,expires_at,updated_at) VALUES(?,?,?,?) "
-                "ON CONFLICT(resource) DO UPDATE SET holder=excluded.holder, expires_at=excluded.expires_at, updated_at=excluded.updated_at",
-                (resource, holder, expires, now),
-            )
-            self._db.commit()
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT holder, expires_at FROM leases WHERE resource=?", (resource,)).fetchone()
+                if row and row["expires_at"] > now and row["holder"] != holder:
+                    self._db.rollback()
+                    return False
+                self._db.execute(
+                    "INSERT INTO leases(resource,holder,expires_at,updated_at) VALUES(?,?,?,?) "
+                    "ON CONFLICT(resource) DO UPDATE SET holder=excluded.holder, expires_at=excluded.expires_at, updated_at=excluded.updated_at",
+                    (resource, holder, expires, now),
+                )
+                self._db.commit()
+            except Exception:
+                self._db.rollback()
+                raise
             return True
 
     def health(self) -> dict[str, Any]:
-        row = self._db.execute("SELECT 1 AS ok").fetchone()
+        try:
+            self._db.execute(
+                "CREATE TABLE IF NOT EXISTS _health_check (id INTEGER PRIMARY KEY)"
+            )
+            self._db.execute(
+                "INSERT OR REPLACE INTO _health_check(id) VALUES(1)"
+            )
+            self._db.commit()
+            ok = True
+        except Exception:
+            ok = False
         return {
             "service": "Amosclaud Postortores",
-            "status": "ready" if row and row["ok"] == 1 else "unavailable",
+            "status": "ready" if ok else "unavailable",
             "storage": "sqlite-bootstrap",
             "native_contract": True,
             "path": self.path,

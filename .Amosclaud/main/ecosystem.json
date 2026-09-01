@@ -158,6 +158,16 @@
     },
     {
       "from": "platform_runtime",
+      "to": "amosclaud_word_book",
+      "protocol": "native Book API / repository files"
+    },
+    {
+      "from": "amosclaud_word_book",
+      "to": "github",
+      "protocol": "portable versioned repository representation"
+    },
+    {
+      "from": "platform_runtime",
       "to": "postortores_data_system",
       "protocol": "planned native Postortores API"
     },

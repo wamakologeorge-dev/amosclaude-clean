@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -28,12 +29,17 @@ class ArtifactStore:
     def digest(data: bytes) -> str:
         return hashlib.sha256(data).hexdigest()
 
-    def _object_path(self, digest: str) -> Path:
+    @staticmethod
+    def _validate_digest(digest: str) -> None:
         if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
             raise ValueError("invalid sha256 digest")
+
+    def _object_path(self, digest: str) -> Path:
+        self._validate_digest(digest)
         return self.objects / digest[:2] / digest[2:]
 
     def _metadata_path(self, digest: str) -> Path:
+        self._validate_digest(digest)
         return self.metadata / f"{digest}.json"
 
     def put(
@@ -46,10 +52,28 @@ class ArtifactStore:
         digest = self.digest(data)
         path = self._object_path(digest)
         path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            temp = path.with_suffix(".tmp")
-            temp.write_bytes(data)
-            os.replace(temp, path)
+        if path.exists():
+            if self.digest(path.read_bytes()) != digest:
+                fd, tmp_name = tempfile.mkstemp(dir=path.parent)
+                try:
+                    os.write(fd, data)
+                    os.close(fd)
+                    os.replace(tmp_name, path)
+                except Exception:
+                    os.close(fd) if not os.get_inheritable(fd) else None
+                    if os.path.exists(tmp_name):
+                        os.unlink(tmp_name)
+                    raise
+        else:
+            fd, tmp_name = tempfile.mkstemp(dir=path.parent)
+            try:
+                os.write(fd, data)
+                os.close(fd)
+                os.replace(tmp_name, path)
+            except Exception:
+                if os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
+                raise
         meta = {
             "digest": digest,
             "size": len(data),
