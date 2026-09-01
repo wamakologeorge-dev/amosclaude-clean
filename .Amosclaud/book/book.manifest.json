@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "book_id": "amosclaud-word-book",
   "title": "Amosclaud Word Book",
   "purpose": "Public living Amosclaud manual: vision, guidelines, developer documentation, human-and-agent engineering memory, and repository continuity.",
@@ -10,6 +10,32 @@
     "acts_like": ["README", "developer guide", "living documentation", "small Word-style book"],
     "private_security_tool": false,
     "repository_runtime_details_are_repository_scoped": true
+  },
+  "license_contract": {
+    "license_id": "LicenseRef-Amosclaud-Book-Proprietary-1.0",
+    "version": "1.0",
+    "terms_path": "LICENSES/Amosclaud-Book-Proprietary-1.0.txt",
+    "book_notice_path": ".Amosclaud/book/LICENSE.md",
+    "repository_root_license_remains_mit": true,
+    "prospective_scope_only": true,
+    "public_reading_allowed": true,
+    "official_copy_requires_grant": true,
+    "official_export_requires_grant": true,
+    "redistribution_requires_grant": true,
+    "signed_provenance_algorithm": "Ed25519",
+    "hidden_surveillance_allowed": false,
+    "private_signing_keys_must_never_enter_book": true,
+    "invoice_without_accepted_billing_terms_allowed": false,
+    "covered_paths": [
+      ".Amosclaud/book/**",
+      "amoscloud_ai/book.py",
+      "amoscloud_ai/book_studio.py",
+      "amoscloud_ai/book_watchdog.py",
+      "amoscloud_ai/book_license.py",
+      "amoscloud_ai/api/routes/book.py",
+      "web/amosclaud-book.html",
+      "web/amosclaud-book-studio.html"
+    ]
   },
   "reading_target_minutes_per_chapter": 3,
   "truth_statuses": [
@@ -58,10 +84,11 @@
     {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"}
   ],
   "agent_contract": {
-    "copy_mode": "versioned-snapshot",
+    "copy_mode": "licensed-versioned-snapshot",
     "must_read_before_work": ["00", "01", "02"],
     "slapface_preflight_required": true,
     "must_report_change": true,
-    "completion_requires_book_update": true
+    "completion_requires_book_update": true,
+    "official_export_must_carry_license_receipt": true
   }
 }
