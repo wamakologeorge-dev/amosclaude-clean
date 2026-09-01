@@ -231,7 +231,10 @@ def detect_secrets(text: str) -> list[SecretFinding]:
             (_GITHUB_TOKEN, "provider_token", 0.91, "provider-specific token structure"),
             (_OPENAI_STYLE, "api_key_literal", 0.66, "API-key-style secret structure"),
             (_JWT, "jwt_token", 0.76, "three-part JWT structure"),
-            (_AWS_ACCESS_ID, "cloud_access_identifier", 0.63, "cloud credential identifier structure"),
+            # Access IDs identify a principal/account but are not the secret half
+            # of an AWS credential pair. They should trigger review, not an
+            # automatic leak claim, unless another strong secret signal exists.
+            (_AWS_ACCESS_ID, "cloud_access_identifier", 0.40, "cloud access identifier structure"),
         ):
             for match in pattern.finditer(line):
                 candidate = _finding(
