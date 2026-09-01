@@ -27,6 +27,7 @@
     "docs",
     "scripts",
     "tests",
+    ".Amosclaud/book",
     ".github/workflows",
     ".github/workflows/fast-pr-gate.yml"
   ],
@@ -34,6 +35,10 @@
     "platform_runtime": {
       "path": "amoscloud_ai",
       "purpose": "FastAPI services, accounts, agents, repositories, execution and platform APIs"
+    },
+    "amosclaud_word_book": {
+      "path": ".Amosclaud/book",
+      "purpose": "Bidirectional GitHub-native and Amosclaud-native human/agent engineering knowledge, chapter navigation, capability truth, change reporting, agent context and completion gating"
     },
     "api_gateway": {
       "path": "api-gateway",
