@@ -12,10 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout repository history
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository with Git
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "${HEAD_SHA}"
+          git checkout --detach FETCH_HEAD
 
       - name: Determine changed files
         shell: bash
@@ -23,7 +30,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch origin "$BASE_REF" --depth=1
+          git fetch --no-tags origin "$BASE_REF" --depth=1
           git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/amosclaud-changed-files.txt
           cat /tmp/amosclaud-changed-files.txt
 
