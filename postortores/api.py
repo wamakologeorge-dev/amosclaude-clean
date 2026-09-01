@@ -87,6 +87,16 @@ _engine: PostortoresEngine | None = None
 _engine_lock = threading.Lock()
 
 
+def _reset_engine() -> None:
+    global _engine
+    if _engine is not None:
+        try:
+            _engine.close()
+        except Exception:
+            pass
+        _engine = None
+
+
 def engine() -> PostortoresEngine:
     global _engine
     if _engine is not None:
@@ -269,12 +279,18 @@ def acquire_lease(
     return {"acquired": svc.acquire_lease(body.resource, body.holder, body.ttl_seconds)}
 
 
-app = FastAPI(
-    title="Amosclaud Postortores",
-    version="0.1.0",
-    description="Native Amosclaud data, memory, evidence, event, graph and coordination service.",
-)
-app.include_router(router)
+def create_app() -> FastAPI:
+    _reset_engine()
+    app = FastAPI(
+        title="Amosclaud Postortores",
+        version="0.1.0",
+        description="Native Amosclaud data, memory, evidence, event, graph and coordination service.",
+    )
+    app.include_router(router)
+    return app
+
+
+app = create_app()
 
 
 def main() -> None:
@@ -285,4 +301,4 @@ def main() -> None:
     )
 
 
-__all__ = ["app", "router", "main"]
+__all__ = ["app", "router", "create_app", "main"]
