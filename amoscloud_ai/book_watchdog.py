@@ -276,7 +276,13 @@ class RepositoryBookWatchdog:
     """Repository-local Slapface state and safe watchdog sentence collector."""
 
     def __init__(self, repository_root: str | Path) -> None:
-        self.repository_root = Path(repository_root).expanduser().resolve()
+        allowed_root = Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).expanduser().resolve()
+        candidate_root = Path(repository_root).expanduser().resolve()
+        try:
+            candidate_root.relative_to(allowed_root)
+        except ValueError as exc:
+            raise BookWatchdogError("Repository path escapes allowed workspace root") from exc
+        self.repository_root = candidate_root
         self.book_root = self.repository_root / ".Amosclaud" / "book"
         self.runtime_root = self.book_root / ".runtime"
         self.handoff_path = self.runtime_root / "slapface.json"
