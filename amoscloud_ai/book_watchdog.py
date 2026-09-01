@@ -384,7 +384,11 @@ class RepositoryBookWatchdog:
             raise BookWatchdogError("There is no blocking Slapface handoff to resolve")
         if str(current.get("handoff_id")) != str(handoff_id):
             raise BookWatchdogError("Slapface handoff id does not match the active blocker")
-        safe_evidence = [redact_book_text(str(item), limit=1500)[0] for item in evidence]
+        safe_evidence = []
+        for item in evidence:
+            cleaned = redact_book_text(str(item).strip(), limit=1500)[0]
+            if cleaned:
+                safe_evidence.append(cleaned)
         if not safe_evidence:
             raise BookWatchdogError("Verified repair evidence is required")
         if any("[REDACTED]" in item for item in safe_evidence):
