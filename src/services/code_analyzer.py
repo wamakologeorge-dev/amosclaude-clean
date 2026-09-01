@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import ast
+import os
 import re
+import tempfile
 from pathlib import Path
+
+from amoscloud_ai.book_watchdog import BookWatchdogError, RepositoryBookWatchdog
 
 
 class CodeAnalyzer:
@@ -12,6 +16,8 @@ class CodeAnalyzer:
 
     The collector is deliberately bounded and excludes credentials, generated
     content, dependency trees, and files outside the authorized workspace.
+    Amosclaud-managed repositories must also pass Slapface before the first
+    file scan begins.
     """
 
     SAFE_SUFFIXES = {
@@ -57,10 +63,58 @@ class CodeAnalyzer:
 
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
+        self._workspace = self._trusted_workspace(self.workspace)
+
+    @staticmethod
+    def _trusted_workspace(workspace: Path) -> Path:
+        candidate = workspace.resolve()
+        roots = [
+            Path(os.getenv("AMOSCLAUD_WORKSPACE_ROOT", ".")).expanduser().resolve(),
+            Path(os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")).expanduser().resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        ]
+        for root in roots:
+            try:
+                candidate.relative_to(root)
+                return candidate
+            except ValueError:
+                continue
+        raise BookWatchdogError("Workspace escapes allowed roots for repository analysis")
+
+    def _is_amosclaud_repository(self) -> bool:
+        if (self._workspace / ".Amosclaud").exists() or (self._workspace / ".Amosclaud-workflow").exists():
+            return True
+        repository_root = Path(
+            os.getenv("REPOSITORY_STORAGE_PATH", "data/repositories")
+        ).expanduser().resolve()
+        try:
+            self._workspace.relative_to(repository_root)
+            return True
+        except ValueError:
+            return False
+
+    def _book_preflight(self, objective: str) -> None:
+        if not self._is_amosclaud_repository():
+            return
+        verdict = RepositoryBookWatchdog(self.workspace).preflight(
+            actor="amosclaud-autonomous",
+            action="repository-scan",
+        )
+        if verdict.get("work_allowed") is False:
+            handoff = verdict.get("handoff") or {}
+            chapter = str(handoff.get("chapter_link") or ".Amosclaud/book/chapters/00-slapface.md")
+            summary = str(handoff.get("summary") or verdict.get("message") or "Slapface blocked repository work")
+            raise BookWatchdogError(
+                f"SLAPFACE blocked repository scan before file analysis. {summary} Read: {chapter}"
+            )
 
     def inspect(self, objective: str = "") -> list[str]:
+        # This is intentionally the first repository operation. Slapface must
+        # decide continuity before rglob/read_text touches source files.
+        self._book_preflight(objective)
+
         evidence: list[str] = []
-        python_files = list(self.workspace.rglob("*.py"))
+        python_files = list(self._workspace.rglob("*.py"))
         evidence.append(f"Discovered {len(python_files)} Python source files")
         parse_failures = 0
         for path in python_files[:500]:
@@ -71,7 +125,7 @@ class CodeAnalyzer:
             except SyntaxError as exc:
                 parse_failures += 1
                 evidence.append(
-                    f"Syntax error: {path.relative_to(self.workspace)}:{exc.lineno}"
+                    f"Syntax error: {path.relative_to(self._workspace)}:{exc.lineno}"
                 )
         evidence.append(f"AST parse failures: {parse_failures}")
         evidence.extend(self._repository_context(objective))
@@ -82,9 +136,9 @@ class CodeAnalyzer:
             if path.is_symlink() or not path.is_file():
                 return False
             resolved = path.resolve(strict=True)
-            if resolved != self.workspace and self.workspace not in resolved.parents:
+            if resolved != self._workspace and self._workspace not in resolved.parents:
                 return False
-            relative = resolved.relative_to(self.workspace)
+            relative = resolved.relative_to(self._workspace)
         except (OSError, RuntimeError, ValueError):
             return False
         if any(part in self.IGNORED_PARTS for part in relative.parts):
@@ -138,10 +192,10 @@ class CodeAnalyzer:
             "readme.md",
         }
 
-        for path in sorted(self.workspace.rglob("*")):
+        for path in sorted(self._workspace.rglob("*")):
             if not self._safe_candidate(path):
                 continue
-            relative = path.relative_to(self.workspace).as_posix()
+            relative = path.relative_to(self._workspace).as_posix()
             if len(file_map) < self.MAX_FILE_MAP:
                 file_map.append(relative)
             try:

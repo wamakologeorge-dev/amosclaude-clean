@@ -16,8 +16,10 @@ def test_repository_book_has_all_registered_chapters() -> None:
     book = AmosclaudBook(BOOK_ROOT)
     chapters = book.chapters()
 
-    assert len(chapters) == 11
+    assert len(chapters) == 12
     assert all(chapter["available"] for chapter in chapters)
+    assert book.chapter("0")["id"] == "00"
+    assert "Slapface" in book.chapter("00")["content"]
     assert book.chapter("1")["id"] == "01"
     assert "What Amosclaud Is" in book.chapter("01")["content"]
 
@@ -27,7 +29,7 @@ def test_book_status_is_evidence_aware() -> None:
     status = book.status()
 
     assert status["service"] == "Amosclaud Word Book"
-    assert status["written_chapters"] == status["chapter_count"] == 11
+    assert status["written_chapters"] == status["chapter_count"] == 12
     assert len(status["book_version"]) == 64
     assert "not proof" in status["truth_rule"]
 
@@ -69,11 +71,11 @@ def test_human_progress_and_agent_copy_are_runtime_state(tmp_path: Path) -> None
 
     book = AmosclaudBook(book_root)
     progress = book.complete_chapter("01", "human-reader")
-    context = book.agent_context("agent-1", ["01", "03"])
+    context = book.agent_context("agent-1", ["00", "01", "03"])
 
     assert "01" in progress["completed"]
     assert context["agent_id"] == "agent-1"
-    assert [chapter["id"] for chapter in context["chapters"]] == ["01", "03"]
+    assert [chapter["id"] for chapter in context["chapters"]] == ["00", "01", "03"]
     assert (book_root / ".runtime" / "progress" / "human-reader.json").exists()
     assert (book_root / ".runtime" / "agents" / "agent-1.json").exists()
 
@@ -102,9 +104,14 @@ def test_change_report_rejects_unknown_chapter(tmp_path: Path) -> None:
         )
 
 
-def test_manifest_declares_bidirectional_contract() -> None:
+def test_manifest_declares_bidirectional_and_watchdog_contract() -> None:
     manifest = json.loads((BOOK_ROOT / "book.manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["sync_contract"]["github_native"] is True
     assert manifest["sync_contract"]["amosclaud_native"] is True
     assert manifest["agent_contract"]["completion_requires_book_update"] is True
+    assert manifest["agent_contract"]["slapface_preflight_required"] is True
+    assert manifest["agent_contract"]["must_read_before_work"][0] == "00"
+    assert manifest["watchdog_contract"]["repository_scoped"] is True
+    assert manifest["watchdog_contract"]["secret_values_must_never_be_recorded"] is True
+    assert manifest["watchdog_contract"]["secret_detection"]["suspicious"] == "warn"
