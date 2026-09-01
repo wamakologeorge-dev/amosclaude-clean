@@ -81,7 +81,8 @@
     {"id": "08", "slug": "applications-connectors", "title": "Applications and Connectors", "reading_minutes": 3, "audience": "both"},
     {"id": "09", "slug": "security-identity", "title": "Security and Identity", "reading_minutes": 3, "audience": "both"},
     {"id": "10", "slug": "desktop", "title": "Amosclaud Desktop", "reading_minutes": 3, "audience": "both"},
-    {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"}
+    {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"},
+    {"id": "12", "slug": "license-ownership", "title": "License and Ownership", "reading_minutes": 3, "audience": "both"}
   ],
   "agent_contract": {
     "copy_mode": "licensed-versioned-snapshot",
