@@ -10,6 +10,7 @@ jobs:
   book-gate:
     name: Book change contract
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repository history
         uses: actions/checkout@v4
@@ -27,8 +28,10 @@ jobs:
           cat /tmp/amosclaud-changed-files.txt
 
       - name: Slapface preflight and high-confidence secret gate
-        shell: python
+        shell: bash
         run: |
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
 
           from amoscloud_ai.book_watchdog import secret_verdict
@@ -84,10 +87,13 @@ jobs:
                   )
               raise SystemExit(1)
           print('Slapface secret preflight passed without high-confidence credential exposure.')
+          PY
 
       - name: Enforce Amosclaud Word Book update
-        shell: python
+        shell: bash
         run: |
+          set -euo pipefail
+          python - <<'PY'
           from pathlib import Path
 
           changed = [line.strip() for line in Path('/tmp/amosclaud-changed-files.txt').read_text().splitlines() if line.strip()]
@@ -122,6 +128,7 @@ jobs:
           print('Book Gate passed. Book files changed:')
           for path in book_changes:
               print(f'  - {path}')
+          PY
 
       - name: Run Amosclaud Word Book tests
         run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py tests/test_book_studio.py -q
