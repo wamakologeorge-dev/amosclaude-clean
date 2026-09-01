@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Amosclaud Word Book</title>
+  <style>
+    :root { font-family: Aptos, Segoe UI, system-ui, sans-serif; color: #202124; background: #eef1f5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; }
+    header { height: 54px; background: #163c73; color: white; display: flex; align-items: center; gap: 16px; padding: 0 20px; box-shadow: 0 1px 4px #0004; }
+    header strong { font-size: 18px; }
+    header span { opacity: .82; font-size: 13px; }
+    .ribbon { background: white; border-bottom: 1px solid #d6dae0; padding: 10px 20px; display: flex; gap: 10px; align-items: center; position: sticky; top: 0; z-index: 3; }
+    button, select, input { font: inherit; }
+    button { border: 1px solid #b6bdc7; background: white; border-radius: 4px; padding: 7px 12px; cursor: pointer; }
+    button.primary { background: #185abd; color: white; border-color: #185abd; }
+    button:disabled { opacity: .55; cursor: default; }
+    .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr) 300px; min-height: calc(100vh - 104px); }
+    nav, aside { background: #f8f9fb; border-right: 1px solid #d6dae0; padding: 16px; overflow: auto; }
+    aside { border-right: 0; border-left: 1px solid #d6dae0; }
+    nav h2, aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #626b78; }
+    .chapter-link { width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 8px; border-radius: 4px; }
+    .chapter-link:hover, .chapter-link.active { background: #e7eef9; }
+    main { padding: 28px; overflow: auto; }
+    .page { max-width: 816px; min-height: 1056px; margin: 0 auto; background: white; box-shadow: 0 2px 14px #0002; padding: 78px 82px; line-height: 1.58; }
+    .page h1 { font-size: 30px; margin-top: 0; color: #17365d; }
+    .page h2 { font-size: 21px; color: #2f5597; margin-top: 28px; }
+    .page p, .page li { font-family: Georgia, Cambria, serif; font-size: 16px; }
+    .page code { font-family: Consolas, monospace; background: #f2f3f5; padding: 1px 4px; border-radius: 3px; }
+    .status { padding: 9px 10px; background: #eef4ff; border-left: 3px solid #185abd; margin-bottom: 14px; font-size: 13px; }
+    .small { color: #667085; font-size: 12px; }
+    .cap { margin: 10px 0; padding: 10px; background: white; border: 1px solid #e0e4e9; border-radius: 6px; }
+    .pill { display: inline-block; font-size: 11px; border-radius: 999px; background: #eef1f5; padding: 3px 7px; margin-top: 5px; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: 220px 1fr; } aside { display: none; } .page { padding: 48px; } }
+    @media (max-width: 700px) { .layout { display: block; } nav { max-height: 240px; border-bottom: 1px solid #d6dae0; } main { padding: 10px; } .page { min-height: auto; padding: 28px 22px; } }
+  </style>
+</head>
+<body>
+  <header><strong>Amosclaud Word Book</strong><span>Human + Agent Engineering Memory</span></header>
+  <div class="ribbon">
+    <button id="previous">Previous</button>
+    <button id="next">Next</button>
+    <button id="finish" class="primary">✓ Finish chapter</button>
+    <span id="version" class="small"></span>
+  </div>
+  <div class="layout">
+    <nav><h2>Chapters</h2><div id="chapters">Loading…</div></nav>
+    <main><article class="page"><div id="chapter"><h1>Opening Amosclaud Book…</h1></div></article></main>
+    <aside>
+      <h2>Book status</h2><div id="status" class="status">Loading…</div>
+      <h2>Capabilities</h2><div id="capabilities"></div>
+    </aside>
+  </div>
+<script>
+const api = '/api/v1/book';
+let chapterList = [], currentIndex = 0;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderMarkdown(source) {
+  const lines = source.split('\n'); let html = '', list = false;
+  const inline = s => esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  for (const line of lines) {
+    if (/^# /.test(line)) { if(list){html+='</ul>';list=false;} html += `<h1>${inline(line.slice(2))}</h1>`; }
+    else if (/^## /.test(line)) { if(list){html+='</ul>';list=false;} html += `<h2>${inline(line.slice(3))}</h2>`; }
+    else if (/^- /.test(line)) { if(!list){html+='<ul>';list=true;} html += `<li>${inline(line.slice(2))}</li>`; }
+    else if (/^\d+\. /.test(line)) { if(!list){html+='<ul>';list=true;} html += `<li>${inline(line.replace(/^\d+\. /,''))}</li>`; }
+    else if (!line.trim()) { if(list){html+='</ul>';list=false;} }
+    else { if(list){html+='</ul>';list=false;} html += `<p>${inline(line)}</p>`; }
+  }
+  if(list) html += '</ul>'; return html;
+}
+async function loadChapter(index) {
+  if (!chapterList.length) return; currentIndex = Math.max(0, Math.min(index, chapterList.length - 1));
+  const meta = chapterList[currentIndex];
+  document.querySelectorAll('.chapter-link').forEach((b,i)=>b.classList.toggle('active',i===currentIndex));
+  document.getElementById('previous').disabled = currentIndex === 0;
+  document.getElementById('next').disabled = currentIndex === chapterList.length - 1;
+  if (!meta.available) { document.getElementById('chapter').innerHTML = `<h1>${esc(meta.title)}</h1><p>This chapter is registered but has not been written yet.</p>`; return; }
+  const res = await fetch(`${api}/chapters/${meta.id}`); const data = await res.json();
+  document.getElementById('chapter').innerHTML = renderMarkdown(data.content || '');
+}
+async function load() {
+  const [chaptersRes,statusRes,capsRes] = await Promise.all([fetch(`${api}/chapters`),fetch(`${api}/status`),fetch(`${api}/capabilities`)]);
+  chapterList = await chaptersRes.json(); const status = await statusRes.json(); const caps = await capsRes.json();
+  document.getElementById('version').textContent = `Book ${String(status.book_version || '').slice(0,12)} • ${status.written_chapters}/${status.chapter_count} chapters`;
+  document.getElementById('status').innerHTML = `<strong>${esc(status.service)}</strong><br>${esc(status.truth_rule)}`;
+  document.getElementById('chapters').innerHTML = chapterList.map((c,i)=>`<button class="chapter-link" data-i="${i}">${esc(c.id)}. ${esc(c.title)} <span class="small">${esc(c.reading_minutes)} min</span></button>`).join('');
+  document.querySelectorAll('.chapter-link').forEach(b=>b.onclick=()=>loadChapter(Number(b.dataset.i)));
+  document.getElementById('capabilities').innerHTML = caps.map(c=>`<div class="cap"><strong>${esc(c.name)}</strong><br><span class="pill">${esc(c.status)}</span></div>`).join('');
+  await loadChapter(0);
+}
+document.getElementById('previous').onclick=()=>loadChapter(currentIndex-1);
+document.getElementById('next').onclick=()=>loadChapter(currentIndex+1);
+document.getElementById('finish').onclick=async()=>{
+  const reader = localStorage.getItem('amosclaud-book-reader') || `human-${crypto.randomUUID()}`;
+  localStorage.setItem('amosclaud-book-reader', reader);
+  const chapter = chapterList[currentIndex];
+  const res = await fetch(`${api}/chapters/${chapter.id}/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reader})});
+  if(res.ok){ document.getElementById('finish').textContent='✓ Chapter finished'; setTimeout(()=>document.getElementById('finish').textContent='✓ Finish chapter',1400); }
+};
+load().catch(err=>{ document.getElementById('chapter').innerHTML=`<h1>Book unavailable</h1><p>${esc(err.message)}</p>`; });
+</script>
+</body>
+</html>

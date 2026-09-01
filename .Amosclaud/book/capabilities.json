@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "id": "repository-platform-source",
+      "name": "Repository and platform source",
+      "status": "verified",
+      "chapter_ids": ["01", "02"],
+      "evidence": ["README.md", "amoscloud_ai", "tests"],
+      "limitations": []
+    },
+    {
+      "id": "amosclaud-word-book",
+      "name": "Amosclaud Word Book",
+      "status": "implemented_verification_pending",
+      "chapter_ids": ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"],
+      "evidence": [
+        ".Amosclaud/book/book.manifest.json",
+        ".Amosclaud/book/chapters",
+        ".Amosclaud/book/capabilities.json",
+        ".Amosclaud/book/changes.jsonl",
+        ".Amosclaud/book/next-task.json",
+        "amoscloud_ai/book.py",
+        "amoscloud_ai/api/routes/book.py",
+        "web/amosclaud-book.html",
+        "tests/test_amosclaud_book.py",
+        ".github/workflows/amosclaud-book-gate.yml",
+        "docs/AMOSCLAUD_WORD_BOOK.md"
+      ],
+      "limitations": [
+        "Dedicated tests are committed but current-revision CI evidence must be observed before changing this capability to verified.",
+        "The GitHub Book Gate workflow becomes an absolute merge blocker only when repository branch/ruleset settings require its status check.",
+        "Direct Amosclaud/MCP synchronization will use this native contract later; that external connection is not claimed as active yet."
+      ]
+    },
+    {
+      "id": "amosclaud-language",
+      "name": "Amosclaud Programming Language",
+      "status": "in_progress",
+      "chapter_ids": ["01"],
+      "evidence": ["amosclaud_language", "docs/AMOSCLAUD_LANGUAGE.md"],
+      "limitations": ["The complete language vision is not yet verified as finished."]
+    },
+    {
+      "id": "self-agent-programmer",
+      "name": "Self-Agent Programmer",
+      "status": "in_progress",
+      "chapter_ids": ["03"],
+      "evidence": ["amoscloud_ai", "docs/AMOSCLAUD_SELF_AGENT_PROGRAMMER.md"],
+      "limitations": ["Universal autonomous completion is not claimed."]
+    },
+    {
+      "id": "spacecodeme",
+      "name": "SpaceCodeMe",
+      "status": "implemented_verification_pending",
+      "chapter_ids": ["05"],
+      "evidence": ["amoscloud_ai", "web"],
+      "limitations": ["End-to-end product verification remains required."]
+    },
+    {
+      "id": "postortores",
+      "name": "Postortores native data system",
+      "status": "in_progress",
+      "chapter_ids": ["06"],
+      "evidence": [],
+      "limitations": ["Work exists outside the current main branch and must not be represented as a verified main-branch capability until integrated and verified."]
+    },
+    {
+      "id": "physical-amosclaud-computer",
+      "name": "Physical Amosclaud Computer",
+      "status": "planned",
+      "chapter_ids": ["11"],
+      "evidence": [],
+      "limitations": ["Physical product and complete appliance lifecycle are not yet verified."]
+    }
+  ]
+}
