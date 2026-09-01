@@ -1,8 +1,42 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "book_id": "amosclaud-word-book",
   "title": "Amosclaud Word Book",
-  "purpose": "Canonical human-and-agent engineering knowledge system for Amosclaud.",
+  "purpose": "Public living Amosclaud manual: vision, guidelines, developer documentation, human-and-agent engineering memory, and repository continuity.",
+  "product_contract": {
+    "public_reading": true,
+    "human_readable": true,
+    "agent_readable": true,
+    "acts_like": ["README", "developer guide", "living documentation", "small Word-style book"],
+    "private_security_tool": false,
+    "repository_runtime_details_are_repository_scoped": true
+  },
+  "license_contract": {
+    "license_id": "LicenseRef-Amosclaud-Book-Proprietary-1.0",
+    "version": "1.0",
+    "terms_path": "LICENSES/Amosclaud-Book-Proprietary-1.0.txt",
+    "book_notice_path": ".Amosclaud/book/LICENSE.md",
+    "repository_root_license_remains_mit": true,
+    "prospective_scope_only": true,
+    "public_reading_allowed": true,
+    "official_copy_requires_grant": true,
+    "official_export_requires_grant": true,
+    "redistribution_requires_grant": true,
+    "signed_provenance_algorithm": "Ed25519",
+    "hidden_surveillance_allowed": false,
+    "private_signing_keys_must_never_enter_book": true,
+    "invoice_without_accepted_billing_terms_allowed": false,
+    "covered_paths": [
+      ".Amosclaud/book/**",
+      "amoscloud_ai/book.py",
+      "amoscloud_ai/book_studio.py",
+      "amoscloud_ai/book_watchdog.py",
+      "amoscloud_ai/book_license.py",
+      "amoscloud_ai/api/routes/book.py",
+      "web/amosclaud-book.html",
+      "web/amosclaud-book-studio.html"
+    ]
+  },
   "reading_target_minutes_per_chapter": 3,
   "truth_statuses": [
     "verified",
@@ -17,7 +51,23 @@
     "github_native": true,
     "amosclaud_native": true,
     "mode": "bidirectional-repository-runtime",
-    "rule": "Every meaningful Amosclaud change must be represented in the Book before it is eligible for completion or merge."
+    "rule": "Every Amosclaud repository action must consult the Book first. Every meaningful Amosclaud change must be represented in the Book before it is eligible for completion or merge."
+  },
+  "watchdog_contract": {
+    "name": "Slapface",
+    "relationship_to_book": "Chapter 00 and repository gatekeeper behavior inside the public Book product",
+    "repository_scoped": true,
+    "preflight_required": true,
+    "owner_repetitive_approval_required": false,
+    "identity_and_permission_checks_remain_required": true,
+    "active_blocker_cannot_be_overridden_by_owner_instruction": true,
+    "release_requires_repair_evidence": true,
+    "secret_values_must_never_be_recorded": true,
+    "secret_detection": {
+      "confirmed_secret": "block",
+      "probable_secret": "block",
+      "suspicious": "warn"
+    }
   },
   "slapface_contract": {
     "enabled": true,
@@ -31,6 +81,7 @@
     "source_independent": ["amosclaud", "github", "local", "third-party"]
   },
   "chapters": [
+    {"id": "00", "slug": "slapface", "title": "Slapface — Introduction and Repository Gatekeeper", "reading_minutes": 3, "audience": "both"},
     {"id": "01", "slug": "what-is-amosclaud", "title": "What Amosclaud Is", "reading_minutes": 3, "audience": "both"},
     {"id": "02", "slug": "platform", "title": "Amosclaud Platform", "reading_minutes": 3, "audience": "both"},
     {"id": "03", "slug": "agent", "title": "Self-Agent Programmer", "reading_minutes": 3, "audience": "both"},
@@ -41,13 +92,17 @@
     {"id": "08", "slug": "applications-connectors", "title": "Applications and Connectors", "reading_minutes": 3, "audience": "both"},
     {"id": "09", "slug": "security-identity", "title": "Security and Identity", "reading_minutes": 3, "audience": "both"},
     {"id": "10", "slug": "desktop", "title": "Amosclaud Desktop", "reading_minutes": 3, "audience": "both"},
-    {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"}
+    {"id": "11", "slug": "physical-computer", "title": "Physical Amosclaud Computer", "reading_minutes": 3, "audience": "both"},
+    {"id": "12", "slug": "license-ownership", "title": "License and Ownership", "reading_minutes": 3, "audience": "both"}
   ],
   "agent_contract": {
     "copy_mode": "versioned-snapshot",
     "must_read_before_work": ["01", "02"],
+    "copy_mode": "licensed-versioned-snapshot",
+    "must_read_before_work": ["00", "01", "02"],
     "slapface_preflight_required": true,
     "must_report_change": true,
-    "completion_requires_book_update": true
+    "completion_requires_book_update": true,
+    "official_export_must_carry_license_receipt": true
   }
 }
