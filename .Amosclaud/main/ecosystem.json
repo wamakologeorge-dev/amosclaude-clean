@@ -16,6 +16,7 @@
     "amosclaud_os",
     "amosclaud_platform",
     "amosclaud_metrics",
+    "postortores",
     "api-gateway",
     "api_key_manager",
     "database",
@@ -43,9 +44,13 @@
       "path": "api-gateway",
       "purpose": "Single authenticated ingress joining repository, autonomous and CI services"
     },
+    "postortores_data_system": {
+      "path": "postortores",
+      "purpose": "Amosclaud-native versioned state, event streams, agent memory, verification evidence, graph relationships and worker coordination"
+    },
     "database_layer": {
       "path": "database",
-      "purpose": "Shared synchronous and asynchronous persistence adapters"
+      "purpose": "Compatibility persistence adapters while platform data migrates behind Postortores"
     },
     "control_plane": {
       "path": "services/control_plane",
@@ -110,7 +115,7 @@
       ]
     },
     "railway": {
-      "purpose": "Production application hosting and persistent /data volume",
+      "purpose": "Legacy production application hosting and persistent /data volume during infrastructure migration",
       "required_environment": [
         "AMOSCLAUD_PUBLIC_URL",
         "AUTH_DB_PATH",
@@ -118,13 +123,13 @@
       ]
     },
     "redis": {
-      "purpose": "Durable queues, throttling, locks and short-lived task state",
+      "purpose": "Compatibility queue, throttling, locks and short-lived task state while Postortores coordination primitives mature",
       "required_environment": [
         "REDIS_URL"
       ]
     },
     "mysql": {
-      "purpose": "Structured platform metadata, API-key usage and future lakehouse records",
+      "purpose": "Compatibility structured metadata source during migration to Postortores",
       "required_environment": [
         "MYSQL_URL"
       ]
@@ -163,8 +168,13 @@
     },
     {
       "from": "platform_runtime",
+      "to": "postortores_data_system",
+      "protocol": "planned native Postortores API"
+    },
+    {
+      "from": "postortores_data_system",
       "to": "database_layer",
-      "protocol": "SQL adapter"
+      "protocol": "compatibility adapter / migration"
     },
     {
       "from": "platform_runtime",
@@ -174,12 +184,12 @@
     {
       "from": "control_plane",
       "to": "redis",
-      "protocol": "Redis/BullMQ"
+      "protocol": "Redis/BullMQ compatibility queue"
     },
     {
-      "from": "platform_runtime",
+      "from": "database_layer",
       "to": "mysql",
-      "protocol": "MySQL"
+      "protocol": "MySQL compatibility source"
     },
     {
       "from": "github_automation",
@@ -194,7 +204,7 @@
     {
       "from": "platform_runtime",
       "to": "railway",
-      "protocol": "deployment runtime"
+      "protocol": "legacy deployment runtime"
     },
     {
       "from": "platform_runtime",
