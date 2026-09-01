@@ -176,7 +176,7 @@ def detect_secrets(text: str) -> list[SecretFinding]:
 
     findings: dict[tuple[int, str, str], SecretFinding] = {}
     for line_number, raw_line in enumerate(str(text or "").splitlines(), 1):
-        line = raw_line[:20_000]
+        line = raw_line
         stripped = line.strip()
         if not stripped:
             continue
