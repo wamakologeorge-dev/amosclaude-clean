@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.book import AmosclaudBook, BookError
@@ -42,10 +42,23 @@ from amoscloud_ai.api.routes.repositories import (
 router = APIRouter(prefix="/book", tags=["amosclaud-word-book"])
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WEB_DIR = REPO_ROOT / "web"
+_LICENSE_UI_TAG = '<script src="/static/amosclaud-book-license.js" defer></script>'
 
 
 def _book() -> AmosclaudBook:
     return AmosclaudBook()
+
+
+def _book_html(filename: str) -> HTMLResponse:
+    """Serve a Book page with the shared proprietary-license UI boundary."""
+    path = WEB_DIR / filename
+    try:
+        source = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="Amosclaud Book page is unavailable") from exc
+    if _LICENSE_UI_TAG not in source:
+        source = source.replace("</body>", f"{_LICENSE_UI_TAG}\n</body>")
+    return HTMLResponse(source, headers={"Cache-Control": "no-store"})
 
 
 def _safe(call):
@@ -180,20 +193,20 @@ def book_home() -> dict[str, Any]:
 
 
 @router.get("/reader", include_in_schema=False)
-def book_reader() -> FileResponse:
-    return FileResponse(WEB_DIR / "amosclaud-book.html")
+def book_reader() -> HTMLResponse:
+    return _book_html("amosclaud-book.html")
 
 
 @router.get("/slapface", include_in_schema=False)
-def slapface_page() -> FileResponse:
+def slapface_page() -> HTMLResponse:
     """Open the Word Book with Chapter 00 / Slapface as the first page."""
-    return FileResponse(WEB_DIR / "amosclaud-book.html")
+    return _book_html("amosclaud-book.html")
 
 
 @router.get("/studio", include_in_schema=False)
-def book_studio_page(user: sqlite3.Row = Depends(_current_user)) -> FileResponse:
+def book_studio_page(user: sqlite3.Row = Depends(_current_user)) -> HTMLResponse:
     """Open the authenticated Word-style authoring companion."""
-    return FileResponse(WEB_DIR / "amosclaud-book-studio.html")
+    return _book_html("amosclaud-book-studio.html")
 
 
 @router.get("/studio/tools")
@@ -309,7 +322,7 @@ def official_book_export(
                     "code": "amosclaud_book_license_required",
                     "message": str(exc),
                     "license": BOOK_LICENSE_ID,
-                    "terms": f"/api/v1/book/license/text",
+                    "terms": "/api/v1/book/license/text",
                 },
             ) from exc
     return {
