@@ -361,6 +361,11 @@ class RepositoryBookWatchdog:
         }
         self._ensure_runtime()
         with _RUNTIME_LOCK:
+            current = self._load_handoff()
+            if current and current.get("status") == "blocked":
+                raise BookWatchdogError(
+                    "An active Slapface handoff must be resolved before creating another"
+                )
             self.handoff_path.write_text(
                 json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
                 encoding="utf-8",
