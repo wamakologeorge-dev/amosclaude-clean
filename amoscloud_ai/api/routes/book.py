@@ -1,4 +1,4 @@
-"""Native API router for the Amosclaud Word Book and Slapface preflight."""
+"""Native API router for the public Amosclaud Word Book and Slapface preflight."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -96,6 +96,7 @@ def book_home() -> dict[str, Any]:
         lambda: {
             "manifest": _book().manifest(),
             "status": _book().status(),
+            "intro": _book().slapface_intro(),
             "slapface": _slapface().status(),
         }
     )
@@ -107,8 +108,14 @@ def book_reader() -> FileResponse:
 
 
 @router.get("/slapface", include_in_schema=False)
-def slapface_reader() -> FileResponse:
-    return FileResponse(WEB_DIR / "amosclaud-slapface.html")
+def slapface_reader_alias() -> FileResponse:
+    """Public alias: Slapface is the opening page of the Book reader."""
+    return FileResponse(WEB_DIR / "amosclaud-book.html")
+
+
+@router.get("/slapface/content")
+def slapface_content() -> dict[str, Any]:
+    return _safe(lambda: _book().slapface_intro())
 
 
 @router.get("/status")
@@ -163,11 +170,10 @@ def book_agent_context(request: AgentContextRequest) -> dict[str, Any]:
         if slapface["blocked"]:
             return {
                 "agent_id": request.agent_id,
+                "intro": _book().slapface_intro(),
                 "slapface": slapface,
                 "work_allowed": False,
-                "message": (
-                    "Slapface must be resolved before a normal Book agent context is issued."
-                ),
+                "message": "Read Slapface and resolve the active handoff before normal engineering work.",
             }
         return {
             **_book().agent_context(request.agent_id, request.chapter_ids),
