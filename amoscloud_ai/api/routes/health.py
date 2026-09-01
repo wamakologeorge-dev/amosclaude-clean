@@ -13,6 +13,7 @@ from amoscloud_ai.agent.preflight import run_preflight
 from amoscloud_ai.api.routes import (
     amosclaud_authority,
     autonomous_codex,
+    book,
     bundle_pages,
     bundles,
     cdn,
@@ -45,6 +46,7 @@ router.include_router(owner_bootstrap.router, prefix="/api/v1")
 # These service routers are composed here so the platform always exposes its
 # critical Autonomous contracts even when a deployment imports only health.
 router.include_router(amosclaud_authority.router, prefix="/api/v1")
+router.include_router(book.router, prefix="/api/v1")
 router.include_router(bundles.router, prefix="/api/v1")
 router.include_router(bundle_pages.router)
 router.include_router(byte_metadata_router, prefix="/api/v1")
