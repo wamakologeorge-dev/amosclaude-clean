@@ -1,14 +1,27 @@
-"""Native API router for the Amosclaud Word Book."""
+"""Native API router for the Amosclaud Word Book and Slapface watchdog."""
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.book import AmosclaudBook, BookError
+from amoscloud_ai.book_watchdog import (
+    BookWatchdogError,
+    RepositoryBookWatchdog,
+    secret_verdict,
+)
+from amoscloud_ai.api.routes.repositories import (
+    _access,
+    _current_user,
+    _db,
+    _repo_path,
+    _require_write,
+)
 
 router = APIRouter(prefix="/book", tags=["amosclaud-word-book"])
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
@@ -21,8 +34,20 @@ def _book() -> AmosclaudBook:
 def _safe(call):
     try:
         return call()
-    except BookError as exc:
+    except (BookError, BookWatchdogError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _repository_watchdog(repository_id: int, user: sqlite3.Row, *, write: bool = False) -> RepositoryBookWatchdog:
+    with _db() as db:
+        access = _access(db, repository_id, user["id"])
+        if write:
+            _require_write(access)
+    return RepositoryBookWatchdog(_repo_path(repository_id))
+
+
+def _actor(user: sqlite3.Row) -> str:
+    return f"account:{user['id']}"
 
 
 class ChapterCompletion(BaseModel):
@@ -52,6 +77,27 @@ class GateRequest(BaseModel):
     change_id: str | None = None
 
 
+class SecretCheckRequest(BaseModel):
+    text: str = Field(default="", max_length=2_000_000)
+
+
+class WatchdogPreflightRequest(BaseModel):
+    action: str = Field(min_length=1, max_length=200)
+    proposed_text: str = Field(default="", max_length=2_000_000)
+
+
+class SlapfaceBlockRequest(BaseModel):
+    summary: str = Field(min_length=1, max_length=4000)
+    chapter_link: str = Field(default=".Amosclaud/book/chapters/00-slapface.md", max_length=500)
+    missing_pieces: list[str] = Field(min_length=1, max_length=50)
+    reason: str = Field(default="unfinished_work", min_length=1, max_length=100)
+
+
+class SlapfaceResolveRequest(BaseModel):
+    handoff_id: str = Field(min_length=1, max_length=100)
+    evidence: list[str] = Field(min_length=1, max_length=50)
+
+
 @router.get("")
 def book_home() -> dict[str, Any]:
     return _safe(lambda: {"manifest": _book().manifest(), "status": _book().status()})
@@ -59,6 +105,12 @@ def book_home() -> dict[str, Any]:
 
 @router.get("/reader", include_in_schema=False)
 def book_reader() -> FileResponse:
+    return FileResponse(WEB_DIR / "amosclaud-book.html")
+
+
+@router.get("/slapface", include_in_schema=False)
+def slapface_page() -> FileResponse:
+    """Open the Word Book with Chapter 00 / Slapface as the first page."""
     return FileResponse(WEB_DIR / "amosclaud-book.html")
 
 
@@ -115,3 +167,68 @@ def book_agent_context(request: AgentContextRequest) -> dict[str, Any]:
 @router.post("/gate")
 def book_gate(request: GateRequest) -> dict[str, Any]:
     return _safe(lambda: _book().gate(request.changed_files, request.change_id))
+
+
+@router.post("/secret-check")
+def book_secret_check(request: SecretCheckRequest) -> dict[str, Any]:
+    """Classify likely credentials locally without returning candidate values."""
+    return secret_verdict(request.text)
+
+
+@router.get("/repositories/{repository_id}/watchdog")
+def repository_watchdog_status(
+    repository_id: int,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    watchdog = _repository_watchdog(repository_id, user)
+    return _safe(watchdog.status)
+
+
+@router.post("/repositories/{repository_id}/preflight")
+def repository_watchdog_preflight(
+    repository_id: int,
+    request: WatchdogPreflightRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    watchdog = _repository_watchdog(repository_id, user)
+    return _safe(
+        lambda: watchdog.preflight(
+            actor=_actor(user),
+            action=request.action,
+            proposed_text=request.proposed_text,
+        )
+    )
+
+
+@router.post("/repositories/{repository_id}/slapface/block")
+def repository_slapface_block(
+    repository_id: int,
+    request: SlapfaceBlockRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    watchdog = _repository_watchdog(repository_id, user, write=True)
+    return _safe(
+        lambda: watchdog.block_handoff(
+            actor=_actor(user),
+            summary=request.summary,
+            chapter_link=request.chapter_link,
+            missing_pieces=request.missing_pieces,
+            reason=request.reason,
+        )
+    )
+
+
+@router.post("/repositories/{repository_id}/slapface/resolve")
+def repository_slapface_resolve(
+    repository_id: int,
+    request: SlapfaceResolveRequest,
+    user: sqlite3.Row = Depends(_current_user),
+) -> dict[str, Any]:
+    watchdog = _repository_watchdog(repository_id, user, write=True)
+    return _safe(
+        lambda: watchdog.resolve_handoff(
+            actor=_actor(user),
+            handoff_id=request.handoff_id,
+            evidence=request.evidence,
+        )
+    )
