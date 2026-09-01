@@ -28,11 +28,8 @@ jobs:
 
       - name: Slapface preflight and high-confidence secret gate
         shell: python
-        env:
-          BASE_REF: ${{ github.base_ref }}
         run: |
           from pathlib import Path
-          import subprocess
 
           from amoscloud_ai.book_watchdog import secret_verdict
 
@@ -49,9 +46,7 @@ jobs:
           warnings = []
           for raw in changed:
               path = Path(raw)
-              if not path.is_file():
-                  continue
-              if path.stat().st_size > 2_000_000:
+              if not path.is_file() or path.stat().st_size > 2_000_000:
                   continue
               if path.suffix.lower() not in text_suffixes and path.name not in {'Dockerfile', 'Makefile'}:
                   continue
@@ -129,4 +124,4 @@ jobs:
               print(f'  - {path}')
 
       - name: Run Amosclaud Word Book tests
-        run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py -q
+        run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py tests/test_book_studio.py -q
