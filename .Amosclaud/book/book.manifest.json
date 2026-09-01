@@ -1,8 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "book_id": "amosclaud-word-book",
   "title": "Amosclaud Word Book",
-  "purpose": "Canonical human-and-agent engineering knowledge system for Amosclaud.",
+  "purpose": "Canonical human-and-agent engineering knowledge and repository-watchdog system for Amosclaud.",
   "reading_target_minutes_per_chapter": 3,
   "truth_statuses": [
     "verified",
@@ -17,9 +17,25 @@
     "github_native": true,
     "amosclaud_native": true,
     "mode": "bidirectional-repository-runtime",
-    "rule": "Every meaningful Amosclaud change must be represented in the Book before it is eligible for completion or merge."
+    "rule": "Every Amosclaud repository action must consult the Book first. Every meaningful Amosclaud change must be represented in the Book before it is eligible for completion or merge."
+  },
+  "watchdog_contract": {
+    "name": "Slapface",
+    "repository_scoped": true,
+    "preflight_required": true,
+    "owner_repetitive_approval_required": false,
+    "identity_and_permission_checks_remain_required": true,
+    "active_blocker_cannot_be_overridden_by_owner_instruction": true,
+    "release_requires_repair_evidence": true,
+    "secret_values_must_never_be_recorded": true,
+    "secret_detection": {
+      "confirmed_secret": "block",
+      "probable_secret": "block",
+      "suspicious": "warn"
+    }
   },
   "chapters": [
+    {"id": "00", "slug": "slapface", "title": "Slapface — Repository Gatekeeper", "reading_minutes": 3, "audience": "both"},
     {"id": "01", "slug": "what-is-amosclaud", "title": "What Amosclaud Is", "reading_minutes": 3, "audience": "both"},
     {"id": "02", "slug": "platform", "title": "Amosclaud Platform", "reading_minutes": 3, "audience": "both"},
     {"id": "03", "slug": "agent", "title": "Self-Agent Programmer", "reading_minutes": 3, "audience": "both"},
@@ -34,7 +50,8 @@
   ],
   "agent_contract": {
     "copy_mode": "versioned-snapshot",
-    "must_read_before_work": ["01", "02"],
+    "must_read_before_work": ["00", "01", "02"],
+    "slapface_preflight_required": true,
     "must_report_change": true,
     "completion_requires_book_update": true
   }
