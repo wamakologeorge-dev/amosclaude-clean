@@ -431,7 +431,7 @@ def repository_watchdog_preflight(
     request: WatchdogPreflightRequest,
     user: sqlite3.Row = Depends(_current_user),
 ) -> dict[str, Any]:
-    watchdog = _repository_watchdog(repository_id, user)
+    watchdog = _repository_watchdog(repository_id, user, write=True)
     return _safe(
         lambda: watchdog.preflight(
             actor=_actor(user),
