@@ -1,14 +1,25 @@
 {
   "schema_version": 1,
   "name": "Slapface",
-  "description": "A fail-closed Amosclaud Book preflight that surfaces unfinished handoffs before repository work begins.",
-  "enforced": true,
+  "role": "public-book-introduction-and-preflight",
+  "description": "The public opening page of the Amosclaud Book plus a fail-closed continuity rule for governed agents.",
+  "public_readable": true,
+  "human_readable": true,
+  "agent_readable": true,
+  "book_style": ["readme", "mini-word", "documentation", "guidelines", "vision"],
+  "enforced_for_governed_agent_work": true,
   "fail_closed": true,
-  "intro_chapter": "00",
   "owner_bypass_allowed": false,
   "auto_copy_last_chapter_link": true,
   "remediation_requires_matching_handoff_id": true,
   "resolution_requires_verified_change_report": true,
+  "secret_detection": {
+    "hard_block_threshold": 0.92,
+    "lower_confidence_action": "warn",
+    "documentation_test_example_context_reduces_confidence": true,
+    "raw_secret_must_not_be_stored_or_returned": true,
+    "network_validation_of_suspected_secrets": false
+  },
   "clear_message": "No unfinished Slapface handoff is blocking this scope.",
   "blocked_message": "Stop before repository work. Read the linked chapter and repair the missing pieces first."
 }
