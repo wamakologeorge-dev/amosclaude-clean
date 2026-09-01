@@ -16,22 +16,23 @@ jobs:
         shell: bash
         env:
           REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           git init .
           git remote add origin "https://github.com/${REPOSITORY}.git"
           git fetch --no-tags --depth=1 origin "${HEAD_SHA}"
-          git checkout --detach FETCH_HEAD
+          git checkout --detach "${HEAD_SHA}"
 
       - name: Determine changed files
         shell: bash
         env:
-          BASE_REF: ${{ github.base_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE_REF" --depth=1
-          git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/amosclaud-changed-files.txt
+          git fetch --no-tags --depth=1 origin "${BASE_SHA}"
+          git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > /tmp/amosclaud-changed-files.txt
           cat /tmp/amosclaud-changed-files.txt
 
       - name: Slapface preflight and high-confidence secret gate
