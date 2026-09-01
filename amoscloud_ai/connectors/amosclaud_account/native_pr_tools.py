@@ -97,8 +97,12 @@ def register_native_pr_tools(
     async def amosclaud_list_pull_requests(
         repository_id: int,
         ctx: Context,
+        include_deleted: bool = False,
     ) -> dict[str, Any]:
-        """List native Amosclaud pull requests including control metadata."""
+        """List native Amosclaud pull requests including control metadata.
+
+        Set include_deleted=True to surface soft-deleted PRs that can be restored.
+        """
 
         if repository_id <= 0:
             raise RuntimeError("repository_id must be a positive integer")
@@ -107,11 +111,13 @@ def register_native_pr_tools(
             user_id=user_id,
             method="GET",
             path=f"/api/v1/amosclaud/production/repositories/{repository_id}/pull-requests",
+            query={"include_deleted": include_deleted} if include_deleted else None,
         )
         pull_requests = _body_or_raise(result, operation="List pull requests")
         return {
             "authority": "amosclaud",
             "repository_id": repository_id,
+            "include_deleted": include_deleted,
             "pull_requests": pull_requests,
             "count": len(pull_requests) if isinstance(pull_requests, list) else None,
         }
@@ -121,6 +127,7 @@ def register_native_pr_tools(
         repository_id: int,
         pull_request_id: int,
         ctx: Context,
+        include_deleted: bool = False,
     ) -> dict[str, Any]:
         """Get one native Amosclaud pull request and its latest Action evidence."""
 
@@ -131,6 +138,7 @@ def register_native_pr_tools(
             user_id=user_id,
             method="GET",
             path=f"/api/v1/amosclaud/production/repositories/{repository_id}/pull-requests",
+            query={"include_deleted": include_deleted} if include_deleted else None,
         )
         pull_requests = _body_or_raise(prs_result, operation="Get pull request")
         if not isinstance(pull_requests, list):

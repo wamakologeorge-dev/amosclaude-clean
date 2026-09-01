@@ -117,6 +117,38 @@ async def test_create_pull_request_routes_only_through_amosclaud_native_api():
 
 
 @pytest.mark.asyncio
+async def test_list_and_get_pull_requests_can_include_deleted_prs():
+    calls: list[dict[str, Any]] = []
+
+    async def request(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "status_code": 200,
+            "body": [{"id": 9, "state": "deleted"}],
+        }
+
+    mcp = _register(request)
+    list_result = await mcp.tools["amosclaud_list_pull_requests"](
+        repository_id=4,
+        ctx=object(),
+        include_deleted=True,
+    )
+    assert list_result["include_deleted"] is True
+    assert list_result["pull_requests"][0]["id"] == 9
+    assert calls[0]["query"] == {"include_deleted": True}
+
+    get_result = await mcp.tools["amosclaud_get_pull_request"](
+        repository_id=4,
+        pull_request_id=9,
+        ctx=object(),
+        include_deleted=True,
+    )
+    assert get_result["pull_request"]["id"] == 9
+    assert calls[1]["query"] == {"include_deleted": True}
+
+
+@pytest.mark.asyncio
 async def test_merge_tool_uses_verified_amosclaud_production_gate():
     calls: list[dict[str, Any]] = []
 
