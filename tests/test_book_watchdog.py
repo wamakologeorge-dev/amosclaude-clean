@@ -71,7 +71,9 @@ def test_suspicious_classification_warns_without_blocking() -> None:
 
 
 def test_private_key_material_is_confirmed_and_redacted() -> None:
-    source = "-----BEGIN PRIVATE KEY-----\nnot-a-real-private-key-body\n-----END PRIVATE KEY-----"
+    # Split the fixture in repository source so the PR-level Book scan does not
+    # mistake the detector's own test vector for a real checked-in private key.
+    source = "-----BEGIN " + "PRIVATE KEY-----\nnot-a-real-private-key-body\n-----END PRIVATE KEY-----"
 
     findings = detect_secrets(source)
     redacted, count = redact_book_text(source)
