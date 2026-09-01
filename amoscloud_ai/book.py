@@ -33,6 +33,8 @@ class AmosclaudBook:
         self.capabilities_path = self.root / "capabilities.json"
         self.changes_path = self.root / "changes.jsonl"
         self.next_task_path = self.root / "next-task.json"
+        self.slapface_policy_path = self.root / "slapface.json"
+        self.slapface_intro_path = self.root / "slapface.md"
         self.chapters_path = self.root / "chapters"
         self.runtime_path = self.root / ".runtime"
         self.progress_path = self.runtime_path / "progress"
@@ -68,7 +70,14 @@ class AmosclaudBook:
     def version(self) -> str:
         """Return a content hash representing the canonical portable Book state."""
         digest = hashlib.sha256()
-        paths = [self.manifest_path, self.capabilities_path, self.next_task_path, self.changes_path]
+        paths = [
+            self.manifest_path,
+            self.capabilities_path,
+            self.next_task_path,
+            self.slapface_policy_path,
+            self.slapface_intro_path,
+            self.changes_path,
+        ]
         paths.extend(sorted(self.chapters_path.glob("*.md")))
         for path in paths:
             digest.update(path.relative_to(self.root).as_posix().encode("utf-8"))
@@ -76,6 +85,22 @@ class AmosclaudBook:
             digest.update(path.read_bytes())
             digest.update(b"\0")
         return digest.hexdigest()
+
+    def slapface_intro(self) -> dict[str, Any]:
+        """Return the public Book preface used by humans and governed agents."""
+        try:
+            content = self.slapface_intro_path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise BookError(f"Required Book file is missing: {self.slapface_intro_path}") from exc
+        return {
+            "id": "slapface",
+            "title": "Slapface",
+            "position": "preface-before-chapters",
+            "public_readable": True,
+            "path": self.slapface_intro_path.relative_to(self.root).as_posix(),
+            "content": content,
+            "policy": self._load_json(self.slapface_policy_path),
+        }
 
     def chapters(self) -> list[dict[str, Any]]:
         manifest = self.manifest()
@@ -136,6 +161,9 @@ class AmosclaudBook:
             "service": "Amosclaud Word Book",
             "schema_version": self.manifest().get("schema_version"),
             "book_version": self.version(),
+            "public_readable": True,
+            "book_roles": ["readme", "mini-word", "documentation", "guidelines", "vision", "engineering-memory"],
+            "intro": {"id": "slapface", "title": "Slapface", "position": "before-chapters"},
             "chapter_count": len(chapters),
             "written_chapters": sum(1 for chapter in chapters if chapter["available"]),
             "capability_status_counts": counts,
@@ -167,6 +195,7 @@ class AmosclaudBook:
             "agent_id": actor,
             "book_version": self.version(),
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "slapface_intro": self.slapface_intro(),
             "chapters": selected,
             "capabilities": self.capabilities(),
             "next_task": self.next_task(),
