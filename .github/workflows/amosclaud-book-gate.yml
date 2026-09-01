@@ -138,4 +138,4 @@ jobs:
           PY
 
       - name: Run Amosclaud Word Book tests
-        run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py tests/test_book_studio.py -q
+        run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py tests/test_book_studio.py tests/test_book_license.py -q
