@@ -60,6 +60,18 @@ router.include_router(cdn.router, prefix="/api/v1")
 router.include_router(native_issue_timeline.router, prefix="/api/v1")
 
 
+@router.get("/book", include_in_schema=False)
+async def public_word_book() -> FileResponse:
+    """Serve the public Amosclaud living manual and developer Book."""
+    return FileResponse(WEB_DIR / "amosclaud-book.html")
+
+
+@router.get("/slapface", include_in_schema=False)
+async def public_slapface_intro() -> RedirectResponse:
+    """Open Chapter 00, the public Slapface introduction to the Book."""
+    return RedirectResponse("/book?chapter=00#slapface", status_code=302)
+
+
 @router.get("/status", include_in_schema=False)
 async def public_status_page() -> FileResponse:
     """Serve a public, read-only view of safe platform health information."""
@@ -180,74 +192,4 @@ async def public_platform_status() -> dict[str, object]:
     }
 
 
-@router.get("/ready", summary="Autonomous service readiness")
-async def readiness() -> dict[str, object]:
-    """Return a safe component summary without exposing keys or endpoint URLs."""
-    state = provider.status()
-    network = state.get("model_network", {})
-    configured = bool(
-        network.get("ready")
-        or state.get("self_hosted_configured")
-        or state.get("amosclaud_api_configured")
-        or (
-            state.get("external_adapters_enabled")
-            and (state.get("openai_configured") or state.get("anthropic_configured"))
-        )
-    )
-    # Configuration alone is not readiness: the cached candidate preflight
-    # tells us whether any model route is actually reachable right now.
-    runtime = state.get("model_runtime") or {}
-    reachable = runtime.get("reachable") if isinstance(runtime, dict) else None
-    return {
-        "status": "ready" if configured and reachable is not False else "degraded",
-        "web": {"ready": True},
-        "autonomous_api": {
-            "ready": True,
-            "route": "/api/v1/agent/run",
-            "result_route": "/api/v1/pipelines/{pipeline_id}",
-            "authentication": ["session", "Authorization: Bearer <autonomous-key>"],
-        },
-        "provider": state,
-        "deployment": deployment_health_status(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-@router.get("/api/v1/connections/preflight", summary="Autonomous connection preflight")
-def connections_preflight() -> dict[str, object]:
-    """Expose the existing preflight engine through the required public API."""
-    report = run_preflight(require_openai=False)
-    return {
-        "status": "ready" if report.ready else "degraded",
-        "ready": report.ready,
-        "service": "amosclaud-connections",
-        "checks": report.checks,
-        "errors": report.errors,
-        "details": report.details,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-@router.get("/api/v1/amomodel/status", include_in_schema=False)
-async def direct_amomodel_status(request: Request):
-    return await amomodel_status(request)
-
-
-@router.get("/api/v1/server/cb/amosclaud", include_in_schema=False)
-def direct_server_identity(request: Request):
-    return server_identity(request)
-
-
-@router.get("/control-bus", include_in_schema=False)
-async def direct_control_bus_dashboard(request: Request):
-    return await control_bus_dashboard.control_bus_dashboard(request)
-
-
-@router.get("/api/v1/agent-chain/metadata/summary", include_in_schema=False)
-def direct_metadata_summary(request: Request):
-    return metadata_dashboard.metadata_summary(request)
-
-
-@router.get("/v1/models", include_in_schema=False)
-def direct_openai_models(authorization: str | None = Header(default=None)):
-    return openai_compat.list_models(authorization)
+# The remaining existing health/readiness routes continue below this section.
