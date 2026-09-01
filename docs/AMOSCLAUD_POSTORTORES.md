@@ -79,8 +79,8 @@ This first change does **not** claim that Postortores is already a production-sc
 ## Roadmap
 
 1. Integrate Postortores behind the canonical Amosclaud platform persistence layer.
-2. Add authenticated REST/MCP interfaces and organization-aware policy enforcement.
-3. Add content-addressed blob/artifact storage and snapshots.
+2. Harden the bootstrap REST interface with signed credentials, MCP support and organization-aware policy enforcement.
+3. Harden content-addressed artifact storage and snapshots for production use.
 4. Add encrypted secrets/value classes and field-level access policy.
 5. Add replication, WAL shipping, backup/restore and point-in-time recovery.
 6. Add distributed vector indexes and larger memory stores.
