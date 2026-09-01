@@ -26,6 +26,70 @@ jobs:
           git diff --name-only "origin/$BASE_REF...HEAD" > /tmp/amosclaud-changed-files.txt
           cat /tmp/amosclaud-changed-files.txt
 
+      - name: Slapface preflight and high-confidence secret gate
+        shell: python
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          from amoscloud_ai.book_watchdog import secret_verdict
+
+          changed = [
+              line.strip()
+              for line in Path('/tmp/amosclaud-changed-files.txt').read_text().splitlines()
+              if line.strip()
+          ]
+          text_suffixes = {
+              '.py', '.js', '.jsx', '.ts', '.tsx', '.json', '.toml', '.yml', '.yaml',
+              '.md', '.txt', '.env', '.ini', '.cfg', '.sh', '.html', '.css', '.xml',
+          }
+          blocking = []
+          warnings = []
+          for raw in changed:
+              path = Path(raw)
+              if not path.is_file():
+                  continue
+              if path.stat().st_size > 2_000_000:
+                  continue
+              if path.suffix.lower() not in text_suffixes and path.name not in {'Dockerfile', 'Makefile'}:
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except (OSError, UnicodeDecodeError):
+                  continue
+              verdict = secret_verdict(text)
+              for finding in verdict['findings']:
+                  safe = {
+                      'path': raw,
+                      'line': finding['line'],
+                      'kind': finding['kind'],
+                      'classification': finding['classification'],
+                      'confidence': finding['confidence'],
+                      'fingerprint': finding['fingerprint'],
+                      'reasons': finding['reasons'],
+                  }
+                  if finding['classification'] in {'confirmed_secret', 'probable_secret'}:
+                      blocking.append(safe)
+                  else:
+                      warnings.append(safe)
+
+          for finding in warnings:
+              print(
+                  '::warning file={path},line={line}::Slapface suspicious text '
+                  '({kind}, confidence {confidence}). Review it; Book is not calling it a leak.'.format(**finding)
+              )
+          if blocking:
+              for finding in blocking:
+                  print(
+                      '::error file={path},line={line}::Slapface blocked high-confidence '
+                      'credential-like material ({kind}, {classification}, confidence {confidence}). '
+                      'The credential value is intentionally not printed.'.format(**finding)
+                  )
+              raise SystemExit(1)
+          print('Slapface secret preflight passed without high-confidence credential exposure.')
+
       - name: Enforce Amosclaud Word Book update
         shell: python
         run: |
@@ -65,4 +129,4 @@ jobs:
               print(f'  - {path}')
 
       - name: Run Amosclaud Word Book tests
-        run: python -m pytest tests/test_amosclaud_book.py -q
+        run: python -m pytest tests/test_amosclaud_book.py tests/test_book_watchdog.py -q
