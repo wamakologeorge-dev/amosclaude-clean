@@ -1,6 +1,6 @@
 # Slapface — The Opening Page of the Amosclaud Book
 
-**Audience:** founders, developers, operators, contributors, applications, and AI agents  
+**Audience:** founders, developers, operators, contributors, applications, and AI agents
 **Purpose:** vision, orientation, engineering guidance, continuity, and truth before work begins
 
 Slapface is the first page of the Amosclaud Book. It is public project guidance, not a private agent tool.
