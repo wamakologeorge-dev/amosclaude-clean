@@ -394,8 +394,17 @@ def verify_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     value.pop("audit_event_id", None)
     if value.get("receipt_type") != "amosclaud-book-license-receipt":
         return {"valid": False, "reason": "wrong_receipt_type"}
+
+    trusted = public_signer()
+    if (
+        value.get("signature_algorithm") != trusted["algorithm"]
+        or value.get("signer_key_id") != trusted["key_id"]
+        or value.get("signer_public_key") != trusted["public_key"]
+    ):
+        return {"valid": False, "reason": "untrusted_signer"}
+
     try:
-        public = Ed25519PublicKey.from_public_bytes(_unb64(str(value["signer_public_key"])))
+        public = Ed25519PublicKey.from_public_bytes(_unb64(trusted["public_key"]))
         public.verify(_unb64(signature), b"amosclaud-book-license-v1\0" + _canonical(value))
     except Exception:
         return {"valid": False, "reason": "signature_verification_failed"}
