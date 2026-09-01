@@ -69,6 +69,17 @@
       "suspicious": "warn"
     }
   },
+  "slapface_contract": {
+    "enabled": true,
+    "position": "preface-before-chapters",
+    "preflight_required_before_repository_work": true,
+    "owner_bypass_allowed": false,
+    "remediation_only_when_blocked": true,
+    "resolution_requires_verified_change_report": true,
+    "high_confidence_secret_exposure_blocks": true,
+    "lower_confidence_secret_like_values_warn_only": true,
+    "source_independent": ["amosclaud", "github", "local", "third-party"]
+  },
   "chapters": [
     {"id": "00", "slug": "slapface", "title": "Slapface — Introduction and Repository Gatekeeper", "reading_minutes": 3, "audience": "both"},
     {"id": "01", "slug": "what-is-amosclaud", "title": "What Amosclaud Is", "reading_minutes": 3, "audience": "both"},
@@ -85,6 +96,8 @@
     {"id": "12", "slug": "license-ownership", "title": "License and Ownership", "reading_minutes": 3, "audience": "both"}
   ],
   "agent_contract": {
+    "copy_mode": "versioned-snapshot",
+    "must_read_before_work": ["01", "02"],
     "copy_mode": "licensed-versioned-snapshot",
     "must_read_before_work": ["00", "01", "02"],
     "slapface_preflight_required": true,

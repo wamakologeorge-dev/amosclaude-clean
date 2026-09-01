@@ -1,3 +1,4 @@
+"""Native API router for the public Amosclaud Word Book and Slapface preflight."""
 # SPDX-License-Identifier: LicenseRef-Amosclaud-Book-Proprietary-1.0
 """Native API router for the Amosclaud Word Book, Book Studio, Slapface, and Book licensing."""
 from __future__ import annotations
@@ -14,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field
 
 from amoscloud_ai.book import AmosclaudBook, BookError
+from amoscloud_ai.slapface import Slapface
 from amoscloud_ai.book_license import (
     BOOK_LICENSE_ID,
     BOOK_LICENSE_TERMS_PATH,
@@ -49,6 +51,8 @@ def _book() -> AmosclaudBook:
     return AmosclaudBook()
 
 
+def _slapface() -> Slapface:
+    return Slapface()
 def _book_html(filename: str) -> HTMLResponse:
     """Serve a Book page with the shared proprietary-license UI boundary."""
     path = WEB_DIR / filename
@@ -126,6 +130,7 @@ class ChapterStudioSave(BaseModel):
 class AgentContextRequest(BaseModel):
     agent_id: str = Field(min_length=1, max_length=128)
     chapter_ids: list[str] | None = None
+    slapface_scope: str = Field(default="default", min_length=1, max_length=128)
 
 
 class ChangeReport(BaseModel):
@@ -146,50 +151,48 @@ class GateRequest(BaseModel):
     change_id: str | None = None
 
 
-class SecretCheckRequest(BaseModel):
-    text: str = Field(default="", max_length=2_000_000)
+class SlapfacePreflightRequest(BaseModel):
+    scope: str = Field(default="default", min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=128)
+    objective: str = Field(min_length=1, max_length=8000)
+    mode: str = Field(default="plan", min_length=1, max_length=64)
+    source: str = Field(default="amosclaud", min_length=1, max_length=128)
+    handoff_id: str | None = Field(default=None, max_length=200)
 
 
-class WatchdogPreflightRequest(BaseModel):
-    action: str = Field(min_length=1, max_length=200)
-    proposed_text: str = Field(default="", max_length=2_000_000)
-
-
-class SlapfaceBlockRequest(BaseModel):
-    summary: str = Field(min_length=1, max_length=4000)
-    chapter_link: str = Field(default=".Amosclaud/book/chapters/00-slapface.md", max_length=500)
-    missing_pieces: list[str] = Field(min_length=1, max_length=50)
-    reason: str = Field(default="unfinished_work", min_length=1, max_length=100)
+class SlapfaceHandoffRequest(BaseModel):
+    scope: str = Field(default="default", min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=128)
+    chapter_id: str = Field(min_length=1, max_length=16)
+    next_line: str = Field(min_length=1, max_length=4000)
+    risk: str = Field(min_length=1, max_length=4000)
+    missing_pieces: list[str] = Field(min_length=1, max_length=100)
+    required_paths: list[str] = Field(default_factory=list, max_length=200)
+    source: str = Field(default="amosclaud", min_length=1, max_length=128)
 
 
 class SlapfaceResolveRequest(BaseModel):
-    handoff_id: str = Field(min_length=1, max_length=100)
-    evidence: list[str] = Field(min_length=1, max_length=50)
+    scope: str = Field(default="default", min_length=1, max_length=128)
+    handoff_id: str = Field(min_length=1, max_length=200)
+    change_id: str = Field(min_length=1, max_length=200)
+    actor: str = Field(min_length=1, max_length=128)
 
 
-class BookLicenseGrantRequest(BaseModel):
-    subject_type: Literal["account", "organization"]
-    subject_id: int = Field(gt=0)
-    permissions: list[Literal["copy", "export", "redistribute"]] = Field(min_length=1, max_length=3)
-    repository_id: int | None = Field(default=None, gt=0)
-    expires_at: datetime | None = None
-    billing_terms_accepted: bool = False
-
-
-class BookLicenseActionRequest(BaseModel):
-    action: Literal["copy", "export", "redistribute"] = "export"
-    organization_id: int | None = Field(default=None, gt=0)
-    repository_id: int | None = Field(default=None, gt=0)
-    chapter_id: str | None = Field(default=None, max_length=20)
-
-
-class BookReceiptVerifyRequest(BaseModel):
-    receipt: dict[str, Any]
+class SecretScanRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2_000_000)
+    path: str = Field(default="<submitted-text>", min_length=1, max_length=1000)
 
 
 @router.get("")
 def book_home() -> dict[str, Any]:
-    return _safe(lambda: {"manifest": _book().manifest(), "status": _book().status()})
+    return _safe(
+        lambda: {
+            "manifest": _book().manifest(),
+            "status": _book().status(),
+            "intro": _book().slapface_intro(),
+            "slapface": _slapface().status(),
+        }
+    )
 
 
 @router.get("/reader", include_in_schema=False)
@@ -337,9 +340,20 @@ def verify_book_receipt(request: BookReceiptVerifyRequest) -> dict[str, Any]:
     return verify_receipt(request.receipt)
 
 
+@router.get("/slapface", include_in_schema=False)
+def slapface_reader_alias() -> FileResponse:
+    """Public alias: Slapface is the opening page of the Book reader."""
+    return FileResponse(WEB_DIR / "amosclaud-book.html")
+
+
+@router.get("/slapface/content")
+def slapface_content() -> dict[str, Any]:
+    return _safe(lambda: _book().slapface_intro())
+
+
 @router.get("/status")
 def book_status() -> dict[str, Any]:
-    return _safe(lambda: _book().status())
+    return _safe(lambda: {**_book().status(), "slapface": _slapface().status()})
 
 
 @router.get("/chapters")
@@ -402,7 +416,23 @@ def book_next_task() -> dict[str, Any]:
 
 @router.post("/agent-context")
 def book_agent_context(request: AgentContextRequest) -> dict[str, Any]:
-    return _safe(lambda: _book().agent_context(request.agent_id, request.chapter_ids))
+    def build_context() -> dict[str, Any]:
+        slapface = _slapface().status(request.slapface_scope)
+        if slapface["blocked"]:
+            return {
+                "agent_id": request.agent_id,
+                "intro": _book().slapface_intro(),
+                "slapface": slapface,
+                "work_allowed": False,
+                "message": "Read Slapface and resolve the active handoff before normal engineering work.",
+            }
+        return {
+            **_book().agent_context(request.agent_id, request.chapter_ids),
+            "slapface": slapface,
+            "work_allowed": True,
+        }
+
+    return _safe(build_context)
 
 
 @router.post("/gate")
@@ -410,66 +440,55 @@ def book_gate(request: GateRequest) -> dict[str, Any]:
     return _safe(lambda: _book().gate(request.changed_files, request.change_id))
 
 
-@router.post("/secret-check")
-def book_secret_check(request: SecretCheckRequest) -> dict[str, Any]:
-    """Classify likely credentials locally without returning candidate values."""
-    return secret_verdict(request.text)
+@router.get("/slapface/status")
+def slapface_status(scope: str = Query(default="default", min_length=1, max_length=128)) -> dict[str, Any]:
+    return _safe(lambda: _slapface().status(scope))
 
 
-@router.get("/repositories/{repository_id}/watchdog")
-def repository_watchdog_status(
-    repository_id: int,
-    user: sqlite3.Row = Depends(_current_user),
-) -> dict[str, Any]:
-    watchdog = _repository_watchdog(repository_id, user)
-    return _safe(watchdog.status)
-
-
-@router.post("/repositories/{repository_id}/preflight")
-def repository_watchdog_preflight(
-    repository_id: int,
-    request: WatchdogPreflightRequest,
-    user: sqlite3.Row = Depends(_current_user),
-) -> dict[str, Any]:
-    watchdog = _repository_watchdog(repository_id, user, write=True)
+@router.post("/slapface/preflight")
+def slapface_preflight(request: SlapfacePreflightRequest) -> dict[str, Any]:
     return _safe(
-        lambda: watchdog.preflight(
-            actor=_actor(user),
-            action=request.action,
-            proposed_text=request.proposed_text,
-        )
-    )
-
-
-@router.post("/repositories/{repository_id}/slapface/block")
-def repository_slapface_block(
-    repository_id: int,
-    request: SlapfaceBlockRequest,
-    user: sqlite3.Row = Depends(_current_user),
-) -> dict[str, Any]:
-    watchdog = _repository_watchdog(repository_id, user, write=True)
-    return _safe(
-        lambda: watchdog.block_handoff(
-            actor=_actor(user),
-            summary=request.summary,
-            chapter_link=request.chapter_link,
-            missing_pieces=request.missing_pieces,
-            reason=request.reason,
-        )
-    )
-
-
-@router.post("/repositories/{repository_id}/slapface/resolve")
-def repository_slapface_resolve(
-    repository_id: int,
-    request: SlapfaceResolveRequest,
-    user: sqlite3.Row = Depends(_current_user),
-) -> dict[str, Any]:
-    watchdog = _repository_watchdog(repository_id, user, write=True)
-    return _safe(
-        lambda: watchdog.resolve_handoff(
-            actor=_actor(user),
+        lambda: _slapface().preflight(
+            workspace=None,
+            scope=request.scope,
+            agent_id=request.agent_id,
+            objective=request.objective,
+            mode=request.mode,
+            source=request.source,
             handoff_id=request.handoff_id,
-            evidence=request.evidence,
+            scan_secrets=False,
         )
     )
+
+
+@router.post("/slapface/handoffs")
+def slapface_record_handoff(request: SlapfaceHandoffRequest) -> dict[str, Any]:
+    return _safe(
+        lambda: _slapface().record_handoff(
+            scope=request.scope,
+            agent_id=request.agent_id,
+            chapter_id=request.chapter_id,
+            next_line=request.next_line,
+            risk=request.risk,
+            missing_pieces=request.missing_pieces,
+            required_paths=request.required_paths,
+            source=request.source,
+        )
+    )
+
+
+@router.post("/slapface/resolve")
+def slapface_resolve(request: SlapfaceResolveRequest) -> dict[str, Any]:
+    return _safe(
+        lambda: _slapface().resolve(
+            scope=request.scope,
+            handoff_id=request.handoff_id,
+            change_id=request.change_id,
+            actor=request.actor,
+        )
+    )
+
+
+@router.post("/slapface/scan")
+def slapface_scan(request: SecretScanRequest) -> dict[str, Any]:
+    return _safe(lambda: Slapface.scan_text(request.text, path=request.path))
