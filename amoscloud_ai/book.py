@@ -1,8 +1,11 @@
-"""Amosclaud Word Book: repository-native and Amosclaud-native engineering memory.
+"""Amosclaud Word Book: public living manual and repository-native engineering memory.
 
 The repository representation under ``.Amosclaud/book`` is intentionally plain
 JSON/JSONL/Markdown so Git, local Amosclaud installations, Desktop, SpaceCodeMe
 and future MCP clients can consume the same contract without a GitHub-only API.
+The Book is readable documentation first; repository-scoped Slapface runtime
+state provides the watchdog behavior without turning the Book into a secret
+store.
 """
 from __future__ import annotations
 
@@ -13,6 +16,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from amoscloud_ai.book_watchdog import secret_verdict
 
 BOOK_ROOT_ENV = "AMOSCLAUD_BOOK_ROOT"
 DEFAULT_BOOK_ROOT = Path(__file__).resolve().parents[1] / ".Amosclaud" / "book"
@@ -33,6 +38,8 @@ class AmosclaudBook:
         self.capabilities_path = self.root / "capabilities.json"
         self.changes_path = self.root / "changes.jsonl"
         self.next_task_path = self.root / "next-task.json"
+        self.slapface_policy_path = self.root / "slapface.json"
+        self.slapface_intro_path = self.root / "slapface.md"
         self.chapters_path = self.root / "chapters"
         self.runtime_path = self.root / ".runtime"
         self.progress_path = self.runtime_path / "progress"
@@ -62,13 +69,44 @@ class AmosclaudBook:
             raise BookError("actor must contain at least one safe identifier character")
         return value[:128]
 
+    @staticmethod
+    def _refuse_secrets(value: Any, *, operation: str) -> None:
+        """Keep raw credentials out of durable Book data.
+
+        Suspicious-only findings remain non-blocking. Confirmed/probable
+        credential material is rejected before any Book file is opened for
+        writing, and the candidate value is never included in the exception.
+        """
+        payload = json.dumps(value, ensure_ascii=False, default=str)
+        verdict = secret_verdict(payload)
+        if not verdict["allowed"]:
+            kinds = sorted(
+                {
+                    str(item.get("kind"))
+                    for item in verdict["findings"]
+                    if item.get("classification") in {"confirmed_secret", "probable_secret"}
+                }
+            )
+            label = ", ".join(kinds) if kinds else "credential-like material"
+            raise BookError(
+                f"Book refused {operation}: high-confidence {label} was detected. "
+                "The raw value was not stored. Use an environment/secret reference instead."
+            )
+
     def manifest(self) -> dict[str, Any]:
         return self._load_json(self.manifest_path)
 
     def version(self) -> str:
         """Return a content hash representing the canonical portable Book state."""
         digest = hashlib.sha256()
-        paths = [self.manifest_path, self.capabilities_path, self.next_task_path, self.changes_path]
+        paths = [
+            self.manifest_path,
+            self.capabilities_path,
+            self.next_task_path,
+            self.slapface_policy_path,
+            self.slapface_intro_path,
+            self.changes_path,
+        ]
         paths.extend(sorted(self.chapters_path.glob("*.md")))
         for path in paths:
             digest.update(path.relative_to(self.root).as_posix().encode("utf-8"))
@@ -76,6 +114,22 @@ class AmosclaudBook:
             digest.update(path.read_bytes())
             digest.update(b"\0")
         return digest.hexdigest()
+
+    def slapface_intro(self) -> dict[str, Any]:
+        """Return the public Book preface used by humans and governed agents."""
+        try:
+            content = self.slapface_intro_path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise BookError(f"Required Book file is missing: {self.slapface_intro_path}") from exc
+        return {
+            "id": "slapface",
+            "title": "Slapface",
+            "position": "preface-before-chapters",
+            "public_readable": True,
+            "path": self.slapface_intro_path.relative_to(self.root).as_posix(),
+            "content": content,
+            "policy": self._load_json(self.slapface_policy_path),
+        }
 
     def chapters(self) -> list[dict[str, Any]]:
         manifest = self.manifest()
@@ -132,15 +186,21 @@ class AmosclaudBook:
         for capability in capabilities:
             status = str(capability.get("status", "unknown"))
             counts[status] = counts.get(status, 0) + 1
+        manifest = self.manifest()
         return {
             "service": "Amosclaud Word Book",
-            "schema_version": self.manifest().get("schema_version"),
+            "schema_version": manifest.get("schema_version"),
             "book_version": self.version(),
+            "public_readable": True,
+            "book_roles": ["readme", "mini-word", "documentation", "guidelines", "vision", "engineering-memory"],
+            "intro": {"id": "slapface", "title": "Slapface", "position": "before-chapters"},
             "chapter_count": len(chapters),
             "written_chapters": sum(1 for chapter in chapters if chapter["available"]),
             "capability_status_counts": counts,
             "change_count": len(self.changes(limit=1000)),
             "next_task": self.next_task(),
+            "public_reading": bool(manifest.get("product_contract", {}).get("public_reading", True)),
+            "slapface_preflight": bool(manifest.get("agent_contract", {}).get("slapface_preflight_required", False)),
             "truth_rule": "Book status describes recorded evidence; it is not proof of production health by itself.",
         }
 
@@ -167,11 +227,14 @@ class AmosclaudBook:
             "agent_id": actor,
             "book_version": self.version(),
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "slapface_intro": self.slapface_intro(),
             "chapters": selected,
             "capabilities": self.capabilities(),
             "next_task": self.next_task(),
             "change_rule": self.manifest().get("sync_contract", {}).get("rule"),
+            "slapface_rule": self.manifest().get("watchdog_contract"),
         }
+        self._refuse_secrets(snapshot, operation="agent context snapshot")
         self._atomic_json(self.agents_path / f"{actor}.json", snapshot)
         return snapshot
 
@@ -184,6 +247,7 @@ class AmosclaudBook:
             raise BookError("files_changed must not be empty")
         if not report.get("chapters_updated"):
             raise BookError("chapters_updated must not be empty")
+        self._refuse_secrets(report, operation="change report")
         valid_chapters = {chapter["id"] for chapter in self.chapters()}
         invalid = [str(value).zfill(2) for value in report["chapters_updated"] if str(value).zfill(2) not in valid_chapters]
         if invalid:

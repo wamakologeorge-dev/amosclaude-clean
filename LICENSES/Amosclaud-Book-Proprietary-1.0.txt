@@ -1,0 +1,134 @@
+AMOSCLAUD BOOK PROPRIETARY LICENSE v1.0
+Production Draft — Legal Review Recommended Before Commercial Enforcement
+Effective for covered material first distributed with this license notice.
+
+Copyright (c) Amosclaud. All rights reserved.
+
+1. PURPOSE AND OWNERSHIP
+This license governs the Amosclaud Book product identified by the applicable
+license notice or Amosclaud Book manifest (the "Book Product"). The Book Product
+includes covered Book chapters, manifests, Slapface/watchdog material, Book
+Studio material, Book-specific graphics/3D directives and assets, and Book
+software files that expressly identify this license.
+
+The Book Product is proprietary Amosclaud material. No rights are granted except
+those expressly stated in this license or in a separate written agreement issued
+by Amosclaud.
+
+2. RELATIONSHIP TO THE REPOSITORY MIT LICENSE
+The Amosclaud repository may also contain software distributed under the MIT
+License or other licenses. Those licenses continue to govern the files to which
+they apply. This license does not revoke rights already granted under an earlier
+license and does not change the license of unrelated Amosclaud components.
+
+A file or product is governed by this license only when it is identified by one
+or more of the following:
+(a) an SPDX-style identifier of LicenseRef-Amosclaud-Book-Proprietary-1.0;
+(b) the Amosclaud Book manifest license scope; or
+(c) a Book-specific LICENSE or license-scope document that names the file.
+
+3. PERMITTED READING AND AUTHORIZED USE
+Subject to these terms, Amosclaud permits a person to:
+(a) read the publicly presented Book Product through an authorized Amosclaud or
+    repository interface;
+(b) make transient technical copies that are reasonably necessary for ordinary
+    viewing, caching, execution, backup, or security scanning;
+(c) use the Book Product internally within an Amosclaud account or organization
+    when that use is covered by an active Amosclaud entitlement or written
+    permission; and
+(d) allow authorized human users and software agents within that same licensed
+    account or organization to read and use the Book Product for the authorized
+    purpose.
+
+These permissions do not include a right to redistribute, republish, resell,
+sublicense, mirror, white-label, extract for a competing product, or create a
+separately distributed derivative of the Book Product.
+
+4. COPY, EXPORT, AND REDISTRIBUTION
+Except for the permitted uses in Section 3, no person may copy, export,
+redistribute, publish, sell, sublicense, mirror, or commercially exploit the Book
+Product without an Amosclaud-issued license or separate written permission.
+
+An Amosclaud-issued export or copy permission may be bound to an account,
+organization, repository, Book version, purpose, term, or other stated scope.
+The recipient must preserve license and provenance notices supplied with an
+authorized export.
+
+5. PROVENANCE AND LICENSE VERIFICATION
+Amosclaud may attach visible or machine-readable provenance to an authorized
+Book export, including a license identifier, account or organization identifier,
+repository identifier, Book version or content hash, issue time, permitted
+action, and cryptographic signature.
+
+Such provenance is intended to verify authorization and integrity. Amosclaud
+must not place private signing keys, API keys, access tokens, passwords, or other
+credentials in a Book document or provenance receipt.
+
+License verification may confirm whether an identified Amosclaud license or
+signed receipt is valid, expired, revoked, or outside its authorized scope.
+Verification must not be represented as proof of a person's identity beyond the
+account or organization data actually held by Amosclaud.
+
+6. NO HIDDEN SURVEILLANCE
+This license does not authorize covert device surveillance, credential
+collection, or hidden tracking of unrelated activity. Any telemetry used for
+license verification or audit must be limited to disclosed Amosclaud product,
+account, organization, repository, license, provenance, and action metadata that
+is reasonably necessary to operate and protect the Book Product.
+
+7. LICENSE VIOLATIONS AND SERVICE CONTROLS
+When Amosclaud has reliable evidence that an identified account or organization
+is using the Book Product outside its license, Amosclaud may, subject to
+applicable law and any governing customer agreement:
+(a) block or suspend Book copy/export functionality;
+(b) revoke or suspend the affected Book entitlement;
+(c) preserve relevant audit and provenance records;
+(d) request that unauthorized copies be removed or licensed; and
+(e) pursue contractual or legal remedies available to Amosclaud.
+
+Amosclaud must not fabricate a debt or automatically charge an unidentified
+person. An invoice, fee, or charge for excess or unauthorized use is permitted
+only when the identified customer has accepted a contract, order, pricing term,
+or other enforceable billing arrangement authorizing that charge.
+
+8. SECURITY AND SECRETS
+The Book Product must not intentionally store or disclose plaintext API keys,
+access tokens, passwords, private signing keys, or comparable secrets. Book
+security mechanisms may block high-confidence credential exposure and may store
+non-reversible fingerprints or safe metadata needed for security and audit.
+
+9. THIRD-PARTY MATERIAL
+This license grants rights only in material Amosclaud has the right to license.
+Third-party libraries, fonts, code, media, models, datasets, or other components
+remain governed by their applicable licenses and notices.
+
+10. TERMINATION
+Rights granted under this license terminate for a material breach that is not
+cured within any cure period required by an applicable written agreement or by
+law. Termination does not alter rights in unrelated MIT-licensed or separately
+licensed Amosclaud components.
+
+11. NO WARRANTY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE BOOK PRODUCT IS PROVIDED "AS IS"
+WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+12. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, AMOSCLAUD AND ITS LICENSORS WILL NOT BE
+LIABLE UNDER THIS LICENSE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR
+PUNITIVE DAMAGES, OR LOSS OF PROFITS, DATA, OR BUSINESS, EXCEPT TO THE EXTENT A
+LIMITATION IS PROHIBITED BY LAW OR A SEPARATE SIGNED AGREEMENT STATES OTHERWISE.
+
+13. WRITTEN COMMERCIAL TERMS
+A signed order form, enterprise agreement, commercial license, or other written
+agreement may grant additional Book rights or replace conflicting provisions of
+this license for the parties and scope identified in that agreement.
+
+14. LEGAL REVIEW STATUS
+This v1.0 text is an Amosclaud production draft intended to establish clear
+product scope and engineering enforcement. Amosclaud should obtain review from a
+qualified software/IP attorney before relying on this text for material
+commercial enforcement, statutory claims, penalties, or cross-jurisdictional
+contract disputes.
+
+License identifier: LicenseRef-Amosclaud-Book-Proprietary-1.0
