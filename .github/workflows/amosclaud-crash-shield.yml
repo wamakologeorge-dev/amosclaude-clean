@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   crash-risk-scan:
-    name: Crash-risk line warnings
+    name: Crash-risk line protection
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -35,7 +36,18 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Scan for crash-risk lines
+      - name: Block new critical crash-risk lines
+        if: github.event_name == 'pull_request'
+        run: >-
+          python scripts/ci/amosclaud_crash_shield.py
+          --root .
+          --changed-since "${{ github.event.pull_request.base.sha }}"
+          --github-annotations
+          --json-report amosclaud-crash-shield-report.json
+          --fail-on-critical
+
+      - name: Scan full repository baseline
+        if: github.event_name != 'pull_request'
         run: >-
           python scripts/ci/amosclaud_crash_shield.py
           --root .
@@ -47,24 +59,28 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
+
           report = Path('amosclaud-crash-shield-report.json')
           if not report.exists():
-              print('### Amosclaud Crash Shield\n\nScanner did not produce a report.')
-              raise SystemExit(0)
-          data = json.loads(report.read_text())
-          findings = data.get('findings', [])
-          counts = {}
-          for item in findings:
-              counts[item['severity']] = counts.get(item['severity'], 0) + 1
-          summary = (
-              '### Amosclaud Crash Shield\n\n'
-              f"Found **{len(findings)}** crash-risk line(s): "
-              f"{counts.get('critical', 0)} critical, "
-              f"{counts.get('high', 0)} high, "
-              f"{counts.get('medium', 0)} medium.\n\n"
-              'Findings are advisory warnings in this first rollout so existing code is not unexpectedly blocked.'
-          )
-          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as fh:
+              summary = '### Amosclaud Crash Shield\n\nScanner did not produce a report.'
+          else:
+              data = json.loads(report.read_text())
+              findings = data.get('findings', [])
+              counts = {}
+              for item in findings:
+                  counts[item['severity']] = counts.get(item['severity'], 0) + 1
+              mode = 'new/changed lines' if os.environ.get('GITHUB_EVENT_NAME') == 'pull_request' else 'full repository baseline'
+              summary = (
+                  '### Amosclaud Crash Shield\n\n'
+                  f"Scanned **{mode}** and found **{len(findings)}** crash-risk line(s): "
+                  f"{counts.get('critical', 0)} critical, "
+                  f"{counts.get('high', 0)} high, "
+                  f"{counts.get('medium', 0)} medium.\n\n"
+                  'Pull requests are blocked only when they introduce a new **critical** crash-risk line. '
+                  'Existing repository findings remain visible without freezing development.'
+              )
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as fh:
               fh.write(summary + '\n')
           PY
