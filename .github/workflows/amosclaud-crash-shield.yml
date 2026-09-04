@@ -1,0 +1,70 @@
+name: Amosclaud Crash Shield
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amosclaud-crash-shield-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  crash-risk-scan:
+    name: Crash-risk line warnings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Scan for crash-risk lines
+        run: >-
+          python scripts/ci/amosclaud_crash_shield.py
+          --root .
+          --github-annotations
+          --json-report amosclaud-crash-shield-report.json
+
+      - name: Publish scan summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = Path('amosclaud-crash-shield-report.json')
+          if not report.exists():
+              print('### Amosclaud Crash Shield\n\nScanner did not produce a report.')
+              raise SystemExit(0)
+          data = json.loads(report.read_text())
+          findings = data.get('findings', [])
+          counts = {}
+          for item in findings:
+              counts[item['severity']] = counts.get(item['severity'], 0) + 1
+          summary = (
+              '### Amosclaud Crash Shield\n\n'
+              f"Found **{len(findings)}** crash-risk line(s): "
+              f"{counts.get('critical', 0)} critical, "
+              f"{counts.get('high', 0)} high, "
+              f"{counts.get('medium', 0)} medium.\n\n"
+              'Findings are advisory warnings in this first rollout so existing code is not unexpectedly blocked.'
+          )
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as fh:
+              fh.write(summary + '\n')
+          PY
