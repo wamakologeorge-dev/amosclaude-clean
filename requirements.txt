@@ -33,17 +33,17 @@ pydantic-settings>=2.2,<3
 gitpython>=3.1.59,<4
 click>=8.4.2,<9
 build>=1.5.0,<2
-flake8>=6,<8
+flake8>=7.3.0,<8
 pylint>=4.0.6,<5
 mypy>=2.3.0,<3
 bandit>=1.9.4,<2
 black>=24.4,<27
 isort>=8.0.1,<9
-requests>=2.31,<3
+requests>=2.34.2,<3
 httpx>=0.28.1,<1
 mcp>=1.27.2,<2
 stripe>=15.5.0,<16
-aiofiles>=23.2,<25
+aiofiles>=25.1.0,<26
 python-dotenv>=1.0,<2
 PyYAML>=6.0,<7
 dnspython>=2.6,<3
@@ -59,5 +59,5 @@ opentelemetry-instrumentation-logging==0.65b0
 opentelemetry-instrumentation-sqlalchemy==0.65b0
 opentelemetry-instrumentation-redis==0.65b0
 pytest>=9.1.1,<10
-pytest-asyncio>=0.23,<2
+pytest-asyncio>=1.4.0,<2
 pytest-cov>=7.1.0,<8

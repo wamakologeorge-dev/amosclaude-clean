@@ -10,11 +10,16 @@ from collections import defaultdict, deque
 from threading import Lock
 
 import redis
-from fastapi import Request
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from amoscloud_ai.book_watchdog import (
+    BookWatchdogError,
+    RepositoryBookWatchdog,
+    repository_root_from_request_path,
+)
 from amoscloud_ai.core.access import AccessMode, AccessPolicy
 
 REPOSITORY_OAUTH_STATE_COOKIE = "amos_github_oauth_state"
@@ -44,7 +49,7 @@ def _route_repository_oauth_callback(request: Request) -> None:
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    """Apply network policy, headers, request limits, origin checks, and abuse protection."""
+    """Apply network, origin, abuse, and Amosclaud Book watchdog controls."""
 
     _lock = Lock()
     _attempts: dict[str, deque[float]] = defaultdict(deque)
@@ -167,6 +172,87 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return self.trusted_origins | self.approval_origins
         return self.trusted_origins
 
+    async def _book_watchdog_preflight(self, request: Request) -> tuple[dict | None, JSONResponse | None]:
+        """Run Slapface before authorized Amosclaud repository work.
+
+        The middleware must not expose repository-specific handoffs or create
+        watchdog events for anonymous users, public viewers, or users who only
+        guessed a repository id. Identity and repository write scope are proven
+        first; Slapface then decides whether the authorized work itself may
+        proceed to the endpoint.
+        """
+
+        repository_root = repository_root_from_request_path(request.url.path)
+        if repository_root is None or not repository_root.is_dir():
+            return None, None
+
+        token = request.cookies.get("amos_session")
+        if not token:
+            return None, None
+
+        # Import lazily to avoid coupling middleware module import to route setup.
+        from amoscloud_ai.api.routes.auth import get_user_from_session
+        from amoscloud_ai.api.routes.repositories import _access, _db
+
+        user = get_user_from_session(token)
+        if not user:
+            return None, None
+        try:
+            repository_id = int(repository_root.name)
+        except ValueError:
+            return None, None
+
+        try:
+            with _db() as db:
+                access = _access(db, repository_id, user["id"])
+        except HTTPException:
+            return None, None
+        if access["role"] not in {"owner", "developer"}:
+            # Public/viewer reads stay readable, but private runtime watchdog
+            # state is never exposed to them and they cannot create events.
+            return None, None
+
+        proposed_text = ""
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            try:
+                body = await request.body()
+                proposed_text = body.decode("utf-8", errors="ignore")
+            except Exception:
+                proposed_text = ""
+
+        watchdog = RepositoryBookWatchdog(repository_root)
+        try:
+            verdict = watchdog.preflight(
+                actor=f"account:{user['id']}",
+                action=f"{request.method} {request.url.path}",
+                proposed_text=proposed_text,
+            )
+        except BookWatchdogError as exc:
+            return None, JSONResponse(
+                {
+                    "detail": "Amosclaud Book could not safely evaluate this repository request.",
+                    "error": "book_watchdog_error",
+                    "reason": type(exc).__name__,
+                },
+                status_code=409,
+            )
+
+        if verdict.get("work_allowed") is False:
+            return verdict, JSONResponse(
+                {
+                    "detail": verdict.get("message"),
+                    "error": "slapface_blocked",
+                    "slapface": {
+                        "reason": verdict.get("reason"),
+                        "handoff": verdict.get("handoff"),
+                        "secret_findings": verdict.get("secret_findings", []),
+                    },
+                },
+                status_code=409,
+                headers={"Cache-Control": "no-store", "X-Amosclaud-Book": "blocked"},
+            )
+        return verdict, None
+
     async def dispatch(self, request: Request, call_next):
         _route_repository_oauth_callback(request)
 
@@ -213,7 +299,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             if origin and origin.rstrip("/") not in allowed_origins:
                 return JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
 
+        book_verdict, book_response = await self._book_watchdog_preflight(request)
+        if book_response is not None:
+            return book_response
+
         response = await call_next(request)
+        if book_verdict is not None:
+            findings = book_verdict.get("secret_findings") or []
+            warning = any(item.get("classification") == "suspicious" for item in findings)
+            response.headers.setdefault(
+                "X-Amosclaud-Book",
+                "allowed-with-warning" if warning else "allowed",
+            )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")

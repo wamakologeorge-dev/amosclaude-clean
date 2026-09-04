@@ -273,3 +273,17 @@ def account_resource(ctx: Context) -> dict[str, Any]:
 
     user_id, _, _ = _identity(ctx)
     return _account_row(user_id)
+
+
+# First-class repository/PR/Action tools use Amosclaud's native control plane.
+# Keep registration here so every hosted account connector exposes the same
+# governed development surface without handing an MCP client provider secrets.
+from .native_pr_tools import register_native_pr_tools
+
+register_native_pr_tools(
+    mcp=mcp,
+    require_scope=_require,
+    request_as_user=request_as_user,
+    read_annotations=READ_ANNOTATIONS,
+    write_annotations=WRITE_ANNOTATIONS,
+)

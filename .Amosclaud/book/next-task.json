@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "active",
+  "task": "Verify Slapface and Book Studio, then roll the Book contract into every Amosclaud-managed developer repository.",
+  "why": "The central Book now has the public reader, Word-style authoring, graphics/3D directives, secret-safe publishing and Slapface watchdog behavior. The next step is to prove those gates in CI and give each third-party repository its own Book instance without mixing repository data.",
+  "required_context": ["00", "01", "02", "09"],
+  "acceptance": [
+    "Book Gate CI passes the Slapface, Book runtime and Book Studio tests.",
+    "High-confidence secret fixtures block without printing or storing their values.",
+    "Suspicious-only values warn without blocking normal work.",
+    "Public reader renders structured graphics and supported Amosclaud 3D directives.",
+    "Authenticated Book Studio can edit the canonical Book while preserving Markdown/directive source for agents.",
+    "New Amosclaud-managed repositories receive a repository-scoped Book/Slapface starter contract.",
+    "Repository owner Books remain isolated from other owners and never store raw credentials."
+  ]
+}
