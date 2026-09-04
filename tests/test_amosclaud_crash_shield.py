@@ -50,3 +50,20 @@ def test_flags_node_process_exit(tmp_path: Path):
     path.write_text("if (fatal) process.exit(1);\n", encoding="utf-8")
     findings = shield.scan_javascript(path, tmp_path)
     assert any(item.rule == "JS001" for item in findings)
+
+
+def test_changed_line_filter_keeps_only_new_risk_lines(tmp_path: Path):
+    findings = _python_findings(
+        tmp_path,
+        "import sys\n\ndef old_stop():\n    sys.exit(1)\n\ndef new_stop():\n    sys.exit(2)\n",
+    )
+    filtered = shield.filter_to_changed_lines(findings, {"service.py": {7}})
+    assert len(filtered) == 1
+    assert filtered[0].line == 7
+    assert filtered[0].rule == "PY004"
+
+
+def test_changed_line_filter_does_not_block_legacy_critical_risk(tmp_path: Path):
+    findings = _python_findings(tmp_path, "import sys\ndef stop():\n    sys.exit(1)\n")
+    assert any(item.severity == "critical" for item in findings)
+    assert shield.filter_to_changed_lines(findings, {"service.py": {1, 2}}) == []
