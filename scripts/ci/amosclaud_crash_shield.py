@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
 """Amosclaud Crash Shield: warn on code patterns that can crash or hang production.
 
-The scanner is intentionally dependency-free so it can run before application
-installation. Findings are advisory by default; --fail-on-critical makes only
-critical findings block CI.
+The scanner is dependency-free so it can run before application installation.
+It can scan the whole repository or only lines changed since a Git base ref.
 """
 from __future__ import annotations
 
 import argparse
 import ast
 import json
-import os
 import re
 import subprocess
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "dist", "build", "vendor", "__pycache__"}
 TEXT_SUFFIXES = {".py", ".js", ".mjs", ".cjs"}
+HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
 
 @dataclass(frozen=True)
@@ -55,7 +53,12 @@ class PythonCrashVisitor(ast.NodeVisitor):
         if self.scope_depth == 0 and isinstance(node.value, ast.Attribute):
             value = node.value
             if isinstance(value.value, ast.Name) and value.value.id == "os" and value.attr == "environ":
-                self.add(node, "PY001", "high", "Module-level os.environ[...] can crash service startup when a variable is missing; prefer os.getenv plus explicit validation.")
+                self.add(
+                    node,
+                    "PY001",
+                    "high",
+                    "Module-level os.environ[...] can crash service startup when a variable is missing; prefer os.getenv plus explicit validation.",
+                )
         self.generic_visit(node)
 
     def visit_Raise(self, node: ast.Raise) -> None:
@@ -154,6 +157,43 @@ def iter_source_files(root: Path) -> list[Path]:
     return files
 
 
+def changed_lines_since(root: Path, base_ref: str) -> dict[str, set[int]]:
+    """Return new-side line numbers changed between base_ref and HEAD."""
+    proc = subprocess.run(
+        ["git", "diff", "--unified=0", "--no-color", f"{base_ref}...HEAD", "--"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr or proc.stdout or "git diff failed").strip())
+
+    changed: dict[str, set[int]] = {}
+    current_path: str | None = None
+    for raw in proc.stdout.splitlines():
+        if raw.startswith("+++ b/"):
+            current_path = raw[6:]
+            changed.setdefault(current_path, set())
+            continue
+        if current_path is None:
+            continue
+        match = HUNK_RE.match(raw)
+        if not match:
+            continue
+        start = int(match.group(1))
+        count = int(match.group(2) or "1")
+        if count <= 0:
+            continue
+        changed[current_path].update(range(start, start + count))
+    return changed
+
+
+def filter_to_changed_lines(findings: list[Finding], changed: dict[str, set[int]]) -> list[Finding]:
+    return [finding for finding in findings if finding.line in changed.get(finding.path, set())]
+
+
 def emit_github(findings: list[Finding]) -> None:
     for finding in findings:
         level = "error" if finding.severity == "critical" else "warning"
@@ -170,7 +210,13 @@ def node_syntax_check(path: Path, root: Path) -> list[Finding]:
     if proc.returncode == 0:
         return []
     text = (proc.stderr or proc.stdout or "Node syntax check failed").strip().splitlines()
-    return [Finding(rel, 1, "JS000", "critical", text[-1][:300] if text else "Node syntax check failed")]
+    line = 1
+    for entry in text:
+        match = re.search(r":(\d+)(?::\d+)?(?:\)|$)", entry)
+        if match:
+            line = int(match.group(1))
+            break
+    return [Finding(rel, line, "JS000", "critical", text[-1][:300] if text else "Node syntax check failed")]
 
 
 def main() -> int:
@@ -179,6 +225,11 @@ def main() -> int:
     parser.add_argument("--github-annotations", action="store_true")
     parser.add_argument("--json-report")
     parser.add_argument("--fail-on-critical", action="store_true")
+    parser.add_argument(
+        "--changed-since",
+        metavar="GIT_REF",
+        help="Report only findings located on lines changed since the supplied Git ref.",
+    )
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -190,6 +241,14 @@ def main() -> int:
             findings.extend(scan_javascript(path, root))
             findings.extend(node_syntax_check(path, root))
 
+    if args.changed_since:
+        try:
+            changed = changed_lines_since(root, args.changed_since)
+        except (OSError, subprocess.TimeoutExpired, RuntimeError) as exc:
+            print(f"Amosclaud Crash Shield could not calculate changed lines: {exc}", file=__import__('sys').stderr)
+            return 3
+        findings = filter_to_changed_lines(findings, changed)
+
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda item: (severity_order.get(item.severity, 9), item.path, item.line, item.rule))
 
@@ -199,11 +258,15 @@ def main() -> int:
         print(f"{finding.severity.upper():8} {finding.path}:{finding.line} {finding.rule} {finding.message}")
 
     if args.json_report:
-        Path(args.json_report).write_text(json.dumps({"count": len(findings), "findings": [asdict(item) for item in findings]}, indent=2) + "\n", encoding="utf-8")
+        Path(args.json_report).write_text(
+            json.dumps({"count": len(findings), "findings": [asdict(item) for item in findings]}, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     critical = sum(1 for item in findings if item.severity == "critical")
     high = sum(1 for item in findings if item.severity == "high")
-    print(f"Amosclaud Crash Shield: {len(findings)} finding(s), {critical} critical, {high} high.")
+    scope = "changed lines" if args.changed_since else "repository"
+    print(f"Amosclaud Crash Shield ({scope}): {len(findings)} finding(s), {critical} critical, {high} high.")
     return 2 if args.fail_on_critical and critical else 0
 
 
