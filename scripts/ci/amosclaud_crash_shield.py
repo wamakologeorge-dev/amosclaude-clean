@@ -144,6 +144,8 @@ def iter_source_files(root: Path) -> list[Path]:
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix not in TEXT_SUFFIXES:
             continue
+        if path.name == "amosclaud_crash_shield.py":
+            continue
         if any(part in SKIP_DIRS for part in path.relative_to(root).parts):
             continue
         if path.stat().st_size > 1_000_000:
