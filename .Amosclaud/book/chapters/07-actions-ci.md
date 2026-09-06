@@ -1,6 +1,6 @@
 # Chapter 07 — Actions, CI and Verification
 
-**Reading target:** 3 minutes  
+**Reading target:** 3 minutes
 **Audience:** Human + AI agent
 
 Amosclaud uses automated checks to turn software changes into evidence. The repository contains GitHub workflows, pipeline services, verification and repair logic, build tooling, security checks and the native Amosclaud Action. GitHub Actions remains the execution host for this repository workflow, while the verification logic and policy belong to Amosclaud.
