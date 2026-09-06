@@ -1,0 +1,72 @@
+name: Amosclaud Native Action
+description: Run the first-party Amosclaud repository verification engine directly inside GitHub Actions
+inputs:
+  objective:
+    description: Verification objective passed to Amosclaud Quick Check
+    required: false
+    default: Validate this repository with the native Amosclaud guardrails.
+  max-lines:
+    description: Maximum repository context lines
+    required: false
+    default: '50'
+  max-files:
+    description: Maximum repository context files
+    required: false
+    default: '8'
+  run-tests:
+    description: Run the repository pytest suite after the Amosclaud guardrail check
+    required: false
+    default: 'true'
+outputs:
+  status:
+    description: Amosclaud verification status
+    value: ${{ steps.verify.outputs.status }}
+  report:
+    description: Path to the machine-readable Amosclaud report
+    value: ${{ steps.verify.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+        cache: pip
+
+    - name: Install Amosclaud
+      shell: bash
+      run: python -m pip install -e .
+
+    - name: Run Amosclaud verification
+      id: verify
+      shell: bash
+      env:
+        AMOSCLAUD_OBJECTIVE: ${{ inputs.objective }}
+        AMOSCLAUD_MAX_LINES: ${{ inputs.max-lines }}
+        AMOSCLAUD_MAX_FILES: ${{ inputs.max-files }}
+      run: |
+        set -euo pipefail
+        report="${RUNNER_TEMP}/amosclaud-report.json"
+        set +e
+        amosclaud-quick . --objective "$AMOSCLAUD_OBJECTIVE" --max-lines "$AMOSCLAUD_MAX_LINES" --max-files "$AMOSCLAUD_MAX_FILES" --json --output "$report"
+        rc=$?
+        set -e
+        test -f "$report"
+        echo "report=$report" >> "$GITHUB_OUTPUT"
+        status=$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["status"])' "$report")
+        echo "status=$status" >> "$GITHUB_OUTPUT"
+        cat "$report"
+        exit "$rc"
+
+    - name: Run pytest
+      if: ${{ inputs.run-tests == 'true' }}
+      shell: bash
+      run: python -m pytest -q
+
+    - name: Upload Amosclaud report
+      if: ${{ always() && steps.verify.outputs.report != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: amosclaud-report
+        path: ${{ steps.verify.outputs.report }}
+        if-no-files-found: error
