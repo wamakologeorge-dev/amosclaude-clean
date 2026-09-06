@@ -49,7 +49,8 @@
     });
     await tx(STORES.docs, 'readwrite', s => s.put(record));
     await tx(STORES.queue, 'readwrite', s => s.add({
-      operationId: uid('op'), documentId: record.id, operation: 'upsert', payload: record,
+      operationId: uid('op'), documentId: record.id, operation: 'upsert',
+      baseServerRevision: record.serverRevision ?? null, payload: record,
       createdAt: now(), status: 'pending', attempts: 0
     }));
     return record;
@@ -64,8 +65,13 @@
   }));
 
   api.deleteDocument = async id => {
+    const existing = await api.getDocument(id);
     await tx(STORES.docs, 'readwrite', s => s.delete(id));
-    await tx(STORES.queue, 'readwrite', s => s.add({ operationId: uid('op'), documentId: id, operation: 'delete', createdAt: now(), status: 'pending', attempts: 0 }));
+    await tx(STORES.queue, 'readwrite', s => s.add({
+      operationId: uid('op'), documentId: id, operation: 'delete',
+      baseServerRevision: existing ? (existing.serverRevision ?? null) : null,
+      createdAt: now(), status: 'pending', attempts: 0
+    }));
   };
 
   api.pending = () => tx(STORES.queue, 'readonly', s => new Promise((resolve, reject) => {
@@ -73,9 +79,27 @@
   }));
 
   api.markSynced = id => tx(STORES.queue, 'readwrite', s => s.delete(id));
-  api.markConflict = (id, reason) => tx(STORES.queue, 'readwrite', s => {
-    const r = s.get(id); r.onsuccess = () => { const item = r.result; if (!item) return; item.status='conflict'; item.reason=reason || 'Server changed since local edit'; item.updatedAt=now(); s.put(item); };
+  api.markConflict = (id, reason, server) => tx(STORES.queue, 'readwrite', s => {
+    const r = s.get(id); r.onsuccess = () => {
+      const item = r.result; if (!item) return;
+      item.status='conflict'; item.reason=reason || 'Server changed since local edit'; item.server=server || null; item.updatedAt=now(); s.put(item);
+    };
   });
+
+  api.applyServerResult = async function (item, result) {
+    if (result.status !== 'synced' || !item.payload) return;
+    if (item.operation === 'upsert' && result.payload) {
+      const local = await api.getDocument(item.documentId);
+      if (local && local.updatedAt === item.payload.updatedAt) {
+        await tx(STORES.docs, 'readwrite', s => s.put(Object.assign({}, local, {
+          serverRevision: result.serverRevision,
+          serverUpdatedAt: result.serverUpdatedAt,
+          contentSha256: result.contentSha256,
+          localOnly: false
+        })));
+      }
+    }
+  };
 
   api.sync = async function (endpoint) {
     if (!navigator.onLine) return { online: false, synced: 0, conflicts: 0, pending: (await api.pending()).length };
@@ -87,9 +111,16 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
           body: JSON.stringify(item)
         });
-        if (response.status === 409) { conflicts++; await api.markConflict(item.id, 'Remote version differs; review before replacing either copy.'); continue; }
-        if (!response.ok) throw new Error(`sync HTTP ${response.status}`);
-        await api.markSynced(item.id); synced++;
+        const result = await response.json().catch(() => ({}));
+        if (response.status === 409 || result.status === 'conflict') {
+          conflicts++;
+          await api.markConflict(item.id, result.reason || 'Remote version differs; review before replacing either copy.', result.server || null);
+          continue;
+        }
+        if (!response.ok) throw new Error(result.detail || `sync HTTP ${response.status}`);
+        await api.applyServerResult(item, result);
+        await api.markSynced(item.id);
+        synced++;
       } catch (error) {
         console.warn('Amosclaud Book sync deferred:', error);
         break;
