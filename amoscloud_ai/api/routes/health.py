@@ -14,6 +14,7 @@ from amoscloud_ai.api.routes import (
     amosclaud_authority,
     autonomous_codex,
     book,
+    book_sync,
     bundle_pages,
     bundles,
     cdn,
@@ -47,6 +48,7 @@ router.include_router(owner_bootstrap.router, prefix="/api/v1")
 # critical Autonomous contracts even when a deployment imports only health.
 router.include_router(amosclaud_authority.router, prefix="/api/v1")
 router.include_router(book.router, prefix="/api/v1")
+router.include_router(book_sync.router, prefix="/api/v1")
 router.include_router(bundles.router, prefix="/api/v1")
 router.include_router(bundle_pages.router)
 router.include_router(byte_metadata_router, prefix="/api/v1")

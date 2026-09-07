@@ -35,6 +35,12 @@ jobs:
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > /tmp/amosclaud-changed-files.txt
           cat /tmp/amosclaud-changed-files.txt
 
+      - name: Install Book Gate Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --no-cache-dir 'python-dotenv>=1,<2'
+
       - name: Slapface preflight and high-confidence secret gate
         shell: bash
         run: |
