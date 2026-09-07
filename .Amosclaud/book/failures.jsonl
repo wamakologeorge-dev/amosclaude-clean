@@ -1,0 +1,1 @@
+{"record_type":"schema","schema_version":"1","rule":"Book failures are permanent engineering memory. A failure record is never deleted or rewritten; a correction creates a new record linked to the original failure_id.","required_fields":["failure_id","recorded_at","change_id","actor","failure_kind","expected","actual","action_result","correction","verification","lessons"]}
