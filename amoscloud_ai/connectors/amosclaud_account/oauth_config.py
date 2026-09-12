@@ -49,7 +49,10 @@ BASE_SCOPES = {
     "deployments:write",
 }
 ADMIN_SCOPE = "admin:write"
-ALL_SCOPES = BASE_SCOPES | {ADMIN_SCOPE}
+# OpenID Connect/OAuth clients such as ChatGPT can request this standard scope
+# to indicate that they need a refresh token for long-lived connections.
+OFFLINE_ACCESS_SCOPE = "offline_access"
+ALL_SCOPES = BASE_SCOPES | {ADMIN_SCOPE, OFFLINE_ACCESS_SCOPE}
 PKCE_VALUE_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 
 
