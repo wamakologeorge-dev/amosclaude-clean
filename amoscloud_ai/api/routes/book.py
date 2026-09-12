@@ -53,6 +53,8 @@ def _book() -> AmosclaudBook:
 
 def _slapface() -> Slapface:
     return Slapface()
+
+
 def _book_html(filename: str) -> HTMLResponse:
     """Serve a Book page with the shared proprietary-license UI boundary."""
     path = WEB_DIR / filename
@@ -149,6 +151,26 @@ class ChangeReport(BaseModel):
 class GateRequest(BaseModel):
     changed_files: list[str]
     change_id: str | None = None
+
+
+class BookLicenseGrantRequest(BaseModel):
+    subject_type: Literal["account", "organization"]
+    subject_id: int = Field(gt=0)
+    permissions: list[str] = Field(min_length=1, max_length=10)
+    repository_id: int | None = Field(default=None, gt=0)
+    expires_at: datetime | None = None
+    billing_terms_accepted: bool = False
+
+
+class BookLicenseActionRequest(BaseModel):
+    action: Literal["copy", "export", "redistribute"]
+    chapter_id: str | None = Field(default=None, max_length=16)
+    organization_id: int | None = Field(default=None, gt=0)
+    repository_id: int | None = Field(default=None, gt=0)
+
+
+class BookReceiptVerifyRequest(BaseModel):
+    receipt: dict[str, Any]
 
 
 class SlapfacePreflightRequest(BaseModel):
