@@ -1,7 +1,7 @@
 # Chapter 01 — What Amosclaud Is
 
-**Reading target:** 3 minutes  
-**Audience:** Human + AI agent  
+**Reading target:** 3 minutes
+**Audience:** Human + AI agent
 **Truth rule:** This chapter separates implemented capability from intended capability.
 
 Amosclaud is an autonomous software-programming platform whose intended operating loop is to understand a software task, prepare a workspace, change real code, execute it, test it, diagnose failures, repair them, verify the result, preserve evidence, and return a true result to the person or system that requested the work.
