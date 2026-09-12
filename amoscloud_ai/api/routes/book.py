@@ -1,6 +1,5 @@
 """Native API router for the public Amosclaud Word Book and Slapface preflight."""
 # SPDX-License-Identifier: LicenseRef-Amosclaud-Book-Proprietary-1.0
-"""Native API router for the Amosclaud Word Book, Book Studio, Slapface, and Book licensing."""
 from __future__ import annotations
 
 import hashlib
