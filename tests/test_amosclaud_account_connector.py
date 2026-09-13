@@ -25,6 +25,14 @@ def test_connector_uses_unique_account_paths(monkeypatch):
     assert oauth.protected_resource_metadata_path().endswith(oauth.MCP_PATH)
 
 
+def test_oauth_metadata_advertises_refresh_tokens_and_offline_access():
+    metadata = oauth.authorization_server_metadata()
+
+    assert "refresh_token" in metadata["grant_types_supported"]
+    assert "offline_access" in metadata["scopes_supported"]
+    assert "S256" in metadata["code_challenge_methods_supported"]
+
+
 def test_oauth_redirects_require_https_or_localhost():
     assert oauth._valid_redirect_uri("https://chatgpt.com/connector/callback") == (
         "https://chatgpt.com/connector/callback"
@@ -60,6 +68,8 @@ def test_pkce_s256_verification():
 def test_default_scopes_are_full_for_admin_and_bounded_for_members():
     assert "admin:write" in oauth._requested_scopes(None, is_admin=True)
     assert "admin:write" not in oauth._requested_scopes(None, is_admin=False)
+    assert "offline_access" not in oauth._requested_scopes(None, is_admin=False)
+    assert "offline_access" in oauth._requested_scopes("offline_access", is_admin=False)
     with pytest.raises(HTTPException):
         oauth._requested_scopes("admin:write", is_admin=False)
 

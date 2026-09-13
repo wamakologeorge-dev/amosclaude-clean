@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from amoscloud_ai.connectors.amosclaud_account.oauth import router as connector_oauth_router
 from amoscloud_ai.connectors.amosclaud_account.server import mcp as account_mcp
+from amoscloud_ai.mcp_transport_security import public_mcp_transport_security
 from amoscloud_ai.workspace_access import install_admin_repository_access
 
 # Install the verified platform-owner access policy before the main application
@@ -42,7 +43,7 @@ app.include_router(connector_oauth_router)
 account_mcp.settings.streamable_http_path = "/"
 app.mount(
     "/connectors/amosclaud/v1/mcp",
-    account_mcp.streamable_http_app(),
+    account_mcp.streamable_http_app(transport_security=public_mcp_transport_security()),
     name="amosclaud-account-connector",
 )
 
